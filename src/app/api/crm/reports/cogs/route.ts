@@ -1,13 +1,33 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
+import {
+  loadVisitCosting,
+  splitCents,
+  pct,
+  ratio,
+  type CostedVisit,
+  type ServiceTarget,
+  type VisitServiceShare,
+} from "@/lib/visit-costing";
 
+const log = logger.child("reports/cogs");
+
+// Not exported: Next.js only permits handler/config exports from route files.
+const UNASSIGNED_SERVICE_ID = "unassigned";
+
+/** Per-service rollup of completed visits in the window. Hours are MAN-hours. */
 export interface COGSReportRow {
   serviceId: string;
   serviceName: string;
-  jobCount: number;
+  /** Completed visits that include this service (a shared visit counts once per service). */
+  visitCount: number;
+  /** Visits whose labor was estimated rather than recorded by crew clock-out. */
+  laborEstimatedVisitCount: number;
   budgetedHours: number;
   actualStaffHrs: number;
+  /** (actual − budgeted) ÷ budgeted × 100, one decimal. */
   hoursVariancePct: number;
   grossSalesCents: number;
   laborCostCents: number;
@@ -17,18 +37,116 @@ export interface COGSReportRow {
   laborPct: number;
   materialsPct: number;
   marginPct: number;
+  /** Σ revenue ÷ Σ man-hours (ratio of sums, not an average of ratios). */
   avgRevPerManHrCents: number;
   targetRateCents: number;
+  /** avgRevPerManHr − target; 0 when either side is missing. */
   avgOverUnderCents: number;
 }
 
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+const QuerySchema = z.object({ from: ymd.nullable(), to: ymd.nullable() });
+
+interface ServiceBucket {
+  serviceId: string;
+  serviceName: string;
+  targetRateCents: number;
+  visitCount: number;
+  laborEstimatedVisitCount: number;
+  budgetedHours: number;
+  actualStaffHrs: number;
+  grossSalesCents: number;
+  laborCostCents: number;
+  materialsCostCents: number;
+}
+
+const UNASSIGNED_SHARE: VisitServiceShare[] = [
+  { serviceId: UNASSIGNED_SERVICE_ID, serviceName: "Unassigned", share: 1 },
+];
+
+function bucketKey(share: VisitServiceShare): string {
+  return share.serviceId ?? `name:${share.serviceName}`;
+}
+
+function getBucket(
+  buckets: Map<string, ServiceBucket>,
+  share: VisitServiceShare,
+  services: Map<string, ServiceTarget>
+): ServiceBucket {
+  const key = bucketKey(share);
+  const existing = buckets.get(key);
+  if (existing) return existing;
+  const catalog = share.serviceId ? services.get(share.serviceId) : undefined;
+  const bucket: ServiceBucket = {
+    serviceId: key,
+    serviceName: catalog?.name ?? share.serviceName,
+    targetRateCents: catalog?.targetRateCentsPerHr ?? 0,
+    visitCount: 0,
+    laborEstimatedVisitCount: 0,
+    budgetedHours: 0,
+    actualStaffHrs: 0,
+    grossSalesCents: 0,
+    laborCostCents: 0,
+    materialsCostCents: 0,
+  };
+  buckets.set(key, bucket);
+  return bucket;
+}
+
+/** Split one visit's $ and hours across its services by `share`, then accumulate. */
+function accumulateVisit(
+  visit: CostedVisit,
+  buckets: Map<string, ServiceBucket>,
+  services: Map<string, ServiceTarget>
+): void {
+  // Legacy visits with no crm_job_services rows land in "Unassigned".
+  const shares = visit.services.length > 0 ? visit.services : UNASSIGNED_SHARE;
+  const fractions = shares.map((s) => s.share);
+  const revenue = splitCents(visit.revenueCents, fractions);
+  const labor = splitCents(visit.laborCostCents, fractions);
+  const materials = splitCents(visit.materialsCostCents, fractions);
+
+  shares.forEach((share, i) => {
+    const b = getBucket(buckets, share, services);
+    b.visitCount += 1;
+    if (visit.laborEstimated) b.laborEstimatedVisitCount += 1;
+    b.budgetedHours += visit.budgetedHours * share.share;
+    b.actualStaffHrs += visit.manHours * share.share;
+    b.grossSalesCents += revenue[i];
+    b.laborCostCents += labor[i];
+    b.materialsCostCents += materials[i];
+  });
+}
+
+function toRow(b: ServiceBucket): COGSReportRow {
+  const directCostCents = b.laborCostCents + b.materialsCostCents;
+  const grossProfitCents = b.grossSalesCents - directCostCents;
+  const avgRevPerManHrCents = ratio(b.grossSalesCents, b.actualStaffHrs);
+  return {
+    serviceId: b.serviceId,
+    serviceName: b.serviceName,
+    visitCount: b.visitCount,
+    laborEstimatedVisitCount: b.laborEstimatedVisitCount,
+    budgetedHours: Math.round(b.budgetedHours * 10) / 10,
+    actualStaffHrs: Math.round(b.actualStaffHrs * 10) / 10,
+    hoursVariancePct: pct(b.actualStaffHrs - b.budgetedHours, b.budgetedHours),
+    grossSalesCents: b.grossSalesCents,
+    laborCostCents: b.laborCostCents,
+    materialsCostCents: b.materialsCostCents,
+    directCostCents,
+    grossProfitCents,
+    laborPct: pct(b.laborCostCents, b.grossSalesCents),
+    materialsPct: pct(b.materialsCostCents, b.grossSalesCents),
+    marginPct: pct(grossProfitCents, b.grossSalesCents),
+    avgRevPerManHrCents,
+    targetRateCents: b.targetRateCents,
+    avgOverUnderCents:
+      b.targetRateCents > 0 && avgRevPerManHrCents > 0 ? avgRevPerManHrCents - b.targetRateCents : 0,
+  };
+}
+
 export async function GET(request: Request) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
+  const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,176 +158,29 @@ export async function GET(request: Request) {
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
-
-  // Window by actual visit completion date, not crm_jobs.updated_at — a job
-  // completed in an earlier period but re-opened/edited later (status
-  // tweak, note added) would otherwise show up in the WRONG period's COGS,
-  // and a job completed within the window but untouched since would be
-  // wrongly excluded if `to` is tight. crm_jobs has no completion timestamp
-  // of its own; a job's completion date is whichever of its visits actually
-  // completed within range.
-  let qualifyingJobIds: string[] | null = null;
-  if (from || to) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let vq = (supabase as any)
-      .from("crm_job_visits")
-      .select("job_id")
-      .eq("status", "completed")
-      .not("completed_at", "is", null)
-      .is("deleted_at", null);
-    if (from) vq = vq.gte("completed_at", from);
-    // completed_at is a timestamptz — a bare date string casts to midnight
-    // UTC, which in any US timezone excludes almost the entire `to` day.
-    if (to) vq = vq.lte("completed_at", `${to} 23:59:59.999`);
-    const { data: qualifyingVisits, error: vErr } = await vq;
-    if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
-    qualifyingJobIds = Array.from(
-      new Set((qualifyingVisits ?? []).map((v: { job_id: string }) => v.job_id))
-    );
+  const parsed = QuerySchema.safeParse({
+    from: searchParams.get("from"),
+    to: searchParams.get("to"),
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid query" }, { status: 400 });
   }
+  const { from, to } = parsed.data;
 
-  // Fetch completed jobs with service, estimate, and visit data
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q = (supabase as any)
-    .from("crm_jobs")
-    .select(`
-      id,
-      actual_hours,
-      actual_labor_cost_cents,
-      actual_material_cost_cents,
-      service_id,
-      crm_services:service_id ( id, name, target_rate_cents_per_hr ),
-      estimates:estimate_id ( total_cents, total_budgeted_hours )
-    `)
-    .is("deleted_at", null)
-    .not("service_id", "is", null);
+  try {
+    const { visits, services } = await loadVisitCosting(supabase, { from, to });
 
-  if (qualifyingJobIds) {
-    q = q.in("id", qualifyingJobIds.length > 0 ? qualifyingJobIds : ["00000000-0000-0000-0000-000000000000"]);
+    const buckets = new Map<string, ServiceBucket>();
+    for (const visit of visits) accumulateVisit(visit, buckets, services);
+
+    const rows = Array.from(buckets.values())
+      .map(toRow)
+      .sort((a, b) => b.grossSalesCents - a.grossSalesCents);
+
+    return NextResponse.json({ rows });
+  } catch (err) {
+    log.error("failed to build COGS report", { err, from, to });
+    const message = err instanceof Error ? err.message : "Failed to load report";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: jobs, error } = await (q as any);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const jobIds: string[] = (jobs ?? []).map((j: { id: string }) => j.id);
-
-  // Fetch most recent completed visit per job for men_count. Use completed_at
-  // (not clocked_out_at) — clocked_out_at only reflects the crew time-clock
-  // flow and stays null for visits completed via the dispatch board.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: visits } = await (supabase as any)
-    .from("crm_job_visits")
-    .select("job_id, men_count, rate_cents, completed_at")
-    .in("job_id", jobIds.length > 0 ? jobIds : ["00000000-0000-0000-0000-000000000000"])
-    .eq("status", "completed")
-    .not("completed_at", "is", null)
-    .is("deleted_at", null)
-    .order("completed_at", { ascending: false });
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const visitMap = new Map<string, { men_count: number; rate_cents: number }>();
-  for (const v of (visits ?? [])) {
-    if (!visitMap.has(v.job_id)) visitMap.set(v.job_id, v);
-  }
-
-  // Aggregate by service
-  interface ServiceBucket {
-    serviceId: string;
-    serviceName: string;
-    targetRateCents: number;
-    jobCount: number;
-    budgetedHours: number;
-    actualStaffHrs: number;
-    grossSalesCents: number;
-    laborCostCents: number;
-    materialsCostCents: number;
-    revPerManHrSamples: number[];
-  }
-
-  const byService = new Map<string, ServiceBucket>();
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const job of (jobs ?? []) as any[]) {
-    const svcId: string = job.service_id;
-    const svcName: string = job.crm_services?.name ?? "Unknown";
-    const targetRate: number = job.crm_services?.target_rate_cents_per_hr ?? 0;
-
-    if (!byService.has(svcId)) {
-      byService.set(svcId, {
-        serviceId: svcId,
-        serviceName: svcName,
-        targetRateCents: targetRate,
-        jobCount: 0,
-        budgetedHours: 0,
-        actualStaffHrs: 0,
-        grossSalesCents: 0,
-        laborCostCents: 0,
-        materialsCostCents: 0,
-        revPerManHrSamples: [],
-      });
-    }
-
-    const bucket = byService.get(svcId)!;
-    const visit = visitMap.get(job.id);
-    // crm_jobs.actual_hours is already man-hours (see job-costing/route.ts
-    // for the full explanation) — multiplying by men_count again here
-    // double-counted crew size across this whole service's rollup.
-    const actualHours = Number(job.actual_hours ?? 0);
-    const actualStaffHrs = actualHours;
-    const rateCents: number = visit?.rate_cents ?? 0;
-    const revPerManHr = actualStaffHrs > 0 ? Math.round(rateCents / actualStaffHrs) : 0;
-
-    bucket.jobCount++;
-    bucket.budgetedHours += Number(job.estimates?.total_budgeted_hours ?? 0);
-    bucket.actualStaffHrs += actualStaffHrs;
-    bucket.grossSalesCents += Number(job.estimates?.total_cents ?? 0);
-    bucket.laborCostCents += Number(job.actual_labor_cost_cents ?? 0);
-    bucket.materialsCostCents += Number(job.actual_material_cost_cents ?? 0);
-    if (revPerManHr > 0) bucket.revPerManHrSamples.push(revPerManHr);
-  }
-
-  const rows: COGSReportRow[] = Array.from(byService.values()).map((b) => {
-    const directCostCents = b.laborCostCents + b.materialsCostCents;
-    const grossProfitCents = b.grossSalesCents - directCostCents;
-    const marginPct = b.grossSalesCents > 0
-      ? Math.round((grossProfitCents / b.grossSalesCents) * 1000) / 10
-      : 0;
-    const laborPct = b.grossSalesCents > 0
-      ? Math.round((b.laborCostCents / b.grossSalesCents) * 1000) / 10
-      : 0;
-    const materialsPct = b.grossSalesCents > 0
-      ? Math.round((b.materialsCostCents / b.grossSalesCents) * 1000) / 10
-      : 0;
-    const avgRevPerManHr = b.revPerManHrSamples.length > 0
-      ? Math.round(b.revPerManHrSamples.reduce((s, v) => s + v, 0) / b.revPerManHrSamples.length)
-      : 0;
-    const hoursVariancePct = b.budgetedHours > 0
-      ? Math.round(((b.actualStaffHrs - b.budgetedHours) / b.budgetedHours) * 1000) / 10
-      : 0;
-
-    return {
-      serviceId: b.serviceId,
-      serviceName: b.serviceName,
-      jobCount: b.jobCount,
-      budgetedHours: Math.round(b.budgetedHours * 10) / 10,
-      actualStaffHrs: Math.round(b.actualStaffHrs * 10) / 10,
-      hoursVariancePct,
-      grossSalesCents: b.grossSalesCents,
-      laborCostCents: b.laborCostCents,
-      materialsCostCents: b.materialsCostCents,
-      directCostCents,
-      grossProfitCents,
-      laborPct,
-      materialsPct,
-      marginPct,
-      avgRevPerManHrCents: avgRevPerManHr,
-      targetRateCents: b.targetRateCents,
-      avgOverUnderCents: avgRevPerManHr - b.targetRateCents,
-    };
-  }).sort((a, b) => b.grossSalesCents - a.grossSalesCents);
-
-  return NextResponse.json({ rows });
 }

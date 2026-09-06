@@ -1,29 +1,5 @@
 import type { DashboardConfig } from "@/types/crm-reports";
-// NOTE: cashPaymentFilter/issuedInvoiceFilter and the rpt_payments
-// "net_amount_cents"/"is_cash" and rpt_invoices "is_issued" columns they'd
-// normally use only exist in a separate, not-yet-committed reports-audit
-// branch. Until that lands, the two rules below are inlined against columns
-// that ARE currently whitelisted on the live rpt_invoices/rpt_payments
-// datasets (same "Rule A"/"Rule B" definitions used in
-// src/lib/kpi/landscapt-kpi-compute.ts and
-// src/lib/company-report/compute.ts) so these seeded dashboard templates
-// build and run correctly against main as it stands today. The cash rule
-// here is an approximation: rpt_payments doesn't currently expose
-// is_credit, so account credits can't be excluded — only the AR Write-off
-// method is — and the payment aggregates below sum the gross amount_cents
-// rather than a refund-adjusted net figure (net_amount_cents isn't
-// whitelisted yet either).
-import type { AnalysisFilter } from "@/types/crm-reports";
-
-const ISSUED_INVOICE_STATUSES = ["printed", "sent", "viewed", "partial", "paid", "overdue"];
-
-function issuedInvoiceFilter(): AnalysisFilter[] {
-  return [{ column: "status", op: "in", value: ISSUED_INVOICE_STATUSES }];
-}
-
-function cashPaymentFilter(): AnalysisFilter[] {
-  return [{ column: "method", op: "neq", value: "AR Write-off" }];
-}
+import { cashPaymentFilter, issuedInvoiceFilter } from "@/lib/reports/helpers";
 
 // ============================================================
 // Starter dashboard templates offered from the "New Dashboard" flow.
@@ -857,14 +833,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               visual: {
                 type: "kpi",
                 useTabDateRange: true,
-                kpiColumn: "sum_amount_cents",
+                kpiColumn: "sum_net_amount_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
                   filters: [...cashPaymentFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -877,14 +853,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "kpi",
                 useTabDateRange: false,
                 relativeDateFilter: "today",
-                kpiColumn: "sum_amount_cents",
+                kpiColumn: "sum_net_amount_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
                   filters: [...cashPaymentFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -897,14 +873,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "kpi",
                 useTabDateRange: false,
                 relativeDateFilter: "yesterday",
-                kpiColumn: "sum_amount_cents",
+                kpiColumn: "sum_net_amount_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
                   filters: [...cashPaymentFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -940,14 +916,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "pie",
                 useTabDateRange: true,
                 labelColumn: "method",
-                valueColumns: ["sum_amount_cents"],
+                valueColumns: ["sum_net_amount_cents"],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
                   filters: [...cashPaymentFilter()],
                   groupBy: ["method"],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
-                  sortColumn: "sum_amount_cents",
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
+                  sortColumn: "sum_net_amount_cents",
                   sortDir: "desc",
                 },
               },

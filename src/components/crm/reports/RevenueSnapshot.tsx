@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { DollarSign, Receipt, AlertCircle, TrendingUp } from "lucide-react";
+import { ISSUED_INVOICE_STATUSES } from "@/lib/reports/helpers";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,9 +54,11 @@ export function useReportData() {
       const sb = supabase as any;
 
       const now = new Date();
-      const ytdStart = new Date(now.getFullYear(), 0, 1).toISOString();
+      // Invoice-date window is a plain YYYY-MM-DD (crm_invoices.invoice_date is a date).
+      const ytdStartDate = `${now.getFullYear()}-01-01`;
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const today = now.toISOString();
+      const todayDate = today.slice(0, 10);
 
       const [
         clientsRes,
@@ -64,7 +67,7 @@ export function useReportData() {
         estimatesRes,
       ] = await Promise.all([
         sb.from("clients").select("id, status").is("deleted_at", null),
-        sb.from("crm_invoices").select("id, total_cents, paid_cents:amount_paid_cents, due_date, created_at, status").is("deleted_at", null),
+        sb.from("crm_invoices").select("id, total_cents, paid_cents:amount_paid_cents, balance_cents, invoice_date, due_date, created_at, status").is("deleted_at", null),
         sb.from("crm_jobs").select("id, status, created_at").is("deleted_at", null),
         sb.from("estimates").select("id, stage, total_price_cents:total_cents").is("deleted_at", null),
       ]);
@@ -75,11 +78,14 @@ export function useReportData() {
       const activeClients = clients.filter((c: { status: string }) => c.status === "active").length;
       const totalLeads = clients.filter((c: { status: string }) => c.status === "lead").length;
 
-      // Invoices
+      // Invoices — Rule A: only issued invoices (not draft/void) are revenue or AR.
       const invoices = invoicesRes.data ?? [];
-      const ytdInvoices = invoices.filter(
-        (i: { created_at: string; status: string }) =>
-          i.created_at >= ytdStart && i.created_at <= today && i.status !== "void"
+      const isIssued = (i: { status: string }) =>
+        (ISSUED_INVOICE_STATUSES as readonly string[]).includes(i.status);
+      const issuedInvoices = invoices.filter(isIssued);
+      const ytdInvoices = issuedInvoices.filter(
+        (i: { invoice_date: string | null }) =>
+          !!i.invoice_date && i.invoice_date >= ytdStartDate && i.invoice_date <= todayDate
       );
       // Revenue = invoiced total (recognized revenue), not just cash collected —
       // outstanding/overdue AR are subsets of this, so it should never be smaller
@@ -88,22 +94,19 @@ export function useReportData() {
         (sum: number, i: { total_cents: number }) => sum + (i.total_cents ?? 0),
         0
       );
-      const outstanding = invoices.filter(
-        (i: { status: string }) => i.status !== "paid" && i.status !== "void"
+      const outstanding = issuedInvoices.filter(
+        (i: { balance_cents: number | null }) => (i.balance_cents ?? 0) > 0
       );
       const outstandingAR = outstanding.reduce(
-        (sum: number, i: { total_cents: number; paid_cents: number }) =>
-          sum + ((i.total_cents ?? 0) - (i.paid_cents ?? 0)),
+        (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
         0
       );
       const overdueAR = outstanding
         .filter(
-          (i: { due_date: string | null }) =>
-            i.due_date && i.due_date < today.slice(0, 10)
+          (i: { due_date: string | null }) => i.due_date && i.due_date < todayDate
         )
         .reduce(
-          (sum: number, i: { total_cents: number; paid_cents: number }) =>
-            sum + ((i.total_cents ?? 0) - (i.paid_cents ?? 0)),
+          (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
           0
         );
 

@@ -3,7 +3,8 @@ import type { ReportDataset } from "@/types/crm-reports";
 // ============================================================
 // Dataset catalog — one entry per `rpt_*` reporting view.
 // Field keys MUST match the view columns exactly
-// (supabase/migrations/20260706000010_crm_report_center.sql).
+// (supabase/migrations/20260706233504_crm_report_center.sql and the
+// later `rpt_*` view migrations that extend it).
 // ============================================================
 
 export const REPORT_DATASETS: ReportDataset[] = [
@@ -199,7 +200,22 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "invoice_number", label: "Invoice #", type: "number" },
       { key: "invoice_date", label: "Invoice Date", type: "date" },
       { key: "due_date", label: "Due Date", type: "date" },
-      { key: "status", label: "Status", type: "text" },
+      {
+        key: "status",
+        label: "Status",
+        type: "text",
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "printed", label: "Printed" },
+          { value: "sent", label: "Sent" },
+          { value: "viewed", label: "Viewed" },
+          { value: "partial", label: "Partial" },
+          { value: "paid", label: "Paid" },
+          { value: "overdue", label: "Overdue" },
+          { value: "void", label: "Void" },
+        ],
+      },
+      { key: "is_issued", label: "Issued (not draft/void)", type: "boolean" },
       { key: "client_name", label: "Client", type: "text" },
       { key: "sales_rep", label: "Sales Rep", type: "text" },
       { key: "description", label: "Description", type: "text" },
@@ -228,7 +244,22 @@ export const REPORT_DATASETS: ReportDataset[] = [
     fields: [
       { key: "invoice_number", label: "Invoice #", type: "number" },
       { key: "invoice_date", label: "Invoice Date", type: "date" },
-      { key: "invoice_status", label: "Invoice Status", type: "text" },
+      {
+        key: "invoice_status",
+        label: "Invoice Status",
+        type: "text",
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "printed", label: "Printed" },
+          { value: "sent", label: "Sent" },
+          { value: "viewed", label: "Viewed" },
+          { value: "partial", label: "Partial" },
+          { value: "paid", label: "Paid" },
+          { value: "overdue", label: "Overdue" },
+          { value: "void", label: "Void" },
+        ],
+      },
+      { key: "is_issued", label: "Invoice Issued (not draft/void)", type: "boolean" },
       { key: "client_name", label: "Client", type: "text" },
       { key: "name", label: "Item", type: "text" },
       { key: "description", label: "Description", type: "text" },
@@ -256,7 +287,11 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "applied_amount_cents", label: "Applied Amount", type: "money" },
       { key: "unused_amount_cents", label: "Unused Amount", type: "money" },
       { key: "refunded_amount_cents", label: "Refunded", type: "money" },
+      { key: "net_amount_cents", label: "Net Amount (after refunds)", type: "money" },
+      { key: "processing_fee_cents", label: "Processing Fee", type: "money" },
       { key: "is_prepayment", label: "Prepayment", type: "boolean" },
+      { key: "is_credit", label: "Account Credit", type: "boolean" },
+      { key: "is_cash", label: "Cash Received (not credit/write-off)", type: "boolean" },
       { key: "invoice_number", label: "Invoice #", type: "number" },
       { key: "billing_zip", label: "Billing Zip", type: "text" },
       { key: "created_at", label: "Created At", type: "datetime" },

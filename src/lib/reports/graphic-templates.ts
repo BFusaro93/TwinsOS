@@ -1,4 +1,5 @@
 import type { VisualSpec } from "@/types/crm-reports";
+import { cashPaymentFilter, issuedInvoiceFilter } from "@/lib/reports/helpers";
 
 // ============================================================
 // Graphics Library — system catalog of pre-made, panel-level graphics
@@ -156,20 +157,21 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
   {
     key: "payments-by-method-pie",
     name: "Payments by Method",
-    description: "Pie chart of collected payments grouped by payment method.",
+    description:
+      "Pie chart of cash collected grouped by payment method (excludes account credits and AR write-offs; net of refunds).",
     category: "Accounts Receivable",
     visual: {
       type: "pie",
       useTabDateRange: true,
       labelColumn: "method",
-      valueColumns: ["sum_amount_cents"],
+      valueColumns: ["sum_net_amount_cents"],
       config: {
         dataset: "rpt_payments",
         columns: [],
-        filters: [],
+        filters: [...cashPaymentFilter()],
         groupBy: ["method"],
-        aggregates: [{ column: "amount_cents", fn: "sum" }],
-        sortColumn: "sum_amount_cents",
+        aggregates: [{ column: "net_amount_cents", fn: "sum" }],
+        sortColumn: "sum_net_amount_cents",
         sortDir: "desc",
       },
     },
@@ -220,7 +222,7 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
   {
     key: "invoiced-revenue-ytd-gauge",
     name: "Invoiced Revenue YTD",
-    description: "Gauge of invoiced revenue against a yearly goal.",
+    description: "Gauge of invoiced revenue against a yearly goal (excludes draft and void invoices).",
     category: "Accounts Receivable",
     visual: {
       type: "gauge",
@@ -231,7 +233,7 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
       config: {
         dataset: "rpt_invoices",
         columns: [],
-        filters: [{ column: "status", op: "neq", value: "void" }],
+        filters: [...issuedInvoiceFilter()],
         groupBy: [],
         aggregates: [{ column: "total_cents", fn: "sum" }],
         sortDir: "asc",

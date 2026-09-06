@@ -7,6 +7,7 @@ import type {
 import { computeTotals } from "@/lib/reports/engine";
 import type { ReportParams } from "@/lib/reports/definition-types";
 import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import type { InvoiceStatus } from "@/types/crm-invoices";
 
 // ============================================================
 // Shared helpers for report definitions.
@@ -136,6 +137,62 @@ export const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
+
+// ============================================================
+// Revenue / cash recognition rules — the single TS home for both.
+// The `rpt_*` views apply the same rules as `is_issued` (rpt_invoices,
+// rpt_invoice_line_items) and `is_cash` / `net_amount_cents` (rpt_payments).
+//
+// Rule A — Issued-invoice rule: an invoice counts as revenue / receivable
+//   only when `status NOT IN ('draft', 'void')`. Drafts are "uninvoiced
+//   work" (Income Not Invoiced shows them); they are never AR or revenue.
+//
+// Rule B — Cash rule: a `crm_payments` row counts as cash received only
+//   when `is_credit = false` AND `method <> 'AR Write-off'`. Cash amounts
+//   are net of refunds (`amount_cents - refunded_amount_cents`).
+// ============================================================
+
+/** Rule A: the six invoice statuses that count as issued (not draft/void). */
+export const ISSUED_INVOICE_STATUSES: readonly InvoiceStatus[] = [
+  "printed",
+  "sent",
+  "viewed",
+  "partial",
+  "paid",
+  "overdue",
+];
+
+/** Rule A for view-backed datasets: filter on the view's `is_issued` flag. */
+export function issuedInvoiceFilter(column = "is_issued"): AnalysisFilter[] {
+  return [{ column, op: "eq", value: true }];
+}
+
+/** Rule B for view-backed datasets: filter on rpt_payments' `is_cash` flag. */
+export function cashPaymentFilter(column = "is_cash"): AnalysisFilter[] {
+  return [{ column, op: "eq", value: true }];
+}
+
+/** Payment method that zeroes out bad debt without real money changing hands. */
+export const AR_WRITE_OFF_METHOD = "AR Write-off";
+
+/**
+ * Rule A / Rule B for bespoke handlers hitting base tables directly — apply
+ * inline on the PostgREST builder (kept inline rather than wrapped in a
+ * generic helper: structural typing over the builder's generic filter
+ * methods trips TS2589):
+ *   crm_invoices:  .in("status", ISSUED_INVOICE_STATUSES)
+ *                  (or .in("crm_invoices.status", ...) through an !inner join)
+ *   crm_payments:  .eq("is_credit", false).neq("method", AR_WRITE_OFF_METHOD)
+ *                  and sum netPaymentCents(row) instead of amount_cents.
+ */
+
+/** Rule B net-of-refund amount for a `crm_payments` row. */
+export function netPaymentCents(row: {
+  amount_cents: number | null;
+  refunded_amount_cents?: number | null;
+}): number {
+  return (row.amount_cents ?? 0) - (row.refunded_amount_cents ?? 0);
+}
 
 /** The standard dateRange filter def used by most reports. */
 export function dateRangeFilterDef(

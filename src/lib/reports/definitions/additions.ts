@@ -1,5 +1,6 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import {
+  ISSUED_INVOICE_STATUSES,
   buildResult,
   col,
   dateRangeFilterDef,
@@ -241,8 +242,8 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           .from("crm_invoices")
           .select("contract_id, total_cents, amount_paid_cents, status")
           .in("contract_id", ids)
-          .neq("status", "void")
           .is("deleted_at", null)
+          .in("status", ISSUED_INVOICE_STATUSES)
           .limit(5000);
         if (invError) throw new Error(invError.message);
         interface InvRow {

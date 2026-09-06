@@ -6,12 +6,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import type { JobCostingReportRow } from "@/app/api/crm/reports/job-costing/route";
 
 function fmtHrs(h: number) {
   return h.toFixed(1);
+}
+
+function pctOf(numerator: number, denominator: number) {
+  return denominator > 0 ? Math.round((numerator / denominator) * 1000) / 10 : 0;
+}
+
+function ratioOf(numerator: number, denominator: number) {
+  return denominator > 0 ? Math.round(numerator / denominator) : 0;
+}
+
+function defaultDateRange() {
+  const now = new Date();
+  const { year, month } = nyDateParts(now);
+  return { from: ymd(year, month, 1), to: isoNy(now) };
 }
 
 function OverUnderCell({ cents }: { cents: number }) {
@@ -35,31 +50,35 @@ function SummaryKPI({ label, value, sub, color }: { label: string; value: string
   );
 }
 
+function csvText(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 function downloadCSV(rows: JobCostingReportRow[]) {
   const headers = [
-    "Date", "Client", "Job", "Service", "Men", "Bgt Hrs", "Act Hrs", "Staff Hrs",
+    "Date", "Client", "Services", "Crew", "Men", "Bgt Man-Hrs", "Act Man-Hrs",
     "Hrs Variance", "Bgt Rate", "Rev/Man Hr", "Target/Man Hr", "Over/Under",
-    "Labor Cost", "Est Revenue", "Materials", "Gross Profit", "Margin %",
+    "Labor Cost", "Labor Estimated", "Revenue", "Materials", "Gross Profit", "Margin %",
   ];
   const lines = [headers.join(",")];
   for (const r of rows) {
     lines.push([
       r.completedAt ? new Date(r.completedAt).toLocaleDateString() : "",
-      `"${r.clientName}"`,
-      `"${r.jobTitle}"`,
-      `"${r.serviceName}"`,
+      csvText(r.clientName),
+      csvText(r.serviceNames),
+      csvText(r.crewName ?? ""),
       r.menCount,
       r.budgetedHours.toFixed(1),
-      r.actualHours.toFixed(1),
-      r.actualStaffHrs.toFixed(1),
+      r.actualManHours.toFixed(1),
       r.hoursVariance.toFixed(1),
       (r.budgetedRateCents / 100).toFixed(2),
       (r.revPerManHrCents / 100).toFixed(2),
       (r.targetRateCents / 100).toFixed(2),
       (r.overUnderCents / 100).toFixed(2),
-      (r.actualLaborCostCents / 100).toFixed(2),
-      (r.estimatedRevenueCents / 100).toFixed(2),
-      (r.actualMaterialCostCents / 100).toFixed(2),
+      (r.laborCostCents / 100).toFixed(2),
+      r.laborEstimated ? "Y" : "N",
+      (r.revenueCents / 100).toFixed(2),
+      (r.materialsCostCents / 100).toFixed(2),
       (r.grossProfitCents / 100).toFixed(2),
       r.marginPct.toFixed(1),
     ].join(","));
@@ -73,13 +92,19 @@ function downloadCSV(rows: JobCostingReportRow[]) {
   URL.revokeObjectURL(url);
 }
 
-export default function JobCostingReportPage() {
-  const today = new Date();
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-  const todayStr = today.toISOString().slice(0, 10);
+async function fetchReport(params: URLSearchParams): Promise<{ rows: JobCostingReportRow[] }> {
+  const res = await fetch(`/api/crm/reports/job-costing?${params.toString()}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `Failed to load report (${res.status})`);
+  }
+  return res.json() as Promise<{ rows: JobCostingReportRow[] }>;
+}
 
-  const [from, setFrom] = useState(firstOfMonth);
-  const [to, setTo] = useState(todayStr);
+export default function JobCostingReportPage() {
+  const [defaults] = useState(defaultDateRange);
+  const [from, setFrom] = useState(defaults.from);
+  const [to, setTo] = useState(defaults.to);
   const [serviceId, setServiceId] = useState<string>("all");
 
   const { data: services = [] } = useCRMServices();
@@ -87,29 +112,37 @@ export default function JobCostingReportPage() {
   const params = new URLSearchParams({ from, to });
   if (serviceId !== "all") params.set("service_id", serviceId);
 
-  const { data, isLoading } = useQuery<{ rows: JobCostingReportRow[] }>({
+  const { data, isLoading, error } = useQuery<{ rows: JobCostingReportRow[] }>({
     queryKey: ["crm-job-costing-report", from, to, serviceId],
-    queryFn: async () => {
-      const res = await fetch(`/api/crm/reports/job-costing?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to load report");
-      return res.json() as Promise<{ rows: JobCostingReportRow[] }>;
-    },
+    queryFn: () => fetchReport(params),
   });
 
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data]);
 
+  // Totals sum only additive columns; every rate/percent is a ratio of sums.
   const summary = useMemo(() => {
     if (rows.length === 0) return null;
-    const totalRevenue = rows.reduce((s, r) => s + r.estimatedRevenueCents, 0);
-    const totalLabor = rows.reduce((s, r) => s + r.actualLaborCostCents, 0);
-    const totalMaterials = rows.reduce((s, r) => s + r.actualMaterialCostCents, 0);
-    const totalProfit = rows.reduce((s, r) => s + r.grossProfitCents, 0);
-    const avgMargin = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 1000) / 10 : 0;
-    const avgRevPerManHr = rows.filter(r => r.revPerManHrCents > 0);
-    const avgRev = avgRevPerManHr.length > 0
-      ? Math.round(avgRevPerManHr.reduce((s, r) => s + r.revPerManHrCents, 0) / avgRevPerManHr.length)
-      : 0;
-    return { totalRevenue, totalLabor, totalMaterials, totalProfit, avgMargin, avgRev };
+    const sum = (pick: (r: JobCostingReportRow) => number) => rows.reduce((s, r) => s + pick(r), 0);
+    const totalRevenue = sum((r) => r.revenueCents);
+    const totalLabor = sum((r) => r.laborCostCents);
+    const totalMaterials = sum((r) => r.materialsCostCents);
+    const totalProfit = sum((r) => r.grossProfitCents);
+    const totalBudgetedHours = sum((r) => r.budgetedHours);
+    const totalManHours = sum((r) => r.actualManHours);
+    return {
+      totalRevenue,
+      totalLabor,
+      totalMaterials,
+      totalProfit,
+      totalBudgetedHours,
+      totalManHours,
+      hoursVariance: totalManHours - totalBudgetedHours,
+      marginPct: pctOf(totalProfit, totalRevenue),
+      laborPct: pctOf(totalLabor, totalRevenue),
+      budgetedRateCents: ratioOf(totalRevenue, totalBudgetedHours),
+      revPerManHrCents: ratioOf(totalRevenue, totalManHours),
+      laborEstimatedCount: rows.filter((r) => r.laborEstimated).length,
+    };
   }, [rows]);
 
   return (
@@ -117,7 +150,7 @@ export default function JobCostingReportPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Job Costing Report</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Estimated vs. actual performance by job</p>
+          <p className="text-sm text-slate-500 mt-0.5">Budgeted vs. actual performance per completed visit</p>
         </div>
         {rows.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => downloadCSV(rows)}>
@@ -156,9 +189,13 @@ export default function JobCostingReportPage() {
       {/* Summary strip */}
       {summary && (
         <div className="flex gap-3 flex-wrap">
-          <SummaryKPI label="Est. Revenue" value={formatCurrency(summary.totalRevenue)} sub={`${rows.length} jobs`} />
-          <SummaryKPI label="Actual Labor" value={formatCurrency(summary.totalLabor)} />
-          <SummaryKPI label="Actual Materials" value={formatCurrency(summary.totalMaterials)} />
+          <SummaryKPI label="Revenue" value={formatCurrency(summary.totalRevenue)} sub={`${rows.length} completed visits`} />
+          <SummaryKPI
+            label="Labor"
+            value={formatCurrency(summary.totalLabor)}
+            sub={`${summary.laborPct.toFixed(1)}% of revenue${summary.laborEstimatedCount > 0 ? ` · ${summary.laborEstimatedCount} estimated†` : ""}`}
+          />
+          <SummaryKPI label="Materials" value={formatCurrency(summary.totalMaterials)} />
           <SummaryKPI
             label="Gross Profit"
             value={formatCurrency(summary.totalProfit)}
@@ -166,13 +203,14 @@ export default function JobCostingReportPage() {
             sub="revenue − labor − materials"
           />
           <SummaryKPI
-            label="Avg Margin"
-            value={`${summary.avgMargin.toFixed(1)}%`}
-            color={summary.avgMargin >= 40 ? "green" : summary.avgMargin >= 20 ? undefined : "red"}
+            label="Margin"
+            value={`${summary.marginPct.toFixed(1)}%`}
+            color={summary.marginPct >= 40 ? "green" : summary.marginPct >= 20 ? undefined : "red"}
           />
           <SummaryKPI
-            label="Avg Rev / Man Hr"
-            value={summary.avgRev > 0 ? formatCurrency(summary.avgRev) : "—"}
+            label="Rev / Man Hr"
+            value={summary.revPerManHrCents > 0 ? formatCurrency(summary.revPerManHrCents) : "—"}
+            sub={`${fmtHrs(summary.totalManHours)} man-hrs`}
           />
         </div>
       )}
@@ -181,9 +219,13 @@ export default function JobCostingReportPage() {
       <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-16 text-sm text-red-600">
+            {error instanceof Error ? error.message : "Failed to load report"}
+          </div>
         ) : rows.length === 0 ? (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400">
-            No completed jobs in this date range.
+            No completed visits in this date range.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -192,7 +234,7 @@ export default function JobCostingReportPage() {
                 <tr className="bg-slate-50 border-b text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Date</th>
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Client</th>
-                  <th className="px-3 py-2.5 text-left whitespace-nowrap">Service</th>
+                  <th className="px-3 py-2.5 text-left whitespace-nowrap">Services</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Men</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Bgt Hrs</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Act Hrs</th>
@@ -213,19 +255,21 @@ export default function JobCostingReportPage() {
                   const hrsPositive = r.hoursVariance <= 0;
                   const marginGood = r.marginPct >= 40;
                   return (
-                    <tr key={r.jobId} className="border-b last:border-0 hover:bg-slate-50">
+                    <tr key={r.visitId} className="border-b last:border-0 hover:bg-slate-50">
                       <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
                         {r.completedAt ? new Date(r.completedAt).toLocaleDateString() : "—"}
                       </td>
-                      <td className="px-3 py-2 font-medium text-slate-800 max-w-[140px] truncate">
+                      <td className="px-3 py-2 font-medium text-slate-800 max-w-[140px] truncate" title={r.clientName}>
                         {r.clientName}
                       </td>
-                      <td className="px-3 py-2 text-slate-600 max-w-[120px] truncate">{r.serviceName}</td>
+                      <td className="px-3 py-2 text-slate-600 max-w-[160px] truncate" title={r.serviceNames}>
+                        {r.serviceNames}
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.menCount}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                         {r.budgetedHours > 0 ? fmtHrs(r.budgetedHours) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{fmtHrs(r.actualStaffHrs)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{fmtHrs(r.actualManHours)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {r.budgetedHours > 0 ? (
                           <span className={hrsPositive ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
@@ -245,20 +289,23 @@ export default function JobCostingReportPage() {
                       <td className="px-3 py-2 text-right">
                         <OverUnderCell cents={r.overUnderCents} />
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                        {formatCurrency(r.actualLaborCostCents)}
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                        {formatCurrency(r.laborCostCents)}
+                        {r.laborEstimated && (
+                          <span className="ml-0.5 text-amber-600" title="Estimated: man-hours × crew labor burden (no crew clock-out recorded)">†</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                        {r.estimatedRevenueCents > 0 ? formatCurrency(r.estimatedRevenueCents) : "—"}
+                        {r.revenueCents > 0 ? formatCurrency(r.revenueCents) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                        {r.actualMaterialCostCents > 0 ? formatCurrency(r.actualMaterialCostCents) : "—"}
+                        {r.materialsCostCents > 0 ? formatCurrency(r.materialsCostCents) : "—"}
                       </td>
                       <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", r.grossProfitCents >= 0 ? "text-green-700" : "text-red-700")}>
-                        {r.estimatedRevenueCents > 0 ? formatCurrency(r.grossProfitCents) : "—"}
+                        {r.revenueCents > 0 ? formatCurrency(r.grossProfitCents) : "—"}
                       </td>
                       <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", marginGood ? "text-green-600" : r.marginPct >= 20 ? "text-slate-700" : "text-red-600")}>
-                        {r.estimatedRevenueCents > 0 ? `${r.marginPct.toFixed(1)}%` : "—"}
+                        {r.revenueCents > 0 ? `${r.marginPct.toFixed(1)}%` : "—"}
                       </td>
                     </tr>
                   );
@@ -267,28 +314,31 @@ export default function JobCostingReportPage() {
               {rows.length > 1 && summary && (
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
-                    <td colSpan={4} className="px-3 py-2.5 text-xs text-slate-600">{rows.length} jobs</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
-                      {fmtHrs(rows.reduce((s, r) => s + r.budgetedHours, 0))}
+                    <td colSpan={4} className="px-3 py-2.5 text-xs text-slate-600">{rows.length} visits</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{fmtHrs(summary.totalBudgetedHours)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">{fmtHrs(summary.totalManHours)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {summary.totalBudgetedHours > 0 ? (
+                        <span className={summary.hoursVariance <= 0 ? "text-green-600" : "text-red-600"}>
+                          {summary.hoursVariance > 0 ? "+" : ""}{fmtHrs(summary.hoursVariance)}
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">
+                      {summary.budgetedRateCents > 0 ? formatCurrency(summary.budgetedRateCents) : "—"}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
-                      {fmtHrs(rows.reduce((s, r) => s + r.actualStaffHrs, 0))}
+                      {summary.revPerManHrCents > 0 ? formatCurrency(summary.revPerManHrCents) : "—"}
                     </td>
-                    <td colSpan={4} />
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                      {formatCurrency(summary.totalLabor)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                      {formatCurrency(summary.totalRevenue)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
-                      {formatCurrency(summary.totalMaterials)}
-                    </td>
+                    <td colSpan={2} />
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(summary.totalLabor)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(summary.totalRevenue)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{formatCurrency(summary.totalMaterials)}</td>
                     <td className={cn("px-3 py-2.5 text-right tabular-nums", summary.totalProfit >= 0 ? "text-green-700" : "text-red-700")}>
                       {formatCurrency(summary.totalProfit)}
                     </td>
-                    <td className={cn("px-3 py-2.5 text-right tabular-nums", summary.avgMargin >= 40 ? "text-green-600" : summary.avgMargin >= 20 ? "text-slate-700" : "text-red-600")}>
-                      {summary.avgMargin.toFixed(1)}%
+                    <td className={cn("px-3 py-2.5 text-right tabular-nums", summary.marginPct >= 40 ? "text-green-600" : summary.marginPct >= 20 ? "text-slate-700" : "text-red-600")}>
+                      {summary.marginPct.toFixed(1)}%
                     </td>
                   </tr>
                 </tfoot>
@@ -297,6 +347,26 @@ export default function JobCostingReportPage() {
           </div>
         )}
       </div>
+
+      {rows.length > 0 && (
+        <div className="text-[11px] text-slate-400 leading-relaxed space-y-0.5">
+          <p>
+            One row per visit completed in the window. Hours are man-hours (crew size × time on site).
+            Revenue is the visit&apos;s rate × quantity. Rates and percentages in the total row are ratios of the summed columns.
+          </p>
+          {summary && summary.laborEstimatedCount > 0 && (
+            <p>
+              <span className="text-amber-600">†</span> Labor estimated as man-hours × the crew&apos;s average labor burden rate
+              because no crew clock-out recorded actual labor for that visit.
+            </p>
+          )}
+          <p>
+            Materials logged against a specific visit are charged to that visit; job-level materials are spread
+            evenly across the job&apos;s completed visits.
+            {serviceId !== "all" && " Service filter shows whole visits that include the selected service."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

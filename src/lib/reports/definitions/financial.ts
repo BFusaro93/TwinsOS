@@ -1,9 +1,13 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import {
+  AR_WRITE_OFF_METHOD,
+  ISSUED_INVOICE_STATUSES,
   buildResult,
+  cashPaymentFilter,
   col,
   dateRangeFilterDef,
   dateRangeFilters,
+  issuedInvoiceFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -63,11 +67,12 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Totals invoiced income per client — subtotal, tax, total, and amount paid.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
+    notes: ["Excludes draft and void invoices."],
     analysis: (params) => ({
       dataset: "rpt_invoices",
       columns: [],
       filters: [
-        { column: "status", op: "neq", value: "void" },
+        ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, { preset: "this_year" }),
       ],
       groupBy: ["client_name"],
@@ -89,6 +94,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows every open invoice with a balance due and how many days overdue it is.",
     filters: [dateRangeFilterDef("Invoice Date", "all_time")],
+    notes: ["Excludes draft and void invoices — only issued invoices are receivables."],
     analysis: (params) => ({
       dataset: "rpt_invoices",
       columns: [
@@ -104,7 +110,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "balance_cents", op: "gt", value: 0 },
-        { column: "status", op: "neq", value: "void" },
+        ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, { preset: "all_time" }),
       ],
       groupBy: [],
@@ -119,6 +125,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     name: "Pre-Payments",
     description: "Shows prepayments received, how much has been applied, and what remains.",
     filters: [dateRangeFilterDef("Payment Date", "this_year")],
+    notes: ["Cash only: excludes account credits and AR write-offs. Applied Amount is net of refunds."],
     analysis: (params) => ({
       dataset: "rpt_payments",
       columns: [
@@ -126,11 +133,13 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         "client_name",
         "method",
         "amount_cents",
+        "refunded_amount_cents",
         "applied_amount_cents",
         "unused_amount_cents",
       ],
       filters: [
         { column: "is_prepayment", op: "eq", value: true },
+        ...cashPaymentFilter(),
         ...dateRangeFilters("payment_date", params, { preset: "this_year" }),
       ],
       groupBy: [],
@@ -149,9 +158,13 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, params }) => {
       const { from, to } = resolveDateRange(params, "this_month");
 
+      // Rule A (issued invoices only) and the soft-delete guard are applied on
+      // the joined parent; `!inner` drops line items whose invoice fails them.
       let lineQuery = supabase
         .from("crm_invoice_line_items")
-        .select("name, description, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)");
+        .select("name, description, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)")
+        .is("crm_invoices.deleted_at", null)
+        .in("crm_invoices.status", ISSUED_INVOICE_STATUSES);
       if (from) lineQuery = lineQuery.gte("crm_invoices.invoice_date", from);
       if (to) lineQuery = lineQuery.lte("crm_invoices.invoice_date", to);
       const { data, error } = await lineQuery.limit(5000);
@@ -163,10 +176,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         total_cents: number | null;
         crm_invoices: { invoice_date: string | null; status: string | null } | null;
       };
-      const lines = ((data ?? []) as unknown as LineRow[]).filter((r) => {
-        const status = r.crm_invoices?.status ?? "";
-        return status !== "void" && status !== "draft";
-      });
+      const lines = (data ?? []) as unknown as LineRow[];
 
       const incomeByName = new Map<string, number>();
       for (const line of lines) {
@@ -206,21 +216,30 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
 
       let payQuery = supabase
         .from("crm_payments")
-        .select("amount_cents, unused_amount_cents, processing_fee_cents")
-        .is("deleted_at", null);
+        .select("amount_cents, unused_amount_cents, refunded_amount_cents, processing_fee_cents")
+        .is("deleted_at", null)
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD);
       if (from) payQuery = payQuery.gte("payment_date", from);
       if (to) payQuery = payQuery.lte("payment_date", to);
       const { data, error } = await payQuery.limit(5000);
       if (error) throw new Error(error.message);
 
-      type PayRow = { amount_cents: number | null; unused_amount_cents: number | null; processing_fee_cents: number | null };
+      type PayRow = {
+        amount_cents: number | null;
+        unused_amount_cents: number | null;
+        refunded_amount_cents: number | null;
+        processing_fee_cents: number | null;
+      };
       let appliedCents = 0;
       let unappliedCents = 0;
       let processingFeeCents = 0;
       for (const p of (data ?? []) as unknown as PayRow[]) {
         const amount = p.amount_cents ?? 0;
         const unused = p.unused_amount_cents ?? 0;
-        appliedCents += amount - unused;
+        const refunded = p.refunded_amount_cents ?? 0;
+        // Mirrors rpt_payments.applied_amount_cents = greatest(0, amount - unused - refunded).
+        appliedCents += Math.max(0, amount - unused - refunded);
         unappliedCents += unused;
         processingFeeCents += p.processing_fee_cents ?? 0;
       }
@@ -239,7 +258,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       ];
 
       return buildResult(PROFIT_LOSS_COLUMNS, rows, [
-        "Cash basis: income is counted when payment is received, not when work is invoiced.",
+        "Cash basis: income is counted when payment is received, not when work is invoiced. Cash only: excludes account credits and AR write-offs; net of refunds.",
         "Credit card processing fees are the surcharge collected from clients on card payments (never on ACH) — separate from the invoice amount itself.",
         "Expenses include job material costs (by purchase date) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
       ]);
@@ -257,8 +276,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       let query = supabase
         .from("crm_invoices")
         .select("invoice_date, subtotal_cents, tax_cents, total_cents")
-        .neq("status", "void")
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .in("status", ISSUED_INVOICE_STATUSES);
       if (from) query = query.gte("invoice_date", from);
       if (to) query = query.lte("invoice_date", to);
       const { data, error } = await query.limit(5000);
@@ -306,7 +325,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
           col("tax_collected_cents", "Tax Collected", "money"),
         ],
         rows,
-        ["Tax is reported on invoice date (accrual)."]
+        ["Tax is reported on invoice date (accrual). Excludes draft and void invoices."]
       );
     },
   },

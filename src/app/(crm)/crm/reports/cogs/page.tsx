@@ -5,8 +5,23 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
+import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
 import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import type { COGSReportRow } from "@/app/api/crm/reports/cogs/route";
+
+function pctOf(numerator: number, denominator: number) {
+  return denominator > 0 ? Math.round((numerator / denominator) * 1000) / 10 : 0;
+}
+
+function ratioOf(numerator: number, denominator: number) {
+  return denominator > 0 ? Math.round(numerator / denominator) : 0;
+}
+
+function defaultDateRange() {
+  const now = new Date();
+  const { year, month } = nyDateParts(now);
+  return { from: ymd(year, month, 1), to: isoNy(now) };
+}
 
 function OverUnderCell({ cents }: { cents: number }) {
   if (cents === 0) return <span className="text-slate-400">—</span>;
@@ -31,15 +46,16 @@ function SummaryKPI({ label, value, sub, color }: { label: string; value: string
 
 function downloadCSV(rows: COGSReportRow[]) {
   const headers = [
-    "Service", "Jobs", "Bgt Hrs", "Act Hrs", "Hrs Var %",
+    "Service", "Visits", "Bgt Man-Hrs", "Act Man-Hrs", "Hrs Var %",
     "Gross Sales", "Labor Cost", "Labor %", "Materials", "Materials %",
-    "Direct Cost", "Gross Profit", "Margin %", "Avg Rev/Man Hr", "Target/Man Hr", "Avg Over/Under",
+    "Direct Cost", "Gross Profit", "Margin %", "Rev/Man Hr", "Target/Man Hr", "Over/Under",
+    "Visits w/ Estimated Labor",
   ];
   const lines = [headers.join(",")];
   for (const r of rows) {
     lines.push([
-      `"${r.serviceName}"`,
-      r.jobCount,
+      `"${r.serviceName.replace(/"/g, '""')}"`,
+      r.visitCount,
       r.budgetedHours.toFixed(1),
       r.actualStaffHrs.toFixed(1),
       r.hoursVariancePct.toFixed(1) + "%",
@@ -54,6 +70,7 @@ function downloadCSV(rows: COGSReportRow[]) {
       (r.avgRevPerManHrCents / 100).toFixed(2),
       (r.targetRateCents / 100).toFixed(2),
       (r.avgOverUnderCents / 100).toFixed(2),
+      r.laborEstimatedVisitCount,
     ].join(","));
   }
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -65,54 +82,63 @@ function downloadCSV(rows: COGSReportRow[]) {
   URL.revokeObjectURL(url);
 }
 
-export default function COGSReportPage() {
-  const today = new Date();
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-  const todayStr = today.toISOString().slice(0, 10);
+async function fetchReport(params: URLSearchParams): Promise<{ rows: COGSReportRow[] }> {
+  const res = await fetch(`/api/crm/reports/cogs?${params.toString()}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `Failed to load report (${res.status})`);
+  }
+  return res.json() as Promise<{ rows: COGSReportRow[] }>;
+}
 
-  const [from, setFrom] = useState(firstOfMonth);
-  const [to, setTo] = useState(todayStr);
+export default function COGSReportPage() {
+  const [defaults] = useState(defaultDateRange);
+  const [from, setFrom] = useState(defaults.from);
+  const [to, setTo] = useState(defaults.to);
 
   const params = new URLSearchParams({ from, to });
 
-  const { data, isLoading } = useQuery<{ rows: COGSReportRow[] }>({
+  const { data, isLoading, error } = useQuery<{ rows: COGSReportRow[] }>({
     queryKey: ["crm-cogs-report", from, to],
-    queryFn: async () => {
-      const res = await fetch(`/api/crm/reports/cogs?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to load report");
-      return res.json() as Promise<{ rows: COGSReportRow[] }>;
-    },
+    queryFn: () => fetchReport(params),
   });
 
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data]);
 
+  // Totals sum only additive columns; every rate/percent is a ratio of sums.
+  // visitCount is NOT summed — a shared visit appears under each of its services.
   const totals = useMemo(() => {
     if (rows.length === 0) return null;
+    const sum = (pick: (r: COGSReportRow) => number) => rows.reduce((s, r) => s + pick(r), 0);
+    const budgetedHours = sum((r) => r.budgetedHours);
+    const actualStaffHrs = sum((r) => r.actualStaffHrs);
+    const grossSalesCents = sum((r) => r.grossSalesCents);
+    const laborCostCents = sum((r) => r.laborCostCents);
+    const materialsCostCents = sum((r) => r.materialsCostCents);
+    const directCostCents = sum((r) => r.directCostCents);
+    const grossProfitCents = sum((r) => r.grossProfitCents);
     return {
-      jobCount: rows.reduce((s, r) => s + r.jobCount, 0),
-      budgetedHours: rows.reduce((s, r) => s + r.budgetedHours, 0),
-      actualStaffHrs: rows.reduce((s, r) => s + r.actualStaffHrs, 0),
-      grossSalesCents: rows.reduce((s, r) => s + r.grossSalesCents, 0),
-      laborCostCents: rows.reduce((s, r) => s + r.laborCostCents, 0),
-      materialsCostCents: rows.reduce((s, r) => s + r.materialsCostCents, 0),
-      directCostCents: rows.reduce((s, r) => s + r.directCostCents, 0),
-      grossProfitCents: rows.reduce((s, r) => s + r.grossProfitCents, 0),
+      budgetedHours,
+      actualStaffHrs,
+      hoursVariancePct: pctOf(actualStaffHrs - budgetedHours, budgetedHours),
+      grossSalesCents,
+      laborCostCents,
+      materialsCostCents,
+      directCostCents,
+      grossProfitCents,
+      marginPct: pctOf(grossProfitCents, grossSalesCents),
+      laborPct: pctOf(laborCostCents, grossSalesCents),
+      revPerManHrCents: ratioOf(grossSalesCents, actualStaffHrs),
+      laborEstimatedVisitCount: sum((r) => r.laborEstimatedVisitCount),
     };
   }, [rows]);
-
-  const overallMarginPct = totals && totals.grossSalesCents > 0
-    ? Math.round((totals.grossProfitCents / totals.grossSalesCents) * 1000) / 10
-    : 0;
-  const overallLaborPct = totals && totals.grossSalesCents > 0
-    ? Math.round((totals.laborCostCents / totals.grossSalesCents) * 1000) / 10
-    : 0;
 
   return (
     <div className="flex flex-col gap-5 p-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Cost of Goods Sold — By Service</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Profitability breakdown by service type across a date range</p>
+          <p className="text-sm text-slate-500 mt-0.5">Profitability of completed visits by service across a date range</p>
         </div>
         {rows.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => downloadCSV(rows)}>
@@ -137,9 +163,13 @@ export default function COGSReportPage() {
       {/* Summary strip */}
       {totals && (
         <div className="flex gap-3 flex-wrap">
-          <SummaryKPI label="Services" value={String(rows.length)} sub={`${totals.jobCount} total jobs`} />
+          <SummaryKPI label="Services" value={String(rows.length)} sub={`${totals.actualStaffHrs.toFixed(1)} man-hrs`} />
           <SummaryKPI label="Gross Sales" value={formatCurrency(totals.grossSalesCents)} />
-          <SummaryKPI label="Labor Cost" value={formatCurrency(totals.laborCostCents)} sub={`${overallLaborPct.toFixed(1)}% of sales`} />
+          <SummaryKPI
+            label="Labor Cost"
+            value={formatCurrency(totals.laborCostCents)}
+            sub={`${totals.laborPct.toFixed(1)}% of sales${totals.laborEstimatedVisitCount > 0 ? " · some estimated†" : ""}`}
+          />
           <SummaryKPI label="Materials" value={formatCurrency(totals.materialsCostCents)} />
           <SummaryKPI
             label="Gross Profit"
@@ -149,8 +179,9 @@ export default function COGSReportPage() {
           />
           <SummaryKPI
             label="Overall Margin"
-            value={`${overallMarginPct.toFixed(1)}%`}
-            color={overallMarginPct >= 40 ? "green" : overallMarginPct >= 20 ? undefined : "red"}
+            value={`${totals.marginPct.toFixed(1)}%`}
+            color={totals.marginPct >= 40 ? "green" : totals.marginPct >= 20 ? undefined : "red"}
+            sub={totals.revPerManHrCents > 0 ? `${formatCurrency(totals.revPerManHrCents)} / man-hr` : undefined}
           />
         </div>
       )}
@@ -159,9 +190,13 @@ export default function COGSReportPage() {
       <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-16 text-sm text-red-600">
+            {error instanceof Error ? error.message : "Failed to load report"}
+          </div>
         ) : rows.length === 0 ? (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400">
-            No completed jobs in this date range.
+            No completed visits in this date range.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -169,7 +204,7 @@ export default function COGSReportPage() {
               <thead>
                 <tr className="bg-slate-50 border-b text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Service</th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap">Jobs</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap">Visits</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Bgt Hrs</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Act Hrs</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Hrs Var</th>
@@ -189,7 +224,7 @@ export default function COGSReportPage() {
                 {rows.map((r) => (
                   <tr key={r.serviceId} className="border-b last:border-0 hover:bg-slate-50">
                     <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{r.serviceName}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.jobCount}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.visitCount}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                       {r.budgetedHours > 0 ? r.budgetedHours.toFixed(1) : "—"}
                     </td>
@@ -204,7 +239,15 @@ export default function COGSReportPage() {
                     <td className="px-3 py-2 text-right tabular-nums text-slate-700">
                       {r.grossSalesCents > 0 ? formatCurrency(r.grossSalesCents) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-700">{formatCurrency(r.laborCostCents)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                      {formatCurrency(r.laborCostCents)}
+                      {r.laborEstimatedVisitCount > 0 && (
+                        <span
+                          className="ml-0.5 text-amber-600"
+                          title={`${r.laborEstimatedVisitCount} of ${r.visitCount} visits have estimated labor (man-hours × crew burden)`}
+                        >†</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                       {r.grossSalesCents > 0 ? `${r.laborPct.toFixed(1)}%` : "—"}
                     </td>
@@ -237,22 +280,31 @@ export default function COGSReportPage() {
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-xs">
                     <td className="px-3 py-2.5 text-slate-600">Total</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{totals.jobCount}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-300">—</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{totals.budgetedHours.toFixed(1)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">{totals.actualStaffHrs.toFixed(1)}</td>
-                    <td />
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {totals.budgetedHours > 0 ? (
+                        <span className={totals.hoursVariancePct <= 0 ? "text-green-600" : "text-red-600"}>
+                          {totals.hoursVariancePct > 0 ? "+" : ""}{totals.hoursVariancePct.toFixed(1)}%
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(totals.grossSalesCents)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(totals.laborCostCents)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{overallLaborPct.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{totals.laborPct.toFixed(1)}%</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{formatCurrency(totals.materialsCostCents)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(totals.directCostCents)}</td>
                     <td className={cn("px-3 py-2.5 text-right tabular-nums", totals.grossProfitCents >= 0 ? "text-green-700" : "text-red-700")}>
                       {formatCurrency(totals.grossProfitCents)}
                     </td>
-                    <td className={cn("px-3 py-2.5 text-right tabular-nums", overallMarginPct >= 40 ? "text-green-600" : overallMarginPct >= 20 ? "text-slate-700" : "text-red-600")}>
-                      {overallMarginPct.toFixed(1)}%
+                    <td className={cn("px-3 py-2.5 text-right tabular-nums", totals.marginPct >= 40 ? "text-green-600" : totals.marginPct >= 20 ? "text-slate-700" : "text-red-600")}>
+                      {totals.marginPct.toFixed(1)}%
                     </td>
-                    <td colSpan={3} />
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
+                      {totals.revPerManHrCents > 0 ? formatCurrency(totals.revPerManHrCents) : "—"}
+                    </td>
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               )}
@@ -260,6 +312,27 @@ export default function COGSReportPage() {
           </div>
         )}
       </div>
+
+      {rows.length > 0 && (
+        <div className="text-[11px] text-slate-400 leading-relaxed space-y-0.5">
+          <p>
+            Each visit completed in the window is split across its services in proportion to man-hours worked
+            (even split when no hours are recorded); a visit with several services counts once under each.
+            Hours are man-hours. Rev/Man Hr, percentages and the total row are ratios of the summed columns.
+            Visits with no service assignments appear as &ldquo;Unassigned&rdquo;.
+          </p>
+          {totals && totals.laborEstimatedVisitCount > 0 && (
+            <p>
+              <span className="text-amber-600">†</span> Includes visits whose labor was estimated as man-hours × the crew&apos;s
+              average labor burden rate because no crew clock-out recorded actual labor.
+            </p>
+          )}
+          <p>
+            Materials logged against a specific visit are charged to that visit; job-level materials are spread
+            evenly across the job&apos;s completed visits.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

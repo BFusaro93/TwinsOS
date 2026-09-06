@@ -1,12 +1,16 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import {
+  AR_WRITE_OFF_METHOD,
+  ISSUED_INVOICE_STATUSES,
   buildResult,
   col,
   dateRangeFilterDef,
   dateRangeFilters,
   eqFilter,
+  issuedInvoiceFilter,
   MONTH_KEYS,
   MONTH_LABELS,
+  netPaymentCents,
   resolveDateRange,
 } from "@/lib/reports/helpers";
 
@@ -40,6 +44,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
     filters: [dateRangeFilterDef("Invoice Date", "this_month")],
+    notes: ["Excludes line items on draft and void invoices."],
     analysis: (params) => ({
       dataset: "rpt_invoice_line_items",
       columns: [
@@ -53,7 +58,10 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         "total_cents",
         "invoice_status",
       ],
-      filters: [...dateRangeFilters("invoice_date", params)],
+      filters: [
+        ...issuedInvoiceFilter(),
+        ...dateRangeFilters("invoice_date", params),
+      ],
       groupBy: [],
       aggregates: [],
       sortColumn: "invoice_date",
@@ -71,8 +79,10 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       const { from, to } = resolveDateRange(params, "this_month");
       let query = supabase
         .from("crm_payments")
-        .select("payment_date, method, amount_cents, unused_amount_cents")
-        .is("deleted_at", null);
+        .select("payment_date, method, amount_cents, refunded_amount_cents, unused_amount_cents")
+        .is("deleted_at", null)
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD);
       if (from) query = query.gte("payment_date", from);
       if (to) query = query.lte("payment_date", to);
       const { data, error } = await query.limit(5000);
@@ -82,6 +92,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         payment_date: string | null;
         method: string | null;
         amount_cents: number | null;
+        refunded_amount_cents: number | null;
         unused_amount_cents: number | null;
       };
 
@@ -109,7 +120,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
             unused_cents: 0,
             total_cents: 0,
           };
-        const amount = r.amount_cents ?? 0;
+        const amount = netPaymentCents(r);
         totals[paymentBucket(r.method)] += amount;
         totals.unused_cents += r.unused_amount_cents ?? 0;
         totals.total_cents += amount;
@@ -132,7 +143,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("unused_cents", "Unapplied", "money"),
           col("total_cents", "Total", "money"),
         ],
-        rows
+        rows,
+        ["Cash only: excludes account credits and AR write-offs; amounts are net of refunds."]
       );
     },
   },
@@ -152,10 +164,12 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       let query = supabase
         .from("crm_payments")
         .select(
-          "payment_date, method, amount_cents, processing_fee_cents, clients:client_id(display_name)"
+          "payment_date, method, amount_cents, refunded_amount_cents, processing_fee_cents, clients:client_id(display_name)"
         )
         .is("deleted_at", null)
-        .gt("processing_fee_cents", 0);
+        .gt("processing_fee_cents", 0)
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD);
       if (from) query = query.gte("payment_date", from);
       if (to) query = query.lte("payment_date", to);
       const { data, error } = await query.order("payment_date", { ascending: false }).limit(5000);
@@ -165,6 +179,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         payment_date: string | null;
         method: string | null;
         amount_cents: number | null;
+        refunded_amount_cents: number | null;
         processing_fee_cents: number | null;
         clients: { display_name: string | null } | null;
       };
@@ -172,7 +187,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         payment_date: r.payment_date,
         client_name: r.clients?.display_name ?? "(unknown)",
         method: r.method,
-        amount_cents: r.amount_cents ?? 0,
+        amount_cents: netPaymentCents(r),
         processing_fee_cents: r.processing_fee_cents ?? 0,
       }));
 
@@ -187,7 +202,10 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("processing_fee_cents", "Processing Fee", "money"),
         ],
         rows,
-        [`Total processing fees collected in this period: $${(totalFeeCents / 100).toFixed(2)}`]
+        [
+          `Total processing fees collected in this period: $${(totalFeeCents / 100).toFixed(2)}`,
+          "Cash only: excludes account credits and AR write-offs; Payment Amount is net of refunds.",
+        ]
       );
     },
   },
@@ -197,11 +215,12 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     name: "Revenue by Postal Code",
     description: "Totals invoiced revenue by billing postal code.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
+    notes: ["Excludes draft and void invoices."],
     analysis: (params) => ({
       dataset: "rpt_invoices",
       columns: [],
       filters: [
-        { column: "status", op: "neq", value: "void" },
+        ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, { preset: "this_year" }),
       ],
       groupBy: ["billing_zip"],
@@ -223,9 +242,13 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
     run: async ({ supabase, params }) => {
       const { from, to } = resolveDateRange(params, "this_year");
+      // Rule A (issued invoices only) and the soft-delete guard are applied on
+      // the joined parent; `!inner` drops line items whose invoice fails them.
       let query = supabase
         .from("crm_invoice_line_items")
-        .select("name, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)");
+        .select("name, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)")
+        .is("crm_invoices.deleted_at", null)
+        .in("crm_invoices.status", ISSUED_INVOICE_STATUSES);
       if (from) query = query.gte("crm_invoices.invoice_date", from);
       if (to) query = query.lte("crm_invoices.invoice_date", to);
       const { data, error } = await query.limit(5000);
@@ -236,9 +259,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         total_cents: number | null;
         crm_invoices: { invoice_date: string | null; status: string | null } | null;
       };
-      const lines = ((data ?? []) as unknown as Row[]).filter(
-        (r) => r.crm_invoices?.status !== "void"
-      );
+      const lines = (data ?? []) as unknown as Row[];
 
       interface ServiceTotals {
         months: number[];
@@ -274,7 +295,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("total_cents", "Total", "money"),
         ],
         rows,
-        ["Revenue is reported on the invoice date. Void invoices are excluded."]
+        ["Revenue is reported on the invoice date. Draft and void invoices are excluded."]
       );
     },
   },
@@ -407,7 +428,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         .from("crm_invoices")
         .select("invoice_date, total_cents, status")
         .is("deleted_at", null)
-        .neq("status", "void");
+        .in("status", ISSUED_INVOICE_STATUSES);
       if (from) invQuery = invQuery.gte("invoice_date", from);
       if (to) invQuery = invQuery.lte("invoice_date", to);
       const { data: invData, error: invError } = await invQuery.limit(5000);
@@ -415,15 +436,21 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
 
       let payQuery = supabase
         .from("crm_payments")
-        .select("payment_date, amount_cents")
-        .is("deleted_at", null);
+        .select("payment_date, amount_cents, refunded_amount_cents")
+        .is("deleted_at", null)
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD);
       if (from) payQuery = payQuery.gte("payment_date", from);
       if (to) payQuery = payQuery.lte("payment_date", to);
       const { data: payData, error: payError } = await payQuery.limit(5000);
       if (payError) throw new Error(payError.message);
 
       type InvoiceRow = { invoice_date: string | null; total_cents: number | null };
-      type PaymentRow = { payment_date: string | null; amount_cents: number | null };
+      type PaymentRow = {
+        payment_date: string | null;
+        amount_cents: number | null;
+        refunded_amount_cents: number | null;
+      };
 
       const invoicedMonths = new Array<number>(12).fill(0);
       for (const r of (invData ?? []) as unknown as InvoiceRow[]) {
@@ -433,7 +460,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       const collectedMonths = new Array<number>(12).fill(0);
       for (const r of (payData ?? []) as unknown as PaymentRow[]) {
         const idx = parseInt((r.payment_date ?? "").slice(5, 7), 10) - 1;
-        if (idx >= 0 && idx < 12) collectedMonths[idx] += r.amount_cents ?? 0;
+        if (idx >= 0 && idx < 12) collectedMonths[idx] += netPaymentCents(r);
       }
 
       const rows = [
@@ -457,7 +484,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          "Invoiced reflects the invoice date; Collected reflects the payment date. Void invoices are excluded.",
+          "Invoiced reflects the invoice date and excludes draft and void invoices. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds.",
         ]
       );
     },
@@ -473,10 +500,12 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       let query = supabase
         .from("crm_payments")
         .select(
-          "payment_date, method, reference, amount_cents, processing_fee_cents, clients:client_id(display_name)"
+          "payment_date, method, reference, amount_cents, refunded_amount_cents, processing_fee_cents, clients:client_id(display_name)"
         )
         .is("deleted_at", null)
-        .like("method", "Credit Card%");
+        .like("method", "Credit Card%")
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD);
       if (from) query = query.gte("payment_date", from);
       if (to) query = query.lte("payment_date", to);
       const { data, error } = await query.order("payment_date", { ascending: false }).limit(5000);
@@ -487,6 +516,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         method: string | null;
         reference: string | null;
         amount_cents: number | null;
+        refunded_amount_cents: number | null;
         processing_fee_cents: number | null;
         clients: { display_name: string | null } | null;
       };
@@ -496,7 +526,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         client_name: r.clients?.display_name ?? "(unknown)",
         method: r.method,
         reference: r.reference,
-        amount_cents: r.amount_cents ?? 0,
+        amount_cents: netPaymentCents(r),
         processing_fee_cents: r.processing_fee_cents ?? 0,
       }));
 
@@ -509,7 +539,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("amount_cents", "Amount", "money"),
           col("processing_fee_cents", "Processing Fee", "money"),
         ],
-        rows
+        rows,
+        ["Cash only: excludes account credits and AR write-offs; Amount is net of refunds."]
       );
     },
   },
