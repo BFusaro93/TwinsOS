@@ -56,6 +56,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error?.message ?? "create failed" }, { status: 500 });
   }
 
+  // Same client-timeline row the in-app New Job dialog writes (see
+  // useCreateClientJob). Admin client → org_id must be explicit. Best-effort.
+  await db.from("client_activity").insert({
+    org_id: auth.orgId,
+    client_id: body.clientId,
+    activity_type: "job",
+    subject: `Job created: ${(body.jobType ?? "one_time").replace(/_/g, " ")}`,
+    ref_id: data.id,
+    ref_table: "crm_jobs",
+  });
+
   return NextResponse.json({
     id: data.id,
     jobNumber: data.job_number,

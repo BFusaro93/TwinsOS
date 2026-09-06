@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { roundHours, formatMonthDay } from "@/lib/utils";
+import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow, BudgetMethod } from "@/types/crm-jobs";
 
@@ -681,6 +683,9 @@ export function useCreateVisit() {
       /** Current job_type of the parent job, e.g. from a Waiting List dispatch —
        * used to graduate a waiting_list job into a concretely scheduled one below. */
       jobType?: string;
+      /** Crew size for this visit — defaults from the parent job's man_count so
+       *  the dispatch board's MEN column isn't 0 until someone edits the sheet. */
+      menCount?: number | null;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -691,6 +696,7 @@ export function useCreateVisit() {
           client_id: values.clientId,
           scheduled_date: values.scheduledDate,
           crew_id: values.crewId ?? null,
+          men_count: values.menCount ?? 1,
           start_time: values.startTime ?? null,
           end_time: values.endTime ?? null,
           priority: values.priority ?? 1,
@@ -857,8 +863,19 @@ export function useUpdateVisitStatus() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits').update(patch).eq('id', id)
-        .select('client_id, job_id, job_service_id').single();
+        .select('client_id, job_id, job_service_id, scheduled_date').single();
       if (error) throw error;
+      if (status === 'dispatched' && data?.client_id) {
+        // Same lightweight timeline row useUpdateVisit writes — no notification.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('client_activity').insert({
+          client_id: data.client_id,
+          activity_type: 'job',
+          subject: `Visit dispatched ${formatMonthDay(data.scheduled_date)}`,
+          ref_id: data.job_id,
+          ref_table: 'crm_jobs',
+        });
+      }
       return {
         clientId: data?.client_id as string | undefined,
         jobId: data?.job_id as string | undefined,
@@ -945,15 +962,41 @@ export function useUpdateVisit() {
       let dateChanged = false;
       let dateChangeClientId: string | null = null;
       let dateChangeServiceIds: string[] | undefined;
-      if (updates.scheduled_date !== undefined) {
+      // Lightweight activity-timeline rows (no notifications) for the two
+      // dispatcher actions that previously left no trace on the client:
+      // rescheduling a visit and dispatching it.
+      const activityRows: { client_id: string; subject: string; ref_id: string }[] = [];
+      let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string } | null = null;
+      if (updates.scheduled_date !== undefined || (updates.status && updates.status !== 'completed')) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: before } = await (supabase as any)
-          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id').eq('id', id).single();
+        const { data } = await (supabase as any)
+          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status').eq('id', id).single();
+        before = data ?? null;
+      }
+      if (updates.scheduled_date !== undefined) {
         dateChanged = !!before && before.scheduled_date !== updates.scheduled_date;
         dateChangeClientId = before?.client_id ?? null;
         if (dateChanged && before?.job_id) {
+          // Package spacing rule (crm_job_services.min_days) — every client
+          // reschedule path funnels through here (JobDetail dispatch, sheet
+          // edits), so this is where the guard lives; the API routes run the
+          // same check and the DB trigger is the final floor.
+          const violation = await checkPackageMinDaysViolation(supabase, id, updates.scheduled_date);
+          if (violation) throw new Error(violation);
           dateChangeServiceIds = await fetchVisitServiceIds(supabase, before.job_id, before.job_service_id ?? null);
+          activityRows.push({
+            client_id: before.client_id,
+            subject: `Visit moved ${formatMonthDay(before.scheduled_date)} → ${formatMonthDay(updates.scheduled_date)}`,
+            ref_id: before.job_id,
+          });
         }
+      }
+      if (updates.status === 'dispatched' && before && before.status !== 'dispatched') {
+        activityRows.push({
+          client_id: before.client_id,
+          subject: `Visit dispatched ${formatMonthDay(updates.scheduled_date ?? before.scheduled_date)}`,
+          ref_id: before.job_id,
+        });
       }
 
       // Completing a visit must go through the /complete route below, which
@@ -968,7 +1011,12 @@ export function useUpdateVisit() {
       // writes directly, same as before.
       const isCompleting = updates.status === 'completed';
       const { status: _statusOmittedForCompletion, ...updatesWithoutStatus } = updates;
-      const dbUpdates = isCompleting ? updatesWithoutStatus : updates;
+      const dbUpdates = { ...(isCompleting ? updatesWithoutStatus : updates) };
+      // Hours come from clock deltas × men and qty ÷ production rate — round
+      // before writing so float noise (6.000000000000001) never reaches the
+      // row or the crm_jobs audit trail that echoes the actual_hours rollup.
+      if (typeof dbUpdates.actual_hours === 'number') dbUpdates.actual_hours = roundHours(dbUpdates.actual_hours, 2);
+      if (typeof dbUpdates.budgeted_hours === 'number') dbUpdates.budgeted_hours = roundHours(dbUpdates.budgeted_hours);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
@@ -977,6 +1025,13 @@ export function useUpdateVisit() {
         .update(dbUpdates as any)
         .eq('id', id);
       if (error) throw error;
+
+      if (activityRows.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('client_activity').insert(
+          activityRows.map((r) => ({ ...r, activity_type: 'job', ref_table: 'crm_jobs' }))
+        );
+      }
 
       // Cascade completion to parent job via server route
       let clientId: string | undefined;
@@ -1019,7 +1074,7 @@ export function useUpdateVisit() {
         }).catch(() => {});
       }
 
-      return { clientId, dateChanged, dateChangeClientId, dateChangeServiceIds };
+      return { clientId, dateChanged, dateChangeClientId, dateChangeServiceIds, activityClientId: activityRows[0]?.client_id ?? null };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
@@ -1030,6 +1085,7 @@ export function useUpdateVisit() {
         qc.invalidateQueries({ queryKey: ['clients', clientId] });
         qc.invalidateQueries({ queryKey: ['crm-invoices'] });
       }
+      if (data?.activityClientId) qc.invalidateQueries({ queryKey: ['clients', data.activityClientId, 'activity'] });
       qc.invalidateQueries({ queryKey: ['clients'] });
       if (data?.dateChanged && data.dateChangeClientId) {
         fireAutomationTrigger({
@@ -1049,7 +1105,7 @@ export function useGenerateVisits() {
       job,
       dates,
     }: {
-      job: { id: string; clientId: string; crewId?: string | null; notesToCrew?: string | null };
+      job: { id: string; clientId: string; crewId?: string | null; notesToCrew?: string | null; manCount?: number | null };
       dates: string[];
     }) => {
       const supabase = createClient();
@@ -1060,6 +1116,7 @@ export function useGenerateVisits() {
         scheduled_date: d,
         priority: i + 1,
         notes_to_crew: job.notesToCrew ?? null,
+        men_count: job.manCount ?? 1,
       }));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_visits').insert(rows);
@@ -1076,6 +1133,7 @@ export function useCreateClientJob() {
     mutationFn: async (values: NewClientJobFormValues) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      const jobManCount = Math.max(1, ...values.services.map((s) => s.teamSize || 1));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_jobs')
@@ -1118,10 +1176,16 @@ export function useCreateClientJob() {
           waiting_list_end: values.waitingListEnd || null,
           start_date_window: values.startDateWindow || null,
           end_date_window: values.endDateWindow || null,
+          // Recurring season window — generate-visits stops at recurrence_end.
+          recurrence_start: values.jobType === 'recurring' ? (values.startDateWindow || null) : null,
+          recurrence_end: values.jobType === 'recurring' ? (values.recurrenceEnd || null) : null,
+          // Crew size from the dialog's Team column (largest across rows) —
+          // was never written, so every visit landed on the board with MEN 0.
+          man_count: jobManCount,
           is_complete: false,
           notes: values.notes || null,
           notes_to_crew: values.notesToCrew || null,
-          budgeted_hours: values.services.reduce((sum, s) => sum + (s.budgetedHours || 0) * (s.teamSize || 1), 0) || null,
+          budgeted_hours: roundHours(values.services.reduce((sum, s) => sum + (s.budgetedHours || 0) * (s.teamSize || 1), 0)) || null,
         })
         .select()
         .single();
@@ -1142,7 +1206,7 @@ export function useCreateClientJob() {
           assigned_to: s.assignedTo || null,
           qty: s.qty,
           rate_cents: s.rateCents,
-          budgeted_hours: s.budgetedHours,
+          budgeted_hours: roundHours(s.budgetedHours || 0),
           budget_method: s.budgetMethod,
           team_size: s.teamSize,
           days_count: s.daysCount,
@@ -1188,13 +1252,14 @@ export function useCreateClientJob() {
       let createdVisitIds: string[] = [];
       if (values.scheduledDate && autoVisitTypes.includes(values.jobType)) {
         if (values.services.length > 1) {
-          const visitRows = values.services.map((_s, i) => ({
+          const visitRows = values.services.map((s, i) => ({
             job_id: job.id,
             client_id: values.clientId,
             job_service_id: serviceIdBySortOrder[i] ?? null,
             scheduled_date: values.scheduledDate,
             status: 'scheduled',
             crew_id: values.crewId || null,
+            men_count: s.teamSize || jobManCount,
           }));
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: insertedVisits } = await (supabase as any)
@@ -1212,6 +1277,7 @@ export function useCreateClientJob() {
               scheduled_date: values.scheduledDate,
               status: 'scheduled',
               crew_id: values.crewId || null,
+              men_count: jobManCount,
             })
             .select('id')
             .single();
@@ -1233,11 +1299,24 @@ export function useCreateClientJob() {
             scheduled_date: s.startDate,
             status: 'scheduled',
             crew_id: values.crewId || null,
+            men_count: s.teamSize || jobManCount,
           }));
         if (visitRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase as any).from('crm_job_visits').insert(visitRows);
         }
+      }
+
+      // Recurring jobs: generate the season's visits right away (through
+      // recurrence_end, or year end, capped server-side) instead of leaving
+      // the job with zero visits until someone finds "Generate Visits".
+      // Best-effort — the job exists either way and the button still works.
+      if (values.jobType === 'recurring' && values.schedule && values.startDateWindow) {
+        await fetch('/api/crm/jobs/generate-visits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId: job.id, lookaheadDays: 365 }),
+        }).catch(() => {});
       }
 
       // The "already completed" checkbox (one-time jobs only) logs work that's
@@ -1281,6 +1360,9 @@ export function useCreateClientJob() {
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'client', values.clientId] });
       qc.invalidateQueries({ queryKey: ['clients', values.clientId, 'activity'] });
+      // Recurring jobs now generate their season's visits on create — refresh
+      // the dispatch board / visit lists so they show without a reload.
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       if (values.products.length > 0) {
         qc.invalidateQueries({ queryKey: ['crm-job-products', (data as { id: string }).id] });
       }
@@ -1591,6 +1673,27 @@ export function useJobsList(filters?: {
 
 // ── create jobs from won estimate ─────────────────────────────────────────────
 
+/** Jobs already created from an estimate (crm_jobs.estimate_id) — lets the
+ *  estimate header offer "View Job" instead of a second "Convert to Job". */
+export function useEstimateJobs(estimateId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['crm-jobs', 'by-estimate', estimateId],
+    enabled: !!estimateId,
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('crm_jobs')
+        .select('id, job_type, status, created_at')
+        .eq('estimate_id', estimateId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as { id: string; job_type: string; status: string; created_at: string }[];
+    },
+  });
+}
+
 export function useCreateJobsFromEstimate() {
   const qc = useQueryClient();
   return useMutation({
@@ -1606,6 +1709,7 @@ export function useCreateJobsFromEstimate() {
       materials,
       projectId,
       eacHintCents,
+      manCount,
     }: {
       estimateId: string;
       clientId: string;
@@ -1613,6 +1717,8 @@ export function useCreateJobsFromEstimate() {
       scheduledDate: string | null;
       crewId: string | null;
       schedule?: string | null;
+      /** Crew size from the convert dialog — lands on crm_jobs.man_count and every visit's men_count. */
+      manCount?: number | null;
       notesToCrew: string | null;
       services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string }[];
       materials?: { productItemId: string; productName: string; qty: number; unitPriceCents: number | null }[];
@@ -1623,6 +1729,8 @@ export function useCreateJobsFromEstimate() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      const jobManCount = Math.max(1, Math.round(manCount ?? 1));
+      const totalBudgetedHours = roundHours(services.reduce((s, sv) => s + (sv.budgetedHours ?? 0), 0));
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
@@ -1642,7 +1750,8 @@ export function useCreateJobsFromEstimate() {
           rate_cents: services.reduce((s, sv) => s + sv.totalCents, 0),
           schedule_days: [],
           conflict_days: [],
-          man_count: 1,
+          man_count: jobManCount,
+          budgeted_hours: totalBudgetedHours || null,
           call_ahead: false,
           is_complete: false,
           invoice_separately: false,
@@ -1652,6 +1761,18 @@ export function useCreateJobsFromEstimate() {
       if (error) throw error;
 
       const jobId = (data as { id: string }).id;
+
+      // Same timeline row useCreateClientJob writes, so a job converted from
+      // an estimate shows up in the client's Activity like any other job.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        client_id: clientId,
+        activity_type: "job",
+        subject: `Job created: ${jobType.replace(/_/g, " ")}`,
+        ref_id: jobId,
+        ref_table: "crm_jobs",
+        created_by: user?.id ?? null,
+      });
 
       if (services.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1666,13 +1787,29 @@ export function useCreateJobsFromEstimate() {
               rate_cents: s.rateCents,
               sort_order: i,
               included: true,
-              budgeted_hours: s.budgetedHours ?? 0,
+              budgeted_hours: roundHours(s.budgetedHours ?? 0),
               budget_method: s.budgetMethod ?? 'manual',
-              team_size: 1,
+              team_size: jobManCount,
               days_count: 1,
             }))
           );
         if (svcError) throw svcError;
+      }
+
+      // A dated job gets its first visit here (with the crew size), so it
+      // shows on the dispatch board immediately with the right MEN count
+      // rather than relying on JobDetail's one_time-only auto-create effect.
+      if (scheduledDate) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("crm_job_visits").insert({
+          job_id: jobId,
+          client_id: clientId,
+          scheduled_date: scheduledDate,
+          status: "scheduled",
+          crew_id: crewId,
+          men_count: jobManCount,
+          notes_to_crew: notesToCrew,
+        });
       }
 
       if (materials && materials.length > 0) {
@@ -1744,13 +1881,16 @@ export function useCreateJobsFromEstimate() {
         // Non-fatal — the job itself was created successfully above.
       }
 
-      // Mark estimate accepted
+      // Mark estimate accepted — only if it isn't already (an estimate accepted
+      // online / via the portal is converted from the header button, and a
+      // no-op re-save would still land a spurious stage entry in the audit trail).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
         .from("estimates")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update({ stage: "accepted" } as any)
-        .eq("id", estimateId);
+        .eq("id", estimateId)
+        .neq("stage", "accepted");
 
       // Seed the linked project's EAC (estimated cost at completion) from this
       // estimate — but only if it's still unset (0), so we never clobber a PM's
@@ -1769,6 +1909,7 @@ export function useCreateJobsFromEstimate() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
+      qc.invalidateQueries({ queryKey: ["clients", data.clientId, "activity"] });
       if (data.projectId) {
         qc.invalidateQueries({ queryKey: ["projects"] });
         qc.invalidateQueries({ queryKey: ["client-projects"] });
@@ -2070,6 +2211,7 @@ export function useUpdateJobService() {
       patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number };
     }) => {
       const supabase = createClient();
+      if (typeof patch.budgeted_hours === 'number') patch = { ...patch, budgeted_hours: roundHours(patch.budgeted_hours) };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_job_services')
@@ -2110,7 +2252,7 @@ export function useAddJobService() {
         service_name: serviceName,
         qty,
         rate_cents: rateCents,
-        budgeted_hours: budgetedHours,
+        budgeted_hours: roundHours(budgetedHours),
         budget_method: budgetMethod ?? 'manual',
         team_size: 1,
         days_count: 1,

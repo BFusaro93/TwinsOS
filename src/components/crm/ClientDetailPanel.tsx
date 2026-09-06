@@ -39,6 +39,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -80,7 +90,7 @@ import {
   useUpsertClientCustomFieldValue,
 } from "@/lib/hooks/use-client-custom-fields";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatHours } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
@@ -2024,11 +2034,18 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                         ))}
                       </div>
                       <div className="shrink-0 text-right">
-                        {job.rateCents != null && (
-                          <p className="text-xs font-medium text-slate-700">
-                            {formatCurrency(job.rateCents)}
-                          </p>
-                        )}
+                        {(() => {
+                          // Same rule as JobsList.jobRevenueCents / the board:
+                          // Σ service qty × rate wins over the creation-time
+                          // rate_cents snapshot when the job has priced lines.
+                          const svcTotal = (job.services ?? []).reduce((sum, sv) => sum + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0);
+                          const shown = svcTotal > 0 ? svcTotal : job.rateCents;
+                          return shown != null ? (
+                            <p className="text-xs font-medium text-slate-700">
+                              {formatCurrency(shown)}
+                            </p>
+                          ) : null;
+                        })()}
                         {job.scheduledDate && (
                           <p className="text-[10px] text-slate-400">
                             {formatDate(job.scheduledDate)}
@@ -2453,7 +2470,7 @@ function JobVisitsModal({
               </thead>
               <tbody className="divide-y">
                 {isWaitingList ? waitingListRows.map((svc) => {
-                  const hrs = svc.budgetedHours > 0 ? `${svc.budgetedHours}hrs` : (job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
+                  const hrs = svc.budgetedHours > 0 ? `${formatHours(svc.budgetedHours)}hrs` : (job.budgetedHours != null ? `${formatHours(job.budgetedHours)}hrs` : "—");
                   const amt = svc.rateCents != null ? formatCurrency(svc.rateCents) : "—";
                   return (
                     <tr key={svc.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => { onClose(); onOpenJob(job.id); }}>
@@ -2478,8 +2495,8 @@ function JobVisitsModal({
                 }) : filtered.map((v: CRMJobVisit) => {
                   // Fall back to job-level budgeted hours if visit doesn't have its own
                   const hours = mode === "history"
-                    ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
-                    : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
+                    ? (() => { const h = computeActualHours(v); return h != null ? `${formatHours(h)}hrs` : "0hrs"; })()
+                    : (v.budgetedHours != null ? `${formatHours(v.budgetedHours)}hrs` : job.budgetedHours != null ? `${formatHours(job.budgetedHours)}hrs` : "—");
                   const amount = v.rateCents != null ? formatCurrency(v.rateCents) : (job.rateCents != null ? formatCurrency(job.rateCents) : "—");
                   const dateStr = fmtDate(v.scheduledDate);
 
@@ -3018,8 +3035,8 @@ function ClientAllVisitsModal({
               <tbody className="divide-y">
                 {filtered.map((v: CRMJobVisit) => {
                   const hours = mode === "history"
-                    ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
-                    : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : "—");
+                    ? (() => { const h = computeActualHours(v); return h != null ? `${formatHours(h)}hrs` : "0hrs"; })()
+                    : (v.budgetedHours != null ? `${formatHours(v.budgetedHours)}hrs` : "—");
                   const amount = v.rateCents != null ? formatCurrency(v.rateCents) : "—";
                   return (
                     <tr
@@ -3098,6 +3115,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
   const { mutateAsync: activate } = useActivateClient();
   const { mutate: addTag } = useAddClientTag();
@@ -3138,6 +3156,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   if (!client) return null;
 
   async function handleConvert() {
+    setConvertConfirmOpen(false);
     try {
       await convertLead(clientId);
       toast.success(`${client!.displayName} converted to client`);
@@ -3617,12 +3636,30 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <Button
               size="sm"
               className="h-7 shrink-0 bg-yellow-600 text-xs text-white hover:bg-yellow-700"
-              onClick={handleConvert}
+              onClick={() => setConvertConfirmOpen(true)}
               disabled={converting}
             >
               {converting ? "Converting…" : "Convert to Client"}
             </Button>
           </PermissionGate>
+          <AlertDialog open={convertConfirmOpen} onOpenChange={setConvertConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Convert to Client</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Convert <span className="font-medium text-slate-800">{client.displayName}</span> to an active client?
+                  They will appear in the Clients list and can be scheduled for jobs and invoiced.
+                  Today becomes their &ldquo;Client since&rdquo; date.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void handleConvert()} className="bg-yellow-600 hover:bg-yellow-700">
+                  Convert to Client
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 

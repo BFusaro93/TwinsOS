@@ -3,6 +3,9 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 const LOOKAHEAD_DAYS = 14;
+/** Hard cap on visits inserted per call — a weekly job through year end is
+ *  ~52, so this only trips on a mis-configured schedule/end date. */
+const MAX_VISITS_PER_RUN = 60;
 
 const DAY_INDEX: Record<string, number> = {
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
@@ -166,13 +169,21 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  // Generate only through the end of the current calendar year — visits are
-  // regenerated each year so customers who don't renew are never pre-scheduled.
-  const yearEnd = new Date(today.getFullYear(), 11, 31);
-  const windowEnd = yearEnd;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jobAny = job as any;
+
+  // Generate through the job's own end date when it has one (the dialog's
+  // optional "End date" → crm_jobs.recurrence_end; MAX_VISITS_PER_RUN still
+  // caps a runaway window). Otherwise only through the end of the current
+  // calendar year — visits are regenerated each year so customers who don't
+  // renew are never pre-scheduled. recurrence_end is a date-only column, so
+  // parse at LOCAL midnight (see toISODate); `new Date("YYYY-MM-DD")` is UTC
+  // and would drop the final day's visit west of UTC.
+  const yearEnd = new Date(today.getFullYear(), 11, 31);
+  const recurrenceEnd: Date | null = jobAny.recurrence_end
+    ? new Date((jobAny.recurrence_end as string) + 'T00:00:00')
+    : null;
+  const windowEnd = recurrenceEnd ?? yearEnd;
 
   // Package jobs don't recur on a weekly/monthly rule — each numbered visit
   // has its own fixed date already resolved onto crm_job_services (from the
@@ -208,6 +219,7 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
         job_id: jobId, client_id: jobAny.client_id,
         crew_id: jobAny.crew_id ?? null, scheduled_date: s.start_date,
         job_service_id: s.id,
+        men_count: Math.max(1, Number(jobAny.man_count ?? 1) || 1),
         priority: jobAny.priority ?? 1, notes_to_crew: jobAny.notes_to_crew ?? null,
       }));
 
@@ -220,19 +232,24 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
     return NextResponse.json({ generated: toInsert.length });
   }
 
-  // For recurring jobs: start generating from the job's scheduled_date (the "start recurring" date)
-  // if it's in the future; otherwise start from today.
-  const jobStartDate = jobAny.scheduled_date
-    ? new Date(jobAny.scheduled_date + 'T00:00:00')
+  // For recurring jobs: start generating from the job's "start recurring" date
+  // (NewJobDialog stores it as recurrence_start / start_date_window, the
+  // estimate-convert flow as scheduled_date) if it's in the future; otherwise today.
+  const recurringStart: string | null =
+    jobAny.scheduled_date ?? jobAny.recurrence_start ?? jobAny.start_date_window ?? null;
+  const jobStartDate = recurringStart
+    ? new Date(recurringStart + 'T00:00:00')
     : today;
   const windowStart = jobStartDate > today ? jobStartDate : today;
 
   const fromStr = toISODate(windowStart);
   const toStr   = toISODate(windowEnd);
 
-  const effectiveEnd = jobAny.recurrence_end
-    ? new Date(Math.min(windowEnd.getTime(), new Date(jobAny.recurrence_end as string).getTime()))
-    : windowEnd;
+  const effectiveEnd = windowEnd;
+  if (effectiveEnd < windowStart) {
+    return NextResponse.json({ generated: 0, message: "Job's end date has passed — nothing to generate." });
+  }
+  const menCount: number = Math.max(1, Number(jobAny.man_count ?? 1) || 1);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
@@ -362,7 +379,7 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
       toInsert.push({
         job_id: jobId, client_id: j.client_id,
         crew_id: j.crew_id ?? null, scheduled_date: dateStr,
-        job_service_id: null,
+        job_service_id: null, men_count: menCount,
         priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
       });
       continue;
@@ -375,16 +392,18 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
       toInsert.push({
         job_id: jobId, client_id: j.client_id,
         crew_id: j.crew_id ?? null, scheduled_date: dateStr,
-        job_service_id: svc.id,
+        job_service_id: svc.id, men_count: menCount,
         priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
       });
       existingDateServiceKeys.add(key);
     }
+    if (toInsert.length >= MAX_VISITS_PER_RUN) break;
   }
 
   if (toInsert.length === 0) {
     return NextResponse.json({ generated: 0, message: "All visits already exist in window." });
   }
+  if (toInsert.length > MAX_VISITS_PER_RUN) toInsert.length = MAX_VISITS_PER_RUN;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: insertErr } = // eslint-disable-next-line @typescript-eslint/no-explicit-any

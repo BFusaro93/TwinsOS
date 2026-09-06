@@ -106,6 +106,15 @@ function useBreadcrumbs() {
     accounting: "Accounting",
     communication: "Communication",
     "sales-meetings": "Sales Meetings",
+    admin: "Admin",
+    documents: "Documents",
+    forms: "Forms",
+    analysis: "Analysis",
+    dispatch: "Dispatch Board",
+    "waiting-list": "Waiting List",
+    crew: "Crew",
+    stops: "Stops",
+    r: "Report",
   };
 
   // Label for a UUID segment, keyed by the collection segment before it —
@@ -133,6 +142,11 @@ function useBreadcrumbs() {
     parts: "Part Details",
     meters: "Meter Details",
     automations: "Automation Details",
+    documents: "Document Details",
+    forms: "Form Details",
+    analysis: "Analysis Details",
+    dashboards: "Dashboard Details",
+    stops: "Stop Details",
   };
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -22,7 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { CalendarDays, Briefcase, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, roundHours } from "@/lib/utils";
 import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
@@ -103,8 +103,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
   // Default to items the client actually accepted — items marked "lost" on a per-item
   // acceptance (portal or public proposal) are left unchecked, but still selectable.
+  // $0 lines (net of their own discount) are also left unchecked: they'd otherwise
+  // convert into billable $0 services on the job.
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(lineItems.filter((li) => li.status !== "lost").map((li) => li.id))
+    () => new Set(
+      lineItems
+        .filter((li) => li.status !== "lost" && Math.max(0, li.totalCents - (li.discountCents ?? 0)) > 0)
+        .map((li) => li.id)
+    )
   );
   const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(
     () => new Set(materialItems.map((dc) => dc.id))
@@ -115,6 +121,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const [jobType,       setJobType]       = useState("one_time");
   const [scheduledDate, setScheduledDate] = useState("");
   const [crewId,        setCrewId]        = useState("");
+  /** Crew size — lands on crm_jobs.man_count and each visit's men_count (the
+   *  dispatch board's MEN column). */
+  const [manCount,      setManCount]      = useState(1);
   const [schedule,      setSchedule]      = useState("");
   const [notesToCrew,   setNotesToCrew]   = useState(() =>
     lineItems.map((li) => li.jobNote).filter(Boolean).join("\n").trim()
@@ -184,6 +193,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         jobType,
         scheduledDate: scheduledDate || null,
         crewId: crewId || null,
+        manCount,
         schedule: jobType === "recurring" ? schedule : null,
         notesToCrew: notesToCrew || null,
         projectId: jobType === "project" ? projectId : null,
@@ -205,7 +215,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             ? (li.adjRateCents ?? li.rateCents)
             : (li.qty > 0 ? Math.round((netByLineId.get(li.id) ?? 0) / li.qty) : (li.adjRateCents ?? li.rateCents)),
           totalCents:    netByLineId.get(li.id) ?? 0,
-          budgetedHours: budgetedHoursFromLineItem(li),
+          budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
           budgetMethod:  li.budgetMethod,
         })),
         materials: selectedMaterialItems.map((dc) => ({
@@ -433,6 +443,18 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-medium text-slate-600">Crew Size (men)</Label>
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              value={manCount}
+              onChange={(e) => setManCount(Math.max(1, Math.round(Number(e.target.value)) || 1))}
+              className="text-sm"
+            />
           </div>
 
           <div className="flex flex-col gap-1 col-span-2">

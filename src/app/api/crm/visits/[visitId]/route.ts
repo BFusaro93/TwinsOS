@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-notify";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { formatMonthDay } from "@/lib/utils";
 
 const PatchSchema = z.object({
   scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -42,7 +43,17 @@ export async function PATCH(
   // OUT on completion, it never guards a manual edit. This is a
   // data-integrity floor, not an advisory warning, so a violation blocks the
   // write outright.
-  if (parsed.data.scheduled_date) {
+  // Snapshot before the write so the activity rows below can say what
+  // changed (old date → new date, scheduled → dispatched).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: before } = await (supabase as any)
+    .from("crm_job_visits")
+    .select("client_id, job_id, scheduled_date, status")
+    .eq("id", visitId)
+    .maybeSingle();
+  const prev = before as { client_id: string; job_id: string; scheduled_date: string; status: string } | null;
+
+  if (parsed.data.scheduled_date && parsed.data.scheduled_date !== prev?.scheduled_date) {
     const violation = await checkPackageMinDaysViolation(supabase, visitId, parsed.data.scheduled_date);
     if (violation) {
       return NextResponse.json({ error: violation }, { status: 409 });
@@ -58,6 +69,25 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Lightweight client-timeline rows (no notifications) for a reschedule
+  // and for the transition into "dispatched" — the dispatch board's bulk
+  // Change Status / Move actions land here. Best-effort.
+  if (prev) {
+    const rows: { subject: string }[] = [];
+    if (parsed.data.scheduled_date && parsed.data.scheduled_date !== prev.scheduled_date) {
+      rows.push({ subject: `Visit moved ${formatMonthDay(prev.scheduled_date)} → ${formatMonthDay(parsed.data.scheduled_date)}` });
+    }
+    if (parsed.data.status === "dispatched" && prev.status !== "dispatched") {
+      rows.push({ subject: `Visit dispatched ${formatMonthDay(parsed.data.scheduled_date ?? prev.scheduled_date)}` });
+    }
+    if (rows.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert(
+        rows.map((r) => ({ ...r, client_id: prev.client_id, activity_type: "job", ref_id: prev.job_id, ref_table: "crm_jobs", created_by: user.id }))
+      );
+    }
+  }
 
   // Push notifications — best-effort, never block the response on these.
   // Only fire when the patch actually touched the relevant field (not just

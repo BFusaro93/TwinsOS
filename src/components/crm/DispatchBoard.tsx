@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime, formatDateShort, todayLocalISODate } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort, todayLocalISODate, formatHours } from "@/lib/utils";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { toast } from "sonner";
 import {
@@ -89,7 +89,6 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
-const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
 // Stable empty-array reference for visits with no per-member time rows — avoids
 // handing VisitRow a fresh [] every render, which would otherwise defeat any
 // memoization keyed on this array's identity.
@@ -142,29 +141,55 @@ function effectiveCrewMemberIds(
     .map((m) => m.id);
 }
 
+// Value shown in an hours <input> — 2 decimals, blank for null — so raw
+// float noise from qty ÷ production-rate math (0.00006666666666666667)
+// never reaches the board or the sheet.
+function hoursInputValue(h: number | null | undefined): string {
+  return h == null ? "" : formatHours(h);
+}
+
 function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
 
-  async function cycle(e: React.MouseEvent) {
-    e.stopPropagation();
-    const i = STATUS_CYCLE.indexOf(visit.status);
-    const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
+  // Explicit status menu instead of a one-click cycle: a stray click on the
+  // icon used to flip a visit straight to Dispatched (firing the
+  // visit_dispatched automations) with no confirmation and no feedback.
+  async function setStatus(next: VisitStatus) {
+    if (next === visit.status) return;
     try {
       await updateStatus({ id: visit.id, status: next, jobId: visit.jobId, jobType: visit.job?.jobType });
-    } catch {
-      toast.error("Failed to update status");
+      toast.success(`Visit marked ${STATUS_OPTIONS.find((o) => o.value === next)?.label ?? next}`);
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update status");
     }
   }
 
   return (
-    <button
-      onClick={cycle}
-      disabled={isPending}
-      title={visit.status}
-      className={cn("flex items-center justify-center rounded transition-opacity", isPending && "opacity-50")}
-    >
-      <VisitStatusIcon status={visit.status} />
-    </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          onClick={(e) => e.stopPropagation()}
+          disabled={isPending}
+          title={`Status: ${visit.status.replace(/_/g, " ")} — click to change`}
+          className={cn("flex items-center justify-center rounded transition-opacity", isPending && "opacity-50")}
+        >
+          <VisitStatusIcon status={visit.status} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-40" onClick={(e) => e.stopPropagation()}>
+        {STATUS_OPTIONS.map((opt) => (
+          <DropdownMenuItem
+            key={opt.value}
+            className={cn("text-xs gap-2", opt.value === visit.status && "font-semibold")}
+            disabled={opt.value === visit.status}
+            onSelect={() => void setStatus(opt.value)}
+          >
+            <VisitStatusIcon status={opt.value} />
+            {opt.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -230,7 +255,7 @@ function JobDetailSheet({
    * Start/End edit overlaps another stop already assigned to this crew. */
   allVisits: CRMJobVisit[];
 }) {
-  const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
+  const { mutateAsync: updateVisit } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
   const { currentUser } = useCurrentUserStore();
@@ -265,9 +290,15 @@ function JobDetailSheet({
   // ONE specific service (a multi-service job split across visits), it must
   // use that service's own rate instead, or every visit on the job would
   // show the same job-level amount regardless of which service it's for.
+  // Σ services wins over job.rateCents whenever the job HAS priced services:
+  // job.rate_cents is a snapshot taken at creation (estimate conversion) and
+  // drifts the moment a service line is re-priced, which is exactly how the
+  // Services table and the costing panel disagreed ($1,908 vs $2,120). A DB
+  // trigger now keeps rate_cents in sync too (see
+  // 20260906150200_crm_jobs_rate_cents_sync_from_services.sql).
   const rateFallbackCents = linkedService
     ? (serviceTotal || null)
-    : (job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null));
+    : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null));
 
   // Form state — reset when visit changes
   const [status,      setStatus]      = useState<VisitStatus>(visit.status);
@@ -280,15 +311,21 @@ function JobDetailSheet({
   // clock-in/out or Start/End × men. Reading visit.actualHours directly here
   // showed 0/blank whenever there was no explicit override, even when the
   // row was correctly showing a computed value from real times.
-  const [actualHours, setActualHours] = useState(String(computeActualHours(visit) ?? ""));
+  const [actualHours, setActualHours] = useState(hoursInputValue(computeActualHours(visit)));
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
-  const [budgetedHoursInput, setBudgetedHoursInput] = useState(String(computeBudgetedHours(visit) ?? ""));
+  const [budgetedHoursInput, setBudgetedHoursInput] = useState(hoursInputValue(computeBudgetedHours(visit)));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
          : rateFallbackCents != null ? rateFallbackCents / 100
          : "")
   );
+  // Save's own in-flight flag. useUpdateVisit's shared `isPending` covers
+  // every updateVisit call in this sheet (Start/End blur autosave, Save Notes,
+  // comments) — gating the Save button on it meant clicking Save right after
+  // editing a time field fired the blur autosave first, disabled the button,
+  // and swallowed the click: sheet stayed open, no toast, nothing written.
+  const [saving, setSaving] = useState(false);
 
   // Sync crewId when the visit prop updates (e.g. after drag-assign or propagate)
   useEffect(() => { setCrewId(visit.crewId ?? job?.crewId ?? ""); }, [visit.id, visit.crewId, job?.crewId]);
@@ -309,10 +346,10 @@ function JobDetailSheet({
   const [appointmentEndTouched,   setAppointmentEndTouched]   = useState(false);
   const appointmentEndButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    setBudgetedHoursInput(String(computeBudgetedHours(visit) ?? ""));
+    setBudgetedHoursInput(hoursInputValue(computeBudgetedHours(visit)));
   }, [visit.id, visit.budgetedHours, job?.budgetedHours]);
   useEffect(() => {
-    setActualHours(String(computeActualHours(visit) ?? ""));
+    setActualHours(hoursInputValue(computeActualHours(visit)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visit.id, visit.actualHours, visit.startTime, visit.endTime, visit.clockedInAt, visit.clockedOutAt, visit.menCount]);
 
@@ -457,12 +494,15 @@ function JobDetailSheet({
     if (status === "dispatched" && visit.status !== "dispatched") {
       updates.dispatched_at = new Date().toISOString();
     }
+    setSaving(true);
     try {
       await updateVisit({ id: visit.id, updates, jobId: visit.jobId, jobType: visit.job?.jobType });
       toast.success("Saved");
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1049,9 +1089,9 @@ function JobDetailSheet({
             <Button
               className="bg-brand-500 hover:bg-brand-600 text-white h-8 text-xs px-6"
               onClick={handleSave}
-              disabled={isPending}
+              disabled={saving}
             >
-              {isPending ? "Saving…" : "Save"}
+              {saving ? "Saving…" : "Save"}
             </Button>
             <button
               className="text-xs text-slate-500 hover:text-slate-700"
@@ -1583,12 +1623,13 @@ function EditJobTimesDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes.length, allMembers.length]);
 
-  // Keep the dispatch board's Men column in sync with how many crew members
-  // actually have a time entry here — only once there IS at least one entry,
-  // so opening the dialog on a visit with a manually-set Men count (and no
-  // per-member times yet) doesn't zero it out.
+  // Seed the dispatch board's Men column from how many crew members have a
+  // time entry here — but ONLY when the visit has no men count yet (0/null).
+  // An explicit Men value set on the sheet is the dispatcher's number for
+  // this stop; overwriting it with the time-entry roster size (this used to
+  // run on any mismatch) silently turned "Men 3" back into 2.
   useEffect(() => {
-    if (memberTimes.length > 0 && memberTimes.length !== visit.menCount) {
+    if (memberTimes.length > 0 && !visit.menCount) {
       updateVisit.mutate({ id: visitId, updates: { men_count: memberTimes.length } });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1829,7 +1870,8 @@ function VisitRow({
   // ONE specific service (a multi-service job split across visits), where it
   // would show the same job-level amount on every one of that job's visits
   // instead of each service's own rate.
-  const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null)));
+  // Σ services before job.rateCents — same reasoning as the sheet (C-03).
+  const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null)));
   const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
   const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
@@ -1931,10 +1973,12 @@ function VisitRow({
     // without editing it doesn't silently wipe a real measured value.
     const existingValue = field === "start_time" ? visit.startTime : visit.endTime;
     if ((value || null) !== (existingValue || null)) updates.actual_hours = null;
-    // Typing a time is what actually sends a crew out for the day — pull the
-    // headcount from who's really on that crew today (Team Assignment),
-    // instead of leaving whatever men_count the visit happened to start with.
-    if (visit.crewId) {
+    // Typing a time is what actually sends a crew out for the day — fill an
+    // EMPTY headcount from who's really on that crew today (Team Assignment).
+    // Only when men_count is still 0/null: an explicit Men value entered on
+    // the sheet or the row is the dispatcher's call and must not be
+    // overwritten by a roster count (see C-11).
+    if (visit.crewId && !visit.menCount) {
       const crewSize = effectiveCrewSize(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize);
       if (crewSize > 0) updates.men_count = crewSize;
     }
@@ -1976,8 +2020,8 @@ function VisitRow({
     );
   }
 
-  const [bHrsVal, setBHrsVal] = useState(String(budgetedHours ?? ""));
-  useEffect(() => { setBHrsVal(String(budgetedHours ?? "")); }, [budgetedHours]);
+  const [bHrsVal, setBHrsVal] = useState(hoursInputValue(budgetedHours));
+  useEffect(() => { setBHrsVal(hoursInputValue(budgetedHours)); }, [budgetedHours]);
 
   function saveBudgetedHours(value: string) {
     const n = parseFloat(value);
@@ -2387,7 +2431,8 @@ function visitAmountCents(visit: CRMJobVisit): number {
   const serviceTotal = linkedService
     ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
     : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
-  return visit.rateCents ?? (linkedService ? serviceTotal : (job?.rateCents ?? serviceTotal));
+  // Σ services before job.rateCents (a creation-time snapshot) — see C-03.
+  return visit.rateCents ?? (linkedService ? serviceTotal : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? 0)));
 }
 
 // ── totals row ─────────────────────────────────────────────────────────────────
@@ -3612,14 +3657,18 @@ export function DispatchBoard() {
                     });
                     if (!r.ok) {
                       const body = await r.json().catch(() => ({}));
-                      throw new Error((body as { error?: string }).error ?? `HTTP ${r.status}`);
+                      const msg = (body as { error?: string }).error ?? `HTTP ${r.status}`;
+                      // 409 = package min-days rule ("Step 2 must be at least
+                      // N days after Step 1 (earliest MM/DD)") — show it as-is.
+                      throw new Error(r.status === 409 ? msg : `Failed to move visits: ${msg}`);
                     }
                     await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                    await qc.invalidateQueries({ queryKey: ["clients"] });
                     setSelectedIds(new Set());
                     setMoveDayOpen(false);
                     toast.success(`Moved ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${moveDayDate}`);
                   } catch (err) {
-                    toast.error(`Failed to move visits: ${err instanceof Error ? err.message : "unknown error"}`);
+                    toast.error(err instanceof Error ? err.message : "Failed to move visits");
                   }
                 }}
               >

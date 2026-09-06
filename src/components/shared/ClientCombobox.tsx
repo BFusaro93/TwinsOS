@@ -22,6 +22,8 @@ interface ClientLike {
   id: string;
   displayName: string;
   billingAddress?: string | null;
+  /** Searchable alongside the name — typing "1042" finds account #1042. */
+  accountNumber?: string | null;
 }
 
 interface ClientComboboxProps {
@@ -76,7 +78,7 @@ export function ClientCombobox({
               {clients.map((c) => (
                 <CommandItem
                   key={c.id}
-                  value={[c.displayName, c.billingAddress ?? ""].join(" ")}
+                  value={[c.displayName, c.accountNumber ?? "", c.billingAddress ?? ""].join(" ")}
                   onSelect={() => {
                     onValueChange(c.id);
                     setOpen(false);
@@ -89,7 +91,10 @@ export function ClientCombobox({
                     )}
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{c.displayName}</p>
+                    <p className="truncate text-sm font-medium">
+                      {c.displayName}
+                      {c.accountNumber && <span className="ml-1.5 text-xs font-normal text-slate-400">#{c.accountNumber}</span>}
+                    </p>
                     {c.billingAddress && (
                       <p className="truncate text-xs text-slate-400">{c.billingAddress}</p>
                     )}

@@ -220,3 +220,36 @@ export function localISODateFromToday(days: number): string {
   d.setDate(d.getDate() + days);
   return toLocalISODate(d);
 }
+
+/**
+ * Round an hours value for STORAGE (default 4 decimals). Budgeted hours are
+ * derived from qty ÷ production rate and actual hours from clock deltas ×
+ * men — both produce float noise like 0.00006666666666666667 or
+ * 6.000000000000001 that would otherwise land in the DB and the audit trail.
+ */
+export function roundHours(hours: number, decimals = 4): number {
+  if (!Number.isFinite(hours)) return 0;
+  const f = 10 ** decimals;
+  return Math.round(hours * f) / f;
+}
+
+/**
+ * Format an hours value for DISPLAY — fixed decimals (default 2), no unit.
+ * Use this everywhere budgeted/actual hours are rendered so "0.00006666…h"
+ * and "6.000000000000001" never reach the UI. Null/undefined → "—".
+ */
+export function formatHours(hours: number | null | undefined, decimals = 2): string {
+  if (hours == null || !Number.isFinite(hours)) return "—";
+  return hours.toFixed(decimals);
+}
+
+/**
+ * "9/7"-style month/day from a YYYY-MM-DD string — for compact activity-
+ * timeline subjects like "Visit moved 9/7 → 9/8". No timezone math: the
+ * string is split, never parsed through Date.
+ */
+export function formatMonthDay(ymd: string | null | undefined): string {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}/.test(ymd)) return "—";
+  const [, m, d] = ymd.slice(0, 10).split("-").map(Number);
+  return `${m}/${d}`;
+}

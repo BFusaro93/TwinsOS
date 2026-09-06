@@ -222,6 +222,8 @@ export interface NewClientJobFormValues {
   waitingListEnd: string | null;
   startDateWindow: string | null;
   endDateWindow: string | null;
+  /** Recurring jobs only — last date visits should be generated for (season end). */
+  recurrenceEnd?: string | null;
   isComplete: boolean;
   notes: string | null;
   notesToCrew: string | null;

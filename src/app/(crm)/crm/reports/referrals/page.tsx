@@ -3,7 +3,7 @@
 import { Fragment, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { Users, ArrowLeft } from "lucide-react";
 import type { ReferralReportRow } from "@/app/api/crm/reports/referrals/route";
 
@@ -117,7 +117,7 @@ export default function ReferralsReportPage() {
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-slate-500">
-                          {c.clientSince ? new Date(c.clientSince).toLocaleDateString() : "—"}
+                          {formatDate(c.clientSince)}
                         </td>
                         <td className="px-4 py-2.5 text-right">
                           {c.balanceOutstandingCents > 0

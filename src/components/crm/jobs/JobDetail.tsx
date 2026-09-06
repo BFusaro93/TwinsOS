@@ -49,7 +49,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCurrency, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -316,6 +316,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           clientId: job.clientId,
           scheduledDate: job.scheduledDate!,
           crewId: job.crewId ?? null,
+          menCount: job.manCount,
         });
         await qc.invalidateQueries({ queryKey: ['crm-job-visits', 'job', job.id] });
       } catch {
@@ -828,7 +829,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     <div className="flex flex-col gap-1">
                       <Label className="text-xs text-slate-500">Budgeted Hours</Label>
                       <p className="text-sm text-slate-500 py-1.5">
-                        {job.budgetedHours != null ? `${job.budgetedHours}h` : "—"}
+                        {job.budgetedHours != null ? `${formatHours(job.budgetedHours)}h` : "—"}
                         <span className="text-[10px] text-slate-400 ml-1.5">
                           (sum of service hours — edit per-service on the Services tab)
                         </span>
@@ -1239,12 +1240,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   </div>
                   <div>
                     <p className="text-xs text-slate-400">Budgeted Hrs</p>
-                    <p className="text-xl font-bold text-slate-800">{job.budgetedHours?.toFixed(1) ?? "—"}</p>
+                    <p className="text-xl font-bold text-slate-800">{formatHours(job.budgetedHours)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-400">Actual Hrs</p>
                     <p className="text-xl font-bold text-slate-800">
-                      {visits.filter((v) => v.actualHours).reduce((s, v) => s + (v.actualHours ?? 0), 0).toFixed(1)}
+                      {formatHours(visits.filter((v) => v.actualHours).reduce((s, v) => s + (v.actualHours ?? 0), 0))}
                     </p>
                   </div>
                   <div>
@@ -1329,7 +1330,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           </>
                         ) : (
                           <>
-                            <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${s.budgetedHours}h` : "—"}</td>
+                            <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${formatHours(s.budgetedHours)}h` : "—"}</td>
                             <td className="px-4 py-3 text-right tabular-nums">{s.qty ?? 1}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {s.rateCents != null ? formatCurrency(s.rateCents) : "—"}
@@ -1997,7 +1998,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
               <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
               <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={crewSummary} title={crewSummaryTitle} />
-              <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${job.budgetedHours}h` : "—"} />
+              <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${formatHours(job.budgetedHours)}h` : "—"} />
               <InfoRow icon={<Receipt className="h-3.5 w-3.5" />} label="Revenue" value={formatCurrency(jobValueCents)} />
               {job.source && <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Source" value={job.source} />}
               {job.projectId && (
@@ -2132,8 +2133,8 @@ function VisitRow({
         </td>
         <td className="px-4 py-3 text-slate-600">{visitServiceName}</td>
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${visitBudgetedHours}h` : "—"}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{computeActualHours(visit)?.toFixed(1) ?? "—"}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${formatHours(visitBudgetedHours)}h` : "—"}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{formatHours(computeActualHours(visit))}</td>
         <td className="px-4 py-3 text-center">
           <Badge
             variant="outline"
@@ -2153,7 +2154,8 @@ function VisitRow({
                 <span className="font-semibold">Job note:</span> {jobNotesToCrew}
               </div>
             )}
-            {visit.notesToCrew ? (
+            {/* generate-visits copies the job note onto each visit — don't show it twice */}
+            {visit.notesToCrew && visit.notesToCrew !== jobNotesToCrew ? (
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="text-slate-600 hover:text-brand-600 text-left truncate max-w-[200px] block">
                 {visit.notesToCrew}
               </button>
@@ -2288,6 +2290,9 @@ function VisitRow({
                 try {
                   await onDispatch(dispatchDate, dispatchCrew || null);
                   setDispatching(false);
+                } catch (err) {
+                  // e.g. package min-days violation from useUpdateVisit
+                  toast.error(err instanceof Error ? err.message : "Failed to dispatch visit");
                 } finally {
                   setDispatchSaving(false);
                 }

@@ -18,7 +18,7 @@ import {
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
-import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useCRMServices, useEstimateJobs } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
@@ -85,6 +85,7 @@ import {
   Sparkles,
   MessageSquarePlus,
   Pencil,
+  Briefcase,
 } from "lucide-react";
 import {
   useAttachments,
@@ -343,6 +344,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const backClientId = searchParams.get("clientId");
   const qc = useQueryClient();
   const { data: estimate, isLoading } = useEstimate(estimateId);
+  // Jobs already converted from this estimate — drives the header's
+  // "Convert to Job" vs "View Job" action for accepted estimates.
+  const { data: estimateJobs = [] } = useEstimateJobs(estimateId);
   const { data: templates } = useEstimateTemplates();
   const { data: clients }   = useClients();
   const { data: employees } = useSelectableEmployees();
@@ -729,6 +733,26 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 gap-y-2">
+          {/* An estimate accepted ONLINE (public proposal / portal) never went
+              through the in-app Accepted click that auto-opens the convert
+              dialog — so an accepted estimate always exposes Convert to Job
+              here. Opens the dialog directly: no stage re-save, no spurious
+              "moved to accepted" activity. Once a job exists, link to it. */}
+          {effectiveStage === "accepted" && (
+            estimateJobs.length > 0 ? (
+              <Button variant="outline" size="sm" className="h-8 text-xs"
+                title="A job has already been created from this estimate"
+                onClick={() => router.push(`/crm/scheduling/jobs/${estimateJobs[0].id}`)}>
+                <Briefcase className="mr-1 h-3.5 w-3.5 text-green-600" />View Job
+              </Button>
+            ) : (
+              <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700"
+                title="Create a job from this accepted estimate"
+                onClick={() => setConvertDialogOpen(true)}>
+                <Briefcase className="mr-1 h-3.5 w-3.5" />Convert to Job
+              </Button>
+            )
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             title="Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"
             onClick={() => setWonLostDialog("accepted")}>

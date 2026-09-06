@@ -30,7 +30,8 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { computePackageVisitSchedule } from "@/lib/package-schedule";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, roundHours } from "@/lib/utils";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { Plus, X } from "lucide-react";
@@ -63,6 +64,35 @@ function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Whole-day difference `b - a` between two YYYY-MM-DD strings (local calendar). */
+function daysBetween(a: string, b: string): number {
+  return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86_400_000);
+}
+
+/** Shift a YYYY-MM-DD string by `n` days (local calendar); empty stays empty. */
+function shiftDateStr(iso: string, n: number): string {
+  if (!iso) return iso;
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return toLocalDateStr(d);
+}
+
+/** Calendar months spanned by [from, to], inclusive of both end months (min 1). */
+function monthsSpanned(from: string, to: string): number {
+  if (!from || !to || to < from) return 1;
+  const a = new Date(from + "T00:00:00"), b = new Date(to + "T00:00:00");
+  return Math.max(1, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1);
+}
+
+const JOB_TYPE_OPTIONS: { value: JobType; label: string }[] = [
+  { value: "one_time",     label: "One Time" },
+  { value: "recurring",    label: "Recurring" },
+  { value: "waiting_list", label: "Waiting List" },
+  { value: "package",      label: "Package" },
+  { value: "snow",         label: "Snow" },
+  { value: "project",      label: "Project" },
+];
+
 interface ServiceRow {
   serviceId: string;
   serviceName: string;
@@ -75,10 +105,13 @@ interface ServiceRow {
   teamSize: number;
   /** Days that must elapse after this service's visit completes before the next package-sequenced service is due. */
   minDays: number | null;
+  /** True once the user has typed a date into this row — the header Start
+   *  Date then stops re-syncing it. */
+  startDateEdited: boolean;
 }
 
 function blankServiceRow(date: string): ServiceRow {
-  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null };
+  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null, startDateEdited: false };
 }
 
 interface ProductRow {
@@ -98,10 +131,15 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   clientId?: string;
   initialJobType?: JobType;
+  /** Show a Job Type selector in the dialog. Defaults to true when no
+   *  `initialJobType` is given (Jobs page "Add Job", Quick Add), so those
+   *  entry points aren't locked to one_time. */
+  allowTypeChange?: boolean;
   onCreated?: (jobId: string) => void;
 }
 
-export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, initialJobType, onCreated }: Props) {
+export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, initialJobType, allowTypeChange, onCreated }: Props) {
+  const showTypeSelector = allowTypeChange ?? initialJobType == null;
   const createJob = useCreateClientJob();
   const { data: clients } = useClients();
   const { data: crmServices } = useCRMServices();
@@ -125,6 +163,11 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
   const [startDate, setStartDate] = useState(todayStr());
   const [completeByDate, setCompleteByDate] = useState("");
+  /** Recurring only — last date visits are generated for (crm_jobs.recurrence_end). */
+  const [recurrenceEnd, setRecurrenceEnd] = useState("");
+  /** Package only — the date the step windows are currently anchored to, so a
+   *  Start Date change can shift every window by the same offset. */
+  const [packageAnchor, setPackageAnchor] = useState<string | null>(null);
   const [schedule, setSchedule] = useState("");
   const [packageId, setPackageId] = useState("");
   const [isComplete, setIsComplete] = useState(false);
@@ -149,6 +192,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setNotesToCrew("");
       setStartDate(today);
       setCompleteByDate("");
+      setRecurrenceEnd("");
+      setPackageAnchor(null);
       setSchedule("");
       setPackageId("");
       setIsComplete(false);
@@ -182,30 +227,74 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       }, earliest);
       setStartDate(toLocalDateStr(earliest));
       setCompleteByDate(toLocalDateStr(latest));
+      setPackageAnchor(toLocalDateStr(earliest));
+    } else {
+      setPackageAnchor(null);
     }
 
     setServices(
       visitSchedule.length > 0
         ? visitSchedule.map(({ service, scheduledDate }) => {
-            const matchingService = (crmServices ?? []).find((s) => s.id === service.serviceId);
+            // Package steps may reference the service by id OR only carry its
+            // name (older packages) — fall back to a name match so the step
+            // still inherits the service's default rate / production rate.
+            const matchingService = (crmServices ?? []).find((s) => s.id === service.serviceId)
+              ?? (crmServices ?? []).find((s) => s.name.trim().toLowerCase() === service.serviceName.trim().toLowerCase());
             const qty = 1;
             return {
-              serviceId: service.serviceId ?? "",
+              serviceId: service.serviceId ?? matchingService?.id ?? "",
               serviceName: service.serviceName,
               startDate: scheduledDate ? toLocalDateStr(scheduledDate) : "",
               completeByDate: service.endDate ?? "",
               qty,
-              rateCents: service.defaultRateCents ?? matchingService?.defaultRateCents ?? 0,
+              rateCents: (service.defaultRateCents || matchingService?.defaultRateCents) ?? 0,
               budgetedHours: matchingService
                 ? computeJobServiceBudgetedHours(matchingService, qty)
                 : service.defaultBHrs ?? 0,
               budgetMethod: matchingService?.budgetMethod ?? "manual",
               teamSize: 1,
               minDays: service.minDays ?? null,
+              startDateEdited: false,
             };
           })
         : [blankServiceRow(startDate)]
     );
+  }
+
+  /** Header Start Date changed. Package jobs: shift every step window (and
+   *  Complete By) by the same offset so the program re-anchors to the new
+   *  start instead of staying on the package's template dates. Other types:
+   *  re-sync service-row start dates the user hasn't hand-edited. */
+  function changeStartDate(next: string) {
+    setStartDate(next);
+    if (!next) return;
+    if (jobType === "package" && packageAnchor) {
+      const offset = daysBetween(packageAnchor, next);
+      if (offset !== 0) {
+        setServices((prev) => prev.map((s) => ({
+          ...s,
+          startDate: shiftDateStr(s.startDate, offset),
+          completeByDate: shiftDateStr(s.completeByDate, offset),
+        })));
+        setCompleteByDate((prev) => shiftDateStr(prev, offset));
+      }
+      setPackageAnchor(next);
+      return;
+    }
+    setServices((prev) => prev.map((s) => (s.startDateEdited ? s : { ...s, startDate: next })));
+  }
+
+  function changeJobType(next: JobType) {
+    setJobType(next);
+    // Type-specific inputs don't carry across (a package's step rows make no
+    // sense on a one-time job, a schedule only applies to recurring).
+    setSchedule("");
+    setRecurrenceEnd("");
+    setPackageId("");
+    setPackageAnchor(null);
+    setCompleteByDate("");
+    setIsComplete(false);
+    setServices([blankServiceRow(startDate)]);
   }
 
   function updateService(i: number, updates: Partial<ServiceRow>) {
@@ -224,10 +313,13 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     const svc = (crmServices ?? []).find((s) => s.id === serviceId);
     if (!svc) return;
     const qty = services[i]?.qty ?? 1;
+    // Only fill the service's default rate into an EMPTY rate — a rate the
+    // user already typed (e.g. Rate 120, then picking "Salt") must survive.
+    const typedRate = services[i]?.rateCents ?? 0;
     updateService(i, {
       serviceId: svc.id,
       serviceName: svc.name,
-      rateCents: svc.defaultRateCents ?? 0,
+      rateCents: typedRate > 0 ? typedRate : (svc.defaultRateCents ?? 0),
       budgetedHours: computeJobServiceBudgetedHours(svc, qty),
       budgetMethod: svc.budgetMethod,
     });
@@ -297,6 +389,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const selectedPackageTotalSteps = selectedPackage
     ? (selectedPackage.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) || 1)
     : null;
+  // Package billing summary — the program total is the sum of its step rates;
+  // the monthly installment spreads it over the months the program covers.
+  const packageMonths = monthsSpanned(startDate, completeByDate);
+  const packageMonthlyCents = Math.round(serviceTotalCents / packageMonths);
 
   async function handleSubmit() {
     if (!effectiveClientId) { toast.error("Client is required"); return; }
@@ -307,6 +403,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     if (rf.isRequired("sales_rep") && !salesRepId) { toast.error("Sales Rep is required"); return; }
     if (jobType === "waiting_list" && startDate && completeByDate && completeByDate < startDate) {
       toast.error("End date cannot be before start date");
+      return;
+    }
+    if (jobType === "recurring" && recurrenceEnd && startDate && recurrenceEnd < startDate) {
+      toast.error("End date cannot be before the start date");
       return;
     }
 
@@ -344,6 +444,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         waitingListEnd: (jobType === "waiting_list" || jobType === "package") ? completeByDate || null : null,
         startDateWindow: jobType === "recurring" ? startDate || null : null,
         endDateWindow: null,
+        recurrenceEnd: jobType === "recurring" ? (recurrenceEnd || null) : null,
         isComplete: jobType === "one_time" ? isComplete : false,
         notes: null,
         notesToCrew: notesToCrew || null,
@@ -356,7 +457,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           assignedTo: null,
           qty: s.qty,
           rateCents: s.rateCents,
-          budgetedHours: s.budgetedHours,
+          budgetedHours: roundHours(s.budgetedHours),
           budgetMethod: s.budgetMethod,
           teamSize: s.teamSize,
           daysCount: 1,
@@ -402,20 +503,33 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         <div className="flex gap-5 py-2">
           <div className="flex flex-1 flex-col gap-4 min-w-0">
 
+            {showTypeSelector && (
+              <div className="flex flex-col gap-1.5 max-w-xs">
+                <Label>Job Type *</Label>
+                <Select value={jobType} onValueChange={(v) => changeJobType(v as JobType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {JOB_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Client + Contract */}
             <div className="grid grid-cols-4 gap-3">
               {!defaultClientId ? (
                 <div className="flex flex-col gap-1.5">
                   <Label>Client *</Label>
-                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                    <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
-                    <SelectContent>
-                      {(clients ?? [])
-                        .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
-                        .sort((a, b) => a.displayName.localeCompare(b.displayName))
-                        .map((c) => <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  {/* Leads and lost leads can't have jobs — convert the lead first.
+                      (crm_jobs also enforces this with a DB trigger.) */}
+                  <ClientCombobox
+                    clients={(clients ?? [])
+                      .filter((c) => c.status !== "inactive" && c.status !== "cancelled" && c.status !== "lead" && c.status !== "lost")
+                      .sort((a, b) => a.displayName.localeCompare(b.displayName))}
+                    value={selectedClientId}
+                    onValueChange={setSelectedClientId}
+                    noneLabel="Select client…"
+                  />
                 </div>
               ) : <div />}
               <div className="flex flex-col gap-1.5">
@@ -458,7 +572,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
             {/* Type-specific fields */}
             {jobType === "recurring" && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>Schedule *</Label>
                   {(crmSchedules ?? []).length > 0 ? (
@@ -479,7 +593,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Start Recurring</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>End Date <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+                  <Input type="date" value={recurrenceEnd} min={startDate || undefined} onChange={(e) => setRecurrenceEnd(e.target.value)} />
+                  <p className="text-xs text-slate-400">Visits are generated from the start date through this date (or year end if blank).</p>
                 </div>
               </div>
             )}
@@ -513,7 +632,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>Start Date</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Complete By</Label>
@@ -524,14 +643,25 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             {jobType === "package" && (
               <p className="text-xs text-slate-400 -mt-2">
                 Package jobs are scheduled within this date range and go to the Waiting List for opportunistic dispatch, rather than a fixed date.
+                {packageId && " Changing the Start Date shifts every step window by the same number of days."}
               </p>
+            )}
+            {jobType === "package" && packageId && (
+              <div className="flex items-center gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm">
+                <span className="text-slate-500">Monthly</span>
+                <span className="font-semibold text-slate-800">{formatCurrency(packageMonthlyCents)}</span>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-500">Total</span>
+                <span className="font-semibold text-slate-800">{formatCurrency(serviceTotalCents)}</span>
+                <span className="text-xs text-slate-400">({packageMonths} month{packageMonths === 1 ? "" : "s"}, {services.length} step{services.length === 1 ? "" : "s"})</span>
+              </div>
             )}
 
             {(jobType === "one_time" || jobType === "snow" || jobType === "project") && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>{jobType === "one_time" ? "Job Date" : "Start Date"}</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
                 </div>
                 {jobType === "one_time" && (
                   <div className="flex flex-col gap-1.5">
@@ -671,7 +801,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       </SelectContent>
                     </Select>
                     {showServiceDate && (
-                      <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value })} className="h-7 px-1.5 text-xs" />
+                      <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value, startDateEdited: true })} className="h-7 px-1.5 text-xs" />
                     )}
                     {showCompleteBy ? (
                       <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 px-1.5 text-xs" />

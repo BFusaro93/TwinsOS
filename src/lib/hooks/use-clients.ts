@@ -1164,10 +1164,15 @@ export function useConvertLeadToClient() {
         .eq("status", "lead")
         .select("id");
       if (error) throw error;
-      return { converted: (updated?.length ?? 0) > 0 };
+      const converted = (updated?.length ?? 0) > 0;
+      if (converted) {
+        await logClientActivity(supabase, id, "Converted from lead to client");
+      }
+      return { converted };
     },
     onSuccess: (result, id) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
       if (result.converted) {
         fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
       }

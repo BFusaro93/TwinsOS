@@ -82,19 +82,38 @@ export async function recalcNextPackageVisitDate(
   }
 }
 
+/** "9/7"-style month/day for the min-days toast. */
+function monthDay(ymd: string): string {
+  const [, m, d] = ymd.split("-").map(Number);
+  return `${m}/${d}`;
+}
+
 /**
- * Validates a manual reschedule (dispatch-board drag or direct edit) of a
- * package-sequenced visit against its service's `min_days` constraint.
+ * Validates a manual reschedule (Move to Day, dispatch-board drag, JobDetail
+ * dispatch, direct API edit) of a package-sequenced visit against the
+ * package's `min_days` spacing rules.
  *
- * Unlike `recalcNextPackageVisitDate` (which pushes a later visit OUT after an
- * earlier one completes), this runs BEFORE a write to block a reschedule that
- * would land a visit too close to the preceding visit's actual completion —
- * the completion-triggered recalc above only ever fires on the completion
- * path, so a manual drag/edit of `scheduled_date` has no other guard.
+ * `min_days` on a step means "at least N days after the PREVIOUS step" (see
+ * computePackageVisitSchedule in package-schedule.ts). The baseline is the
+ * previous step's actual completion date once it has completed, otherwise
+ * its currently scheduled date — an earlier version only enforced against a
+ * COMPLETED predecessor, which is how "Fert 2 of 5" could be moved onto
+ * Fert 1's day before Fert 1 was done. Cancelled/skipped/deleted visits are
+ * ignored when looking for a neighbour, so a skipped intermediate step
+ * doesn't hide the real one further back.
  *
- * Returns a human-readable error string if the new date violates min_days,
- * or null if the reschedule is fine (not a package visit, no min_days
- * constraint, no completed preceding visit, or the date already satisfies it).
+ * Two directions are checked:
+ *   - backward: this step vs. the nearest earlier step (this step's min_days)
+ *   - forward:  the nearest later step vs. this step's new date (that later
+ *               step's min_days) — moving Fert 1 onto Fert 2's day is the
+ *               same violation seen from the other side.
+ *
+ * Returns a human-readable error string, or null when the move is fine (not
+ * a package visit, no min_days configured, no neighbouring visit, or the
+ * date already satisfies the gap). Mirrored server-side by the
+ * crm_job_visits_enforce_package_min_days trigger, which only checks the
+ * backward direction (the completion-time recalc pushes later visits OUT and
+ * must never be blocked by a forward check).
  */
 export async function checkPackageMinDaysViolation(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,52 +121,71 @@ export async function checkPackageMinDaysViolation(
   visitId: string,
   newScheduledDate: string
 ): Promise<string | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await supabase
     .from("crm_job_visits")
-    .select("job_service_id")
+    .select("job_service_id, job_id")
     .eq("id", visitId)
     .maybeSingle();
-  const jobServiceId = (visit as { job_service_id: string | null } | null)?.job_service_id;
-  if (!jobServiceId) return null;
+  const moved = visit as { job_service_id: string | null; job_id: string } | null;
+  if (!moved?.job_service_id) return null;
 
-  const { data: service } = await supabase
+  type Step = { id: string; sort_order: number; min_days: number | null; service_name: string | null };
+  const { data: stepRows } = await supabase
     .from("crm_job_services")
-    .select("id, job_id, sort_order, min_days")
-    .eq("id", jobServiceId)
-    .maybeSingle();
-  const svc = service as { id: string; job_id: string; sort_order: number; min_days: number | null } | null;
-  if (!svc?.min_days) return null;
+    .select("id, sort_order, min_days, service_name")
+    .eq("job_id", moved.job_id)
+    .order("sort_order", { ascending: true });
+  const steps = (stepRows ?? []) as Step[];
+  const idx = steps.findIndex((s) => s.id === moved.job_service_id);
+  if (idx < 0) return null;
+  const me = steps[idx];
+  // Nothing to enforce in either direction if no step has min_days.
+  if (!steps.some((s) => (s.min_days ?? 0) > 0)) return null;
 
-  // Walk backward through earlier services (by sort_order, descending) until
-  // we find one with a completed visit — mirrors the forward walk in
-  // recalcNextPackageVisitDate, so a cancelled/skipped intermediate service
-  // doesn't hide a real completed predecessor further back in the chain.
-  const { data: earlierServices } = await supabase
-    .from("crm_job_services")
-    .select("id")
-    .eq("job_id", svc.job_id)
-    .lt("sort_order", svc.sort_order)
-    .order("sort_order", { ascending: false });
-
-  for (const earlier of (earlierServices ?? []) as { id: string }[]) {
-    const { data: completedVisits } = await supabase
-      .from("crm_job_visits")
-      .select("completed_at, scheduled_date")
-      .eq("job_service_id", earlier.id)
-      .eq("status", "completed")
-      .is("deleted_at", null)
-      .order("completed_at", { ascending: false })
-      .limit(1);
-    const prevVisit = completedVisits?.[0] as { completed_at: string | null; scheduled_date: string } | undefined;
-    if (!prevVisit) continue; // this earlier service never completed — keep walking back
-
-    const baselineDate = prevVisit.completed_at ? isoNy(new Date(prevVisit.completed_at)) : prevVisit.scheduled_date;
-    const minDate = shiftYmd(baselineDate, svc.min_days);
-    if (newScheduledDate < minDate) {
-      return `This visit requires at least ${svc.min_days} day(s) after the previous visit's completion (${baselineDate}). The earliest allowed date is ${minDate}.`;
+  type NeighbourVisit = { scheduled_date: string; completed_at: string | null; status: string };
+  // Nearest neighbouring step (in the given direction) that has a live visit
+  // — prefers a completed visit, then the latest scheduled one.
+  async function nearest(direction: "before" | "after"): Promise<{ step: Step; stepNo: number; visit: NeighbourVisit } | null> {
+    const candidates = direction === "before" ? steps.slice(0, idx).reverse() : steps.slice(idx + 1);
+    for (const step of candidates) {
+      const { data: rows } = await supabase
+        .from("crm_job_visits")
+        .select("scheduled_date, completed_at, status")
+        .eq("job_service_id", step.id)
+        .neq("id", visitId)
+        .is("deleted_at", null)
+        .not("status", "in", "(cancelled,skipped)")
+        .order("scheduled_date", { ascending: false });
+      const list = (rows ?? []) as NeighbourVisit[];
+      if (list.length === 0) continue;
+      const v = list.find((r) => r.status === "completed") ?? list[0];
+      return { step, stepNo: steps.indexOf(step) + 1, visit: v };
     }
-    return null; // baseline found and satisfied
+    return null;
   }
-  return null; // no completed preceding visit — nothing to enforce yet
+  const baselineOf = (v: NeighbourVisit) =>
+    v.status === "completed" && v.completed_at ? isoNy(new Date(v.completed_at)) : v.scheduled_date;
+  const label = (step: Step, no: number) => `Step ${no}${step.service_name ? ` (${step.service_name})` : ""}`;
+  const myNo = idx + 1;
+
+  // Backward: I must be >= previous + my min_days.
+  if ((me.min_days ?? 0) > 0) {
+    const prev = await nearest("before");
+    if (prev) {
+      const earliest = shiftYmd(baselineOf(prev.visit), me.min_days as number);
+      if (newScheduledDate < earliest) {
+        return `${label(me, myNo)} must be at least ${me.min_days} days after ${label(prev.step, prev.stepNo)} (earliest ${monthDay(earliest)})`;
+      }
+    }
+  }
+
+  // Forward: the next step must stay >= my new date + its min_days.
+  const next = await nearest("after");
+  if (next && (next.step.min_days ?? 0) > 0) {
+    const earliestNext = shiftYmd(newScheduledDate, next.step.min_days as number);
+    if (next.visit.scheduled_date < earliestNext) {
+      return `${label(next.step, next.stepNo)} (${monthDay(next.visit.scheduled_date)}) must be at least ${next.step.min_days} days after ${label(me, myNo)} — move it to ${monthDay(earliestNext)} or later first`;
+    }
+  }
+  return null;
 }
