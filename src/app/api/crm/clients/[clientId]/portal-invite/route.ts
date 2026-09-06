@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import type { PortalInviteRow, PortalUserRow } from "@/lib/portal/portal-db";
-
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+import { orgEmailFrom } from "@/lib/email/send";
 
 export async function POST(
   req: Request,
@@ -77,7 +76,7 @@ export async function POST(
     return NextResponse.json({ error: "Failed to create invite" }, { status: 500 });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.twinslawnservice.com";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
   const portalUrl = `${appUrl}/portal/register/${invite.token}`;
 
   // Fetch org branding for email
@@ -94,7 +93,7 @@ export async function POST(
   // Send invite email via Resend
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { error: sendErr } = await resend.emails.send({
-    from: FROM,
+    from: orgEmailFrom(org?.name),
     to: email,
     subject: `You're invited to the ${orgName} Client Portal`,
     html: buildInviteEmail({ orgName, clientFirstName, portalUrl }),

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 export async function POST(request: Request) {
   // 1. Validate the calling user's session and confirm they are an admin.
@@ -118,7 +119,7 @@ export async function POST(request: Request) {
   const resend = new Resend(process.env.RESEND_API_KEY!);
 
   const { error: emailErr } = await resend.emails.send({
-    from: "Twins Lawn Service <noreply@twinslawnservice.com>",
+    from: EMAIL_FROM,
     to: email,
     subject: "You've been invited to Landscapt",
     html: `

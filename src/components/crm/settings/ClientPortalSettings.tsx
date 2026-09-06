@@ -113,7 +113,7 @@ export function ClientPortalTab() {
               <Input
                 value={form.company_name}
                 onChange={(e) => patch("company_name", e.target.value)}
-                placeholder="Twins Lawn Service"
+                placeholder="Your Company Name"
               />
               <p className="text-xs text-slate-400">Displayed in the portal header and emails</p>
             </div>

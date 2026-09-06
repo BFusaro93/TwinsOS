@@ -162,7 +162,7 @@ export async function sendCampaignEmails(
 
   const orgName = org?.name ?? "Your Service Provider";
   const orgAddress = org?.address ?? null;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.twinslawnservice.com";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
 
   let delivered = 0;
   let failed = 0;

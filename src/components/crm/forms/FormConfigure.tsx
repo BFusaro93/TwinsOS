@@ -223,7 +223,7 @@ export function FormConfigure({ form }: Props) {
                 <Input
                   value={n.fromName}
                   onChange={(e) => updateNotification(n._key, { fromName: e.target.value })}
-                  placeholder="Twins Lawn Service"
+                  placeholder="Your Company Name"
                   className="mt-1 h-7 text-xs"
                 />
               </div>

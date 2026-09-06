@@ -11,8 +11,7 @@ import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
-
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+import { orgEmailFrom } from "@/lib/email/send";
 
 const DEFAULT_SUBJECT = "Invoice #[invoicenumber] from [companyname] — [invoicetotal] due [duedate]";
 const DEFAULT_BODY = `<p>Hi [clientfirstname],</p>
@@ -276,7 +275,7 @@ export async function POST(req: NextRequest) {
 
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
   const { data: sendData, error: sendErr } = await resend.emails.send({
-    from: FROM,
+    from: orgEmailFrom(org?.name),
     to: toEmails,
     subject: resolvedSubject,
     html,

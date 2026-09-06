@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
+import { orgEmailFrom } from "@/lib/email/send";
 import { computeWaitFireAt } from "./sequence-enrollment";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,7 +22,6 @@ interface ResolvedEmailContent {
   bodyHtml: string;
 }
 
-const DEFAULT_FROM_ADDRESS = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
 /** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
 export async function resolveEmailStepContent(
@@ -72,7 +72,15 @@ export async function resolveEmailStepContent(
 
   if (toEmails.size === 0) return { error: "no resolvable recipient email for the selected 'to' options" };
 
-  let fromAddress = DEFAULT_FROM_ADDRESS;
+  const { data: orgRow } = await supabase
+    .from("organizations")
+    .select("name")
+    .eq("id", params.orgId)
+    .single();
+
+  // Default sender is the tenant's own name on the shared verified domain —
+  // never a hard-coded tenant.
+  let fromAddress = orgEmailFrom(orgRow?.name as string | null | undefined);
   if (params.fromSelection === "sales_rep" && client.sales_rep_id) {
     // clients.sales_rep_id references crm_employees, not profiles — an
     // employee's email/name live there directly regardless of whether they
@@ -87,12 +95,6 @@ export async function resolveEmailStepContent(
       fromAddress = repName ? `${repName} <${rep.email}>` : (rep.email as string);
     }
   }
-
-  const { data: orgRow } = await supabase
-    .from("organizations")
-    .select("name")
-    .eq("id", params.orgId)
-    .single();
 
   let estimateNumber: string | null = null;
   if (params.estimateId) {
@@ -208,9 +210,19 @@ export async function sendResolvedSequenceEmail(
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, reason: "RESEND_API_KEY not configured" };
 
+  let fromAddress = params.fromAddress;
+  if (!fromAddress) {
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", params.orgId)
+      .single();
+    fromAddress = orgEmailFrom(orgRow?.name as string | null | undefined);
+  }
+
   const resend = new Resend(resendKey);
   const { data: sent, error: sendErr } = await resend.emails.send({
-    from: params.fromAddress || DEFAULT_FROM_ADDRESS,
+    from: fromAddress,
     to: params.toEmails,
     subject: params.subject,
     html: params.bodyHtml,

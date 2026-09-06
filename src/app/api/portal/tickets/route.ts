@@ -5,8 +5,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
 import { notifyStaffOfNewTicket, ticketLink } from "@/lib/ticket-notify";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
-
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+import { orgEmailFrom } from "@/lib/email/send";
 
 // subject/body/category/clientName below all originate from the anonymous
 // portal user's own POST body — interpolating them unescaped into the
@@ -174,7 +173,9 @@ export async function POST(req: Request) {
 
     // Best-effort — don't fail the ticket if email errors
     resend.emails.send({
-      from: FROM,
+      // Tenant-branded sender on the shared verified domain — never a
+      // hard-coded tenant name.
+      from: orgEmailFrom(settings?.company_name),
       to: notifyEmail,
       subject: `[Ticket #${ticket.ticket_number}] ${subject.trim()} — ${clientName}`,
       html: buildTicketNotificationEmail({

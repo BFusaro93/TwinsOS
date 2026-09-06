@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { orgEmailFrom } from "@/lib/email/send";
 
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
 
     try {
       await resend.emails.send({
-        from: `${orgName} <noreply@twinslawnservice.com>`,
+        from: orgEmailFrom(orgName),
         to: profile.email,
         subject: `Estimate #${estimateNum} expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — ${clientName}`,
         html,

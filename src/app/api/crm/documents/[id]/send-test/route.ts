@@ -10,8 +10,7 @@ import {
 } from "@/lib/utils/document-template-renderer";
 import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
 import type { BlockType } from "@/types/crm-documents";
-
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+import { orgEmailFrom } from "@/lib/email/send";
 
 export async function POST(
   req: NextRequest,
@@ -81,7 +80,7 @@ export async function POST(
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { error: sendErr } = await resend.emails.send({
-    from: FROM,
+    from: orgEmailFrom(org?.name),
     to: user.email,
     subject,
     html,

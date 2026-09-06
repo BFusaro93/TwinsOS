@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 // This route generates the link + sends the email itself (see comment
 // below), which bypasses Supabase's own email rate limits entirely — so it
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   await resend.emails.send({
-    from: "Twins Lawn Service <noreply@twinslawnservice.com>",
+    from: EMAIL_FROM,
     to: email,
     subject: "Reset your Equipt password",
     html: `

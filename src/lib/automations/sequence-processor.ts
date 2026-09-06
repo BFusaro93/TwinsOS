@@ -177,6 +177,9 @@ export async function processDueEnrollment(
       toName: built.toName,
       subject: built.subject,
       bodyHtml: built.bodyHtml,
+      // Carry the resolved sender ("from sales rep" or the org-branded
+      // default) through; the approvals path already does this.
+      fromAddress: built.fromAddress,
     });
     if (!sendResult.ok) {
       await logSequenceExecution(adminClient, {
