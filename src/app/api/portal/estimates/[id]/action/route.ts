@@ -104,7 +104,10 @@ export async function POST(
           portal_user_id: ctx.userId,
         }
       : {
-          stage: "declined",
+          // 'declined' is not a seeded estimate stage — a client turning the
+          // proposal down is the same outcome the office records as 'lost'.
+          stage: "lost",
+          reason: "Declined by client via portal",
           portal_declined_at: now,
           portal_user_id: ctx.userId,
         };

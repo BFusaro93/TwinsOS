@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 // ============================================================
 // Materials Needed for Upcoming Jobs
@@ -46,6 +47,10 @@ export interface MaterialsNeededResult {
 }
 
 const TERMINAL_JOB_STATUSES = new Set(["cancelled", "completed", "hold"]);
+/** Visit statuses whose materials have not been consumed yet: scheduled,
+ *  dispatched (on the crew's board, not started) and in_progress (crew is on
+ *  site — product for that visit still has to be on the truck). */
+const OUTSTANDING_VISIT_STATUSES = ["scheduled", "dispatched", "in_progress"];
 const ACTIVE_REQ_STATUSES = new Set(["pending_approval", "approved"]);
 const ACTIVE_PO_STATUSES = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
 
@@ -117,16 +122,17 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
         crm_job_services: { service_id: string | null }[] | null;
       } | null;
     }
-    const { data: visitsRaw, error: visitsErr } = await supabase
-      .from("crm_job_visits")
-      .select(
-        "scheduled_date, crm_jobs!inner(id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(service_id))"
-      )
-      .eq("status", "scheduled")
-      .is("deleted_at", null)
-      .limit(5000);
-    if (visitsErr) throw new Error(visitsErr.message);
-    for (const v of (visitsRaw ?? []) as unknown as VisitRow[]) {
+    const visitsRaw = await fetchAllRows<VisitRow>(() =>
+      supabase
+        .from("crm_job_visits")
+        .select(
+          "scheduled_date, crm_jobs!inner(id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(service_id))"
+        )
+        .in("status", OUTSTANDING_VISIT_STATUSES)
+        .is("deleted_at", null)
+        .is("crm_jobs.deleted_at", null)
+    );
+    for (const v of visitsRaw) {
       const job = v.crm_jobs;
       if (!job || TERMINAL_JOB_STATUSES.has(job.status ?? "")) continue;
       const serviceIds = (job.crm_job_services ?? []).map((js) => js.service_id).filter(Boolean) as string[];
@@ -144,23 +150,33 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       }
     }
 
-    // Waiting-list jobs: no visit rows exist yet, so query crm_jobs directly.
+    // Waiting-list jobs: no visit rows exist until the job is dispatched, so
+    // query crm_jobs directly — but once a waiting-list job HAS live visits,
+    // the visit branch above already counted it, so skip it here.
     interface WaitingJobRow {
       id: string;
       property_id: string | null;
       waiting_list_start: string | null;
       clients: { display_name: string | null } | null;
       crm_job_services: { service_id: string | null }[] | null;
+      crm_job_visits: { id: string }[] | null;
     }
-    const { data: waitingRaw, error: waitingErr } = await supabase
-      .from("crm_jobs")
-      .select("id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(service_id)")
-      .eq("job_type", "waiting_list")
-      .not("status", "in", '("cancelled","completed","hold")')
-      .is("deleted_at", null)
-      .limit(5000);
-    if (waitingErr) throw new Error(waitingErr.message);
-    for (const job of (waitingRaw ?? []) as unknown as WaitingJobRow[]) {
+    const waitingRaw = await fetchAllRows<WaitingJobRow>(() =>
+      supabase
+        .from("crm_jobs")
+        .select(
+          "id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(service_id), crm_job_visits(id)"
+        )
+        .eq("job_type", "waiting_list")
+        .not("status", "in", '("cancelled","completed","hold")')
+        .is("deleted_at", null)
+        // Filters the embedded visits (not the jobs): only live visits count
+        // as "already dispatched".
+        .is("crm_job_visits.deleted_at", null)
+        .limit(1, { referencedTable: "crm_job_visits" })
+    );
+    for (const job of waitingRaw) {
+      if ((job.crm_job_visits ?? []).length > 0) continue;
       const serviceIds = (job.crm_job_services ?? []).map((js) => js.service_id).filter(Boolean) as string[];
       const productIdsForJob = new Set<string>();
       for (const sid of serviceIds) {
@@ -216,15 +232,22 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       clients: { display_name: string | null } | null;
     } | null;
   }
-  const { data: jobProductsRaw, error: jobProductsErr } = await supabase
-    .from("crm_job_products")
-    .select(
-      "product_id, qty, crm_jobs!inner(id, status, scheduled_date, waiting_list_start, clients:client_id(display_name))"
-    )
-    .not("product_id", "is", null)
-    .is("deleted_at", null)
-    .limit(5000);
-  if (jobProductsErr) throw new Error(jobProductsErr.message);
+  // Only 'pending' rows are outstanding demand. crm_job_products.status
+  // (20260808153157): 'invoiced' and 'used_no_invoice' have already run
+  // adjust_product_item_quantity(-qty) against quantity_on_hand, so counting
+  // them again here would subtract the same product twice (once from on-hand,
+  // once as demand); 'not_used' is cancelled and needs nothing.
+  const jobProductsRaw = await fetchAllRows<JobProductRow>(() =>
+    supabase
+      .from("crm_job_products")
+      .select(
+        "product_id, qty, crm_jobs!inner(id, status, scheduled_date, waiting_list_start, clients:client_id(display_name))"
+      )
+      .not("product_id", "is", null)
+      .eq("status", "pending")
+      .is("deleted_at", null)
+      .is("crm_jobs.deleted_at", null)
+  );
 
   interface GeneralDemandEntry {
     jobId: string;
@@ -233,7 +256,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     neededBy: string | null;
   }
   const generalDemandByProduct = new Map<string, GeneralDemandEntry[]>();
-  for (const row of (jobProductsRaw ?? []) as unknown as JobProductRow[]) {
+  for (const row of jobProductsRaw) {
     const job = row.crm_jobs;
     const productId = row.product_id;
     if (!job || !productId) continue;
@@ -263,30 +286,77 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
   const allProductIds = [...new Set([...chemicalProductIds, ...generalProductIds])];
   const onOrderByProduct = new Map<string, number>();
   if (allProductIds.length > 0) {
-    const { data: reqLines } = await supabase
-      .from("requisition_line_items")
-      .select("product_item_id, quantity, requisitions!inner(status)")
-      .in("product_item_id", allProductIds);
-    for (const rl of (reqLines ?? []) as unknown as {
+    interface ReqLine {
       product_item_id: string | null;
       quantity: number;
       requisitions: { status: string } | null;
-    }[]) {
-      if (!rl.product_item_id || !rl.requisitions || !ACTIVE_REQ_STATUSES.has(rl.requisitions.status)) continue;
-      onOrderByProduct.set(rl.product_item_id, (onOrderByProduct.get(rl.product_item_id) ?? 0) + rl.quantity);
     }
-
-    const { data: poLines } = await supabase
-      .from("po_line_items")
-      .select("product_item_id, quantity, purchase_orders!inner(status)")
-      .in("product_item_id", allProductIds);
-    for (const pl of (poLines ?? []) as unknown as {
+    interface PoLine {
+      id: string;
       product_item_id: string | null;
       quantity: number;
       purchase_orders: { status: string } | null;
-    }[]) {
-      if (!pl.product_item_id || !pl.purchase_orders || !ACTIVE_PO_STATUSES.has(pl.purchase_orders.status)) continue;
-      onOrderByProduct.set(pl.product_item_id, (onOrderByProduct.get(pl.product_item_id) ?? 0) + pl.quantity);
+    }
+    const reqLines: ReqLine[] = [];
+    const poLines: PoLine[] = [];
+    // .in() goes on the URL — chunk so a large catalog doesn't blow the length cap.
+    for (let i = 0; i < allProductIds.length; i += 200) {
+      const chunk = allProductIds.slice(i, i + 200);
+      reqLines.push(
+        ...(await fetchAllRows<ReqLine>(() =>
+          supabase
+            .from("requisition_line_items")
+            .select("product_item_id, quantity, requisitions!inner(status)")
+            .in("product_item_id", chunk)
+            .in("requisitions.status", [...ACTIVE_REQ_STATUSES])
+        ))
+      );
+      poLines.push(
+        ...(await fetchAllRows<PoLine>(() =>
+          supabase
+            .from("po_line_items")
+            .select("id, product_item_id, quantity, purchase_orders!inner(status)")
+            .in("product_item_id", chunk)
+            .in("purchase_orders.status", [...ACTIVE_PO_STATUSES])
+        ))
+      );
+    }
+    for (const rl of reqLines) {
+      if (!rl.product_item_id || !rl.requisitions || !ACTIVE_REQ_STATUSES.has(rl.requisitions.status)) continue;
+      onOrderByProduct.set(rl.product_item_id, (onOrderByProduct.get(rl.product_item_id) ?? 0) + Number(rl.quantity));
+    }
+
+    // A partially received PO stays in 'partially_fulfilled' (or 'ordered')
+    // with its full line quantity, but the received portion is already in
+    // quantity_on_hand — so on-order is ordered minus received. There is no
+    // running quantity_received on po_line_items; receipts live in
+    // goods_receipt_lines (po_line_item_id, quantity_received), which is also
+    // what the receiving RPCs' over-receipt guard sums.
+    const activePoLines = poLines.filter(
+      (pl) => pl.product_item_id && pl.purchase_orders && ACTIVE_PO_STATUSES.has(pl.purchase_orders.status)
+    );
+    const receivedByPoLine = new Map<string, number>();
+    const poLineIds = activePoLines.map((pl) => pl.id);
+    for (let i = 0; i < poLineIds.length; i += 200) {
+      const chunk = poLineIds.slice(i, i + 200);
+      const receiptLines = await fetchAllRows<{ po_line_item_id: string | null; quantity_received: number }>(() =>
+        supabase
+          .from("goods_receipt_lines")
+          .select("po_line_item_id, quantity_received")
+          .in("po_line_item_id", chunk)
+      );
+      for (const gr of receiptLines) {
+        if (!gr.po_line_item_id) continue;
+        receivedByPoLine.set(
+          gr.po_line_item_id,
+          (receivedByPoLine.get(gr.po_line_item_id) ?? 0) + Number(gr.quantity_received)
+        );
+      }
+    }
+    for (const pl of activePoLines) {
+      const productId = pl.product_item_id as string;
+      const outstanding = Math.max(Number(pl.quantity) - (receivedByPoLine.get(pl.id) ?? 0), 0);
+      onOrderByProduct.set(productId, (onOrderByProduct.get(productId) ?? 0) + outstanding);
     }
   }
 

@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { getDataset } from "@/lib/reports/datasets";
+import { getDataset, getDatasetField } from "@/lib/reports/datasets";
 import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";
+import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
 import type {
   AnalysisConfig,
+  AnalysisFilter,
   CustomReport,
   CustomReportInput,
   Dashboard,
@@ -385,10 +387,58 @@ export function useGraphicLibraryItems() {
  * tab date-range filter when useTabDateRange is set) and runs it through the
  * same /api/crm/reports/analysis/run endpoint the custom-analysis builder uses.
  */
-function relativeDateISO(kind: "today" | "yesterday"): string {
-  const d = new Date();
-  if (kind === "yesterday") d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+type RelativeDateFilter = NonNullable<VisualSpec["relativeDateFilter"]>;
+
+/**
+ * Inclusive "YYYY-MM-DD" bounds for a relative date filter, computed against
+ * the calendar date in America/New_York (the org's operating timezone) — a
+ * UTC `toISOString()` would roll "today" over to tomorrow at 8pm ET.
+ */
+export function relativeDateBounds(kind: RelativeDateFilter): { from: string; to: string } {
+  const today = isoNy(new Date());
+  switch (kind) {
+    case "today":
+      return { from: today, to: today };
+    case "yesterday": {
+      const yesterday = shiftYmd(today, -1);
+      return { from: yesterday, to: yesterday };
+    }
+    case "this_month":
+      return { from: `${today.slice(0, 7)}-01`, to: today };
+    case "this_year":
+      return { from: `${today.slice(0, 4)}-01-01`, to: today };
+  }
+}
+
+/**
+ * Filters selecting rows whose `dateField` falls within [from, to] (both
+ * inclusive calendar days). For `date` columns a plain gte/lte (or eq when
+ * it's a single day) is exact. For `datetime` (timestamptz) columns the RPC
+ * casts a bare "YYYY-MM-DD" literal to midnight, so `lte to` would drop the
+ * whole final day and `eq day` would match only the midnight instant — those
+ * get a half-open [from 00:00, next-day 00:00) window instead. Either bound
+ * may be blank (e.g. a cleared date input) and is then simply omitted.
+ */
+function dateWindowFilters(
+  datasetKey: string,
+  dateField: string,
+  from: string,
+  to: string
+): AnalysisFilter[] {
+  const isDatetime = getDatasetField(datasetKey, dateField)?.type === "datetime";
+  const filters: AnalysisFilter[] = [];
+  if (!isDatetime && from && to && from === to) {
+    return [{ column: dateField, op: "eq", value: from }];
+  }
+  if (from) filters.push({ column: dateField, op: "gte", value: from });
+  if (to) {
+    filters.push(
+      isDatetime
+        ? { column: dateField, op: "lt", value: shiftYmd(to, 1) }
+        : { column: dateField, op: "lte", value: to }
+    );
+  }
+  return filters;
 }
 
 export function buildEffectiveConfig(
@@ -404,18 +454,15 @@ export function buildEffectiveConfig(
       ...config,
       filters: [
         ...config.filters,
-        { column: dateField, op: "gte", value: dateRange.from },
-        { column: dateField, op: "lte", value: dateRange.to },
+        ...dateWindowFilters(config.dataset, dateField, dateRange.from, dateRange.to),
       ],
     };
   }
   if (visual.relativeDateFilter && dateField) {
+    const { from, to } = relativeDateBounds(visual.relativeDateFilter);
     config = {
       ...config,
-      filters: [
-        ...config.filters,
-        { column: dateField, op: "eq", value: relativeDateISO(visual.relativeDateFilter) },
-      ],
+      filters: [...config.filters, ...dateWindowFilters(config.dataset, dateField, from, to)],
     };
   }
   if (visual.useTabRepFilter && repFilter) {

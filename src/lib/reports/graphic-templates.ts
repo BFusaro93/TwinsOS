@@ -183,7 +183,10 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
     category: "Sales",
     visual: {
       type: "gauge",
-      useTabDateRange: true,
+      // True YTD (Jan 1 -> today) regardless of the tab's range so the yearly
+      // gaugeMax means something.
+      useTabDateRange: false,
+      relativeDateFilter: "this_year",
       dateColumn: "created_at",
       kpiColumn: "count_all",
       valueColumns: [],
@@ -191,7 +194,10 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
       config: {
         dataset: "rpt_clients",
         columns: [],
-        filters: [{ column: "status", op: "eq", value: "lead" }],
+        // No status filter on purpose: a `status eq "lead"` filter drops leads
+        // that have since converted or been lost. Counting all accounts by
+        // created_at is the true "new leads received" number.
+        filters: [],
         groupBy: [],
         aggregates: [{ column: "*", fn: "count" }],
         sortDir: "asc",
@@ -205,7 +211,8 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
     category: "Sales",
     visual: {
       type: "gauge",
-      useTabDateRange: true,
+      useTabDateRange: false,
+      relativeDateFilter: "this_year",
       kpiColumn: "count_all",
       valueColumns: [],
       gaugeMax: 300,
@@ -226,7 +233,8 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
     category: "Accounts Receivable",
     visual: {
       type: "gauge",
-      useTabDateRange: true,
+      useTabDateRange: false,
+      relativeDateFilter: "this_year",
       kpiColumn: "sum_total_cents",
       valueColumns: [],
       gaugeMax: 400000000,
@@ -254,7 +262,9 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
       config: {
         dataset: "rpt_job_visits",
         columns: [],
-        filters: [],
+        // Only visits with real time on them (scheduled/cancelled/skipped
+        // visits have no actual hours and would drag the numbers down).
+        filters: [{ column: "status", op: "in", value: ["completed", "in_progress"] }],
         groupBy: [],
         aggregates: [
           { column: "actual_hours", fn: "sum" },
@@ -277,7 +287,9 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
       config: {
         dataset: "rpt_job_visits",
         columns: [],
-        filters: [],
+        // Only visits with real time on them (scheduled/cancelled/skipped
+        // visits have no actual hours and would drag the numbers down).
+        filters: [{ column: "status", op: "in", value: ["completed", "in_progress"] }],
         groupBy: ["crew_name"],
         aggregates: [
           { column: "actual_hours", fn: "sum" },
@@ -302,7 +314,9 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
       config: {
         dataset: "rpt_job_visits",
         columns: [],
-        filters: [],
+        // Only visits with real time on them (scheduled/cancelled/skipped
+        // visits have no actual hours and would drag the numbers down).
+        filters: [{ column: "status", op: "in", value: ["completed", "in_progress"] }],
         groupBy: ["crew_name", "service_code"],
         aggregates: [{ column: "actual_hours", fn: "sum" }],
         sortDir: "asc",

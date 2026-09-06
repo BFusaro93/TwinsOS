@@ -8,6 +8,8 @@ import {
   eqFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
 
 // ============================================================
 // Second-wave reports — SA parity gaps identified after the
@@ -20,6 +22,48 @@ function monthKey(dateStr: string): string {
   return dateStr.slice(0, 7);
 }
 
+/** UTC offset (minutes) that America/New_York is at the given instant. */
+function nyOffsetMinutes(utcMs: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(new Date(utcMs));
+  const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value ?? "0", 10);
+  const wallAsUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second")
+  );
+  return Math.round((wallAsUtc - Math.floor(utcMs / 1000) * 1000) / 60000);
+}
+
+/**
+ * The instant (ISO, UTC) at which a "YYYY-MM-DD" calendar day starts or ends
+ * in America/New_York — for bounding a timestamptz column by a local day.
+ * PostgREST compares timestamptz literals in the DB session's timezone
+ * (UTC), so a bare `2026-09-06 00:00:00` would be 8pm the night before, ET.
+ */
+function nyDayBoundIso(ymdStr: string, edge: "start" | "end"): string {
+  const [y, m, d] = ymdStr.split("-").map(Number);
+  const wallAsUtc =
+    edge === "start"
+      ? Date.UTC(y, m - 1, d, 0, 0, 0, 0)
+      : Date.UTC(y, m - 1, d, 23, 59, 59, 999);
+  // Two passes so a DST transition on this very day resolves correctly.
+  let utc = wallAsUtc - nyOffsetMinutes(wallAsUtc) * 60000;
+  utc = wallAsUtc - nyOffsetMinutes(utc) * 60000;
+  return new Date(utc).toISOString();
+}
+
 export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
   {
     key: "forms-summary",
@@ -28,24 +72,11 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows forms and the number of responses received in any given time frame.",
     filters: [dateRangeFilterDef("Responses Between", "all_time")],
+    notes: [
+      "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in Eastern time.",
+    ],
     run: async ({ supabase, params }) => {
       const { from, to } = resolveDateRange(params, "all_time");
-      const { data: forms, error: formsError } = await supabase
-        .from("crm_forms")
-        .select("id, name, description, status, created_at")
-        .is("deleted_at", null)
-        .limit(5000);
-      if (formsError) throw new Error(formsError.message);
-
-      let respQuery = supabase
-        .from("crm_form_responses")
-        .select("form_id, created_at")
-        .is("deleted_at", null)
-        .limit(5000);
-      if (from) respQuery = respQuery.gte("created_at", `${from} 00:00:00`);
-      if (to) respQuery = respQuery.lte("created_at", `${to} 23:59:59.999`);
-      const { data: responses, error: respError } = await respQuery;
-      if (respError) throw new Error(respError.message);
 
       interface FormRow {
         id: string;
@@ -58,8 +89,29 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         form_id: string | null;
         created_at: string;
       }
+      const forms = await fetchAllRows<FormRow>(() =>
+        supabase
+          .from("crm_forms")
+          .select("id, name, description, status, created_at")
+          .is("deleted_at", null)
+      );
+
+      // crm_form_responses.created_at is timestamptz — bound it by the
+      // Eastern calendar day, not a bare (UTC-interpreted) literal.
+      const responses = await fetchAllRows<RespRow>(() => {
+        let respQuery = supabase
+          .from("crm_form_responses")
+          .select("form_id, created_at")
+          .is("deleted_at", null)
+          // crm_form_responses.status CHECK: on_hold | completed | spam | ignored
+          .not("status", "in", '("spam","ignored")');
+        if (from) respQuery = respQuery.gte("created_at", nyDayBoundIso(from, "start"));
+        if (to) respQuery = respQuery.lte("created_at", nyDayBoundIso(to, "end"));
+        return respQuery;
+      });
+
       const counts = new Map<string, { count: number; last: string }>();
-      for (const r of (responses ?? []) as RespRow[]) {
+      for (const r of responses) {
         if (!r.form_id) continue;
         const entry = counts.get(r.form_id) ?? { count: 0, last: "" };
         entry.count += 1;
@@ -67,7 +119,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         counts.set(r.form_id, entry);
       }
 
-      const rows = ((forms ?? []) as FormRow[]).map((f) => ({
+      const rows = forms.map((f) => ({
         name: f.name,
         description: f.description,
         status: f.status,
@@ -261,21 +313,27 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       }
 
       const monthKeys = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-      const today = new Date();
+      // "This month" as it appears in America/New_York — a server running in
+      // UTC would otherwise flip to next month at 8pm ET on the last day.
+      const todayNy = isoNy(new Date());
+      const monthIndex = (ymdStr: string) => {
+        const [y, m] = ymdStr.split("-").map(Number);
+        return y * 12 + (m - 1); // months since year 0 — comparable/iterable
+      };
       const rows = contractRows.map((c) => {
         // budget = sum of monthly amounts from start month through the current
         // (or end) month, using the per-month schedule when present
         let budgeted = 0;
         let months = 0;
         if (c.start_date) {
-          const start = new Date(`${c.start_date}T00:00:00`);
-          const end = c.end_date ? new Date(`${c.end_date}T00:00:00`) : today;
-          const last = end < today ? end : today;
-          const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-          while (cursor <= last && months < 120) {
-            budgeted += c.monthly_amounts?.[monthKeys[cursor.getMonth()]] ?? c.monthly_amount_cents ?? 0;
+          const startIdx = monthIndex(c.start_date);
+          const lastIdx = Math.min(
+            monthIndex(todayNy),
+            c.end_date ? monthIndex(c.end_date) : Number.POSITIVE_INFINITY
+          );
+          for (let idx = startIdx; idx <= lastIdx && months < 120; idx += 1) {
+            budgeted += c.monthly_amounts?.[monthKeys[idx % 12]] ?? c.monthly_amount_cents ?? 0;
             months += 1;
-            cursor.setMonth(cursor.getMonth() + 1);
           }
         }
         const inv = invoicedByContract.get(c.id) ?? { invoiced: 0, paid: 0 };
@@ -339,37 +397,61 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         return entry;
       };
 
-      const { data: estLines, error: estError } = await supabase
-        .from("estimate_line_items")
-        .select("service_name, qty, total_cents, estimates!inner(deleted_at)")
-        .is("deleted_at", null)
-        .is("estimates.deleted_at", null)
-        .limit(5000);
-      if (estError) throw new Error(estError.message);
-      for (const li of (estLines ?? []) as { service_name: string | null; qty: number | null; total_cents: number | null }[]) {
+      interface EstLine {
+        service_name: string | null;
+        qty: number | null;
+        total_cents: number | null;
+      }
+      const estLines = await fetchAllRows<EstLine>(() =>
+        supabase
+          .from("estimate_line_items")
+          .select("service_name, qty, total_cents, estimates!inner(deleted_at)")
+          .is("deleted_at", null)
+          .is("estimates.deleted_at", null)
+      );
+      for (const li of estLines) {
         const b = bucket(li.service_name ?? "");
         b.est_qty += Number(li.qty ?? 0);
         b.est_cents += li.total_cents ?? 0;
       }
 
-      const { data: jobLines, error: jobError } = await supabase
-        .from("crm_job_services")
-        .select("service_name, qty, rate_cents")
-        .limit(5000);
-      if (jobError) throw new Error(jobError.message);
-      for (const li of (jobLines ?? []) as { service_name: string | null; qty: number | null; rate_cents: number | null }[]) {
+      // crm_job_services has no deleted_at of its own — the job's soft delete
+      // (and cancellation) is what retires its lines.
+      interface JobLine {
+        service_name: string | null;
+        qty: number | null;
+        rate_cents: number | null;
+      }
+      const jobLines = await fetchAllRows<JobLine>(() =>
+        supabase
+          .from("crm_job_services")
+          .select("service_name, qty, rate_cents, crm_jobs!inner(deleted_at, status)")
+          .is("crm_jobs.deleted_at", null)
+          .neq("crm_jobs.status", "cancelled")
+      );
+      for (const li of jobLines) {
         const b = bucket(li.service_name ?? "");
         const qty = Number(li.qty ?? 1) || 1;
         b.job_qty += qty;
         b.job_cents += Math.round(qty * (li.rate_cents ?? 0));
       }
 
-      const { data: invLines, error: invError } = await supabase
-        .from("crm_invoice_line_items")
-        .select("name, description, qty, total_cents")
-        .limit(5000);
-      if (invError) throw new Error(invError.message);
-      for (const li of (invLines ?? []) as { name: string | null; description: string | null; qty: number | null; total_cents: number | null }[]) {
+      // Issued-invoice rule (helpers.ts Rule A): drafts aren't revenue yet and
+      // void invoices never were; deleted invoices' lines are orphans.
+      interface InvLine {
+        name: string | null;
+        description: string | null;
+        qty: number | null;
+        total_cents: number | null;
+      }
+      const invLines = await fetchAllRows<InvLine>(() =>
+        supabase
+          .from("crm_invoice_line_items")
+          .select("name, description, qty, total_cents, crm_invoices!inner(status, deleted_at)")
+          .is("crm_invoices.deleted_at", null)
+          .in("crm_invoices.status", [...ISSUED_INVOICE_STATUSES])
+      );
+      for (const li of invLines) {
         const b = bucket(li.name ?? li.description ?? "");
         b.inv_qty += Number(li.qty ?? 0);
         b.inv_cents += li.total_cents ?? 0;
@@ -399,6 +481,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         rows,
         [
           "Amounts exclude sales tax. Job amount is line qty × rate on the job's service lines (the sold template), not per-visit delivery — for a recurring job this is a single snapshot, not a sum across every visit, so it won't reconcile 1:1 against Invoiced Amount.",
+          "Excludes deleted estimates/jobs/invoices, cancelled jobs, and draft or void invoices.",
         ]
       );
     },
@@ -411,28 +494,28 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       "Projects budgeted man hours and revenue for the next 12 months from currently scheduled visits.",
     filters: [],
     run: async ({ supabase }) => {
-      const today = new Date().toISOString().slice(0, 10);
-      const horizon = new Date();
-      horizon.setDate(horizon.getDate() + 365);
-      const horizonStr = horizon.toISOString().slice(0, 10);
-
-      // rpt_job_visits already computes revenue + coalesced budgeted hours
-      const { data, error } = await supabase
-        .from("rpt_job_visits")
-        .select("scheduled_date, budgeted_hours, revenue_cents")
-        .eq("status", "scheduled")
-        .gte("scheduled_date", today)
-        .lte("scheduled_date", horizonStr)
-        .limit(5000);
-      if (error) throw new Error(error.message);
+      // Calendar dates in America/New_York, not UTC.
+      const today = isoNy(new Date());
+      const horizonStr = shiftYmd(today, 365);
 
       interface Row {
         scheduled_date: string;
         budgeted_hours: number | null;
         revenue_cents: number | null;
       }
+      // rpt_job_visits already computes revenue + coalesced budgeted hours.
+      // Dispatched visits are still future work (on the board, not started).
+      const data = await fetchAllRows<Row>(() =>
+        supabase
+          .from("rpt_job_visits")
+          .select("scheduled_date, budgeted_hours, revenue_cents")
+          .in("status", ["scheduled", "dispatched"])
+          .gte("scheduled_date", today)
+          .lte("scheduled_date", horizonStr)
+      );
+
       const byMonth = new Map<string, { hours: number; revenue: number; visits: number }>();
-      for (const v of (data ?? []) as Row[]) {
+      for (const v of data) {
         const key = monthKey(v.scheduled_date);
         const entry = byMonth.get(key) ?? { hours: 0, revenue: 0, visits: 0 };
         entry.hours += Number(v.budgeted_hours ?? 0);
@@ -454,11 +537,14 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         [
           col("month", "Month"),
           col("visits", "Scheduled Visits", "number", true),
-          col("budgeted_hours", "Budgeted Hours", "hours"),
+          col("budgeted_hours", "Budgeted Man-Hours", "hours"),
           col("projected_revenue_cents", "Projected Revenue", "money"),
         ],
         rows,
-        ["Based on visits currently in Scheduled status over the next 12 months."]
+        [
+          "Based on visits currently in Scheduled or Dispatched status from today through the next 365 days (Eastern calendar dates).",
+          "Budgeted Man-Hours are duration × number of men.",
+        ]
       );
     },
   },

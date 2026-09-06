@@ -21,7 +21,16 @@ export type DateRangePreset =
   | "this_year"
   | "all_time";
 
+/** Value the filter bar writes to the `range` param when the user picks
+ *  "All Time" (or clears both custom dates) — the only way to distinguish
+ *  "no bounds, on purpose" from "no dates given, use the report's default
+ *  window", since the run hook drops empty `from`/`to` params entirely. */
+export const ALL_TIME_RANGE_PARAM = "all";
+
 /** Resolve `from`/`to` params, falling back to a preset window.
+ *
+ * Explicit `from`/`to` always win. With neither given, `range=all` means an
+ * unbounded window; otherwise the report's own `preset` applies.
  *
  * All "today"/month/year boundaries are computed against the calendar date
  * as it appears in America/New_York (this org's operating timezone), not
@@ -33,6 +42,9 @@ export function resolveDateRange(
 ): { from: string | null; to: string | null } {
   let from = params.from || null;
   let to = params.to || null;
+  if (!from && !to && params.range === ALL_TIME_RANGE_PARAM) {
+    return { from: null, to: null };
+  }
   if (!from && !to && preset !== "all_time") {
     const now = new Date();
     to = isoNy(now);

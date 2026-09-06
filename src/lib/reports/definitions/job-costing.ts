@@ -27,10 +27,13 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     section: "job_costing",
     name: "Job Cost Summary",
     description:
-      "Shows completed visits with budgeted vs actual hours, revenue, and labor cost per visit.",
+      "Shows completed visits with budgeted vs actual man-hours, revenue, and labor cost per visit.",
     filters: [
       dateRangeFilterDef("Completed Between", "this_month"),
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
+    ],
+    notes: [
+      "Budgeted and Actual Man-Hours are both duration × number of men.",
     ],
     analysis: (params) => ({
       dataset: "rpt_job_visits",
@@ -42,8 +45,9 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
         "crew_name",
         "men_count",
         "budgeted_hours",
+        // actual_hours and man_hours are the same figure in rpt_job_visits —
+        // show it once.
         "actual_hours",
-        "man_hours",
         "revenue_cents",
         "actual_labor_cost_cents",
         "rev_per_man_hr_cents",
@@ -95,6 +99,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     filters: [dateRangeFilterDef("Scheduled Between", "this_month")],
     notes: [
       "Only includes services set to the 'production_rate' budget method — manual-rate services have nothing to compare against.",
+      "One row per completed visit × service. A recurring job's visits still in progress or not yet done are excluded, even if the job itself is marked complete.",
       "Rate Variance is actual vs. assumed, as a percentage. Negative means the job took longer than the assumed rate predicted (the rate may be set too aggressively); positive means it went faster (the rate may be too conservative).",
     ],
     analysis: (params) => ({
@@ -110,12 +115,17 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
         "actual_production_rate",
         "rate_variance_bps",
         "budgeted_hours",
+        // job_actual_hours stays NULL (blank) when a visit has no hours;
+        // actual_man_hours is the same share coalesced to 0.
         "job_actual_hours",
         "man_count",
       ],
       filters: [
         { column: "budget_method", op: "eq", value: "production_rate" },
-        { column: "job_status", op: "eq", value: "completed" },
+        // Per-visit status, not the job master's: a recurring job's status
+        // stays 'scheduled' while individual visits complete (and a
+        // completed job can still have skipped visits with no hours).
+        { column: "visit_status", op: "eq", value: "completed" },
         ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
       ],
       groupBy: [],

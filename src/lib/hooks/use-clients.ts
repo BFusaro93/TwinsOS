@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { todayLocalISODate } from "@/lib/utils";
+import { isoNy } from "@/lib/reports/ny-date";
 import { logger } from "@/lib/logger";
 import type { BulkImportResult } from "@/lib/csv";
 import type {
@@ -514,8 +515,8 @@ export function useCreateClient() {
           // jumping straight to Active (defaults to active for back-compat).
           status: values.status ?? "active",
           // Local calendar date — toISOString() is UTC and reads as tomorrow
-          // after ~8 PM Eastern.
-          client_since: todayLocalISODate(),
+          // after ~8 PM Eastern. Leads have no client_since until converted.
+          client_since: (values.status ?? "active") === "lead" ? null : todayLocalISODate(),
         })
         .select()
         .single();
@@ -692,6 +693,10 @@ export function useUpdateClient() {
       }
 
       const smsOptInJustEnabled = updates.smsOptIn === true && before && before.sms_opt_in !== true;
+      // Status is editable from the Edit Client → Details tab; a lead moved to
+      // active there is the same business event as the "Convert" button, so
+      // stamp client_since (the conversion date) if the form left it blank.
+      const leadConverting = updates.status === "active" && before?.status === "lead";
 
       const { error } = await supabase
         .from("clients")
@@ -731,7 +736,8 @@ export function useUpdateClient() {
           billing_email: updates.billingEmail,
           referred_by: updates.referredBy,
           referred_by_client_id: updates.referredByClientId,
-          client_since: updates.clientSince ?? null,
+          // Empty string from the date input means "cleared", not a date.
+          client_since: updates.clientSince || (leadConverting ? isoNy(new Date()) : null),
           priority: updates.priority ?? null,
           is_taxable: updates.isTaxable,
           turf_sqft: updates.turfSqft ?? null,
@@ -1053,7 +1059,8 @@ export function useCreateLead() {
           billing_zip: values.billingZip || null,
           source: values.source || null,
           status: "lead",
-          client_since: todayLocalISODate(),
+          // client_since is the conversion date — leads don't have one until
+          // they become a client (see useConvertLeadToClient).
         })
         .select()
         .single();
@@ -1115,7 +1122,7 @@ export function useBulkImportLeads() {
           billing_zip: r.billingZip?.trim() || null,
           source: r.source?.trim() || null,
           status: "lead",
-          client_since: todayLocalISODate(),
+          // No client_since for leads — set on conversion.
         }).select("id").single();
         if (error) throw error;
         // The dedup maps were only built once from the DB before this loop —
@@ -1147,9 +1154,12 @@ export function useConvertLeadToClient() {
       // stale UI state, or a double-click) silently reactivated it as an
       // active client and fired lead_converted_to_client, bypassing the
       // intended lead → active transition entirely.
+      //
+      // client_since is the conversion date (NULL while a lead), so stamp it
+      // here — reports measure "new clients" and "days to convert" off it.
       const { data: updated, error } = await supabase
         .from("clients")
-        .update({ status: "active" })
+        .update({ status: "active", client_since: isoNy(new Date()) })
         .eq("id", id)
         .eq("status", "lead")
         .select("id");

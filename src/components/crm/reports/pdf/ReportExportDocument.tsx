@@ -9,6 +9,10 @@ export interface ReportExportSection {
   heading: string;
   columns: string[];
   rows: string[][];
+  /** Flat sections only — a formatted totals row (same cells the on-screen
+   *  table footer shows) rendered bold after the last data row. Ignored
+   *  when `grouped` is set, which carries its own grand-total row. */
+  totals?: string[];
   grouped?: ReportExportGrouped;
 }
 
@@ -138,6 +142,13 @@ export function ReportExportDocument({ title, generatedAt, sections, charts }: R
                   {section.rows.length === 0 && (
                     <View style={styles.row}>
                       <Text style={styles.cell}>No rows.</Text>
+                    </View>
+                  )}
+                  {section.totals && section.rows.length > 0 && (
+                    <View style={styles.grandTotalRow} wrap={false}>
+                      {section.totals.map((cell, ci) => (
+                        <Text key={ci} style={styles.cellBold}>{cell}</Text>
+                      ))}
                     </View>
                   )}
                 </>

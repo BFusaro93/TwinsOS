@@ -14,6 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { EstimateStage } from "@/types/crm-estimates";
+import { nyDateParts, shiftYmd, ymd } from "@/lib/reports/ny-date";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -66,12 +67,39 @@ function stageLabelText(stage: string): string {
 
 type DateRange = "this_year" | "last_30" | "last_90" | "custom";
 
+// Range edges are whole calendar days in America/New_York (the org's operating
+// timezone). `new Date("YYYY-MM-DD")` would parse as UTC midnight, which is the
+// previous evening in NY and quietly shifts the window by several hours.
+const NY_HOUR_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  hour: "numeric",
+  hourCycle: "h23",
+});
+
+/** The instant at which the NY calendar day `ymdStr` begins. */
+function nyDayStart(ymdStr: string): Date {
+  // NY is UTC-4 (EDT) or UTC-5 (EST); whichever lands on 00:00 NY is right.
+  for (const offset of ["-04:00", "-05:00"]) {
+    const t = new Date(`${ymdStr}T00:00:00${offset}`);
+    const hour = NY_HOUR_FMT.formatToParts(t).find((p) => p.type === "hour")?.value;
+    if (hour === "0" || hour === "00") return t;
+  }
+  return new Date(`${ymdStr}T00:00:00-05:00`);
+}
+
+/** The last instant of the NY calendar day `ymdStr`. */
+function nyDayEnd(ymdStr: string): Date {
+  return new Date(nyDayStart(shiftYmd(ymdStr, 1)).getTime() - 1);
+}
+
 function getRangeStart(range: DateRange, customStart: string): string {
   const now = new Date();
-  if (range === "this_year") return new Date(now.getFullYear(), 0, 1).toISOString();
+  const { year } = nyDateParts(now);
+  const yearStart = nyDayStart(ymd(year, 0, 1)).toISOString();
+  if (range === "this_year") return yearStart;
   if (range === "last_30") return new Date(now.getTime() - 30 * 86400_000).toISOString();
   if (range === "last_90") return new Date(now.getTime() - 90 * 86400_000).toISOString();
-  return customStart ? new Date(customStart).toISOString() : new Date(now.getFullYear(), 0, 1).toISOString();
+  return customStart ? nyDayStart(customStart).toISOString() : yearStart;
 }
 
 // ── Raw DB types ──────────────────────────────────────────────────────────────
@@ -245,7 +273,7 @@ function ByStageReport({ estimates }: { estimates: RawEstimate[] }) {
   );
 }
 
-// ── Report 2: Won Estimates — Actual vs Estimated ─────────────────────────────
+// ── Report 2: Accepted Estimates ──────────────────────────────────────────────
 
 function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
   const won = useMemo(
@@ -260,9 +288,6 @@ function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
         { label: "Accepted Estimates", value: won.length.toLocaleString() },
         { label: "Total Estimated Value", value: formatCurrency(totalValue) },
       ]} />
-      <p className="mb-3 text-xs text-slate-400">
-        Job actuals coming in Sprint 5 — actual revenue column will be populated once jobs close.
-      </p>
       <div className="overflow-auto rounded-lg border">
         <table className="w-full border-collapse">
           <thead className="border-b bg-slate-50">
@@ -271,13 +296,12 @@ function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
               <TH>Client</TH>
               <TH>Description</TH>
               <TH right>Estimated Total</TH>
-              <TH right>Actual Revenue</TH>
               <TH>Stage</TH>
             </tr>
           </thead>
           <tbody className="divide-y">
             {won.length === 0 ? (
-              <EmptyRow cols={6} />
+              <EmptyRow cols={5} />
             ) : (
               won.map((e) => (
                 <tr key={e.id} className="hover:bg-slate-50/50">
@@ -285,7 +309,6 @@ function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
                   <TD>{e.clients?.display_name ?? "—"}</TD>
                   <TD>{e.description ?? "—"}</TD>
                   <TD right>{formatCurrency(e.total_price_cents ?? 0)}</TD>
-                  <TD right muted>—</TD>
                   <TD>
                     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", stageColorClass(e.stage))}>
                       {stageLabelText(e.stage)}
@@ -401,7 +424,6 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
           <thead className="border-b bg-slate-50">
             <tr>
               <TH>Service</TH>
-              <TH right>Visits</TH>
               <TH right>Qty</TH>
               <TH right>Rate</TH>
               <TH right>Total</TH>
@@ -411,7 +433,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
           </thead>
           <tbody className="divide-y">
             {wonItems.length === 0 ? (
-              <EmptyRow cols={7} />
+              <EmptyRow cols={6} />
             ) : (
               wonItems.map((li) => {
                 const margin = li.total_cents
@@ -420,7 +442,6 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
                 return (
                   <tr key={li.id} className="hover:bg-slate-50/50">
                     <TD>{li.service_name || "—"}</TD>
-                    <TD right muted>—</TD>
                     <TD right>{li.qty ?? 0}</TD>
                     <TD right>{formatCurrency(li.rate_cents ?? 0)}</TD>
                     <TD right>{formatCurrency(li.total_cents ?? 0)}</TD>
@@ -455,7 +476,7 @@ export function EstimatesReportSection() {
 
   const rangeStart = useMemo(() => getRangeStart(dateRange, customStart), [dateRange, customStart]);
   const rangeEnd = useMemo(
-    () => (dateRange === "custom" && customEnd ? new Date(customEnd).toISOString() : new Date().toISOString()),
+    () => (dateRange === "custom" && customEnd ? nyDayEnd(customEnd).toISOString() : new Date().toISOString()),
     [dateRange, customEnd]
   );
 
@@ -518,7 +539,7 @@ export function EstimatesReportSection() {
         <Tabs defaultValue="by_stage">
           <TabsList className="mb-4">
             <TabsTrigger value="by_stage">By Stage</TabsTrigger>
-            <TabsTrigger value="won_vs_actual">Accepted vs. Actual</TabsTrigger>
+            <TabsTrigger value="won_vs_actual">Accepted Estimates</TabsTrigger>
             <TabsTrigger value="won_by_service">Accepted by Service</TabsTrigger>
             <TabsTrigger value="service_products">Service Products</TabsTrigger>
           </TabsList>

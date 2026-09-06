@@ -7,10 +7,16 @@ import {
   dateRangeFilters,
   eqFilter,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { isoNy } from "@/lib/reports/ny-date";
 
 // ============================================================
 // Service Reports section — pre-built reports.
 // ============================================================
+
+/** Visit statuses that still represent outstanding work: dispatched is
+ *  "on the crew's board, not started" — same backlog bucket as scheduled. */
+const OUTSTANDING_VISIT_STATUSES = ["scheduled", "dispatched"];
 
 export const SERVICE_REPORTS: PrebuiltReportDef[] = [
   {
@@ -27,6 +33,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         type: "select",
         options: [
           { value: "scheduled", label: "Scheduled" },
+          { value: "dispatched", label: "Dispatched" },
           { value: "in_progress", label: "In Progress" },
           { value: "completed", label: "Completed" },
           { value: "cancelled", label: "Cancelled" },
@@ -36,6 +43,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
       { key: "zip", label: "Service Zip", type: "text", placeholder: "Any zip" },
     ],
+    notes: ["Budgeted Man-Hours and Actual Man-Hours are both duration × number of men."],
     analysis: (params) => ({
       dataset: "rpt_job_visits",
       columns: [
@@ -45,8 +53,8 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         "crew_name",
         "status",
         "budgeted_hours",
+        // actual_hours and man_hours are the same figure in the view — show it once.
         "actual_hours",
-        "man_hours",
         "revenue_cents",
         "rev_per_man_hr_cents",
         "service_city",
@@ -78,7 +86,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       },
     ],
     notes: [
-      "Visits still in Scheduled status on or before the cutoff — work waiting to be completed.",
+      "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.",
     ],
     analysis: (params) => ({
       dataset: "rpt_job_visits",
@@ -87,16 +95,19 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         "client_name",
         "service_names",
         "crew_name",
+        "status",
         "budgeted_hours",
         "revenue_cents",
         "service_city",
       ],
       filters: [
-        { column: "status", op: "eq", value: "scheduled" },
+        { column: "status", op: "in", value: OUTSTANDING_VISIT_STATUSES },
         {
           column: "scheduled_date",
           op: "lte",
-          value: params.to || new Date().toISOString().slice(0, 10),
+          // "Today" as the calendar date in America/New_York, not UTC — the
+          // UTC date rolls over at 8pm/7pm Eastern.
+          value: params.to || isoNy(new Date()),
         },
       ],
       groupBy: [],
@@ -111,28 +122,34 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
     name: "Client Count by Service",
     description: "Shows how many clients receive each service and the share of the client base.",
     filters: [],
+    notes: [
+      "Counts distinct clients with at least one non-cancelled job for the service. Percent is of all clients that have any such job, not of the whole client list.",
+    ],
     run: async ({ supabase }) => {
-      const { data, error } = await supabase
-        .from("crm_job_services")
-        .select("service_name, crm_jobs:job_id(client_id, status, deleted_at)")
-        .limit(5000);
-      if (error) throw new Error(error.message);
-
       interface Row {
         service_name: string | null;
         crm_jobs: {
           client_id: string | null;
           status: string | null;
-          deleted_at: string | null;
         } | null;
       }
-      const rows = (data ?? []) as unknown as Row[];
+      // Inner joins so deleted jobs / deleted clients / cancelled jobs are
+      // dropped server-side (instead of consuming page slots and then being
+      // filtered out here).
+      const rows = await fetchAllRows<Row>(() =>
+        supabase
+          .from("crm_job_services")
+          .select("service_name, crm_jobs!inner(client_id, status, clients!inner(deleted_at))")
+          .is("crm_jobs.deleted_at", null)
+          .neq("crm_jobs.status", "cancelled")
+          .is("crm_jobs.clients.deleted_at", null)
+      );
 
       const byService = new Map<string, Set<string>>();
       const allClients = new Set<string>();
       for (const r of rows) {
         const job = r.crm_jobs;
-        if (!job || job.deleted_at !== null || job.status === "cancelled") continue;
+        if (!job || job.status === "cancelled") continue;
         if (!job.client_id) continue;
         const service = r.service_name || "(none)";
         let clients = byService.get(service);
@@ -183,6 +200,10 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         ],
       },
     ],
+    notes: [
+      "Scheduled Date is blank for recurring and package jobs — only their individual visits carry dates (see the Visits Report).",
+      "Rate is the job's per-visit rate, not a total — it is not summed in the totals row.",
+    ],
     analysis: (params) => ({
       dataset: "rpt_jobs",
       columns: [
@@ -214,53 +235,80 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows visit progress and earned vs pending revenue for each service package.",
     filters: [],
+    notes: [
+      "Total Visits counts each package job's visits (all statuses except cancelled); Completed counts visits in Completed status.",
+      "Earned is completed visits × the per-visit amount — the visit's own rate × qty when set, otherwise the job total split evenly across its visits. Pending is the job total minus Earned. A package job with no visits generated yet shows entirely as Pending.",
+    ],
     run: async ({ supabase }) => {
-      const { data, error } = await supabase
-        .from("crm_jobs")
-        .select(
-          "id, package_name, package_step, package_total_steps, is_complete, status, total_cents, scheduled_date"
-        )
-        .eq("job_type", "package")
-        .is("deleted_at", null)
-        .limit(5000);
-      if (error) throw new Error(error.message);
-
       interface Row {
         id: string;
         package_name: string | null;
-        package_step: number | null;
-        package_total_steps: number | null;
-        is_complete: boolean | null;
-        status: string | null;
         total_cents: number | null;
         scheduled_date: string | null;
       }
-      const rows = (data ?? []) as unknown as Row[];
-
-      // crm_jobs.scheduled_date is never populated for package/recurring
-      // jobs — only the individual crm_job_visits rows carry a date — so
-      // First Visit/Last Visit always rendered blank without this. Pull
-      // each package job's earliest/latest visit date and use it as a
-      // fallback when the job itself has no scheduled_date.
-      const jobIds = rows.map((r) => r.id);
-      const visitDatesByJob = new Map<string, { min: string; max: string }>();
-      if (jobIds.length > 0) {
-        const { data: visits, error: visitsError } = await supabase
-          .from("crm_job_visits")
-          .select("job_id, scheduled_date")
-          .in("job_id", jobIds)
+      const rows = await fetchAllRows<Row>(() =>
+        supabase
+          .from("crm_jobs")
+          .select("id, package_name, total_cents, scheduled_date")
+          .eq("job_type", "package")
           .is("deleted_at", null)
-          .not("scheduled_date", "is", null)
-          .limit(10000);
-        if (visitsError) throw new Error(visitsError.message);
-        for (const v of (visits ?? []) as { job_id: string; scheduled_date: string }[]) {
-          const existing = visitDatesByJob.get(v.job_id);
-          if (!existing) {
-            visitDatesByJob.set(v.job_id, { min: v.scheduled_date, max: v.scheduled_date });
-          } else {
-            if (v.scheduled_date < existing.min) existing.min = v.scheduled_date;
-            if (v.scheduled_date > existing.max) existing.max = v.scheduled_date;
+      );
+
+      // A package job is one master record whose service is delivered across
+      // many crm_job_visits rows (the job's own status/is_complete only flips
+      // at the very end, and its scheduled_date is never populated), so
+      // progress has to be measured per visit, not per job.
+      interface VisitRow {
+        job_id: string;
+        scheduled_date: string | null;
+        status: string | null;
+        rate_cents: number | null;
+        qty: number | null;
+      }
+      interface JobVisits {
+        total: number;
+        completed: number;
+        completedCents: number | null; // null until a completed visit lacks its own rate
+        min: string | null;
+        max: string | null;
+      }
+      const visitsByJob = new Map<string, JobVisits>();
+      const jobIds = rows.map((r) => r.id);
+      // .in() goes on the URL — chunk so a large org doesn't blow the length cap.
+      for (let i = 0; i < jobIds.length; i += 200) {
+        const chunk = jobIds.slice(i, i + 200);
+        const visits = await fetchAllRows<VisitRow>(() =>
+          supabase
+            .from("crm_job_visits")
+            .select("job_id, scheduled_date, status, rate_cents, qty")
+            .in("job_id", chunk)
+            .is("deleted_at", null)
+            .neq("status", "cancelled")
+        );
+        for (const v of visits) {
+          const jv = visitsByJob.get(v.job_id) ?? {
+            total: 0,
+            completed: 0,
+            completedCents: 0,
+            min: null,
+            max: null,
+          };
+          jv.total += 1;
+          if (v.status === "completed") {
+            jv.completed += 1;
+            if (v.rate_cents != null && jv.completedCents !== null) {
+              jv.completedCents += Math.round(v.rate_cents * (Number(v.qty) || 1));
+            } else {
+              // At least one completed visit has no explicit rate — fall
+              // back to an even split of the job total (below).
+              jv.completedCents = null;
+            }
           }
+          if (v.scheduled_date) {
+            if (!jv.min || v.scheduled_date < jv.min) jv.min = v.scheduled_date;
+            if (!jv.max || v.scheduled_date > jv.max) jv.max = v.scheduled_date;
+          }
+          visitsByJob.set(v.job_id, jv);
         }
       }
 
@@ -291,27 +339,31 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
           };
           byPackage.set(key, summary);
         }
-        summary.total_visits += 1;
-        const isCompleted = Boolean(r.is_complete) || r.status === "completed";
-        const cents = r.total_cents ?? 0;
-        if (isCompleted) {
-          summary.completed += 1;
-          summary.earned_cents += cents;
-        } else {
-          summary.pending_cents += cents;
+        const jv = visitsByJob.get(r.id);
+        const jobTotal = r.total_cents ?? 0;
+        const total = jv?.total ?? 0;
+        const completed = jv?.completed ?? 0;
+        let earned = 0;
+        if (completed > 0) {
+          earned =
+            jv?.completedCents != null
+              ? jv.completedCents
+              : total > 0
+                ? Math.round((jobTotal * completed) / total)
+                : 0;
         }
-        const visitDates = visitDatesByJob.get(r.id);
-        const earliest = r.scheduled_date ?? visitDates?.min ?? null;
-        const latest = r.scheduled_date ?? visitDates?.max ?? null;
-        if (earliest) {
-          if (!summary.first_date || earliest < summary.first_date) {
-            summary.first_date = earliest;
-          }
+        summary.total_visits += total;
+        summary.completed += completed;
+        summary.earned_cents += earned;
+        summary.pending_cents += Math.max(jobTotal - earned, 0);
+
+        const earliest = r.scheduled_date ?? jv?.min ?? null;
+        const latest = jv?.max ?? r.scheduled_date ?? null;
+        if (earliest && (!summary.first_date || earliest < summary.first_date)) {
+          summary.first_date = earliest;
         }
-        if (latest) {
-          if (!summary.last_date || latest > summary.last_date) {
-            summary.last_date = latest;
-          }
+        if (latest && (!summary.last_date || latest > summary.last_date)) {
+          summary.last_date = latest;
         }
       }
 

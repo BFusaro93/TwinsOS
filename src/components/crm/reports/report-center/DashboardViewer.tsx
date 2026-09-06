@@ -28,11 +28,13 @@ import {
   useRunVisualQuery,
 } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
-import { computePresetRange } from "./ReportFilterBar";
+import { computeTotals } from "@/lib/reports/engine";
+import { canQueryDataset } from "@/lib/reports/report-permissions";
+import { useIsCrewOnly, usePermissions } from "@/lib/hooks/use-permissions";
+import { defaultFilterValues } from "./ReportFilterBar";
 import { VisualRenderer } from "./VisualRenderer";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
-import type { DashboardPanel, DashboardTab, ReportResult } from "@/types/crm-reports";
-import type { ReportFilterDef } from "@/types/crm-reports";
+import type { DashboardPanel, DashboardTab, ReportFieldType, ReportResult } from "@/types/crm-reports";
 
 const HUB_HREF = "/crm/admin/reports?tab=dashboards";
 
@@ -56,23 +58,27 @@ function defaultDateRange(): { from: string; to: string } {
   };
 }
 
-/** Default filter values for a prebuilt report's own filter bar (date-range
- *  presets like "this month" resolved fresh on every render), same logic
- *  ReportViewer.tsx's standalone page uses — kept as an inline copy here
- *  rather than importing it, since embedding needs no coupling to the rest
- *  of that page (filter bar, exports, schedule dialog). */
-function reportDefaultParams(filters: ReportFilterDef[]): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const def of filters) {
-    if (def.type === "dateRange") {
-      const { from, to } = computePresetRange(def.defaultValue ?? "this_month");
-      values.from = from;
-      values.to = to;
-    } else {
-      values[def.key] = def.defaultValue ?? "";
-    }
-  }
-  return values;
+/** Rows for a panel's export, with a trailing "Totals" row (matching the
+ *  on-screen ReportTable footer) when the result has totalable columns and
+ *  more than one row — a single-row result's totals would just repeat it.
+ *  Skipped in subtotal mode, where a flat grand-total row would be
+ *  misleading next to the group structure. `format` is formatCellValue for
+ *  CSV/PDF or exportCellValue for Excel, so the totals cells stay the same
+ *  kind of value as the body cells in each format. */
+function exportRowsWithTotals<T>(
+  result: ReportResult,
+  format: (value: unknown, type: ReportFieldType) => T
+): (T | string)[][] {
+  const body = result.rows.map((row) => result.columns.map((c) => format(row[c.key], c.type)));
+  if (result.groupSubtotals || result.rows.length < 2) return body;
+  const totals = result.totals ?? computeTotals(result.columns, result.rows);
+  if (!totals) return body;
+  const totalsRow = result.columns.map((c, i) => {
+    if (i === 0) return "Totals";
+    const total = totals[c.key];
+    return c.totalable && total !== undefined && total !== null ? format(total, c.type) : "";
+  });
+  return [...body, totalsRow];
 }
 
 /** Embeds an existing Report Center prebuilt report (by key) inside a
@@ -91,7 +97,8 @@ function ReportPanelView({
 }) {
   const def = getReport(reportKey);
   const effectiveParams = useMemo(
-    () => ({ ...(def ? reportDefaultParams(def.filters) : {}), ...params }),
+    // Shared with ReportViewer so an "all_time" default writes range=all here too.
+    () => ({ ...(def ? defaultFilterValues(def.filters) : {}), ...params }),
     [def, params]
   );
   const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
@@ -161,8 +168,18 @@ function DashboardVisualPanelView({
   repFilter?: string;
   onData?: (panelId: string, result: ReportResult) => void;
 }) {
+  // Client-side mirror of the analysis/run route's per-dataset gate: a role
+  // denied every report over a sensitive dataset (payroll, invoicing, ...)
+  // gets a quiet notice instead of firing a request that 403s into an error
+  // alert. Crew logins never hold report keys — their scope is decided by
+  // the server (crew-visible dashboards), so they're not gated here.
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const { isCrewOnly, isLoading: crewLoading } = useIsCrewOnly();
+  const permissionsReady = !permissionsLoading && !crewLoading;
+  const denied = permissionsReady && !isCrewOnly && !canQueryDataset(panel.visual.config.dataset, can);
+
   const { data, isFetching, error } = useRunVisualQuery(
-    panel.visual,
+    permissionsReady && !denied ? panel.visual : undefined,
     panel.visual.useTabDateRange ? dateRange : undefined,
     panel.visual.useTabRepFilter ? repFilter : undefined
   );
@@ -172,7 +189,15 @@ function DashboardVisualPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, panel.id]);
 
-  if (isFetching && !data) {
+  if (denied) {
+    return (
+      <div className="flex h-40 items-center justify-center text-center text-xs text-slate-400">
+        You don&apos;t have permission to view this panel.
+      </div>
+    );
+  }
+
+  if ((isFetching || !permissionsReady) && !data) {
     return <Skeleton className="h-40 w-full" />;
   }
 
@@ -251,7 +276,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     downloadCSV(
       `${panel.title}.csv`,
       result.columns.map((c) => c.label),
-      result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type)))
+      exportRowsWithTotals(result, formatCellValue)
     );
   };
 
@@ -265,7 +290,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
           return {
             name: panel.title,
             headers: result.columns.map((c) => c.label),
-            rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+            rows: exportRowsWithTotals(result, exportCellValue),
           };
         })
       );
@@ -285,7 +310,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
           return {
             heading: panel.title,
             columns: result.columns.map((c) => c.label),
-            rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+            rows: exportRowsWithTotals(result, formatCellValue),
           };
         })
       );

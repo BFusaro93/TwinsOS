@@ -42,6 +42,15 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Saved graphics are Report Center content — same gate as the list route.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canView } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "view_report_center",
+  });
+  if (!canView) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_saved_graphics")

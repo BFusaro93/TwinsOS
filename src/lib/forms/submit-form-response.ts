@@ -566,6 +566,7 @@ export async function submitFormResponse(
           notes_to_crew: mappedData["client.notes"] ?? null,
           source: mappedData["client.source"] ?? "form",
           status: "lead",
+          // Leads carry no client_since — it's stamped when the lead converts.
         })
         .select("id")
         .single();

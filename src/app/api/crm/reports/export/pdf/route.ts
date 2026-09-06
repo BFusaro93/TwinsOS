@@ -24,6 +24,8 @@ const exportRequestSchema = z.object({
         heading: z.string(),
         columns: z.array(z.string()),
         rows: z.array(z.array(z.string())),
+        /** Flat sections only — a pre-formatted totals row rendered bold after the data rows. */
+        totals: z.array(z.string()).optional(),
         grouped: groupedSchema.optional(),
       })
     )

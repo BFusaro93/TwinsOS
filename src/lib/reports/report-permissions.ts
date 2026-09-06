@@ -75,6 +75,54 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "approved-sales-by-sales-rep": ["sched_rpt_sales_count_by_sales_rep", "acct_rpt_booked_revenue_by_sales_rep"],
 };
 
+/**
+ * Maps a raw analysis dataset (an `rpt_*` view key from
+ * src/lib/reports/datasets.ts) to the crm_roles permission key(s) that gate
+ * querying it through the Custom Analysis builder / dashboard panels. Any one
+ * of the listed keys grants access.
+ *
+ * Base-table RLS is org-wide, not role-aware, so without this anyone holding
+ * `view_report_center` could pull pay rates, labor cost, invoice/payment
+ * history or estimate pricing via an ad-hoc analysis even when their role is
+ * denied every prebuilt report over that data. Datasets with no entry here
+ * (clients, jobs, visits, services, products, vendors, contracts, chemicals,
+ * WIP, sales-rep month, contract usage) are gated only by view_report_center.
+ * Every key must exist in src/types/crm-roles.ts.
+ */
+const ACCOUNTING_DATASET_KEYS = [
+  "acct_rpt_invoiced_income_by_client",
+  "acct_rpt_invoices_with_balances",
+  "acct_rpt_ar_aging",
+];
+
+const ESTIMATE_DATASET_KEYS = [
+  "estimate_list",
+  "crm_rpt_estimates_by_stage",
+  "crm_rpt_won_estimates_by_service",
+];
+
+export const DATASET_PERMISSION_KEYS: Record<string, string[]> = {
+  rpt_employees: ["sched_rpt_employee_directory"],
+  rpt_timesheets: ["sched_rpt_job_hours_summary", "sched_rpt_employee_directory"],
+  rpt_invoices: ACCOUNTING_DATASET_KEYS,
+  rpt_invoice_line_items: ACCOUNTING_DATASET_KEYS,
+  rpt_payments: ["acct_rpt_payment_audit_summary", ...ACCOUNTING_DATASET_KEYS],
+  rpt_estimates: ESTIMATE_DATASET_KEYS,
+  rpt_estimate_line_items: ESTIMATE_DATASET_KEYS,
+};
+
+/** True when the given permission set (from usePermissions()) allows querying
+ *  a dataset. Client-side mirror of the analysis/run route's dataset gate —
+ *  lets dashboards blank a panel instead of surfacing a 403 error state. */
+export function canQueryDataset(
+  dataset: string,
+  can: (key: string) => boolean
+): boolean {
+  const keys = DATASET_PERMISSION_KEYS[dataset];
+  if (!keys) return true; // ungated beyond view_report_center
+  return keys.some((k) => can(k));
+}
+
 /** True when the given permission set (from usePermissions()) grants access to a report. */
 export function canViewReport(
   reportKey: string,

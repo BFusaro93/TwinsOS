@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import type { ReportColumnDef, ReportResult, VisualSpec } from "@/types/crm-reports";
+import type { ReportColumnDef, ReportFieldType, ReportResult, VisualSpec } from "@/types/crm-reports";
 import { formatCellValue, ReportTable } from "./ReportTable";
 
 // ── palette (matches src/components/shared/ReportsPage.tsx conventions) ──────
@@ -25,6 +25,78 @@ const SERIES_COLORS = ["#0ea5e9", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#
 
 function colFor(columns: ReportColumnDef[], key: string | undefined) {
   return columns.find((c) => c.key === key);
+}
+
+const COMPACT_NUMBER = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+const COMPACT_DOLLARS = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** Short axis-tick label for a value of the given column type — money is
+ *  integer cents (so "$12.5K", not "1250000"), bps are ÷100 for display. */
+function axisTickLabel(value: unknown, type: ReportFieldType): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  switch (type) {
+    case "money":
+      return COMPACT_DOLLARS.format(n / 100);
+    case "percent":
+      return `${COMPACT_NUMBER.format(n)}%`;
+    case "bps":
+      return `${COMPACT_NUMBER.format(n / 100)}%`;
+    case "hours":
+      return `${COMPACT_NUMBER.format(n)}h`;
+    default:
+      return COMPACT_NUMBER.format(n);
+  }
+}
+
+/** Sort comparator over RAW cell values for a column type — dates
+ *  chronologically, numeric types numerically, everything else by label. */
+function compareRaw(a: unknown, b: unknown, type: ReportFieldType): number {
+  const aNull = a === null || a === undefined;
+  const bNull = b === null || b === undefined;
+  if (aNull || bNull) return aNull === bNull ? 0 : aNull ? 1 : -1;
+  switch (type) {
+    case "date":
+    case "datetime": {
+      const ta = Date.parse(String(a));
+      const tb = Date.parse(String(b));
+      if (Number.isFinite(ta) && Number.isFinite(tb)) return ta - tb;
+      return String(a).localeCompare(String(b));
+    }
+    case "money":
+    case "number":
+    case "hours":
+    case "percent":
+    case "bps": {
+      const na = Number(a);
+      const nb = Number(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      return String(a).localeCompare(String(b));
+    }
+    default:
+      return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+  }
+}
+
+/** "Partial" hint for single-number visuals whose underlying query hit the
+ *  engine's row limit — the aggregate shown covers only the returned page. */
+function PartialHint({ result }: { result: ReportResult }) {
+  if (!result.truncated) return null;
+  return (
+    <p className="text-center text-xs text-amber-600">
+      Partial — based on {result.rowCount.toLocaleString()}
+      {result.totalCount !== undefined ? ` of ${result.totalCount.toLocaleString()}` : ""} rows
+    </p>
+  );
 }
 
 function KpiVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
@@ -36,9 +108,10 @@ function KpiVisual({ result, visual }: { result: ReportResult; visual: VisualSpe
       <p className="text-3xl font-bold text-slate-900">
         {col && raw !== undefined ? formatCellValue(raw, col.type) : "—"}
       </p>
-      {result.rowCount > 1 && (
+      {result.rowCount > 1 && !result.truncated && (
         <p className="text-xs text-muted-foreground">across {result.rowCount} rows</p>
       )}
+      <PartialHint result={result} />
     </div>
   );
 }
@@ -84,6 +157,7 @@ function GaugeVisual({ result, visual }: { result: ReportResult; visual: VisualS
         <span>0</span>
         <span>{col ? formatCellValue(max, col.type) : max}</span>
       </div>
+      <PartialHint result={result} />
     </div>
   );
 }
@@ -103,8 +177,10 @@ function CrosstabVisual({ result, visual }: { result: ReportResult; visual: Visu
 
   // A client-side pivot of an already-flat, already-aggregated query result
   // (grouped by both labelCol and headerCol) — no backend changes needed.
-  const headerValues: string[] = [];
-  const headerSeen = new Set<string>();
+  // Header order is decided on the RAW header values (so date headers come
+  // out chronologically and numbers numerically) — sorting the formatted
+  // labels would put "Aug 2026" before "Jul 2026".
+  const headerRawByLabel = new Map<string, unknown>();
   const rowOrder: string[] = [];
   const rowSeen = new Set<string>();
   const cellMap = new Map<string, number>();
@@ -114,23 +190,23 @@ function CrosstabVisual({ result, visual }: { result: ReportResult; visual: Visu
 
   for (const row of result.rows) {
     const rowLabel = formatCellValue(row[labelCol.key], labelCol.type);
-    const headerLabel = formatCellValue(row[headerCol.key], headerCol.type);
+    const headerRaw = row[headerCol.key];
+    const headerLabel = formatCellValue(headerRaw, headerCol.type);
     const value = Number(row[valueCol.key]) || 0;
     if (!rowSeen.has(rowLabel)) {
       rowSeen.add(rowLabel);
       rowOrder.push(rowLabel);
     }
-    if (!headerSeen.has(headerLabel)) {
-      headerSeen.add(headerLabel);
-      headerValues.push(headerLabel);
-    }
+    if (!headerRawByLabel.has(headerLabel)) headerRawByLabel.set(headerLabel, headerRaw);
     const cellKey = `${rowLabel}|${headerLabel}`;
     cellMap.set(cellKey, (cellMap.get(cellKey) ?? 0) + value);
     rowTotals.set(rowLabel, (rowTotals.get(rowLabel) ?? 0) + value);
     colTotals.set(headerLabel, (colTotals.get(headerLabel) ?? 0) + value);
     grandTotal += value;
   }
-  headerValues.sort();
+  const headerValues = [...headerRawByLabel.entries()]
+    .sort(([, a], [, b]) => compareRaw(a, b, headerCol.type))
+    .map(([label]) => label);
 
   return (
     <div className="max-h-72 overflow-auto">
@@ -259,13 +335,17 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
     return c ? formatCellValue(v, c.type) : v;
   };
 
+  // All series share one Y axis, so ticks are formatted by the first value
+  // column's type (money in cents would otherwise read as raw "1250000").
+  const yTickFormatter = (v: unknown) => axisTickLabel(v, valueCols[0].type);
+
   if (visual.type === "line") {
     return (
       <ResponsiveContainer width="100%" height={260}>
         <LineChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="__label" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={yTickFormatter} />
           <Tooltip formatter={tooltipFormatter} />
           {valueCols.length > 1 && <Legend />}
           {valueCols.map((vc, i) => (
@@ -286,7 +366,7 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
       <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="__label" tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={yTickFormatter} />
         <Tooltip formatter={tooltipFormatter} />
         {valueCols.length > 1 && <Legend />}
         {valueCols.map((vc, i) => (

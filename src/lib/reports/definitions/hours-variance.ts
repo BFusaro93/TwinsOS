@@ -26,9 +26,20 @@ const AVB_FORMAT_RULES: PrebuiltReportDef["formatRules"] = [
   { column: "variance_hours", op: "eq", value: 0, color: "yellow" },
 ];
 
+/** Only visits that have (or are accruing) actual hours belong in an
+ *  actual-vs-budget comparison. Scheduled/dispatched visits have no actuals
+ *  yet, and cancelled/skipped visits never will — including them would drag
+ *  the budgeted totals up with work that hasn't happened. */
+const AVB_STATUS_FILTER: AnalysisFilter = {
+  column: "status",
+  op: "in",
+  value: ["completed", "in_progress"],
+};
+
 /** The two SA-style crew bar charts, filtered to the same date window (and
  *  optional crew) as the table below them. */
 function avbHeaderVisuals(dateFilters: AnalysisFilter[]): ReportHeaderVisual[] {
+  const filters = [AVB_STATUS_FILTER, ...dateFilters];
   return [
     {
       title: "Actual Revenue / Man Hour by Crew",
@@ -36,14 +47,30 @@ function avbHeaderVisuals(dateFilters: AnalysisFilter[]): ReportHeaderVisual[] {
         type: "bar",
         useTabDateRange: false,
         labelColumn: "crew_name",
-        valueColumns: ["avg_rev_per_man_hr_cents"],
+        valueColumns: ["rev_per_man_hr"],
         config: {
           dataset: "rpt_job_visits",
           columns: [],
-          filters: dateFilters,
+          filters,
           groupBy: ["crew_name"],
-          aggregates: [{ column: "rev_per_man_hr_cents", fn: "avg" }],
-          sortColumn: "avg_rev_per_man_hr_cents",
+          // Ratio of sums, not an average of per-visit ratios: a 15-minute
+          // visit and an 8-hour visit must not weigh the same.
+          aggregates: [
+            { column: "revenue_cents", fn: "sum" },
+            { column: "man_hours", fn: "sum" },
+          ],
+          formulas: [
+            {
+              name: "rev_per_man_hr",
+              left: "sum_revenue_cents",
+              operator: "/",
+              right: "sum_man_hours",
+              displayType: "money",
+            },
+          ],
+          // Formula columns are computed client-side after the RPC returns,
+          // so they can't drive the SQL sort — order by revenue instead.
+          sortColumn: "sum_revenue_cents",
           sortDir: "desc",
         },
       },
@@ -58,7 +85,7 @@ function avbHeaderVisuals(dateFilters: AnalysisFilter[]): ReportHeaderVisual[] {
         config: {
           dataset: "rpt_job_visits",
           columns: [],
-          filters: dateFilters,
+          filters,
           groupBy: ["crew_name"],
           aggregates: [{ column: "variance_hours", fn: "sum" }],
           sortColumn: "sum_variance_hours",
@@ -68,6 +95,14 @@ function avbHeaderVisuals(dateFilters: AnalysisFilter[]): ReportHeaderVisual[] {
     },
   ];
 }
+
+const AVB_NOTES = [
+  "Grouped by crew (Assigned Resources), with a subtotal row per crew.",
+  "Only completed and in-progress visits are included — scheduled, dispatched, cancelled, and skipped visits have no actual hours to compare.",
+  "Budgeted Hours and Actual Hours are both man-hours (duration × number of men).",
+  "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget. It is blank until a visit has actual hours.",
+  "The Revenue / Man Hour chart is total revenue ÷ total man-hours per crew (not an average of per-visit rates).",
+];
 
 const AVB_COLUMNS = [
   "client_name",
@@ -95,10 +130,7 @@ function avbReport(
     name: `Actual v. Budgeted Hours (${label})`,
     description,
     filters: [],
-    notes: [
-      "Grouped by crew (Assigned Resources), with a subtotal row per crew.",
-      "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
-    ],
+    notes: AVB_NOTES,
     formatRules: AVB_FORMAT_RULES,
     // Fixed date window recomputed on every run — safe to schedule daily
     // (unlike the custom-range variant below, which would go stale).
@@ -116,6 +148,7 @@ function avbReport(
         dataset: "rpt_job_visits",
         columns: AVB_COLUMNS,
         filters: [
+          AVB_STATUS_FILTER,
           { column: "scheduled_date", op: "gte", value: from },
           { column: "scheduled_date", op: "lte", value: to },
         ],
@@ -187,8 +220,7 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
     ],
     notes: [
-      "Grouped by crew (Assigned Resources), with a subtotal row per crew.",
-      "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
+      ...AVB_NOTES,
       "Defaults to month to date (the 1st through today) — pick your own From/To dates to run any range.",
     ],
     formatRules: AVB_FORMAT_RULES,
@@ -201,6 +233,7 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
       dataset: "rpt_job_visits",
       columns: AVB_COLUMNS,
       filters: [
+        AVB_STATUS_FILTER,
         ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
         ...eqFilter("crew_name", params.crew),
       ],

@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   AnalysisConfig,
+  AnalysisFormula,
   ReportColumnDef,
+  ReportFieldType,
   ReportResult,
   ReportResultRow,
 } from "@/types/crm-reports";
@@ -13,6 +15,9 @@ import { getDataset, getDatasetField } from "@/lib/reports/datasets";
 // The RPC re-validates every identifier server-side; this layer
 // exists to fail fast with friendly messages and to shape results.
 // ============================================================
+
+/** crm_run_report clamps p_limit to this many rows server-side. */
+export const RPC_ROW_CAP = 5000;
 
 const AGG_LABELS: Record<string, string> = {
   sum: "Sum of",
@@ -109,8 +114,52 @@ function formulaColumnsFor(
       key: f.name,
       label: `${baseByKey.get(f.left)?.label ?? f.left} ${FORMULA_LABELS[f.operator]} ${baseByKey.get(f.right)?.label ?? f.right}`,
       type: f.displayType,
-      totalable: f.displayType !== "percent",
+      // Only additive formulas (a sum/difference of two totalable-ish
+      // quantities) can be summed down a totals row; a product or ratio
+      // (rate, margin, per-hour) summed across rows is meaningless.
+      totalable: (f.operator === "+" || f.operator === "-") && f.displayType !== "percent",
     }));
+}
+
+/** Evaluate one formula against a row. A `/` formula displayed as a percent
+ *  is scaled ×100 here because the "percent" field type is already-scaled
+ *  0–100 everywhere else (formatCellValue appends "%" without scaling). */
+function evaluateFormula(formula: AnalysisFormula, row: ReportResultRow): number | null {
+  const left = Number(row[formula.left]);
+  const right = Number(row[formula.right]);
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+  switch (formula.operator) {
+    case "+":
+      return left + right;
+    case "-":
+      return left - right;
+    case "*":
+      return left * right;
+    case "/": {
+      if (right === 0) return null;
+      const ratio = left / right;
+      return formula.displayType === "percent" ? ratio * 100 : ratio;
+    }
+  }
+}
+
+/** Client-side sort used when `sortColumn` names a formula column — the RPC
+ *  only sorts by its own output columns and silently ignores anything else,
+ *  so a formula sort has to happen after formulas are computed. Nulls last
+ *  regardless of direction (matching the RPC's `nulls last`). */
+function sortRowsBy(rows: ReportResultRow[], key: string, dir: "asc" | "desc"): ReportResultRow[] {
+  const sign = dir === "desc" ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const av = a[key];
+    const bv = b[key];
+    const aNull = av === null || av === undefined;
+    const bNull = bv === null || bv === undefined;
+    if (aNull && bNull) return 0;
+    if (aNull) return 1;
+    if (bNull) return -1;
+    if (typeof av === "number" && typeof bv === "number") return sign * (av - bv);
+    return sign * String(av).localeCompare(String(bv));
+  });
 }
 
 /** Output column defs for an analysis config's base query — excludes
@@ -142,12 +191,18 @@ function baseColumnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
       return { key: "count_all", label: "Count", type: "number" as const, totalable: true };
     }
     const field = getDatasetField(config.dataset, agg.column);
-    const type =
+    const fieldType: ReportFieldType = field?.type ?? "text";
+    const type: ReportFieldType =
       agg.fn === "count"
-        ? ("number" as const)
-        : field?.type === "money" || field?.type === "hours" || field?.type === "percent"
-          ? field.type
-          : ("number" as const);
+        ? "number"
+        : agg.fn === "min" || agg.fn === "max"
+          // min/max return one of the column's own values, so a date/text
+          // column stays date/text — rendering it as "number" gave "NaN".
+          ? fieldType
+          : fieldType === "money" || fieldType === "hours" || fieldType === "percent" || fieldType === "bps"
+            // sum/avg keep the unit (cents, hours, already-scaled %, bps)
+            ? fieldType
+            : "number";
     return {
       key: aggregateAlias(agg.fn, agg.column),
       label: `${AGG_LABELS[agg.fn]} ${field?.label ?? agg.column}`,
@@ -223,13 +278,25 @@ export async function runAnalysis(
       p_aggregates: aggregated ? config.aggregates.map((a) => ({ column: a.column, fn: a.fn })) : [],
       p_sort_column: config.sortColumn ?? null,
       p_sort_dir: config.sortDir,
-      p_limit: config.limit ?? 1000,
+      // Default to the RPC's own hard cap (it clamps to 5000 anyway) so a
+      // report isn't silently cut at 1000 rows with no indication.
+      p_limit: config.limit ?? RPC_ROW_CAP,
     }
   );
   if (rpcError) throw new Error(rpcError.message);
 
-  const payload = data as { rows: ReportResultRow[]; row_count: number };
+  const payload = data as {
+    rows: ReportResultRow[];
+    row_count: number;
+    /** Rows matched before LIMIT — newer RPC versions only; undefined = unknown. */
+    total_count?: number | null;
+  };
   let rows = payload?.rows ?? [];
+  const totalCount =
+    typeof payload?.total_count === "number" && Number.isFinite(payload.total_count)
+      ? payload.total_count
+      : undefined;
+  const truncated = totalCount !== undefined && totalCount > rows.length;
 
   // Calculated columns — computed here (never sent into the crm_run_report
   // RPC's dynamic SQL) from two of the query's own already-whitelisted
@@ -239,20 +306,15 @@ export async function runAnalysis(
     rows = rows.map((row) => {
       const next: ReportResultRow = { ...row };
       for (const formula of formulas) {
-        const left = Number(row[formula.left]);
-        const right = Number(row[formula.right]);
-        if (!Number.isFinite(left) || !Number.isFinite(right)) {
-          next[formula.name] = null;
-          continue;
-        }
-        next[formula.name] =
-          formula.operator === "+" ? left + right :
-          formula.operator === "-" ? left - right :
-          formula.operator === "*" ? left * right :
-          right === 0 ? null : left / right;
+        next[formula.name] = evaluateFormula(formula, row);
       }
       return next;
     });
+    // The RPC can't sort by a column it doesn't know about (it drops the
+    // ORDER BY silently), so a formula sort is applied here instead.
+    if (config.sortColumn && formulas.some((f) => f.name === config.sortColumn)) {
+      rows = sortRowsBy(rows, config.sortColumn, config.sortDir);
+    }
   }
 
   // Stable secondary sort by the group column so same-group rows sit
@@ -270,6 +332,8 @@ export async function runAnalysis(
     rows,
     totals: computeTotals(columns, rows),
     rowCount: rows.length,
+    totalCount,
+    truncated,
     generatedAt: new Date().toISOString(),
     sectionColumn: subtotalMode ? config.groupBy[0] : undefined,
     groupSubtotals: subtotalMode,

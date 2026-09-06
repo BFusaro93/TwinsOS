@@ -37,7 +37,10 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "third",
               visual: {
                 type: "gauge",
-                useTabDateRange: true,
+                // True YTD (Jan 1 -> today) regardless of the tab's range so the
+                // annual gaugeMax means something.
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 kpiColumn: "sum_total_cents",
                 valueColumns: [],
                 gaugeMax: 400000000,
@@ -57,7 +60,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "third",
               visual: {
                 type: "gauge",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 dateColumn: "created_at",
                 kpiColumn: "count_all",
                 valueColumns: [],
@@ -65,7 +69,12 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_clients",
                   columns: [],
-                  filters: [{ column: "status", op: "eq", value: "lead" }],
+                  // No status filter on purpose: every account starts life as a
+                  // lead (or is entered directly as a client), and a `status eq
+                  // "lead"` filter drops leads that have since converted or been
+                  // lost. Counting all accounts by created_at is the true
+                  // "new leads received" number.
+                  filters: [],
                   groupBy: [],
                   aggregates: [{ column: "*", fn: "count" }],
                   sortDir: "asc",
@@ -78,7 +87,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "third",
               visual: {
                 type: "gauge",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 kpiColumn: "count_all",
                 valueColumns: [],
                 gaugeMax: 300,
@@ -203,14 +213,17 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "bar",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 dateColumn: "created_at",
                 labelColumn: "source",
                 valueColumns: ["count_all"],
                 config: {
                   dataset: "rpt_clients",
                   columns: [],
-                  filters: [{ column: "status", op: "eq", value: "lead" }],
+                  // No status filter: see "New Leads YTD" — counts every account
+                  // created this year by source, including converted/lost leads.
+                  filters: [],
                   groupBy: ["source"],
                   aggregates: [{ column: "*", fn: "count" }],
                   sortColumn: "count_all",
@@ -224,7 +237,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "gauge",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 dateColumn: "created_at",
                 kpiColumn: "count_all",
                 valueColumns: [],
@@ -232,7 +246,9 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_clients",
                   columns: [],
-                  filters: [{ column: "status", op: "eq", value: "lead" }],
+                  // No status filter: see "New Leads YTD" — counts every account
+                  // created this year, including converted/lost leads.
+                  filters: [],
                   groupBy: [],
                   aggregates: [{ column: "*", fn: "count" }],
                   sortDir: "asc",
@@ -245,14 +261,17 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "pie",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 dateColumn: "created_at",
                 labelColumn: "source",
                 valueColumns: ["count_all"],
                 config: {
                   dataset: "rpt_clients",
                   columns: [],
-                  filters: [{ column: "status", op: "eq", value: "lead" }],
+                  // No status filter: see "New Leads YTD" — counts every account
+                  // created this year by source, including converted/lost leads.
+                  filters: [],
                   groupBy: ["source"],
                   aggregates: [{ column: "*", fn: "count" }],
                   sortColumn: "count_all",
@@ -266,13 +285,16 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "table",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_month",
                 dateColumn: "created_at",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_clients",
                   columns: ["display_name", "source", "sales_rep", "created_at"],
-                  filters: [{ column: "status", op: "eq", value: "lead" }],
+                  // No status filter: see "New Leads YTD" — lists every account
+                  // created this month, including ones already converted/lost.
+                  filters: [],
                   groupBy: [],
                   aggregates: [],
                   sortColumn: "created_at",
@@ -341,7 +363,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "bar",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 labelColumn: "source",
                 valueColumns: ["count_all"],
                 config: {
@@ -361,7 +384,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "pie",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 labelColumn: "source",
                 valueColumns: ["count_all"],
                 config: {
@@ -381,7 +405,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "table",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_month",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_clients",
@@ -400,7 +425,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               size: "half",
               visual: {
                 type: "gauge",
-                useTabDateRange: true,
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
                 kpiColumn: "count_all",
                 valueColumns: [],
                 gaugeMax: 300,
@@ -638,15 +664,21 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "gauge",
                 useTabDateRange: false,
                 useTabRepFilter: true,
-                kpiColumn: "actual_cents",
-                budgetColumn: "goal_cents",
+                // Summed so the gauge is correct whether or not a rep is picked
+                // in the tab's Sales Rep select (no rep = whole team vs. the sum
+                // of everyone's goals; a rep = that rep only via useTabRepFilter).
+                kpiColumn: "sum_actual_cents",
+                budgetColumn: "sum_goal_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_sales_rep_month",
-                  columns: ["sales_rep", "goal_cents", "actual_cents"],
+                  columns: [],
                   filters: [],
                   groupBy: [],
-                  aggregates: [],
+                  aggregates: [
+                    { column: "actual_cents", fn: "sum" },
+                    { column: "goal_cents", fn: "sum" },
+                  ],
                   sortDir: "asc",
                 },
               },
@@ -684,7 +716,9 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: ["client_name", "total_cents", "reason"],
-                  filters: [{ column: "stage", op: "eq", value: "lost" }],
+                  // "declined" is the legacy client-portal spelling of "lost";
+                  // keep matching it so older rows don't vanish from the list.
+                  filters: [{ column: "stage", op: "in", value: ["lost", "declined"] }],
                   groupBy: [],
                   aggregates: [],
                   sortColumn: "total_cents",
@@ -745,7 +779,12 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimate_line_items",
                   columns: [],
-                  filters: [],
+                  // Only lines on won estimates count as sales, and not lines the
+                  // client dropped from an otherwise-accepted estimate.
+                  filters: [
+                    { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
+                    { column: "status", op: "neq", value: "lost" },
+                  ],
                   groupBy: ["sales_rep", "service_name"],
                   aggregates: [{ column: "*", fn: "count" }],
                   sortDir: "asc",
@@ -1116,14 +1155,30 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "bar",
                 useTabDateRange: true,
                 labelColumn: "crew_name",
-                valueColumns: ["avg_rev_per_man_hr_cents"],
+                valueColumns: ["rev_per_man_hr"],
                 config: {
                   dataset: "rpt_job_visits",
                   columns: [],
-                  filters: [],
+                  // Only visits with real time on them — scheduled/cancelled/
+                  // skipped visits have no actual hours and would skew the rate.
+                  filters: [{ column: "status", op: "in", value: ["completed", "in_progress"] }],
                   groupBy: ["crew_name"],
-                  aggregates: [{ column: "rev_per_man_hr_cents", fn: "avg" }],
-                  sortColumn: "avg_rev_per_man_hr_cents",
+                  // Ratio of sums (total revenue / total man-hours), not an
+                  // average of per-visit ratios, which over-weights tiny visits.
+                  aggregates: [
+                    { column: "revenue_cents", fn: "sum" },
+                    { column: "man_hours", fn: "sum" },
+                  ],
+                  formulas: [
+                    {
+                      name: "rev_per_man_hr",
+                      left: "sum_revenue_cents",
+                      operator: "/",
+                      right: "sum_man_hours",
+                      displayType: "money",
+                    },
+                  ],
+                  sortColumn: "sum_revenue_cents",
                   sortDir: "desc",
                 },
               },
@@ -1140,7 +1195,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_job_visits",
                   columns: [],
-                  filters: [],
+                  filters: [{ column: "status", op: "in", value: ["completed", "in_progress"] }],
                   groupBy: ["crew_name"],
                   aggregates: [{ column: "variance_hours", fn: "sum" }],
                   sortColumn: "sum_variance_hours",

@@ -15,16 +15,14 @@ import { exportReportPDF } from "@/lib/reports/export-pdf";
 import { useRunReport } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import type { ReportResult, ReportFilterDef } from "@/types/crm-reports";
-import {
-  computePresetRange,
-  ReportFilterBar,
-} from "./ReportFilterBar";
+import type { ReportResult } from "@/types/crm-reports";
+import { defaultFilterValues, ReportFilterBar } from "./ReportFilterBar";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import { HeaderVisual } from "./HeaderVisual";
 import { ReportScheduleDialog } from "./ReportScheduleDialog";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
+import { buildTotalsRow, exportRowsWithTotals } from "@/lib/reports/export-rows";
 
 function chartInputFromResult(
   title: string,
@@ -60,20 +58,6 @@ function BackButton() {
   );
 }
 
-function initialFilterValues(filters: ReportFilterDef[]): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const def of filters) {
-    if (def.type === "dateRange") {
-      const { from, to } = computePresetRange(def.defaultValue ?? "this_month");
-      values.from = from;
-      values.to = to;
-    } else {
-      values[def.key] = def.defaultValue ?? "";
-    }
-  }
-  return values;
-}
-
 function LinkOutCard({ def }: { def: PrebuiltReportDef }) {
   const router = useRouter();
 
@@ -97,7 +81,7 @@ function LinkOutCard({ def }: { def: PrebuiltReportDef }) {
 
 function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
   const [values, setValues] = useState<Record<string, string>>(() =>
-    initialFilterValues(def.filters)
+    defaultFilterValues(def.filters)
   );
   const { data: result, isFetching, error, refetch } = useRunReport(def.key, values);
 
@@ -114,14 +98,15 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
     setChartResults({});
   };
 
+  // Every export carries the same totals row the on-screen table shows
+  // (appended last for CSV/Excel/flat PDF; the grouped PDF already leads
+  // with its own grand-total row via buildGroupedPdfSection).
   const handleExport = () => {
     if (!result) return;
     downloadCSV(
       `${def.key}.csv`,
       result.columns.map((c) => c.label),
-      result.rows.map((row) =>
-        result.columns.map((c) => formatCellValue(row[c.key], c.type))
-      )
+      exportRowsWithTotals(result, formatCellValue)
     );
   };
 
@@ -132,7 +117,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
         {
           name: def.name,
           headers: result.columns.map((c) => c.label),
-          rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+          rows: exportRowsWithTotals(result, exportCellValue),
         },
       ]);
     } catch (err) {
@@ -156,6 +141,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
             heading: "",
             columns: grouped ? grouped.columns : result.columns.map((c) => c.label),
             rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+            totals: grouped ? undefined : buildTotalsRow(result, formatCellValue) ?? undefined,
             grouped,
           },
         ],

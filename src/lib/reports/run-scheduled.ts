@@ -6,12 +6,21 @@ import { ReportExportDocument } from "@/components/crm/reports/pdf/ReportExportD
 import type { ReportExportChart } from "@/components/crm/reports/pdf/ReportExportDocument";
 import { runAnalysis } from "@/lib/reports/engine";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
+import { buildTotalsRow } from "@/lib/reports/export-rows";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import type { ReportColumnDef, ReportFieldType, ReportResult } from "@/types/crm-reports";
 
+/** The org's operating timezone — the cron runs on a UTC server, so every
+ *  wall-clock rendering has to pin this explicitly (the browser path gets
+ *  it for free from the user's machine). */
+const REPORT_TZ = "America/New_York";
+
 /** Standalone copy of ReportTable's `formatCellValue` — that file is a
  *  "use client" component; duplicated here rather than imported so this
- *  server-only path (the report-schedules cron) has no dependency on it. */
+ *  server-only path (the report-schedules cron) has no dependency on it.
+ *  Differs on `datetime`: the date part is formatted in America/New_York
+ *  too (utils.formatDate uses the host timezone, which is UTC on Vercel
+ *  and would roll an evening timestamp onto the next day). */
 function formatCellValueServer(value: unknown, type: ReportFieldType): string {
   if (value === null || value === undefined) return "—";
   switch (type) {
@@ -28,11 +37,20 @@ function formatCellValueServer(value: unknown, type: ReportFieldType): string {
     case "date":
       return formatDate(String(value));
     case "datetime": {
-      const str = String(value);
-      const d = new Date(str);
+      const d = new Date(String(value));
       if (isNaN(d.getTime())) return "—";
-      const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      return `${formatDate(str)} ${time}`;
+      const date = new Intl.DateTimeFormat("en-US", {
+        timeZone: REPORT_TZ,
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(d);
+      const time = d.toLocaleTimeString("en-US", {
+        timeZone: REPORT_TZ,
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `${date} ${time}`;
     }
     case "boolean":
       return value === true || value === "true" ? "Yes" : "No";
@@ -88,6 +106,7 @@ export async function renderScheduledReportPdf(
   const charts = chartResults.filter((c): c is ReportExportChart => c !== null);
 
   const generatedAt = new Date().toLocaleString("en-US", {
+    timeZone: REPORT_TZ,
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -103,6 +122,7 @@ export async function renderScheduledReportPdf(
           heading: "",
           columns: grouped ? grouped.columns : result.columns.map((c) => c.label),
           rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValueServer(row[c.key], c.type))),
+          totals: grouped ? undefined : buildTotalsRow(result, formatCellValueServer) ?? undefined,
           grouped,
         },
       ],

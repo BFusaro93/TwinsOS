@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       service_state: body.serviceState ?? null,
       service_zip: body.serviceZip ?? null,
       status: "lead",
+      // Leads carry no client_since — it's stamped when the lead converts.
     })
     .select("id, display_name, status, created_at")
     .single();

@@ -7,6 +7,9 @@ export interface ReportExportSectionInput {
   heading: string;
   columns: string[];
   rows: string[][];
+  /** Flat sections only — formatted totals row (see buildTotalsRow in
+   *  src/lib/reports/export-rows.ts) appended after the data rows. */
+  totals?: string[];
   /** When set, `rows` is ignored — the PDF renders a grand-total row up top,
    *  then each group's subtotal row immediately followed by its detail rows
    *  (matches the legacy SA layout), via buildGroupedPdfSection. */

@@ -4,17 +4,17 @@ import { createClient } from "@/lib/supabase/server";
 import { analysisConfigSchema } from "@/types/crm-reports";
 import { runAnalysis } from "@/lib/reports/engine";
 import { getCrewRunnableScope, isCrewCaller } from "@/lib/reports/crew-dashboard-access";
+import { DATASET_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
 
 /**
  * Executes an ad-hoc custom analysis (the Custom Analysis builder's
  * preview/run, and dashboard VisualSpec panels). Unlike named reports
  * (src/app/api/crm/reports/run/[reportKey]/route.ts), this runs an
  * arbitrary query against a raw dataset rather than a catalog-defined
- * report, so there's no per-dataset permission mapping to check — only a
- * baseline gate that the caller's role has Report Center access at all.
- * This does not (yet) stop someone with baseline access from querying a
- * dataset that underlies a report they're specifically denied — that would
- * need a dataset-to-permission-key mapping, a larger follow-up.
+ * report, so it's gated in two layers: a baseline check that the caller's
+ * role has Report Center access at all, then a per-dataset check
+ * (DATASET_PERMISSION_KEYS) for the sensitive views — payroll, invoicing,
+ * payments, estimates — since base-table RLS is org-wide, not role-aware.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -62,6 +62,23 @@ export async function POST(request: Request) {
     const { datasets } = await getCrewRunnableScope(supabase);
     if (!datasets.has(parsed.data.dataset)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else {
+    // Sensitive datasets need one of their mapped report permissions on top
+    // of view_report_center (admins pass inside has_settings_permission).
+    // Crew logins never hold these keys — their scope is decided above.
+    const datasetKeys = DATASET_PERMISSION_KEYS[parsed.data.dataset];
+    if (datasetKeys) {
+      const checks = await Promise.all(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        datasetKeys.map((key) => (supabase.rpc as any)("has_settings_permission", { p_key: key }))
+      );
+      if (!checks.some((r) => r.data === true)) {
+        return NextResponse.json(
+          { error: "You don't have permission to query this dataset" },
+          { status: 403 }
+        );
+      }
     }
   }
 

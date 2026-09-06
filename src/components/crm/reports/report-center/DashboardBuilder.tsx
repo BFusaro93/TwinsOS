@@ -56,7 +56,7 @@ import { getReport } from "@/lib/reports/registry";
 import { REPORT_SECTIONS } from "@/types/crm-reports";
 import type { CustomReport, DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
-import { computePresetRange } from "./ReportFilterBar";
+import { defaultFilterValues } from "./ReportFilterBar";
 import { ReportTable } from "./ReportTable";
 import { VisualRenderer } from "./VisualRenderer";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -73,6 +73,22 @@ const SIZE_OPTIONS: { value: DashboardPanel["size"]; label: string }[] = [
   { value: "half", label: "Half" },
   { value: "full", label: "Full" },
 ];
+
+type RelativeDateFilter = NonNullable<VisualSpec["relativeDateFilter"]>;
+
+/** Every relativeDateFilter the VisualSpec schema accepts — the panel
+ *  editor's <Select> offers exactly these, and the save mapping only
+ *  persists one of them (anything else, e.g. "none", becomes undefined). */
+const RELATIVE_DATE_FILTER_OPTIONS: { value: RelativeDateFilter; label: string }[] = [
+  { value: "today", label: "Filter to today" },
+  { value: "yesterday", label: "Filter to yesterday" },
+  { value: "this_month", label: "Month to date" },
+  { value: "this_year", label: "Year to date" },
+];
+
+function isRelativeDateFilter(value: string): value is RelativeDateFilter {
+  return RELATIVE_DATE_FILTER_OPTIONS.some((o) => o.value === value);
+}
 
 const VISUAL_TYPE_OPTIONS: { value: VisualType; label: string }[] = [
   { value: "kpi", label: "KPI" },
@@ -764,24 +780,6 @@ function VisualPanelPreview({ visual }: { visual: VisualSpec }) {
   return <VisualRenderer result={data} visual={visual} />;
 }
 
-/** Default filter values for a prebuilt report's own filter bar, resolved
- *  fresh on every render — same logic as ReportViewer.tsx's standalone page
- *  and DashboardViewer.tsx's embed, duplicated here rather than shared
- *  across files to keep the builder decoupled from the viewer. */
-function reportPreviewDefaultParams(filters: { key: string; type: string; defaultValue?: string }[]): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const def of filters) {
-    if (def.type === "dateRange") {
-      const { from, to } = computePresetRange(def.defaultValue ?? "this_month");
-      values.from = from;
-      values.to = to;
-    } else {
-      values[def.key] = def.defaultValue ?? "";
-    }
-  }
-  return values;
-}
-
 function ReportPanelPreview({
   reportKey,
   params,
@@ -791,7 +789,8 @@ function ReportPanelPreview({
 }) {
   const def = getReport(reportKey);
   const effectiveParams = useMemo(
-    () => ({ ...(def ? reportPreviewDefaultParams(def.filters) : {}), ...params }),
+    // Shared with ReportViewer so an "all_time" default writes range=all here too.
+    () => ({ ...(def ? defaultFilterValues(def.filters) : {}), ...params }),
     [def, params]
   );
   const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
@@ -1073,10 +1072,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
       config,
       useTabDateRange,
       useTabRepFilter: useTabRepFilter || undefined,
-      relativeDateFilter:
-        relativeDateFilter === "today" || relativeDateFilter === "yesterday"
-          ? relativeDateFilter
-          : undefined,
+      relativeDateFilter: isRelativeDateFilter(relativeDateFilter) ? relativeDateFilter : undefined,
       labelColumn: labelColumn || undefined,
       valueColumns,
       kpiColumn: kpiColumn || undefined,
@@ -1216,8 +1212,11 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">No relative date filter</SelectItem>
-              <SelectItem value="today">Filter to today</SelectItem>
-              <SelectItem value="yesterday">Filter to yesterday</SelectItem>
+              {RELATIVE_DATE_FILTER_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </CardContent>

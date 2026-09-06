@@ -13,7 +13,8 @@ import { usePendingSequenceApprovals } from "@/lib/hooks/use-sequence-approvals"
 import type { EstimateStage } from "@/types/crm-estimates";
 import type { InvoiceStatus } from "@/types/crm-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
-import { RevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { RevenueSnapshot, canViewRevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-slate-100 text-slate-600",
@@ -71,6 +72,10 @@ export function MyDay() {
   const { data: allInvoices, isLoading: invoicesLoading } = useInvoices();
   const { data: allClients, isLoading: clientsLoading } = useClients();
   const { data: pendingApprovals, isLoading: approvalsLoading } = usePendingSequenceApprovals();
+  // Revenue/AR snapshot is Report Center / accounting data — hide it (and skip
+  // its queries) for logins that hold neither permission.
+  const { can, isLoading: permsLoading } = usePermissions();
+  const showRevenueSnapshot = !permsLoading && canViewRevenueSnapshot(can);
 
   const today = todayLocalISODate();
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
@@ -196,7 +201,7 @@ export function MyDay() {
         </div>
       </div>
 
-      <RevenueSnapshot />
+      {showRevenueSnapshot && <RevenueSnapshot />}
 
       {/* Two-column content */}
       <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 flex-1">

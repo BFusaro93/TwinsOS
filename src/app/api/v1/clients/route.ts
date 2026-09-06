@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
+import { isClientStatus } from "@/lib/reports/client-status";
+import { isoNy } from "@/lib/reports/ny-date";
 import { CLIENT_SELECT, shapeClient } from "./shape";
 import { createClientSchema } from "./validation";
 
@@ -42,13 +44,17 @@ export async function POST(request: Request) {
     if (!parent || parent.org_id !== auth.orgId) return jsonError("Parent client not found", 404);
   }
 
+  const status = body.status ?? "lead";
   const { data, error } = await db
     .from("clients")
     .insert({
       org_id: auth.orgId,
       display_name: body.displayName,
       account_type: body.accountType ?? "residential",
-      status: body.status ?? "lead",
+      status,
+      // client_since is the conversion date: set when the account is created
+      // straight as a client, left NULL for leads until they convert.
+      client_since: isClientStatus(status) ? isoNy(new Date()) : null,
       primary_phone: body.primaryPhone ?? null,
       primary_email: body.primaryEmail ?? null,
       billing_address: body.billingAddress ?? null,

@@ -27,6 +27,17 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Same gate the Report Center applies to the "Client Referral" report
+  // (REPORT_PERMISSION_KEYS["client-referral"]) — this page shows the same
+  // balances/referral data, so it must not be reachable with a bare login.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "crm_rpt_client_referral",
+  });
+  if (allowed !== true) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("clients")

@@ -166,12 +166,14 @@ export const visualSpecSchema = z.object({
    *  defaultDateField is client_since, which is null for leads — a "New
    *  Leads" panel needs created_at instead). */
   dateColumn: z.string().optional(),
-  /** Append an eq filter on the dataset's defaultDateField for today's or
-   *  yesterday's date, computed fresh at query time — for KPI panels like
+  /** Append a date filter on the dataset's defaultDateField computed fresh at
+   *  query time (in America/New_York): "today"/"yesterday" = that one day;
+   *  "this_month"/"this_year" = from the 1st of the current month/year through
+   *  today (for YTD/MTD gauges that must not depend on the tab's range) — for KPI panels like
    *  "Payments Made Today" that need a fixed relative day rather than the
    *  tab's shared (and user-adjustable) date range. Mutually exclusive with
    *  `useTabDateRange` in practice, though nothing enforces that. */
-  relativeDateFilter: z.enum(["today", "yesterday"]).optional(),
+  relativeDateFilter: z.enum(["today", "yesterday", "this_month", "this_year"]).optional(),
   /** Append an eq filter on this dataset's "sales_rep" column using the
    *  value picked in the tab's shared Sales Rep select (see DashboardTab's
    *  useRepFilter) — no filter is added while nothing is picked. */
@@ -381,9 +383,15 @@ export type ReportResultRow = Record<string, unknown>;
 export interface ReportResult {
   columns: ReportColumnDef[];
   rows: ReportResultRow[];
-  /** Sums for totalable columns, keyed by column key. */
+  /** Sums for totalable columns, keyed by column key. Computed over the
+   *  returned rows — when `truncated` is true they cover only that page. */
   totals?: Record<string, number | null>;
+  /** Number of rows actually returned (≤ the engine's limit). */
   rowCount: number;
+  /** Total rows the query matched before the limit was applied, when known. */
+  totalCount?: number;
+  /** True when totalCount > rowCount — the table (and its totals) are partial. */
+  truncated?: boolean;
   generatedAt: string;
   /** SA-style footnote definitions rendered under the table. */
   notes?: string[];

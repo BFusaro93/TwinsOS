@@ -8,10 +8,20 @@ import {
   eqFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
+import type { AnalysisFilter } from "@/types/crm-reports";
 
 // ============================================================
 // Estimates section — pre-built reports.
 // ============================================================
+
+/**
+ * Line-item status filter: a client accepting an estimate can decline
+ * optional lines, which are marked 'lost' (header totals already exclude
+ * them). Won-estimate line reports must drop those too.
+ */
+const EXCLUDE_LOST_LINES: AnalysisFilter = { column: "status", op: "neq", value: "lost" };
+const EXCLUDE_LOST_LINES_NOTE = "Excludes declined line items (line status = lost).";
 
 const STAGE_OPTIONS = [
   { value: "draft", label: "Draft" },
@@ -70,6 +80,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Estimate Date", "this_year"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
+    notes: [EXCLUDE_LOST_LINES_NOTE],
     analysis: (params) => ({
       dataset: "rpt_estimate_line_items",
       columns: [
@@ -87,6 +98,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
+        EXCLUDE_LOST_LINES,
         ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
@@ -106,11 +118,13 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Estimate Date", "this_year"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
+    notes: [EXCLUDE_LOST_LINES_NOTE],
     analysis: (params) => ({
       dataset: "rpt_estimate_line_items",
       columns: [],
       filters: [
         { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
+        EXCLUDE_LOST_LINES,
         ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
@@ -224,11 +238,15 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
     name: "Close Ratios by Sales Rep",
     description: "Shows each sales rep's win rate by estimate count and by dollar value for a date range.",
     filters: [dateRangeFilterDef("Estimate Date", "this_month")],
+    notes: [
+      "Won = accepted or invoiced. Draft estimates were never presented to a client and are excluded from both counts and amounts.",
+    ],
     run: async ({ supabase, params }) => {
       const { from, to } = resolveDateRange(params, "this_month");
       let query = supabase
         .from("estimates")
         .select("stage, total_cents, sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
+        .neq("stage", "draft")
         .is("deleted_at", null);
       if (from) query = query.gte("estimate_date", from);
       if (to) query = query.lte("estimate_date", to);
@@ -294,10 +312,10 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
     description: "Shows estimates created or sent per day over the last 7 days.",
     filters: [],
     run: async ({ supabase }) => {
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(start.getDate() - 6);
-      const startIso = start.toISOString().slice(0, 10);
+      // estimate_date is a plain date entered on the org's (NY) calendar, so
+      // the 7-day window is anchored to today's NY date, not the server's UTC day.
+      const todayNy = isoNy(new Date());
+      const startIso = shiftYmd(todayNy, -6);
 
       const { data, error } = await supabase
         .from("estimates")
@@ -316,9 +334,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
 
       const days: { day: string; count: number }[] = [];
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
+        const key = shiftYmd(todayNy, -i);
         days.push({ day: key, count: counts.get(key) ?? 0 });
       }
 

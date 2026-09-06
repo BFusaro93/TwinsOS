@@ -9,6 +9,7 @@ import {
   ISSUED_INVOICE_STATUSES,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 // ============================================================
 // Audits section — pre-built reports.
@@ -101,7 +102,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       "Shows draft invoices — revenue already entered on a job but not yet finalized and sent to the client.",
     filters: [dateRangeFilterDef("Invoice Date", "this_month")],
     notes: [
-      "Draft invoices only. A row drops off once the invoice is finalized/sent (or the underlying client_uninvoiced_cents balance clears).",
+      "Draft invoices only, by invoice date. A row drops off once the invoice is printed, sent, or voided. Completed visits that have not had an invoice created at all do not appear here.",
     ],
     analysis: (params) => ({
       dataset: "rpt_invoices",
@@ -132,49 +133,80 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     filters: [dateRangeFilterDef("Visit Date", "this_month")],
     run: async ({ supabase, params }) => {
       const { from, to } = resolveDateRange(params, "this_month");
-      let query = supabase
-        .from("crm_job_visits")
-        .select(
-          "scheduled_date, completed_at, status, rate_cents, qty, crm_jobs:job_id(service_address, service_city, rate_cents), clients:client_id(display_name, balance_outstanding_cents)"
-        )
-        .in("status", ["completed", "in_progress"])
-        .is("deleted_at", null);
-      if (from) query = query.gte("scheduled_date", from);
-      if (to) query = query.lte("scheduled_date", to);
-      const { data, error } = await query
-        .order("scheduled_date", { ascending: false })
-        .limit(5000);
-      if (error) throw new Error(error.message);
 
       type Row = {
         scheduled_date: string | null;
         completed_at: string | null;
         status: string | null;
+        client_id: string | null;
         rate_cents: number | null;
         qty: number | null;
         crm_jobs: {
+          client_id: string;
           service_address: string | null;
           service_city: string | null;
           rate_cents: number | null;
         } | null;
-        clients: {
-          display_name: string | null;
-          balance_outstanding_cents: number | null;
-        } | null;
       };
-      const rows = ((data ?? []) as unknown as Row[])
-        .filter((r) => (r.clients?.balance_outstanding_cents ?? 0) > 0)
-        .map((r) => ({
-          date: r.scheduled_date,
-          client_name: r.clients?.display_name ?? "",
-          status: r.status,
-          address: r.crm_jobs?.service_address ?? "",
-          city: r.crm_jobs?.service_city ?? "",
-          amount_cents: Math.round(
-            (r.rate_cents ?? r.crm_jobs?.rate_cents ?? 0) * (Number(r.qty) || 1)
-          ),
-          balance: r.clients?.balance_outstanding_cents ?? 0,
-        }));
+      // crm_job_visits.client_id is nullable and is only a denormalized copy
+      // of the job's client — resolve the client the same way the rpt_* views
+      // do: COALESCE(visit.client_id, job.client_id). Inner-join the job so
+      // visits of soft-deleted jobs drop out.
+      const visits = await fetchAllRows<Row>(() => {
+        let query = supabase
+          .from("crm_job_visits")
+          .select(
+            "scheduled_date, completed_at, status, client_id, rate_cents, qty, crm_jobs!inner(client_id, service_address, service_city, rate_cents)"
+          )
+          .in("status", ["completed", "in_progress"])
+          .is("deleted_at", null)
+          .is("crm_jobs.deleted_at", null);
+        if (from) query = query.gte("scheduled_date", from);
+        if (to) query = query.lte("scheduled_date", to);
+        return query.order("scheduled_date", { ascending: false });
+      });
+
+      const clientIdOf = (r: Row) => r.client_id ?? r.crm_jobs?.client_id ?? null;
+      const clientIds = [...new Set(visits.map(clientIdOf).filter((id): id is string => !!id))];
+
+      type ClientRow = {
+        id: string;
+        display_name: string | null;
+        balance_outstanding_cents: number | null;
+      };
+      // Only clients that actually owe money, and only live (not deleted) ones.
+      const clientsById = new Map<string, ClientRow>();
+      for (let i = 0; i < clientIds.length; i += 200) {
+        const chunk = clientIds.slice(i, i + 200);
+        const clients = await fetchAllRows<ClientRow>(() =>
+          supabase
+            .from("clients")
+            .select("id, display_name, balance_outstanding_cents")
+            .in("id", chunk)
+            .is("deleted_at", null)
+            .gt("balance_outstanding_cents", 0)
+        );
+        for (const c of clients) clientsById.set(c.id, c);
+      }
+
+      const rows = visits.flatMap((r) => {
+        const clientId = clientIdOf(r);
+        const client = clientId ? clientsById.get(clientId) : undefined;
+        if (!client) return [];
+        return [
+          {
+            date: r.scheduled_date,
+            client_name: client.display_name ?? "",
+            status: r.status,
+            address: r.crm_jobs?.service_address ?? "",
+            city: r.crm_jobs?.service_city ?? "",
+            amount_cents: Math.round(
+              (r.rate_cents ?? r.crm_jobs?.rate_cents ?? 0) * (Number(r.qty) || 1)
+            ),
+            balance: client.balance_outstanding_cents ?? 0,
+          },
+        ];
+      });
 
       return buildResult(
         [
@@ -187,7 +219,10 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
           col("balance", "Account Balance", "money", false),
         ],
         rows,
-        ["Excludes future scheduled visits; amount is the visit rate before tax."]
+        [
+          "Completed and in-progress visits only (by scheduled date); amount is the visit rate × qty before tax.",
+          "Account Balance is the client's current outstanding balance, repeated on each of their visits — it is not summed.",
+        ]
       );
     },
   },

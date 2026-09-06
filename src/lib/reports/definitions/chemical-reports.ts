@@ -5,6 +5,7 @@ import {
   dateRangeFilterDef,
   dateRangeFilters,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
 
 // ============================================================
@@ -21,6 +22,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       "Post-application compliance record of chemicals actually applied — date, EPA #, quantities, conditions, applicator, and license number.",
     filters: [dateRangeFilterDef("Applied Between", "this_month")],
     notes: [
+      "Only chemicals marked as applied (Used) are included — planned applications that were never made are excluded. Service Date is the visit date when the application is tied to a visit.",
       "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
       "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied.",
     ],
@@ -53,7 +55,12 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         "budgeted_concentrate_amount",
         "used",
       ],
-      filters: [...dateRangeFilters("service_date", params, { preset: "this_month" })],
+      filters: [
+        // crm_chemical_applications.used = actually applied (a compliance
+        // record must not list planned-but-unapplied product).
+        { column: "used", op: "eq", value: true },
+        ...dateRangeFilters("service_date", params, { preset: "this_month" }),
+      ],
       groupBy: [],
       aggregates: [],
       sortColumn: "service_date",
@@ -65,8 +72,11 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
     section: "service",
     name: "Planned Chemical Usage Report",
     description:
-      "Chemical quantities needed for scheduled (not-yet-completed) visits — use to load the truck before the day's chemical jobs.",
+      "Chemical quantities needed for scheduled and dispatched (not-yet-started) visits — use to load the truck before the day's chemical jobs.",
     filters: [dateRangeFilterDef("Scheduled Between", "this_month")],
+    notes: [
+      "Includes visits in Scheduled or Dispatched status only; in-progress and completed visits are excluded.",
+    ],
     run: async ({ supabase, params }) => {
       const { from, to } = (() => {
         const now = new Date();
@@ -80,19 +90,6 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         return { from: f, to: t };
       })();
 
-      let query = supabase
-        .from("crm_chemical_applications")
-        .select(
-          "chemical_amount, solution_amount, product:product_id(name), crm_job_visits:visit_id(status, scheduled_date, clients:client_id(display_name))"
-        )
-        .is("deleted_at", null)
-        .limit(5000);
-      if (from) query = query.gte("crm_job_visits.scheduled_date", from);
-      if (to) query = query.lte("crm_job_visits.scheduled_date", to);
-
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-
       interface Row {
         chemical_amount: number | null;
         solution_amount: number | null;
@@ -103,14 +100,30 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
           clients: { display_name: string | null } | null;
         } | null;
       }
-      const rows = (data ?? []) as unknown as Row[];
+      // `!inner` makes the visit filters actually drop rows server-side (a
+      // plain embed only nulls out the embedded object, so every application
+      // in the org came back and was filtered here — and past 1000 rows the
+      // in-range ones fell off the end of the page).
+      const rows = await fetchAllRows<Row>(() => {
+        let query = supabase
+          .from("crm_chemical_applications")
+          .select(
+            "chemical_amount, solution_amount, product:product_id(name), crm_job_visits!inner(status, scheduled_date, clients:client_id(display_name))"
+          )
+          .is("deleted_at", null)
+          // Dispatched = on the crew's board but not started; still to be loaded.
+          .in("crm_job_visits.status", ["scheduled", "dispatched"]);
+        if (from) query = query.gte("crm_job_visits.scheduled_date", from);
+        if (to) query = query.lte("crm_job_visits.scheduled_date", to);
+        return query;
+      });
 
       const totalsByChemical = new Map<string, number>();
       const usageByClientChemical = new Map<string, Map<string, number>>();
 
       for (const r of rows) {
         const visit = r.crm_job_visits;
-        if (!visit || visit.status !== "scheduled") continue;
+        if (!visit) continue;
         const chemical = r.product?.name || "(unknown)";
         const amount = r.chemical_amount ?? 0;
         totalsByChemical.set(chemical, (totalsByChemical.get(chemical) ?? 0) + amount);
@@ -157,7 +170,8 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
     filters: [],
     notes: [
       "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
-      "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product.",
+      "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product, less any quantity already received against those PO lines.",
+      "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Job products already marked Invoiced or Used are excluded — their quantity has already come out of on-hand.",
     ],
     href: "/crm/reports/materials-needed",
   },
