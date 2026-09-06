@@ -5,6 +5,10 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("stripe create intent");
 
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
@@ -81,6 +85,7 @@ export async function POST(request: Request) {
 
   const stripe = getStripe();
 
+  try {
   if (paymentMethod === "us_bank_account") {
     if (!org.ach_payments_enabled) {
       return NextResponse.json({ error: "ACH payments aren't enabled — turn them on in Settings first." }, { status: 400 });
@@ -122,4 +127,7 @@ export async function POST(request: Request) {
     feeCents,
     totalChargeCents,
   });
+  } catch (err) {
+    return stripeErrorResponse(err, log, { invoiceId, connectedAccountId: org.stripe_connect_account_id });
+  }
 }

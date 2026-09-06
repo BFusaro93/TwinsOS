@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import {
@@ -10,6 +9,7 @@ import {
   MAX_ALLOCATION_METADATA_LENGTH,
 } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe multi-invoice charge");
@@ -204,13 +204,6 @@ export async function POST(request: Request) {
       totalChargeCents,
     });
   } catch (err) {
-    if (err instanceof Stripe.errors.StripeCardError) {
-      return NextResponse.json(
-        { error: err.message || "The saved payment method was declined" },
-        { status: 402 }
-      );
-    }
-    log.error("multi-invoice charge failed", { error: err, clientId });
-    return NextResponse.json({ error: "Failed to charge the saved payment method" }, { status: 500 });
+    return stripeErrorResponse(err, log, { clientId });
   }
 }

@@ -9,6 +9,10 @@ import {
   MAX_ALLOCATION_METADATA_LENGTH,
 } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("stripe create intent (multi)");
 
 const CreateIntentSchema = z.object({
   clientId: z.string().uuid(),
@@ -115,6 +119,7 @@ export async function POST(request: Request) {
         )
       : { feeCents: 0, totalChargeCents: balanceCents };
 
+  try {
   const paymentIntent = await stripe.paymentIntents.create(
     {
       amount: totalChargeCents,
@@ -141,4 +146,7 @@ export async function POST(request: Request) {
     feeCents,
     totalChargeCents,
   });
+  } catch (err) {
+    return stripeErrorResponse(err, log, { clientId, connectedAccountId: org.stripe_connect_account_id });
+  }
 }
