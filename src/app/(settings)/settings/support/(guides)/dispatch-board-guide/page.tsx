@@ -10,11 +10,11 @@ import {
 
 const VISIT_STATUSES: [string, string][] = [
   ["Scheduled", "The default state for a newly created visit. Nothing has happened yet."],
-  ["Dispatched", "Sent to a crew — either by clicking the status pill through, or automatically the first time you print or send a crew their day."],
-  ["In Progress", "The crew is on site. Reachable by clicking the pill, or automatically once a crew member clocks in on the crew app."],
-  ["Completed", "The visit is done. Reachable by clicking the pill, or automatically once a crew member clocks out."],
-  ["Skipped", "The crew did not perform this visit today, but it's expected to happen another time (weather, client not ready, access issue). Only reachable via the status dropdown in the visit detail sheet — not part of the pill-click cycle."],
-  ["Cancelled", "The visit was called off entirely and won't be rescheduled as-is. Also only reachable via the status dropdown, not the pill cycle."],
+  ["Dispatched", "Sent to a crew — picked from the status menu, set by Dispatch Assigned, or automatically the first time you print or send a crew their day. Dispatching writes a “Visit dispatched” entry to the client's Activity timeline."],
+  ["In Progress", "The crew is on site. Picked from the status menu, or set automatically once a crew member clocks in on the crew app."],
+  ["Completed", "The visit is done. Picked from the status menu, or set automatically once a crew member clocks out."],
+  ["Skipped", "The crew did not perform this visit today, but it's expected to happen another time (weather, client not ready, access issue). Picked from the status menu or the visit detail sheet."],
+  ["Cancelled", "The visit was called off entirely and won't be rescheduled as-is. Picked from the status menu or the visit detail sheet."],
 ];
 
 const COLUMNS: [string, string][] = [
@@ -22,11 +22,11 @@ const COLUMNS: [string, string][] = [
   ["Assigned", "Which crew (or Unassigned) currently owns the visit."],
   ["Last Svc", "When this client was last serviced for this service — useful for spotting overdue recurring stops."],
   ["Start / End", "Scheduled arrival and departure window, editable inline."],
-  ["B Hrs", "Budgeted hours — from the job's linked service (production rate × team size), or the job-level total as a last resort."],
-  ["Actual Hrs", "See the dedicated section below — this is the number that matters most for job costing."],
+  ["B Hrs", "Budgeted hours — from the job's linked service (production rate × team size), or the job-level total as a last resort. Shown to two decimals."],
+  ["Actual Hrs", "See the dedicated section below — this is the number that matters most for job costing. Shown to two decimals."],
   ["Hr Variance", "Actual minus budgeted, colored red when over and green when under."],
-  ["Men", "Crew headcount used in the actual-hours fallback calculation."],
-  ["Qty, Rate, Amount", "Billing quantity, unit rate, and extended amount for the visit's service."],
+  ["Men", "Crew headcount used in the actual-hours fallback calculation. A value you set here is kept — editing the visit's times only fills Men in when it was blank."],
+  ["Qty, Rate, AMT", "Billing quantity, unit rate, and the job's value — the sum of the job's included service lines, the same figure the visit sheet and the client's Jobs card show."],
   ["Notes/Icons", "Call-ahead flags, comments, and other at-a-glance indicators."],
 ];
 
@@ -46,7 +46,7 @@ export default function DispatchBoardGuidePage() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#where">Where it is</TOCLink>
           <TOCLink href="#jobs-and-visits">Jobs vs. visits</TOCLink>
-          <TOCLink href="#status-cycle">Visit status and the pill cycle</TOCLink>
+          <TOCLink href="#status-cycle">Visit status and the status menu</TOCLink>
           <TOCLink href="#crews-and-assignment">Crews and assignment</TOCLink>
           <TOCLink href="#actual-hours">How actual hours are calculated</TOCLink>
           <TOCLink href="#worked-example">Worked example</TOCLink>
@@ -80,16 +80,19 @@ export default function DispatchBoardGuidePage() {
         </Callout>
       </Section>
 
-      <Section id="status-cycle" title="Visit status and the pill cycle">
+      <Section id="status-cycle" title="Visit status and the status menu">
         <p>
-          Every visit row shows a status pill/icon. <strong>Clicking it advances the visit to the
-          next status in a fixed cycle:</strong> Scheduled → Dispatched → In Progress → Completed →
-          Skipped → back to Scheduled. This is the fast path for a dispatcher moving through the
-          board — click, click, done, no dropdown needed.
+          Every visit row shows a status icon in the <strong>ST</strong> column. <strong>Clicking it
+          opens a status menu</strong> listing Scheduled, Dispatched, In Progress, Completed,
+          Cancelled, and Skipped, with the current status highlighted. Pick the one you want and the
+          visit changes on the spot — a toast (&quot;Visit marked Dispatched&quot;) confirms it. The
+          same statuses are available from the dropdown in the visit&apos;s detail sheet.
         </p>
         <p>
-          Two statuses sit outside that cycle and are reachable only from the status dropdown in the
-          visit&apos;s detail sheet:
+          A single stray click on the icon no longer changes anything — it only opens the menu. That
+          matters because moving a visit to Dispatched isn&apos;t just a label: it can fire
+          &quot;visit dispatched&quot; automations and, as of now, writes to the client&apos;s Activity
+          timeline, so it should always be a deliberate choice.
         </p>
         <Table>
           <thead>
@@ -111,9 +114,8 @@ export default function DispatchBoardGuidePage() {
           <strong>Skipped vs. Cancelled.</strong> Skipped means &quot;not today, but still expected&quot; —
           the client still gets this service, just not on this occurrence (rain day, gate locked,
           crew ran out of daylight). Cancelled means the visit itself is off the books and won&apos;t
-          happen as scheduled. Because they mean different things operationally, neither is part of
-          the one-click pill cycle — both require deliberately opening the visit and picking the
-          status, so a dispatcher can&apos;t skip or cancel a visit by accident with a stray click.
+          happen as scheduled. They mean different things operationally, so pick deliberately — the
+          menu shows both side by side.
         </Callout>
         <p>
           Status also advances itself in a couple of places outside the board: dispatching a crew&apos;s
@@ -142,6 +144,18 @@ export default function DispatchBoardGuidePage() {
           mode is on). It&apos;s off by default so that clicking into a Start/End time field to edit it
           doesn&apos;t accidentally register as a drag.
         </p>
+        <p>
+          Moving a visit to a different day — <strong>Move to Day</strong>, a drag on the board, or a
+          bulk move — writes a &quot;Visit moved 9/7 → 9/8&quot; entry to the client&apos;s Activity
+          timeline, so the client record shows when a stop was rescheduled without digging through
+          the board&apos;s history.
+        </p>
+        <Callout>
+          <strong>Package visits have spacing rules.</strong> If the visit belongs to a Package job
+          whose steps set a <strong>Min Days</strong> gap, a move that would put a step too close to
+          its neighbour is refused with a message like &quot;Step 2 must be at least 14 days after
+          Step 1 (earliest 5/15)&quot; and the visit stays put. See the Jobs &amp; Packages guide.
+        </Callout>
       </Section>
 
       <Section id="actual-hours" title="How actual hours are calculated">
@@ -169,6 +183,9 @@ export default function DispatchBoardGuidePage() {
         <p>
           Editing a visit&apos;s Start or End time clears any stale override so the number recalculates
           from the new times rather than silently keeping a number measured against the old schedule.
+          It does <em>not</em> touch the <strong>Men</strong> count: a headcount you&apos;ve set on the
+          visit is kept, and the times (or the crew&apos;s roster) only fill Men in when it was still
+          blank. Hours are shown to two decimals everywhere on the board and in the visit sheet.
         </p>
         <Callout>
           <strong>Why the fallback matters.</strong> Without it, any visit a crew didn&apos;t clock

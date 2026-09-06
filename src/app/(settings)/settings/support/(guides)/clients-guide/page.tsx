@@ -12,7 +12,7 @@ const STATUS_ROWS: [string, string, string][] = [
   [
     "Lead",
     "Default status for a client added as a prospect, or set manually.",
-    "Estimates can be built and sent. Jobs, invoices, and contracts are blocked until the status moves to Active — a Lead isn't a customer yet.",
+    "Estimates can be built and sent. Jobs, invoices, and contracts are blocked until the status moves to Active — a Lead isn't a customer yet. Leads don't appear in the Add Job client picker, and a job created for one any other way (API, Zapier, import) is rejected with a “convert the lead first” error.",
   ],
   [
     "Active",
@@ -32,7 +32,7 @@ const STATUS_ROWS: [string, string, string][] = [
   [
     "Lost",
     "A Lead closed without converting — via Close as Lost on the Leads list, or when the client declines an estimate in the portal.",
-    "Still a lead, not a client: it never appears in client counts or Client Since reporting, and shows up in the Closed Leads Summary instead.",
+    "Still a lead, not a client: it never appears in client counts or Client Since reporting, and shows up in the Closed Leads Summary instead. Like an open Lead, it can't have jobs.",
   ],
 ];
 
@@ -51,7 +51,7 @@ const CONTACT_TYPES = [
 const TIMELINE_FILTERS: [string, string][] = [
   ["All History", "Everything below, in one chronological feed."],
   ["Notes", "Notes, calls, emails, and tickets."],
-  ["Visits", "Scheduled job visits and completed job records."],
+  ["Visits", "Job created, scheduled job visits, visit moves and dispatches, and completed job records."],
   ["Transactions", "Invoices and payments."],
   ["Estimates", "Estimates and contracts."],
 ];
@@ -111,9 +111,12 @@ export default function ClientsGuidePage() {
           conversion record anywhere in the schema — <strong>a Lead is a client whose status field
           happens to say &quot;Lead.&quot;</strong> Converting a lead to a client is nothing more
           than changing that one field to Active (which also stamps the record&apos;s{" "}
-          <strong>Client Since</strong> date — see below). Everything else — the display name,
-          contacts, properties, custom fields, activity history already on the record — carries
-          straight through untouched. This is also why the Zapier &quot;Lead Converted to
+          <strong>Client Since</strong> date — see below). Click{" "}
+          <strong>Convert to Client</strong> on the lead&apos;s record, confirm in the dialog that
+          appears, and the status flips; a <strong>&quot;Converted from lead to client&quot;</strong>{" "}
+          entry is logged on the Activity timeline so you can see later exactly when it happened.
+          Everything else — the display name, contacts, properties, custom fields, activity history
+          already on the record — carries straight through untouched. This is also why the Zapier &quot;Lead Converted to
           Client&quot; trigger (see the Zapier guide) is really just watching for a status change
           to &quot;active,&quot; not a distinct event type.
         </p>
@@ -155,7 +158,8 @@ export default function ClientsGuidePage() {
         <p>
           <strong>Client Since</strong> is the date a lead became a client — not the date the
           record was created. It is set automatically the moment a lead converts: clicking{" "}
-          <strong>Convert</strong>, or changing a Lead&apos;s status to Active in Edit. A record
+          <strong>Convert to Client</strong> and confirming, or changing a Lead&apos;s status to
+          Active in Edit. A record
           created directly as an Active client gets its creation date. Leads — open or Lost —
           have no Client Since at all, which is what lets reports tell &quot;when did we first
           hear from them&quot; (created date) apart from &quot;when did they start paying
@@ -289,7 +293,10 @@ export default function ClientsGuidePage() {
         <p>
           Every note, call, email, invoice, payment, job visit, estimate, contract, automation, and
           ticket tied to a client lands in one chronological <strong>Activity Timeline</strong> on
-          that client&apos;s record. In practice this is the fastest way to answer &quot;what&apos;s
+          that client&apos;s record. Scheduling actions land here too: creating a job (including one
+          converted from an estimate) logs &quot;Job created,&quot; moving a visit to another day
+          logs &quot;Visit moved 9/7 → 9/8,&quot; and dispatching one logs &quot;Visit
+          dispatched.&quot; In practice this is the fastest way to answer &quot;what&apos;s
           actually happened with this client&quot; without hopping between the invoices tab, the
           estimates tab, and a separate notes log — everything is one feed, newest first, and each
           row deep-links straight to the invoice, estimate, or job it references.

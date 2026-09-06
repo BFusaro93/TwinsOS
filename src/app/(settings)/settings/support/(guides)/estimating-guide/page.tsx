@@ -12,7 +12,7 @@ const STAGES: [string, string][] = [
   ["Draft", "Default stage for a brand-new estimate. Still being built — line items and pricing are in flux. Drafts were never presented to a client, so Close Ratios and win-rate figures leave them out of both counts and amounts."],
   ["Quote", "Set manually once the estimate is ready for internal review — the numbers are considered final pending sign-off."],
   ["Sent", "Set when the estimate is actually delivered to the client (email, PDF, or the client portal). Blocked from actually going out if Approval Status is still Pending — see the callout below. Pipeline dashboards count Sent estimates as open pipeline alongside Draft and Quote."],
-  ["Accepted", "Set when the client accepts — in full or via a tiered/partial acceptance. Converting to a job normally happens from here."],
+  ["Accepted", "Set when the client accepts — in full or via a tiered/partial acceptance, whether you mark it in-app or the client accepts online through the proposal link. Once an estimate is Accepted, a Convert to Job button appears in its header; converting normally happens from here."],
   ["Lost", "Set when the client declines — including a Decline in the client portal, which records the reason “Declined by client via portal” — or when an estimate is manually marked dead. Line items already marked “lost” individually (e.g. a tier the client unchecked when accepting) don’t count toward totals, and the Accepted Estimates by Service reports skip them."],
   ["Invoiced", "Set once billing has started against the estimate (a deposit, milestone, or the full amount has been invoiced)."],
 ];
@@ -266,24 +266,45 @@ export default function EstimatingGuidePage() {
       </Section>
 
       <Section id="converting" title="Converting an estimate to a job">
+        <p>
+          Once an estimate is <strong>Accepted</strong> &mdash; whether you set the stage yourself or
+          the client accepted online through the proposal link &mdash; a{" "}
+          <strong>Convert to Job</strong> button appears in the estimate header. After a job has been
+          created from the estimate, that same button reads <strong>View Job</strong> and jumps
+          straight to it, so an estimate is never converted twice by accident.
+        </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
-            From the estimate, click <strong>Convert Estimate to Job</strong>.
+            From the accepted estimate, click <strong>Convert to Job</strong>.
           </li>
           <li>
             Choose which line items to include &mdash; not every accepted line has to become part
-            of the job.
+            of the job. Lines that net out to <strong>$0</strong> start unchecked so they don&rsquo;t
+            land on the job (and its invoice) as empty rows; tick them if you really want them.
           </li>
           <li>
             Pick a <strong>Job Type</strong>: One Time, Recurring, Project, or Waiting List.
           </li>
           <li>
-            Set the scheduled date and assign a crew, then confirm.
+            Set the scheduled date, assign a crew, and enter a <strong>Crew Size (men)</strong>. The
+            crew size is written onto the job and its first visit, so the Dispatch Board&rsquo;s Men
+            column is right from day one instead of reading 0.
+          </li>
+          <li>
+            Confirm. The job is created and a <strong>&ldquo;Job created&rdquo;</strong> entry is
+            logged on the client&rsquo;s Activity timeline.
           </li>
         </ol>
         <Callout>
+          <strong>Discounts carry over.</strong> The job&rsquo;s price is what the client actually
+          agreed to pay: each included line&rsquo;s own discount <em>and</em> its share of any
+          estimate-level discount are applied to the job&rsquo;s service pricing. A 10%-off estimate
+          produces a job priced 10% off, not one priced at the undiscounted subtotal.
+        </Callout>
+        <Callout>
           <strong>Package</strong> and <strong>Snow</strong> jobs aren&rsquo;t created this way
-          &mdash; they&rsquo;re created directly rather than converted from an estimate.
+          &mdash; they&rsquo;re created directly from <strong>Jobs &rarr; Add Job</strong> rather
+          than converted from an estimate.
         </Callout>
       </Section>
     </DocsFontScope>
