@@ -153,11 +153,20 @@ export function useUpdateOrgSettings() {
         patch.customizations = { ...prev, ...input.customizations };
       }
 
-      const { error } = await supabase
+      // RLS (settings_permission_update_org) silently filters the row out for
+      // a user without company_settings/crm_settings — PostgREST then reports
+      // success with zero rows and the UI used to toast "saved" while nothing
+      // changed (D-20: Google Maps key "saved" but badge stayed Not Connected).
+      // Select the updated row back so a blocked write is a real error.
+      const { data: updated, error } = await supabase
         .from("organizations")
         .update(patch)
-        .eq("id", profile.orgId);
+        .eq("id", profile.orgId)
+        .select("id");
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        throw new Error("Save was blocked — you don't have permission to change organization settings.");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org-settings"] });

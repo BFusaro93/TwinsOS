@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
@@ -1692,19 +1693,28 @@ function GoogleMapsCard() {
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
 
+  // The badge follows the key that is actually SAVED on the org, never the
+  // field's contents — the field mirrors the saved value whenever it changes
+  // (including being cleared elsewhere), and an edited-but-unsaved key is
+  // called out explicitly so "typed it in, badge still says Not Connected"
+  // is never ambiguous.
+  const savedKey = orgSettings?.googleMapsApiKey ?? "";
   useEffect(() => {
-    if (orgSettings?.googleMapsApiKey) setApiKey(orgSettings.googleMapsApiKey);
-  }, [orgSettings?.googleMapsApiKey]);
+    setApiKey(savedKey);
+  }, [savedKey]);
 
-  const isConfigured = !!orgSettings?.googleMapsApiKey;
+  const isConfigured = !!savedKey;
+  const isDirty = orgSettings !== undefined && apiKey.trim() !== savedKey;
 
   async function handleSave() {
     if (!apiKey.trim()) return;
     try {
       await updateOrg.mutateAsync({ googleMapsApiKey: apiKey.trim() });
       toast.success("Google Maps API key saved");
-    } catch {
-      toast.error("Failed to save API key");
+    } catch (err) {
+      // useUpdateOrgSettings now throws when RLS filtered the row out (no
+      // settings permission) instead of reporting a phantom success.
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to save API key");
     }
   }
 
@@ -1713,8 +1723,8 @@ function GoogleMapsCard() {
       await updateOrg.mutateAsync({ googleMapsApiKey: null });
       setApiKey("");
       toast.success("API key removed");
-    } catch {
-      toast.error("Failed to remove API key");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to remove API key");
     }
   }
 
@@ -1799,6 +1809,9 @@ function GoogleMapsCard() {
           >
             {testing ? "Testing…" : "Test Connection"}
           </Button>
+          {isDirty && apiKey.trim() && (
+            <span className="text-xs text-amber-600">Unsaved — click Save Key to connect</span>
+          )}
           {isConfigured && (
             <Button
               size="sm"
@@ -2319,8 +2332,48 @@ function renderTabContent(tab: TabKey) {
   }
 }
 
+/**
+ * `?tab=` → TabKey. Accepts the canonical keys plus the spellings that links
+ * around the app (and people typing URLs) actually use — "client-portal",
+ * "portal", "clients", "roles", "import", … — so /crm/settings?tab=client-portal
+ * opens Client Portal instead of silently landing on General (D-24).
+ */
+const TAB_PARAM_ALIASES: Record<string, TabKey> = {
+  general: "general", company: "general",
+  users: "users", roles: "users", permissions: "users",
+  crm: "crm", clients: "crm", client: "crm",
+  estimates: "estimates", estimate: "estimates",
+  notifications: "notifications",
+  services: "services",
+  accounting: "accounting", billing: "accounting", invoices: "accounting",
+  chemical_tracking: "chemical_tracking", chemicals: "chemical_tracking", chemical: "chemical_tracking",
+  required_fields: "required_fields",
+  import_export: "import_export", import: "import_export", export: "import_export",
+  integrations: "integrations", integration: "integrations",
+  client_portal: "client_portal", portal: "client_portal", clientportal: "client_portal",
+};
+
+export function resolveSettingsTabParam(raw: string | null): TabKey | null {
+  if (!raw) return null;
+  const key = raw.trim().toLowerCase().replace(/[-\s]+/g, "_");
+  return TAB_PARAM_ALIASES[key] ?? null;
+}
+
 export function LandscaptSettingsTabs() {
   const { can, isLoading } = usePermissions();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTab = resolveSettingsTabParam(searchParams.get("tab"));
+  // Controlled, URL-synced tab state: previously this was an uncontrolled
+  // Tabs (defaultValue only) that never read ?tab=, so every deep link in
+  // the app (QuickBooks/Stripe callbacks → ?tab=accounting, Client Portal
+  // → ?tab=crm, WonLost → ?tab=estimates) landed on General.
+  const [activeTab, setActiveTab] = useState<TabKey | null>(requestedTab);
+  useEffect(() => {
+    if (requestedTab && requestedTab !== activeTab) setActiveTab(requestedTab);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab]);
 
   if (isLoading) return null;
 
@@ -2341,7 +2394,16 @@ export function LandscaptSettingsTabs() {
         <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
         <p className="mt-1 text-sm text-slate-500">Manage your CRM configuration</p>
       </div>
-      <Tabs defaultValue={visibleTabs[0]} className="mt-4">
+      <Tabs
+        value={activeTab && visibleTabs.includes(activeTab) ? activeTab : visibleTabs[0]}
+        onValueChange={(tab) => {
+          setActiveTab(tab as TabKey);
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("tab", tab);
+          router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        }}
+        className="mt-4"
+      >
         <div className="border-b px-4 md:px-6">
           <TabsList className="h-auto flex-wrap gap-0 rounded-none bg-transparent p-0">
             {visibleTabs.map((tab) => (

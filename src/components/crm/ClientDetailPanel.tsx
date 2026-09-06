@@ -26,8 +26,10 @@ import {
 import { TagEditor } from "@/components/crm/TagEditor";
 import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
-import { useInvoices, usePayments, usePayment, usePaymentAllocations } from "@/lib/hooks/use-invoices";
+import { useInvoices, usePayments, usePayment, usePaymentAllocations, useAllocatedPaymentsFromOtherClients } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
+import { useQueryClient } from "@tanstack/react-query";
+import { useClientPortalStatus, clientPortalStatusKey, type ClientPortalStatusResponse } from "@/lib/hooks/use-client-portal-status";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -1846,6 +1848,13 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const updateJobStatus = useUpdateJobStatus();
   const { data: invoices } = useInvoices(clientId);
   const { data: payments } = usePayments(clientId);
+  // D-16: a parent account's payment applied to one of THIS client's invoices —
+  // shown read-only with a "via <Parent>" tag, same as Invoice Payment History.
+  const { data: parentPayments } = useAllocatedPaymentsFromOtherClients(clientId);
+  const allPayments = useMemo(
+    () => [...(payments ?? []), ...(parentPayments ?? [])],
+    [payments, parentPayments],
+  );
   const { data: estimates } = useEstimates(clientId);
   const { data: contracts } = useContracts(clientId);
 
@@ -1857,7 +1866,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   // Merge invoices + payments sorted by date desc
   type AccountingRow =
     | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number }
-    | { kind: "payment"; id: string; date: string; amountCents: number };
+    | { kind: "payment"; id: string; date: string; amountCents: number; via?: string | null };
 
   const accountingRows: AccountingRow[] = [
     ...(invoices ?? []).map((inv) => ({
@@ -1873,6 +1882,14 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       id: pmt.id,
       date: pmt.paymentDate,
       amountCents: pmt.amountCents,
+    })),
+    ...(parentPayments ?? []).map((pmt) => ({
+      kind: "payment" as const,
+      id: pmt.id,
+      date: pmt.paymentDate,
+      // The share allocated to this client's invoice, not the parent's full check.
+      amountCents: pmt.displayAmountCents,
+      via: pmt.clientName ?? "parent account",
     })),
   ]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -2146,7 +2163,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           ) : (
             <>
               {accountingRowsVisible.map((row) => {
-                const pmt = row.kind === "payment" ? (payments ?? []).find((p) => p.id === row.id) : null;
+                const pmt = row.kind === "payment" ? allPayments.find((p) => p.id === row.id) : null;
                 return row.kind === "invoice" ? (
                   <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-4 py-3 hover:bg-slate-50 cursor-pointer"
                     onClick={() => setSelectedInvoiceId(row.id)}>
@@ -2168,7 +2185,10 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                     className="w-full text-left border-l-4 border-l-green-400 px-4 py-3 hover:bg-green-50 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-800">Payment{pmt?.method ? ` · ${pmt.method}` : ""}</p>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Payment{pmt?.method ? ` · ${pmt.method}` : ""}
+                        {row.via && <span className="ml-1 font-normal text-slate-400">(via {row.via})</span>}
+                      </p>
                       <p className="shrink-0 text-[10px] text-slate-400">{new Date(row.date + "T12:00:00").toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -2304,7 +2324,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       onOpenChange={(open) => !open && setSelectedInvoiceId(null)}
     />
     <PaymentDetailDialog
-      payment={(payments ?? []).find((p) => p.id === selectedPaymentId) ?? null}
+      payment={allPayments.find((p) => p.id === selectedPaymentId) ?? null}
       onClose={() => setSelectedPaymentId(null)}
     />
     <NewJobDialog
@@ -2336,6 +2356,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       <AllAccountingModal
         invoices={invoices ?? []}
         payments={payments ?? []}
+        parentPayments={parentPayments ?? []}
         onClose={() => setAllAccountingOpen(false)}
         onOpenInvoice={(id) => { setAllAccountingOpen(false); setSelectedInvoiceId(id); }}
         onOpenPayment={(id) => { setAllAccountingOpen(false); setSelectedPaymentId(id); }}
@@ -2749,12 +2770,15 @@ function AllPropertiesModal({
 function AllAccountingModal({
   invoices,
   payments,
+  parentPayments = [],
   onClose,
   onOpenInvoice,
   onOpenPayment,
 }: {
   invoices: CRMInvoice[];
   payments: CRMPayment[];
+  /** Parent-account payments allocated to this client's invoices (D-16). */
+  parentPayments?: (CRMPayment & { displayAmountCents: number })[];
   onClose: () => void;
   onOpenInvoice: (id: string) => void;
   onOpenPayment: (id: string) => void;
@@ -2763,7 +2787,7 @@ function AllAccountingModal({
 
   type Row =
     | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number; status: string }
-    | { kind: "payment"; id: string; date: string; amountCents: number; method: string; reference: string | null };
+    | { kind: "payment"; id: string; date: string; amountCents: number; method: string; reference: string | null; via?: string | null };
 
   const rows: Row[] = [
     ...invoices.map((inv) => ({
@@ -2782,6 +2806,15 @@ function AllAccountingModal({
       amountCents: pmt.amountCents,
       method: pmt.method,
       reference: pmt.reference,
+    })),
+    ...parentPayments.map((pmt) => ({
+      kind: "payment" as const,
+      id: pmt.id,
+      date: pmt.paymentDate,
+      amountCents: pmt.displayAmountCents,
+      method: pmt.method,
+      reference: pmt.reference,
+      via: pmt.clientName ?? "parent account",
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -2851,6 +2884,7 @@ function AllAccountingModal({
                       <td className="px-4 py-2.5 text-neutral-500">Payment</td>
                       <td className="px-4 py-2.5 text-neutral-600">
                         {row.method}{row.reference ? ` · #${row.reference}` : ""}
+                        {row.via && <span className="ml-1 text-neutral-400">(via {row.via})</span>}
                       </td>
                       <td className="px-4 py-2.5 text-right font-medium text-green-600">({formatCurrency(row.amountCents)})</td>
                       <td className="px-4 py-2.5 text-right text-neutral-400">—</td>
@@ -3776,6 +3810,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 QuickBooks
               </h3>
               <QuickBooksClientSyncSection client={client} />
+              <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Client Portal
+              </h3>
+              <ClientPortalSection clientId={clientId} onInvite={() => setPortalInviteOpen(true)} />
             </div>
             <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -3935,6 +3973,58 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   );
 }
 
+// ── Client Portal status (Details tab) ────────────────────────────────────────
+
+function describePortalStatus(s: ClientPortalStatusResponse): { label: string; tone: "muted" | "amber" | "green" } {
+  if (s.status === "active") return { label: "Active", tone: "green" };
+  if (s.status === "invited") return { label: s.inviteExpired ? "Invite expired" : "Invited", tone: "amber" };
+  return { label: "No access", tone: "muted" };
+}
+
+/**
+ * D-25: the office never showed whether a client actually had a portal login —
+ * "Send Portal Invite" just offered to generate a link with no status. This
+ * reads /portal-status (client_portal_users + latest client_portal_invites +
+ * auth last_sign_in_at) and offers the matching action.
+ */
+function ClientPortalSection({ clientId, onInvite }: { clientId: string; onInvite: () => void }) {
+  const { data, isLoading, isError } = useClientPortalStatus(clientId);
+  if (isLoading) return <p className="text-xs text-slate-400">Loading…</p>;
+  if (isError || !data) return <p className="text-xs text-slate-400">Portal status unavailable.</p>;
+  const { label, tone } = describePortalStatus(data);
+  const toneClass = tone === "green"
+    ? "bg-green-100 text-green-700"
+    : tone === "amber" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600";
+  const fmt = (iso: string | null) => (iso ? formatDate(iso) : null);
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="shrink-0 text-slate-400">Status</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${toneClass}`}>{label}</span>
+      </div>
+      <InfoRow label="Login email" value={data.email} />
+      {data.status === "active" && (
+        <>
+          <InfoRow label="Registered" value={fmt(data.activeSince)} />
+          <InfoRow label="Last login" value={data.lastLoginAt ? formatDate(data.lastLoginAt) : "Never signed in"} />
+        </>
+      )}
+      {data.status === "invited" && (
+        <>
+          <InfoRow label="Invited" value={fmt(data.invitedAt)} />
+          <InfoRow label={data.inviteExpired ? "Expired" : "Expires"} value={fmt(data.inviteExpiresAt)} />
+        </>
+      )}
+      <PermissionGate permission="client_reset_portal_password">
+        <Button variant="outline" size="sm" className="h-7 text-xs mt-1" onClick={onInvite}>
+          <ExternalLink className="mr-1.5 h-3 w-3" />
+          {data.status === "active" ? "Manage portal access" : data.status === "invited" ? "Re-send invite" : "Send portal invite"}
+        </Button>
+      </PermissionGate>
+    </div>
+  );
+}
+
 // ── PortalInviteDialog ────────────────────────────────────────────────────────
 
 function PortalInviteDialog({
@@ -3948,12 +4038,18 @@ function PortalInviteDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const qc = useQueryClient();
+  const { data: portalStatus } = useClientPortalStatus(open ? clientId : undefined);
   const [email, setEmail] = useState(defaultEmail);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasExisting, setHasExisting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  // Known-active account (from portal-status) reads the same as the route's
+  // 409 — offer revoke+re-invite up front instead of after a failed attempt.
+  const alreadyActive = hasExisting || portalStatus?.status === "active";
+  const isResend = !alreadyActive && portalStatus?.status === "invited";
 
   // Sync whenever the dialog opens or the client's email changes
   useEffect(() => {
@@ -3978,6 +4074,8 @@ function PortalInviteDialog({
         setError(data.error ?? "Failed to create invite");
       } else {
         setResult({ url: data.inviteUrl });
+        qc.invalidateQueries({ queryKey: clientPortalStatusKey(clientId) });
+        qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
       }
     } catch {
       setError("Failed to create invite — check your connection and try again.");
@@ -3997,6 +4095,7 @@ function PortalInviteDialog({
         return;
       }
       setHasExisting(false);
+      qc.invalidateQueries({ queryKey: clientPortalStatusKey(clientId) });
     } catch {
       setError("Failed to reset portal access — check your connection and try again.");
       return;
@@ -4043,9 +4142,28 @@ function PortalInviteDialog({
           </div>
         ) : (
           <div className="flex flex-col gap-4 py-2">
-            <p className="text-sm text-slate-600">
-              An invite link will be generated. The client sets their password and gets access to view invoices, services, and estimates.
-            </p>
+            {alreadyActive && !error ? (
+              <div className="flex flex-col gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2">
+                <p className="text-sm text-green-800">
+                  Client already has portal access
+                  {portalStatus?.email ? <> as <span className="font-medium">{portalStatus.email}</span></> : null}
+                  {portalStatus?.lastLoginAt ? <> — last login {formatDate(portalStatus.lastLoginAt)}</> : portalStatus?.status === "active" ? " — never signed in" : null}.
+                </p>
+                <p className="text-xs text-green-700">
+                  Sending a new invite will revoke their current login so they can register again with the address below.
+                </p>
+              </div>
+            ) : isResend ? (
+              <p className="text-sm text-slate-600">
+                An invite was sent {portalStatus?.invitedAt ? `on ${formatDate(portalStatus.invitedAt)}` : "previously"}
+                {portalStatus?.inviteExpired ? " and has expired" : " but hasn't been accepted yet"}. Re-sending replaces
+                it with a fresh link (the old one stops working).
+              </p>
+            ) : (
+              <p className="text-sm text-slate-600">
+                An invite link will be generated and emailed. The client sets their password and gets access to view invoices, services, and estimates.
+              </p>
+            )}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">Client Email</label>
               <input
@@ -4075,11 +4193,15 @@ function PortalInviteDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>Close</Button>
-          {!result && (
-            <Button onClick={sendInvite} disabled={loading || resetting || !email}>
-              {loading ? "Creating…" : "Generate Invite Link"}
+          {!result && (alreadyActive ? (
+            <Button variant="destructive" onClick={resetAndInvite} disabled={loading || resetting || !email}>
+              {resetting ? "Revoking…" : loading ? "Creating…" : "Revoke access & send new invite"}
             </Button>
-          )}
+          ) : (
+            <Button onClick={sendInvite} disabled={loading || resetting || !email}>
+              {loading ? "Sending…" : isResend ? "Re-send invite" : "Send invite"}
+            </Button>
+          ))}
         </DialogFooter>
       </DialogContent>
     </Dialog>

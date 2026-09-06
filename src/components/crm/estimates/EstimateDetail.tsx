@@ -10,6 +10,8 @@ import {
   useSaveEstimateFinancials,
   useUpsertLineItem,
   useEstimateShareTokens,
+  useEstimateShareLink,
+  useEnsureEstimateShareLink,
   useEstimateVersions,
   useEstimateChangeRequests,
   useResolveChangeRequest,
@@ -86,6 +88,8 @@ import {
   MessageSquarePlus,
   Pencil,
   Briefcase,
+  Link2,
+  ExternalLink,
 } from "lucide-react";
 import {
   useAttachments,
@@ -366,6 +370,44 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
 
   const { data: shareTokens = [] } = useEstimateShareTokens(estimate?.id ?? "");
+  // D-26: the estimate's live public proposal URL — surfaced as Copy/Open
+  // actions so staff can hand the link to a client without re-sending the
+  // email (which was previously the only way to reach it).
+  const { data: shareLink } = useEstimateShareLink(estimate?.id ?? "");
+  const { mutateAsync: ensureShareLink, isPending: ensuringShareLink } = useEnsureEstimateShareLink();
+  const liveProposalUrl = shareLink?.url ?? null;
+
+  // Resolve (minting only if nothing is live — same rule as send-email) and
+  // then copy or open. Opening pre-creates the tab synchronously so the
+  // popup blocker doesn't eat a window.open issued after an await.
+  async function resolveProposalUrl(): Promise<string | null> {
+    if (liveProposalUrl) return liveProposalUrl;
+    if (!estimate) return null;
+    try {
+      const res = await ensureShareLink(estimate.id);
+      return res.url;
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to create proposal link");
+      return null;
+    }
+  }
+  async function copyProposalLink() {
+    const url = await resolveProposalUrl();
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Proposal link copied");
+    } catch {
+      toast.error("Couldn't copy — your browser blocked clipboard access");
+    }
+  }
+  async function openProposalLink() {
+    if (liveProposalUrl) { window.open(liveProposalUrl, "_blank", "noopener"); return; }
+    const tab = window.open("", "_blank");
+    const url = await resolveProposalUrl();
+    if (!url) { tab?.close(); return; }
+    if (tab) tab.location.href = url; else window.open(url, "_blank", "noopener");
+  }
   const { data: versions = [] } = useEstimateVersions(estimate?.id ?? "");
   const { data: dbStages = [], isLoading: stagesLoading } = useEstimateStages();
   const seedStages = useSeedDefaultStages();
@@ -782,6 +824,26 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 : estimate.approvalStatus === "rejected" ? "Resubmit for Approval"
                 : "Send"}
             </Button>
+          )}
+          {canSend && (
+            <>
+              <Button variant="outline" size="sm" className="h-8 text-xs"
+                disabled={ensuringShareLink}
+                title={liveProposalUrl
+                  ? `Copy the client's proposal link\n${liveProposalUrl}`
+                  : "Copy a proposal link for this estimate (creates one if none is live yet)"}
+                onClick={() => void copyProposalLink()}>
+                <Link2 className="mr-1 h-3.5 w-3.5 text-slate-500" />
+                {liveProposalUrl ? "Copy link" : "Get link"}
+              </Button>
+              {liveProposalUrl && (
+                <Button variant="outline" size="sm" className="h-8 px-2 text-xs"
+                  title="Open the client's proposal page in a new tab"
+                  onClick={() => void openProposalLink()}>
+                  <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+                </Button>
+              )}
+            </>
           )}
           <Button
             variant="outline"
@@ -1222,9 +1284,21 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 const accepted = shareTokens.find((t) => t.acceptedAt);
                 return (
                   <div className="flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1" title={liveProposalUrl ?? "No live proposal link — every link sent has expired or been accepted"}>
                       <Send className="h-3 w-3 text-slate-400" />
                       <span>{shareTokens.length} link{shareTokens.length !== 1 ? "s" : ""} sent</span>
+                      {liveProposalUrl && canSend && (
+                        <>
+                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 hover:underline"
+                            onClick={() => void copyProposalLink()} title={liveProposalUrl}>
+                            <Link2 className="h-3 w-3" /> Copy link
+                          </button>
+                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 hover:underline"
+                            onClick={() => void openProposalLink()} title={liveProposalUrl}>
+                            <ExternalLink className="h-3 w-3" /> Open
+                          </button>
+                        </>
+                      )}
                     </div>
                     {totalViews > 0 ? (
                       <div className="flex items-center gap-1 text-brand-600 font-medium">
@@ -1650,6 +1724,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         salesRepName={estimate.salesRepName ?? null}
         totalCents={estimate.totalCents}
         estimateDate={estimate.createdAt}
+        proposalUrl={liveProposalUrl}
         zeroTotalLineCount={(estimate.lineItems ?? []).filter(
           (li) => !li.deletedAt && li.status === "quote" && li.rowType !== "section" && (li.totalCents - (li.discountCents ?? 0)) <= 0
         ).length}

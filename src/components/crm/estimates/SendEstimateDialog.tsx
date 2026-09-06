@@ -50,6 +50,10 @@ interface Props {
   estimateDate?: string | null;
   /** Number of quote line items that total $0 — surfaces a warning (not a block) before sending. */
   zeroTotalLineCount?: number;
+  /** The estimate's live public proposal URL, when one exists — rendered as the
+   * real [quotelink] target in Preview. Null → the send route mints one, so the
+   * preview shows a labelled placeholder instead of a dead "#" link. */
+  proposalUrl?: string | null;
   open: boolean;
   onClose: () => void;
   onSent: () => void;
@@ -58,6 +62,7 @@ interface Props {
 export function SendEstimateDialog({
   estimateId, estimateNumber, clientName, clientEmail,
   salesRepName, totalCents, estimateDate, zeroTotalLineCount = 0,
+  proposalUrl = null,
   open, onClose, onSent,
 }: Props) {
   const { data: templates = [] } = useEmailTemplates("estimate");
@@ -102,6 +107,15 @@ export function SendEstimateDialog({
   // Preview: resolve merge tags with the same values the send route uses
   // (org name/phone from org settings, rep name falling back to the company,
   // real estimate total/date) — not "Your Company"/"Your Rep" placeholders.
+  // [quotelink] preview: the real live proposal URL when the estimate has one
+  // (so Preview can be clicked/copied), otherwise the same button with an
+  // explicit "generated on send" note — never a dead href="#".
+  const quoteLinkButtonStyle = `color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block`;
+  const quoteLinkPreviewHtml = proposalUrl
+    ? `<a href="${proposalUrl}" target="_blank" rel="noopener" style="${quoteLinkButtonStyle}">View Your Proposal →</a>`
+    : `<span style="${quoteLinkButtonStyle};cursor:default" title="The proposal link is generated when this email is sent">View Your Proposal →</span>`
+      + `<div style="margin-top:6px;font-size:11px;color:#64748b">Link placeholder — the client's unique proposal URL is generated when you send.</div>`;
+
   function previewResolve(text: string) {
     const quoteDate = estimateDate ? new Date(estimateDate) : new Date();
     const quoteTotal = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
@@ -111,7 +125,7 @@ export function SendEstimateDialog({
       .replace(/\[clientlastname\]/gi,     clientName?.split(" ").slice(1).join(" ") ?? "")
       .replace(/\[clientfullname\]/gi,     clientName ?? "Client")
       .replace(/\[companyname\]/gi,        orgName)
-      .replace(/\[quotelink\]/gi,          `<a href="#" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`)
+      .replace(/\[quotelink\]/gi,          quoteLinkPreviewHtml)
       .replace(/\[quotenumber\]/gi,        String(estimateNumber).padStart(5, "0"))
       .replace(/\[quotedate\]/gi,          quoteDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
       .replace(/\[quotetotal\]/gi,         quoteTotal)

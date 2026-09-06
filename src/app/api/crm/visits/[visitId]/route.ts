@@ -13,6 +13,8 @@ const PatchSchema = z.object({
   priority: z.number().int().optional(),
   notes_to_crew: z.string().nullable().optional(),
   invoice_description: z.string().nullable().optional(),
+  /** Why a visit was skipped/cancelled (dispatch board reason prompt). */
+  skip_reason: z.string().max(500).nullable().optional(),
 });
 
 export async function PATCH(
@@ -80,6 +82,13 @@ export async function PATCH(
     }
     if (parsed.data.status === "dispatched" && prev.status !== "dispatched") {
       rows.push({ subject: `Visit dispatched ${formatMonthDay(parsed.data.scheduled_date ?? prev.scheduled_date)}` });
+    }
+    // Skipped / cancelled (dispatch board bulk "Change Status") — same wording
+    // the single-visit mutations write: "Visit skipped 9/9 — Weather".
+    if ((parsed.data.status === "skipped" || parsed.data.status === "cancelled") && prev.status !== parsed.data.status) {
+      const reason = parsed.data.skip_reason?.trim();
+      const base = `Visit ${parsed.data.status} ${formatMonthDay(parsed.data.scheduled_date ?? prev.scheduled_date)}`;
+      rows.push({ subject: reason ? `${base} — ${reason}` : base });
     }
     if (rows.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

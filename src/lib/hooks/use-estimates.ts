@@ -786,6 +786,57 @@ export function useEstimateShareTokens(estimateId: string) {
   });
 }
 
+export interface EstimateShareLink {
+  url: string | null;
+  token?: string;
+  expiresAt?: string | null;
+}
+
+/**
+ * The estimate's current LIVE public proposal link (null when nothing has
+ * been sent, or every link has expired / been accepted). Read-only — use
+ * useEnsureEstimateShareLink to mint one on demand.
+ */
+export function useEstimateShareLink(estimateId: string) {
+  return useQuery({
+    queryKey: ["estimate-share-link", estimateId],
+    queryFn: async (): Promise<EstimateShareLink> => {
+      const res = await fetch(`/api/crm/estimates/${estimateId}/share-link`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "Failed to load proposal link");
+      }
+      return res.json() as Promise<EstimateShareLink>;
+    },
+    enabled: !!estimateId,
+  });
+}
+
+/**
+ * Returns the live proposal link, minting a token only when none is live —
+ * the same reuse rule the send-email route applies, so "Copy proposal link"
+ * and a later email hand the client one URL.
+ */
+export function useEnsureEstimateShareLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (estimateId: string): Promise<EstimateShareLink & { url: string }> => {
+      const res = await fetch(`/api/crm/estimates/${estimateId}/share-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = await res.json().catch(() => ({})) as EstimateShareLink & { error?: string };
+      if (!res.ok || !body.url) throw new Error(body.error ?? "Failed to create proposal link");
+      return body as EstimateShareLink & { url: string };
+    },
+    onSuccess: (_data, estimateId) => {
+      qc.invalidateQueries({ queryKey: ["estimate-share-link", estimateId] });
+      qc.invalidateQueries({ queryKey: ["estimate-share-tokens", estimateId] });
+    },
+  });
+}
+
 // ── change requests ───────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -148,16 +148,107 @@ function hoursInputValue(h: number | null | undefined): string {
   return h == null ? "" : formatHours(h);
 }
 
+// ── skip / cancel reason ───────────────────────────────────────────────────────
+
+type OutcomeStatus = Extract<VisitStatus, "skipped" | "cancelled">;
+
+const OUTCOME_REASON_PRESETS = ["Weather", "Client requested delay", "Crew unavailable", "Other"] as const;
+
+/** Combine a preset + free-text detail into the single stored reason string. */
+function composeOutcomeReason(preset: string, detail: string): string | null {
+  const d = detail.trim();
+  if (preset === "Other" || !preset) return d || (preset === "Other" ? "Other" : null);
+  return d ? `${preset} — ${d}` : preset;
+}
+
+/**
+ * Small prompt shown when a visit is marked Skipped or Cancelled from the ST
+ * status menu / bulk Change Status — the reason lands on
+ * crm_job_visits.skip_reason (same column the crew app writes) and on the
+ * client's Activity timeline ("Visit skipped 9/9 — Client requested delay").
+ * The reason is optional; confirming with nothing selected still applies the
+ * status.
+ */
+function VisitOutcomeReasonDialog({
+  status,
+  count = 1,
+  pending = false,
+  onConfirm,
+  onCancel,
+}: {
+  status: OutcomeStatus | null;
+  count?: number;
+  pending?: boolean;
+  onConfirm: (reason: string | null) => void;
+  onCancel: () => void;
+}) {
+  const [preset, setPreset] = useState("");
+  const [detail, setDetail] = useState("");
+  useEffect(() => { if (status) { setPreset(""); setDetail(""); } }, [status]);
+  const label = status === "cancelled" ? "Cancel" : "Skip";
+  return (
+    <Dialog open={!!status} onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>{label} {count > 1 ? `${count} visits` : "visit"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Reason (optional)</label>
+            <div className="flex flex-wrap gap-1.5">
+              {OUTCOME_REASON_PRESETS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setPreset(preset === r ? "" : r)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                    preset === r ? "border-brand-500 bg-brand-50 text-brand-700 font-medium" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Textarea
+            rows={2}
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            className="text-sm resize-none"
+            placeholder={preset === "Other" || !preset ? "Add a note for the client timeline…" : "Details (optional)"}
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={pending}>Back</Button>
+          <Button size="sm" disabled={pending} className={status === "cancelled" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}
+            onClick={() => onConfirm(composeOutcomeReason(preset, detail))}>
+            {pending ? "Saving…" : `Mark ${status === "cancelled" ? "Cancelled" : "Skipped"}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
+  // Skipped / Cancelled go through the reason prompt first (D-10).
+  const [pendingOutcome, setPendingOutcome] = useState<OutcomeStatus | null>(null);
 
   // Explicit status menu instead of a one-click cycle: a stray click on the
   // icon used to flip a visit straight to Dispatched (firing the
   // visit_dispatched automations) with no confirmation and no feedback.
-  async function setStatus(next: VisitStatus) {
+  async function setStatus(next: VisitStatus, reason?: string | null) {
     if (next === visit.status) return;
+    if ((next === "skipped" || next === "cancelled") && reason === undefined) {
+      setPendingOutcome(next);
+      return;
+    }
     try {
-      await updateStatus({ id: visit.id, status: next, jobId: visit.jobId, jobType: visit.job?.jobType });
+      await updateStatus({ id: visit.id, status: next, jobId: visit.jobId, jobType: visit.job?.jobType, reason });
+      setPendingOutcome(null);
       toast.success(`Visit marked ${STATUS_OPTIONS.find((o) => o.value === next)?.label ?? next}`);
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to update status");
@@ -165,6 +256,13 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
   }
 
   return (
+    <>
+    <VisitOutcomeReasonDialog
+      status={pendingOutcome}
+      pending={isPending}
+      onConfirm={(reason) => { if (pendingOutcome) void setStatus(pendingOutcome, reason); }}
+      onCancel={() => setPendingOutcome(null)}
+    />
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -190,6 +288,7 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+    </>
   );
 }
 
@@ -302,6 +401,10 @@ function JobDetailSheet({
 
   // Form state — reset when visit changes
   const [status,      setStatus]      = useState<VisitStatus>(visit.status);
+  // Skip/cancel reason (crm_job_visits.skip_reason) — editable whenever the
+  // sheet's status is Skipped/Cancelled; prefilled from the stored value.
+  const [skipReason,  setSkipReason]  = useState(visit.skipReason ?? "");
+  useEffect(() => { setSkipReason(visit.skipReason ?? ""); }, [visit.id, visit.skipReason]);
   const [subStatus,   setSubStatus]   = useState(visit.subStatus ?? "");
   const [crewId,      setCrewId]      = useState(visit.crewId ?? job?.crewId ?? "");
   const [startTime,   setStartTime]   = useState(visit.startTime ?? "");
@@ -494,6 +597,9 @@ function JobDetailSheet({
     if (status === "dispatched" && visit.status !== "dispatched") {
       updates.dispatched_at = new Date().toISOString();
     }
+    if (status === "skipped" || status === "cancelled") {
+      updates.skip_reason = skipReason.trim() || null;
+    }
     setSaving(true);
     try {
       await updateVisit({ id: visit.id, updates, jobId: visit.jobId, jobType: visit.job?.jobType });
@@ -646,6 +752,36 @@ function JobDetailSheet({
                       ))}
                     </SelectContent>
                   </Select>
+                  {(status === "skipped" || status === "cancelled") && (
+                    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                        {status === "cancelled" ? "Cancel" : "Skip"} reason
+                        {visit.skipReason && status === visit.status ? "" : " (optional)"}
+                      </label>
+                      <div className="flex flex-wrap gap-1 mb-1.5">
+                        {OUTCOME_REASON_PRESETS.filter((r) => r !== "Other").map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setSkipReason(r)}
+                            className={cn(
+                              "rounded-full border px-2 py-0.5 text-[10px] transition-colors",
+                              skipReason === r ? "border-amber-500 bg-white text-amber-800 font-medium" : "border-amber-200 bg-white/60 text-slate-600 hover:bg-white",
+                            )}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                      <Textarea
+                        rows={2}
+                        value={skipReason}
+                        onChange={(e) => setSkipReason(e.target.value)}
+                        className="text-xs resize-none bg-white"
+                        placeholder="Weather, client request, crew availability…"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Assigned To */}
@@ -2435,12 +2571,21 @@ function visitAmountCents(visit: CRMJobVisit): number {
   return visit.rateCents ?? (linkedService ? serviceTotal : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? 0)));
 }
 
+// Skipped and cancelled visits stay on the board (so the dispatcher can see
+// and undo them) but are not work or revenue for the day — every aggregate
+// (Totals row AMT / B Hrs, crew stat cards, unassigned card) leaves them out.
+// Actual hours are real time punched and are summed regardless of status.
+function countsTowardTotals(visit: CRMJobVisit): boolean {
+  return visit.status !== "skipped" && visit.status !== "cancelled";
+}
+
 // ── totals row ─────────────────────────────────────────────────────────────────
 
 function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
-  const totalBHrs = visits.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
+  const counted   = visits.filter(countsTowardTotals);
+  const totalBHrs = counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
-  const totalAmt  = visits.reduce((s, v) => s + visitAmountCents(v), 0);
+  const totalAmt  = counted.reduce((s, v) => s + visitAmountCents(v), 0);
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
   // Toggleable cols that appear before B Hrs:
@@ -2539,6 +2684,9 @@ export function DispatchBoard() {
   const [editTimesVisitId, setEditTimesVisitId] = useState<string | null>(null);
   const [teamAssignOpen,  setTeamAssignOpen]  = useState(false);
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
+  // Bulk "Change Status" → Skipped/Cancelled waits on the reason dialog.
+  const [bulkOutcome,     setBulkOutcome]     = useState<OutcomeStatus | null>(null);
+  const [bulkOutcomePending, setBulkOutcomePending] = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
   const [dragId,          setDragId]          = useState<string | null>(null);
@@ -2610,6 +2758,40 @@ export function DispatchBoard() {
     return m;
   }, [allVisits, anchorVisitIdByVisitId, memberTimesByAnchorId]);
   const qc = useQueryClient();
+
+  async function applyBulkStatus(status: VisitStatus, reason?: string | null) {
+    const ids = [...selectedIds];
+    const label = STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
+    try {
+      let results: Response[];
+      if (status === "completed") {
+        // Use the complete route so the parent job status is also updated
+        results = await Promise.all(
+          ids.map((id) => fetch(`/api/crm/visits/${id}/complete`, { method: "POST" }))
+        );
+      } else {
+        const body: Record<string, unknown> = { status };
+        if (status === "skipped" || status === "cancelled") body.skip_reason = reason?.trim() || null;
+        results = await Promise.all(
+          ids.map((id) =>
+            fetch(`/api/crm/visits/${id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            })
+          )
+        );
+      }
+      if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      setSelectedIds(new Set());
+      toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${label}`);
+    } catch {
+      toast.error("Failed to update one or more visits");
+    }
+  }
   const createVisit = useCreateVisit();
   const { mutateAsync: returnToWaitingList } = useReturnVisitToWaitingList();
   const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3, selectedDate);
@@ -2903,17 +3085,19 @@ export function DispatchBoard() {
 
   const crewStatsList = (crews ?? []).map((c) => {
     const cv = displayVisits.filter((v) => v.crewId === c.id);
+    const counted = cv.filter(countsTowardTotals);
     return {
       id: c.id,
       name: c.name,
       count: cv.length,
-      bHrs: cv.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0),
-      amt: cv.reduce((s, v) => s + visitAmountCents(v), 0),
+      bHrs: counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0),
+      amt: counted.reduce((s, v) => s + visitAmountCents(v), 0),
     };
   }).filter((s) => s.count > 0);
-  const unassignedStatCount  = displayVisits.filter((v) => !v.crewId).length;
-  const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
-  const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + visitAmountCents(v), 0);
+  const unassignedVisits     = displayVisits.filter((v) => !v.crewId);
+  const unassignedStatCount  = unassignedVisits.length;
+  const unassignedStatBHrs   = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
+  const unassignedStatAmt    = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + visitAmountCents(v), 0);
 
   const callAheadVisits = displayVisits.filter((v) => v.job?.callAhead && v.clientPhone);
 
@@ -3281,36 +3465,13 @@ export function DispatchBoard() {
                     <DropdownMenuItem
                       key={opt.value}
                       className="text-xs"
-                      onSelect={async () => {
-                        const ids = [...selectedIds];
-                        try {
-                          let results: Response[];
-                          if (opt.value === "completed") {
-                            // Use the complete route so the parent job status is also updated
-                            results = await Promise.all(
-                              ids.map((id) =>
-                                fetch(`/api/crm/visits/${id}/complete`, { method: "POST" })
-                              )
-                            );
-                          } else {
-                            results = await Promise.all(
-                              ids.map((id) =>
-                                fetch(`/api/crm/visits/${id}`, {
-                                  method: "PATCH",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ status: opt.value }),
-                                })
-                              )
-                            );
-                          }
-                          if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
-                          await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
-                          await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
-                          setSelectedIds(new Set());
-                          toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${opt.label}`);
-                        } catch {
-                          toast.error("Failed to update one or more visits");
+                      onSelect={() => {
+                        if (opt.value === "skipped" || opt.value === "cancelled") {
+                          // Reason prompt first (D-10) — applyBulkStatus runs on confirm.
+                          setBulkOutcome(opt.value);
+                          return;
                         }
+                        void applyBulkStatus(opt.value);
                       }}
                     >
                       {opt.label}
@@ -3624,6 +3785,17 @@ export function DispatchBoard() {
           object captured at click time, so a save made on the row (or any
           other refetch while the sheet is open) is reflected immediately
           instead of only after closing and reopening it. */}
+      <VisitOutcomeReasonDialog
+        status={bulkOutcome}
+        count={selectedIds.size}
+        pending={bulkOutcomePending}
+        onConfirm={async (reason) => {
+          if (!bulkOutcome) return;
+          setBulkOutcomePending(true);
+          try { await applyBulkStatus(bulkOutcome, reason); } finally { setBulkOutcomePending(false); setBulkOutcome(null); }
+        }}
+        onCancel={() => setBulkOutcome(null)}
+      />
       {detailVisit && (
         <JobDetailSheet
           visit={detailVisit}
