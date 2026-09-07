@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser, useUpdatePhotoModuleAccess } from "@/lib/hooks/use-users";
+import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser, useReactivateUser, useUpdatePhotoModuleAccess, useCreateCrewAccount, useResetPassword } from "@/lib/hooks/use-users";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { Switch } from "@/components/ui/switch";
 import { useCurrentUserStore } from "@/stores";
 import type { OrgUser } from "@/types";
-import { Check, Trash2, UserPlus, Users2, Send } from "lucide-react";
+import { Check, Trash2, UserPlus, Users2, Send, RotateCcw, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
@@ -348,16 +348,16 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
   const [customEmail, setCustomEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [creating, setCreating] = useState(false);
   const [loginEmail, setLoginEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const createCrewAccount = useCreateCrewAccount();
+  const creating = createCrewAccount.isPending;
 
   function reset() {
     setTeamName("");
     setCustomEmail("");
     setPassword("");
     setConfirmPassword("");
-    setCreating(false);
     setLoginEmail(null);
     setError(null);
   }
@@ -374,23 +374,15 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
 
-    setCreating(true);
     try {
-      const res = await fetch("/api/users/create-crew", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamName: teamName.trim(), password, customEmail: customEmail.trim() || undefined }),
+      const data = await createCrewAccount.mutateAsync({
+        teamName: teamName.trim(),
+        password,
+        customEmail: customEmail.trim() || undefined,
       });
-      const data: { success?: boolean; loginEmail?: string; error?: string } = await res.json();
-      if (!res.ok || !data.success) {
-        setError(data.error ?? "Failed to create crew account.");
-      } else {
-        setLoginEmail(data.loginEmail ?? null);
-      }
-    } catch {
-      setError("Network error — please try again.");
-    } finally {
-      setCreating(false);
+      setLoginEmail(data.loginEmail);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create crew account.");
     }
   }
 
@@ -495,6 +487,127 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
 }
 
 // ---------------------------------------------------------------------------
+// ResetPasswordDialog (inline)
+// ---------------------------------------------------------------------------
+
+interface ResetPasswordDialogProps {
+  user: OrgUser | null;
+  onOpenChange: (open: boolean) => void;
+}
+
+function ResetPasswordDialog({ user, onOpenChange }: ResetPasswordDialogProps) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const resetPassword = useResetPassword();
+
+  function reset() {
+    setPassword("");
+    setConfirmPassword("");
+    setDone(false);
+    setError(null);
+  }
+
+  function handleOpenChange(val: boolean) {
+    if (!val) reset();
+    onOpenChange(val);
+  }
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!user) return;
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
+
+    try {
+      await resetPassword.mutateAsync({ userId: user.id, password });
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset password.");
+    }
+  }
+
+  return (
+    <Dialog open={!!user} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Reset Password</DialogTitle>
+          <DialogDescription>
+            {user ? `Set a new password for ${user.name} (${user.email}).` : null} This account uses a
+            login email that can&apos;t receive email, so it must be reset here rather than by a
+            password-reset link.
+          </DialogDescription>
+        </DialogHeader>
+
+        {done ? (
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
+              <p className="mb-2 text-sm font-medium text-brand-900">Password reset!</p>
+              <div className="rounded-md border border-slate-200 bg-white p-3 font-mono text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Login:</span>
+                  <span className="select-all text-slate-900">{user?.email}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-slate-400">Password:</span>
+                  <span className="select-all text-slate-900">{password}</span>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-amber-700">
+                Save these credentials — the password cannot be retrieved after this dialog is closed.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => handleOpenChange(false)}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleReset} className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reset-password">New Password</Label>
+              <Input
+                id="reset-password"
+                type="password"
+                placeholder="Min 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reset-confirm-password">Confirm Password</Label>
+              <Input
+                id="reset-confirm-password"
+                type="password"
+                placeholder="Re-enter password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+            {error && (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={resetPassword.isPending}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={resetPassword.isPending}>
+                {resetPassword.isPending ? "Resetting…" : "Reset Password"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UsersPage
 // ---------------------------------------------------------------------------
 
@@ -505,6 +618,7 @@ export function UsersPage() {
   const { mutate: inviteUser, isPending: inviting } = useInviteUser();
   const { mutate: updateRole } = useUpdateUserRole();
   const { mutate: deactivate } = useDeactivateUser();
+  const { mutate: reactivate } = useReactivateUser();
   const { mutate: updatePhotoAccess } = useUpdatePhotoModuleAccess();
   const [resendingId, setResendingId] = useState<string | null>(null);
   // Avoid a flash of hidden roles while the org's plan is still loading —
@@ -563,6 +677,7 @@ export function UsersPage() {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [crewDialogOpen, setCrewDialogOpen] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<OrgUser | null>(null);
 
   const totalUsers = users.length;
   const activeUsers = users.filter((u) => u.status === "active").length;
@@ -577,7 +692,15 @@ export function UsersPage() {
       "Are you sure you want to deactivate this user? They will lose access to the platform."
     );
     if (!confirmed) return;
-    deactivate(userId);
+    deactivate(userId, {
+      onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to deactivate user"),
+    });
+  }
+
+  function handleReactivate(userId: string) {
+    reactivate(userId, {
+      onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to reactivate user"),
+    });
   }
 
   async function handleInvite(name: string, email: string, role: OrgUser["role"]) {
@@ -711,6 +834,18 @@ export function UsersPage() {
 
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        {user.role === "crew" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-brand-600"
+                            onClick={() => setResetPasswordUser(user)}
+                            aria-label={`Reset password for ${user.name}`}
+                            title="Reset password"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        )}
                         {user.status === "invited" && (
                           <Button
                             variant="ghost"
@@ -724,13 +859,25 @@ export function UsersPage() {
                             <Send className="h-4 w-4" />
                           </Button>
                         )}
-                        {user.status !== "inactive" && (
+                        {user.status === "inactive" ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-brand-600"
+                            onClick={() => handleReactivate(user.id)}
+                            aria-label={`Reactivate ${user.name}`}
+                            title="Reactivate user"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        ) : (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-slate-400 hover:text-red-500"
                             onClick={() => handleDeactivate(user.id)}
                             aria-label={`Deactivate ${user.name}`}
+                            title="Deactivate user"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -782,6 +929,11 @@ export function UsersPage() {
       <CreateCrewAccountDialog
         open={crewDialogOpen}
         onOpenChange={setCrewDialogOpen}
+      />
+
+      <ResetPasswordDialog
+        user={resetPasswordUser}
+        onOpenChange={(open) => { if (!open) setResetPasswordUser(null); }}
       />
     </div>
   );

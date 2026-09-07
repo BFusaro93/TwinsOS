@@ -13775,6 +13775,7 @@ export type Database = {
       }
       get_org_twilio_api_secret: { Args: { p_org_id: string }; Returns: string }
       get_org_twilio_auth_token: { Args: { p_org_id: string }; Returns: string }
+      has_crm_access: { Args: Record<PropertyKey, never>; Returns: boolean }
       has_settings_permission: { Args: { p_key: string }; Returns: boolean }
       increment_api_key_rate_limit: {
         Args: { p_api_key_id: string; p_window_start: string }

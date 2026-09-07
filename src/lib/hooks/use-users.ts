@@ -57,13 +57,64 @@ export function useDeactivateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("profiles")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ status: "inactive" } as any)
-        .eq("id", userId);
-      if (error) throw error;
+      const res = await fetch(`/api/users/${userId}/deactivate`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "Failed to deactivate user");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
+export function useReactivateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/users/${userId}/reactivate`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "Failed to reactivate user");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+      const res = await fetch(`/api/users/${userId}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "Failed to reset password");
+      }
+    },
+  });
+}
+
+export function useCreateCrewAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { teamName: string; password: string; customEmail?: string }) => {
+      const res = await fetch("/api/users/create-crew", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.success) {
+        throw new Error((body as { error?: string }).error ?? "Failed to create crew account");
+      }
+      return body as { success: true; loginEmail: string };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });

@@ -11,6 +11,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { createClient } from "@/lib/supabase/client";
 import { isBillablePlan } from "@/lib/stripe/plans";
 import { useModuleAccess, useAddonAccess } from "@/lib/hooks/use-module-access";
+import { useCrmAccess } from "@/lib/hooks/use-permissions";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 import { parseHomeShortcuts, getHomeShortcutIcon } from "@/lib/home-shortcuts";
@@ -131,6 +132,10 @@ export default function HomePage() {
   const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
   const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
+  // The plan may include Landscapt while this specific user has no linked
+  // crm_employees record — (crm)/layout.tsx blocks them there via the same
+  // check, so don't show a tile that leads straight to that block screen.
+  const { allowed: hasCrmAccess } = useCrmAccess("/crm/home");
   const { data: orgSettings } = useOrgSettings();
   const shortcuts = parseHomeShortcuts(orgSettings?.customizations);
   usePendingPlanRedirect();
@@ -185,7 +190,7 @@ export default function HomePage() {
           </Link>
         )}
 
-        {hasLandscapt && (
+        {hasLandscapt && hasCrmAccess && (
           <Link href="/crm/home" className={INTERNAL_BOX}>
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
               <Sprout className="h-8 w-8" />
