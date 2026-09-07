@@ -174,6 +174,10 @@ export const REPORT_DATASETS: ReportDataset[] = [
     fields: [
       { key: "scheduled_date", label: "Scheduled Date", type: "date" },
       { key: "completed_at", label: "Completed At", type: "datetime" },
+      // The date a completed visit is reported under: completed_at as an
+      // Eastern-time calendar date, else scheduled_date. Costing reports
+      // (Job Cost Summary, the Job Costing page) all date visits by this.
+      { key: "worked_date", label: "Worked Date", type: "date" },
       // crm_job_visits.status CHECK values ('dispatched' added 2026-08-24).
       {
         key: "status",
@@ -199,8 +203,23 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "man_hours", label: "Man Hours", type: "hours" },
       // Rate × qty = revenue_cents; the rate itself is not additive.
       { key: "rate_cents", label: "Rate", type: "money", totalable: false },
+      // Per-service visit → its own rate; whole-job visit → Σ included service
+      // lines (live, so re-pricing a line is reflected) → job rate.
       { key: "revenue_cents", label: "Revenue", type: "money" },
+      // Crew clock-out actual when recorded; otherwise man-hours × the crew's
+      // (then org's) average labor rate; 0 when no rate is configured anywhere.
+      // labor_cost_source says which: actual / estimated / none.
       { key: "actual_labor_cost_cents", label: "Labor Cost", type: "money" },
+      {
+        key: "labor_cost_source",
+        label: "Labor Cost Source",
+        type: "text",
+        options: [
+          { value: "actual", label: "Actual (crew clock-out)" },
+          { value: "estimated", label: "Estimated (hours × labor rate)" },
+          { value: "none", label: "None (no labor rate configured)" },
+        ],
+      },
       { key: "rev_per_man_hr_cents", label: "Rev / Man Hr", type: "money", totalable: false },
       { key: "budgeted_rev_per_man_hr_cents", label: "Budgeted Rev / Man Hr", type: "money", totalable: false },
       { key: "variance_hours", label: "Hours Variance", type: "hours" },
@@ -238,6 +257,11 @@ export const REPORT_DATASETS: ReportDataset[] = [
       // team_size). job_actual_hours and actual_man_hours are the same
       // per-visit man-hour share (the latter coalesced to 0) — labels say so.
       { key: "budgeted_hours", label: "Budgeted Man-Hours", type: "hours" },
+      // The line's own price (qty × rate) and its share of the visit — a
+      // whole-job visit's hours are split across its lines by this share
+      // (revenue first, then budgeted hours when every line is $0, then even).
+      { key: "line_revenue_cents", label: "Line Revenue", type: "money" },
+      { key: "revenue_share", label: "Share of Visit", type: "number", totalable: false },
       { key: "job_actual_hours", label: "Actual Man-Hours (visit)", type: "hours" },
       { key: "man_count", label: "# of Men", type: "number" },
       { key: "actual_man_hours", label: "Actual Man-Hours", type: "hours" },

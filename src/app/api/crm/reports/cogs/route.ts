@@ -25,6 +25,8 @@ export interface COGSReportRow {
   visitCount: number;
   /** Visits whose labor was estimated rather than recorded by crew clock-out. */
   laborEstimatedVisitCount: number;
+  /** Visits with NO labor rate configured (crew or org) — their labor is a placeholder $0. */
+  laborMissingVisitCount: number;
   budgetedHours: number;
   actualStaffHrs: number;
   /** (actual − budgeted) ÷ budgeted × 100, one decimal. */
@@ -53,6 +55,7 @@ interface ServiceBucket {
   targetRateCents: number;
   visitCount: number;
   laborEstimatedVisitCount: number;
+  laborMissingVisitCount: number;
   budgetedHours: number;
   actualStaffHrs: number;
   grossSalesCents: number;
@@ -83,6 +86,7 @@ function getBucket(
     targetRateCents: catalog?.targetRateCentsPerHr ?? 0,
     visitCount: 0,
     laborEstimatedVisitCount: 0,
+    laborMissingVisitCount: 0,
     budgetedHours: 0,
     actualStaffHrs: 0,
     grossSalesCents: 0,
@@ -110,6 +114,7 @@ function accumulateVisit(
     const b = getBucket(buckets, share, services);
     b.visitCount += 1;
     if (visit.laborEstimated) b.laborEstimatedVisitCount += 1;
+    if (visit.laborSource === "none") b.laborMissingVisitCount += 1;
     b.budgetedHours += visit.budgetedHours * share.share;
     b.actualStaffHrs += visit.manHours * share.share;
     b.grossSalesCents += revenue[i];
@@ -127,6 +132,7 @@ function toRow(b: ServiceBucket): COGSReportRow {
     serviceName: b.serviceName,
     visitCount: b.visitCount,
     laborEstimatedVisitCount: b.laborEstimatedVisitCount,
+    laborMissingVisitCount: b.laborMissingVisitCount,
     budgetedHours: Math.round(b.budgetedHours * 10) / 10,
     actualStaffHrs: Math.round(b.actualStaffHrs * 10) / 10,
     hoursVariancePct: pct(b.actualStaffHrs - b.budgetedHours, b.budgetedHours),

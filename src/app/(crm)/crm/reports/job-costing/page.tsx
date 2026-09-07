@@ -54,6 +54,18 @@ function csvText(value: string) {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+/**
+ * Render a "YYYY-MM-DD" worked date without a timezone round-trip — parsing
+ * the string through `new Date()` would treat it as UTC midnight and show the
+ * previous day for US viewers (E-13: this page and Job Cost Summary now share
+ * the same worked date, so they must also render it identically).
+ */
+function fmtYmd(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return ymd;
+  return new Date(y, m - 1, d).toLocaleDateString();
+}
+
 function downloadCSV(rows: JobCostingReportRow[]) {
   const headers = [
     "Date", "Client", "Services", "Crew", "Men", "Bgt Man-Hrs", "Act Man-Hrs",
@@ -63,7 +75,7 @@ function downloadCSV(rows: JobCostingReportRow[]) {
   const lines = [headers.join(",")];
   for (const r of rows) {
     lines.push([
-      r.completedAt ? new Date(r.completedAt).toLocaleDateString() : "",
+      r.workedDate,
       csvText(r.clientName),
       csvText(r.serviceNames),
       csvText(r.crewName ?? ""),
@@ -142,6 +154,7 @@ export default function JobCostingReportPage() {
       budgetedRateCents: ratioOf(totalRevenue, totalBudgetedHours),
       revPerManHrCents: ratioOf(totalRevenue, totalManHours),
       laborEstimatedCount: rows.filter((r) => r.laborEstimated).length,
+      laborMissingCount: rows.filter((r) => r.laborSource === "none").length,
     };
   }, [rows]);
 
@@ -257,7 +270,7 @@ export default function JobCostingReportPage() {
                   return (
                     <tr key={r.visitId} className="border-b last:border-0 hover:bg-slate-50">
                       <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
-                        {r.completedAt ? new Date(r.completedAt).toLocaleDateString() : "—"}
+                        {r.workedDate ? fmtYmd(r.workedDate) : "—"}
                       </td>
                       <td className="px-3 py-2 font-medium text-slate-800 max-w-[140px] truncate" title={r.clientName}>
                         {r.clientName}
@@ -351,13 +364,25 @@ export default function JobCostingReportPage() {
       {rows.length > 0 && (
         <div className="text-[11px] text-slate-400 leading-relaxed space-y-0.5">
           <p>
-            One row per visit completed in the window. Hours are man-hours (crew size × time on site).
-            Revenue is the visit&apos;s rate × quantity. Rates and percentages in the total row are ratios of the summed columns.
+            One row per visit completed in the window, dated by the worked date (completion date in Eastern time, or the
+            scheduled date when no completion time was recorded — the same basis as the Job Cost Summary report).
+            Hours are man-hours (crew size × time on site). Revenue is the visit&apos;s own rate for a per-service visit,
+            otherwise the live sum of the job&apos;s included service lines, otherwise the job rate.
+            Rates and percentages in the total row are ratios of the summed columns.
           </p>
           {summary && summary.laborEstimatedCount > 0 && (
             <p>
-              <span className="text-amber-600">†</span> Labor estimated as man-hours × the crew&apos;s average labor burden rate
-              because no crew clock-out recorded actual labor for that visit.
+              <span className="text-amber-600">†</span> Labor estimated as man-hours × the crew&apos;s average labor rate
+              (each member&apos;s labor burden rate, or their employee hourly rate grossed up by the org labor burden %,
+              falling back to the org-wide average) because no crew clock-out recorded actual labor for that visit.
+            </p>
+          )}
+          {summary && summary.laborMissingCount > 0 && (
+            <p className="text-amber-700">
+              No labor rate configured: {summary.laborMissingCount} of {rows.length} visits show $0.00 labor because
+              neither the crew members nor the org have a labor rate. Set labor burden rates on crew members
+              (Settings → Crews) or hourly rates on employees — until then labor cost, gross profit and margin on those
+              visits are not real figures.
             </p>
           )}
           <p>

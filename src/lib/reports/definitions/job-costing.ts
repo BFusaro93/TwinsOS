@@ -5,6 +5,11 @@ import { dateRangeFilterDef, dateRangeFilters, eqFilter } from "@/lib/reports/he
 // Job Costing section — pre-built reports.
 // ============================================================
 
+/** Footnote explaining rpt_job_visits.actual_labor_cost_cents' fallback chain
+ *  and the `labor_cost_source` flag, so a $0 never passes as a real cost. */
+const LABOR_COST_NOTE =
+  "Labor Cost is the crew clock-out actual when one was recorded (source \"actual\"); otherwise it is estimated as man-hours × the crew's average labor rate — each member's labor burden rate, or their employee hourly rate grossed up by the org's labor burden % — falling back to the org-wide average (source \"estimated\"). Source \"none\" means no labor rate is configured for the crew or org, so the $0.00 shown is NOT a real cost: set labor burden rates on crew members or hourly rates on employees.";
+
 export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
   {
     key: "job-costing-report",
@@ -34,11 +39,14 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     ],
     notes: [
       "Budgeted and Actual Man-Hours are both duration × number of men.",
+      "Worked Date is the completion date (Eastern time), or the scheduled date for visits completed without a timestamp — the same date the Job Costing page uses.",
+      "Revenue is the visit's own rate for per-service visits, otherwise the live sum of the job's included service lines (so re-pricing a line is reflected), otherwise the job rate.",
+      LABOR_COST_NOTE,
     ],
     analysis: (params) => ({
       dataset: "rpt_job_visits",
       columns: [
-        "scheduled_date",
+        "worked_date",
         "client_name",
         "service_names",
         "budget_methods",
@@ -50,6 +58,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
         "actual_hours",
         "revenue_cents",
         "actual_labor_cost_cents",
+        "labor_cost_source",
         "rev_per_man_hr_cents",
         "variance_hours",
       ],
@@ -60,7 +69,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       ],
       groupBy: [],
       aggregates: [],
-      sortColumn: "scheduled_date",
+      sortColumn: "worked_date",
       sortDir: "desc",
     }),
   },
@@ -71,7 +80,10 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows visit count, revenue, labor cost, and man-hours grouped by service.",
     filters: [dateRangeFilterDef("Completed Between", "this_month")],
-    notes: ["Visits with multiple services are grouped by the combined service list."],
+    notes: [
+      "Visits with multiple services are grouped by the combined service list.",
+      LABOR_COST_NOTE,
+    ],
     analysis: (params) => ({
       dataset: "rpt_job_visits",
       columns: [],

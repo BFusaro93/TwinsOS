@@ -130,6 +130,7 @@ export default function COGSReportPage() {
       laborPct: pctOf(laborCostCents, grossSalesCents),
       revPerManHrCents: ratioOf(grossSalesCents, actualStaffHrs),
       laborEstimatedVisitCount: sum((r) => r.laborEstimatedVisitCount),
+      laborMissingVisitCount: sum((r) => r.laborMissingVisitCount),
     };
   }, [rows]);
 
@@ -316,15 +317,26 @@ export default function COGSReportPage() {
       {rows.length > 0 && (
         <div className="text-[11px] text-slate-400 leading-relaxed space-y-0.5">
           <p>
-            Each visit completed in the window is split across its services in proportion to man-hours worked
-            (even split when no hours are recorded); a visit with several services counts once under each.
-            Hours are man-hours. Rev/Man Hr, percentages and the total row are ratios of the summed columns.
+            Each visit completed in the window is split across its services by each service line&apos;s own price
+            (qty × rate) — hours, labor and materials follow that same revenue share, so a $0 line never absorbs a
+            priced visit. When every line on a visit is $0 the split falls back to budgeted man-hours, then an even
+            split. A visit with several services counts once under each. Hours are man-hours. Rev/Man Hr,
+            percentages and the total row are ratios of the summed columns.
             Visits with no service assignments appear as &ldquo;Unassigned&rdquo;.
           </p>
           {totals && totals.laborEstimatedVisitCount > 0 && (
             <p>
               <span className="text-amber-600">†</span> Includes visits whose labor was estimated as man-hours × the crew&apos;s
-              average labor burden rate because no crew clock-out recorded actual labor.
+              average labor rate (member labor burden rate, or employee hourly rate grossed up by the org labor burden %,
+              falling back to the org-wide average) because no crew clock-out recorded actual labor.
+            </p>
+          )}
+          {totals && totals.laborMissingVisitCount > 0 && (
+            <p className="text-amber-700">
+              No labor rate configured: {totals.laborMissingVisitCount} visit{totals.laborMissingVisitCount === 1 ? "" : "s"} in
+              this window carry $0.00 labor because neither the crew members nor the org have a labor rate. Set labor
+              burden rates on crew members (Settings → Crews) or hourly rates on employees — until then labor cost,
+              direct cost, gross profit and margin are understated.
             </p>
           )}
           <p>

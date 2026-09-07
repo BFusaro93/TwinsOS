@@ -7,26 +7,44 @@
 // client, so results are already limited to the caller's org.
 //
 // Per visit:
-//   revenue    = rpt_job_visits.revenue_cents (authoritative per-visit revenue)
+//   revenue    = rpt_job_visits.revenue_cents (authoritative per-visit revenue:
+//                per-service visit → its own rate, else Σ included service
+//                lines, else the job rate — see the view migration)
+//   date       = rpt_job_visits.worked_date (completed_at in Eastern time,
+//                else scheduled_date) — the same basis Job Cost Summary uses
 //   man-hours  = rpt_job_visits.man_hours (already person × hours — never
 //                multiply by men_count again)
-//   labor      = rpt_job_visits.actual_labor_cost_cents when the crew
-//                clock-out wrote it; otherwise ESTIMATED as
-//                man_hours × crew labor burden (avg of the visit's crew
-//                members' labor_burden_cents_per_hour, falling back to the
-//                org-wide member average, then 0) and flagged laborEstimated.
+//   labor      = rpt_job_visits.actual_labor_cost_cents, which the view already
+//                resolves through the fallback chain: crew clock-out actual →
+//                man_hours × the visit crew's average rate (member burden rate,
+//                else employee hourly × org labor burden %) → man_hours × the
+//                org-wide member average → 0. labor_cost_source says which
+//                layer produced it: 'actual' | 'estimated' | 'none' ("no labor
+//                rate configured" — surfaced in report footnotes, never a
+//                silent $0).
 //   materials  = crm_job_materials rows logged against this visit_id, plus
 //                an even share of the job's visit-less (job-level) materials
 //                spread across that job's completed visits (all time).
 //   services   = rpt_job_services rows for the visit; each carries a `share`
-//                (fraction of the visit's $/hours) weighted by
-//                actual_man_hours, then budgeted_hours, then an even split.
+//                (fraction of the visit's $/hours) weighted by the line's own
+//                price (line_revenue_cents = qty × rate), then budgeted_hours
+//                when every line is $0, then an even split.
 // ============================================================
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 
 type Client = SupabaseClient<Database>;
+
+/**
+ * The rpt_* views gained columns (worked_date, labor_cost_source,
+ * line_revenue_cents) that the generated Database types don't know about yet;
+ * read them through an untyped client so the select strings type-check
+ * without regenerating src/types/supabase.ts.
+ */
+type UntypedClient = SupabaseClient;
+
+export type LaborCostSource = "actual" | "estimated" | "none";
 
 export interface VisitCostingWindow {
   /** "YYYY-MM-DD" inclusive lower bound on completed_at, or null for open. */
@@ -50,6 +68,8 @@ export interface CostedVisit {
   serviceNames: string;
   crewName: string | null;
   completedAt: string;
+  /** "YYYY-MM-DD" the work is reported under: completed_at in Eastern time, else scheduled_date. */
+  workedDate: string;
   menCount: number;
   /** Budgeted MAN-hours for the visit. */
   budgetedHours: number;
@@ -57,8 +77,10 @@ export interface CostedVisit {
   manHours: number;
   revenueCents: number;
   laborCostCents: number;
-  /** True when laborCostCents was derived from hours × burden, not clock-out. */
+  /** True when laborCostCents was derived from hours × a labor rate, not clock-out. */
   laborEstimated: boolean;
+  /** Which layer produced laborCostCents; 'none' = no labor rate configured anywhere. */
+  laborSource: LaborCostSource;
   materialsCostCents: number;
   /** Empty for legacy visits with no crm_job_services rows. */
   services: VisitServiceShare[];
@@ -134,6 +156,7 @@ function round2(value: number): number {
 interface VisitViewRow {
   id: string | null;
   completed_at: string | null;
+  worked_date: string | null;
   client_name: string | null;
   service_names: string | null;
   crew_name: string | null;
@@ -142,15 +165,16 @@ interface VisitViewRow {
   man_hours: number | null;
   revenue_cents: number | null;
   actual_labor_cost_cents: number | null;
+  labor_cost_source: string | null;
 }
 
 /** Completed visits in the window, from the reporting view. */
-async function loadCompletedVisits(supabase: Client, window: VisitCostingWindow) {
+async function loadCompletedVisits(supabase: UntypedClient, window: VisitCostingWindow) {
   return fetchAllPages<VisitViewRow>((from, to) => {
     let q = supabase
       .from("rpt_job_visits")
       .select(
-        "id, completed_at, client_name, service_names, crew_name, men_count, budgeted_hours, man_hours, revenue_cents, actual_labor_cost_cents"
+        "id, completed_at, worked_date, client_name, service_names, crew_name, men_count, budgeted_hours, man_hours, revenue_cents, actual_labor_cost_cents, labor_cost_source"
       )
       .eq("status", "completed")
       .not("completed_at", "is", null);
@@ -184,62 +208,6 @@ async function loadVisitLinks(supabase: Client, window: VisitCostingWindow) {
     if (window.to) q = q.lte("completed_at", `${window.to} ${SENTINEL_TS}`);
     return q.order("id").range(from, to);
   });
-}
-
-interface JobRow {
-  id: string;
-  crew_id: string | null;
-}
-
-/** Job-level crew, used when a visit has no crew of its own (view semantics). */
-async function loadJobs(supabase: Client, jobIds: string[]) {
-  return fetchByIdChunks(jobIds, (idChunk) =>
-    fetchAllPages<JobRow>((from, to) =>
-      supabase
-        .from("crm_jobs")
-        .select("id, crew_id")
-        .in("id", idChunk)
-        .is("deleted_at", null)
-        .order("id")
-        .range(from, to)
-    )
-  );
-}
-
-interface CrewBurden {
-  /** crew_id → average labor_burden_cents_per_hour of members with a rate. */
-  byCrew: Map<string, number>;
-  /** Org-wide average across all members with a rate, or 0 if none. */
-  orgAverage: number;
-}
-
-/** crm_crew_members has no active/deleted flag — every member with a rate counts. */
-async function loadCrewBurden(supabase: Client): Promise<CrewBurden> {
-  const members = await fetchAllPages<{ crew_id: string | null; labor_burden_cents_per_hour: number | null }>(
-    (from, to) =>
-      supabase
-        .from("crm_crew_members")
-        .select("crew_id, labor_burden_cents_per_hour")
-        .gt("labor_burden_cents_per_hour", 0)
-        .order("id")
-        .range(from, to)
-  );
-
-  const sums = new Map<string, { total: number; count: number }>();
-  let orgTotal = 0;
-  for (const m of members) {
-    const rate = num(m.labor_burden_cents_per_hour);
-    orgTotal += rate;
-    if (!m.crew_id) continue;
-    const acc = sums.get(m.crew_id) ?? { total: 0, count: 0 };
-    acc.total += rate;
-    acc.count += 1;
-    sums.set(m.crew_id, acc);
-  }
-
-  const byCrew = new Map<string, number>();
-  for (const [crewId, acc] of sums) byCrew.set(crewId, acc.total / acc.count);
-  return { byCrew, orgAverage: members.length > 0 ? orgTotal / members.length : 0 };
 }
 
 interface MaterialRow {
@@ -286,15 +254,16 @@ interface ServiceShareRow {
   service_id: string | null;
   service_name: string | null;
   budgeted_hours: number | null;
-  actual_man_hours: number | null;
+  /** qty × rate of the service line itself (0 for unpriced lines). */
+  line_revenue_cents: number | null;
 }
 
-async function loadServiceRows(supabase: Client, visitIds: string[]) {
+async function loadServiceRows(supabase: UntypedClient, visitIds: string[]) {
   return fetchByIdChunks(visitIds, (idChunk) =>
     fetchAllPages<ServiceShareRow>((from, to) =>
       supabase
         .from("rpt_job_services")
-        .select("visit_id, service_id, service_name, budgeted_hours, actual_man_hours")
+        .select("visit_id, service_id, service_name, budgeted_hours, line_revenue_cents")
         .in("visit_id", idChunk)
         .eq("visit_status", "completed")
         .order("id")
@@ -341,9 +310,15 @@ export function splitCents(totalCents: number, shares: number[]): number[] {
   return parts;
 }
 
+/**
+ * Split a visit across its service lines by the lines' OWN prices (qty × rate),
+ * so a $0 line never absorbs a priced visit; only when every line is unpriced
+ * fall back to budgeted man-hours, then an even split. Mirrors
+ * rpt_job_services.revenue_share.
+ */
 function buildServiceShares(rows: ServiceShareRow[]): VisitServiceShare[] {
   if (rows.length === 0) return [];
-  let weights = rows.map((r) => num(r.actual_man_hours));
+  let weights = rows.map((r) => num(r.line_revenue_cents));
   if (weights.every((w) => w <= 0)) weights = rows.map((r) => num(r.budgeted_hours));
   const shares = normalizeShares(weights);
   return rows.map((r, i) => ({
@@ -389,10 +364,12 @@ export async function loadVisitCosting(
   supabase: Client,
   window: VisitCostingWindow
 ): Promise<VisitCostingData> {
-  const [visitRows, linkRows, burden, services] = await Promise.all([
-    loadCompletedVisits(supabase, window),
+  // Views with columns newer than the generated types — see UntypedClient.
+  const views = supabase as unknown as UntypedClient;
+
+  const [visitRows, linkRows, services] = await Promise.all([
+    loadCompletedVisits(views, window),
     loadVisitLinks(supabase, window),
-    loadCrewBurden(supabase),
     loadServiceTargets(supabase),
   ]);
 
@@ -400,13 +377,11 @@ export async function loadVisitCosting(
   const visitIds = visitRows.map((v) => v.id).filter((id): id is string => !!id);
   const jobIds = Array.from(new Set(linkRows.map((l) => l.job_id)));
 
-  const [jobRows, materialRows, serviceRows] = await Promise.all([
-    loadJobs(supabase, jobIds),
+  const [materialRows, serviceRows] = await Promise.all([
     loadMaterials(supabase, jobIds),
-    loadServiceRows(supabase, visitIds),
+    loadServiceRows(views, visitIds),
   ]);
 
-  const jobCrew = new Map(jobRows.map((j) => [j.id, j.crew_id]));
   const materials = bucketMaterials(materialRows);
   const completedCounts = await loadCompletedVisitCounts(
     supabase,
@@ -419,10 +394,9 @@ export async function loadVisitCosting(
     if (!row.id || !row.completed_at) continue;
     const link = links.get(row.id);
     const jobId = link?.job_id ?? null;
-    const crewId = link?.crew_id ?? (jobId ? jobCrew.get(jobId) ?? null : null);
     const manHours = num(row.man_hours);
 
-    const labor = resolveLabor(row.actual_labor_cost_cents, manHours, crewId, burden);
+    const labor = resolveLabor(row.actual_labor_cost_cents, row.labor_cost_source);
     const materialsCents = resolveMaterials(row.id, jobId, materials, completedCounts);
 
     visits.push({
@@ -432,12 +406,14 @@ export async function loadVisitCosting(
       serviceNames: row.service_names ?? "—",
       crewName: row.crew_name,
       completedAt: row.completed_at,
+      workedDate: row.worked_date ?? row.completed_at.slice(0, 10),
       menCount: Math.max(1, Math.round(num(row.men_count) || 1)),
       budgetedHours: round2(num(row.budgeted_hours)),
       manHours: round2(manHours),
       revenueCents: Math.round(num(row.revenue_cents)),
       laborCostCents: labor.cents,
-      laborEstimated: labor.estimated,
+      laborEstimated: labor.source === "estimated",
+      laborSource: labor.source,
       materialsCostCents: materialsCents,
       services: buildServiceShares(servicesByVisit.get(row.id) ?? []),
     });
@@ -446,15 +422,21 @@ export async function loadVisitCosting(
   return { visits, services };
 }
 
+/**
+ * rpt_job_visits already applies the labor fallback chain (clock-out actual →
+ * crew rate → org rate → 0) and reports which layer won in labor_cost_source;
+ * here we only normalise the flag. A missing/unknown flag with a positive
+ * amount is treated as an actual (the pre-migration view had no flag).
+ */
 function resolveLabor(
-  actualCents: number | null,
-  manHours: number,
-  crewId: string | null,
-  burden: CrewBurden
-): { cents: number; estimated: boolean } {
-  if (actualCents != null) return { cents: Math.round(num(actualCents)), estimated: false };
-  const rate = (crewId ? burden.byCrew.get(crewId) : undefined) ?? burden.orgAverage;
-  return { cents: Math.round(manHours * rate), estimated: true };
+  cents: number | null,
+  source: string | null
+): { cents: number; source: LaborCostSource } {
+  const amount = Math.round(num(cents));
+  if (source === "actual" || source === "estimated" || source === "none") {
+    return { cents: amount, source };
+  }
+  return { cents: amount, source: amount > 0 ? "actual" : "none" };
 }
 
 function resolveMaterials(

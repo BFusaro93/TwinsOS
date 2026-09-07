@@ -58,6 +58,9 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         "probability_pct",
         "age_days",
         "sales_rep",
+        // estimates.reason — the won/lost reason captured when the stage
+        // changed (E-05: lost rows had no reason column).
+        "reason",
       ],
       filters: [
         ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),

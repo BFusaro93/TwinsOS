@@ -8,6 +8,7 @@ import {
   pct,
   ratio,
   type CostedVisit,
+  type LaborCostSource,
   type ServiceTarget,
 } from "@/lib/visit-costing";
 
@@ -21,6 +22,8 @@ export interface JobCostingReportRow {
   serviceNames: string;
   crewName: string | null;
   completedAt: string;
+  /** "YYYY-MM-DD" — completed_at in Eastern time, else scheduled_date (same basis as Job Cost Summary). */
+  workedDate: string;
   menCount: number;
   budgetedHours: number;
   actualManHours: number;
@@ -35,8 +38,10 @@ export interface JobCostingReportRow {
   /** revPerManHr − target. */
   overUnderCents: number;
   laborCostCents: number;
-  /** Labor was estimated (man-hours × crew burden) — no crew clock-out. */
+  /** Labor was estimated (man-hours × crew/org labor rate) — no crew clock-out. */
   laborEstimated: boolean;
+  /** 'none' = no labor rate configured anywhere, so laborCostCents is a placeholder 0. */
+  laborSource: LaborCostSource;
   revenueCents: number;
   materialsCostCents: number;
   grossProfitCents: number;
@@ -62,6 +67,7 @@ function toRow(visit: CostedVisit, services: Map<string, ServiceTarget>): JobCos
     serviceNames: visit.serviceNames,
     crewName: visit.crewName,
     completedAt: visit.completedAt,
+    workedDate: visit.workedDate,
     menCount: visit.menCount,
     budgetedHours: visit.budgetedHours,
     actualManHours: visit.manHours,
@@ -72,6 +78,7 @@ function toRow(visit: CostedVisit, services: Map<string, ServiceTarget>): JobCos
     overUnderCents: targetRateCents > 0 && revPerManHrCents > 0 ? revPerManHrCents - targetRateCents : 0,
     laborCostCents: visit.laborCostCents,
     laborEstimated: visit.laborEstimated,
+    laborSource: visit.laborSource,
     revenueCents: visit.revenueCents,
     materialsCostCents: visit.materialsCostCents,
     grossProfitCents,

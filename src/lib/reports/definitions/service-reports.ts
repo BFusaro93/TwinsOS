@@ -236,20 +236,23 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       "Shows visit progress and earned vs pending revenue for each service package.",
     filters: [],
     notes: [
-      "Total Visits counts every visit on each package job, cancelled included; Completed counts visits in Completed status; Cancelled counts cancelled visits; Remaining is Total − Completed − Cancelled.",
-      "Earned is completed visits × the per-visit amount — the visit's own rate × qty when set, otherwise the job total split evenly across its non-cancelled visits. Pending is the job total minus Earned. A package job with no visits generated yet shows entirely as Pending.",
+      "One row per package job (client + package). Total Visits counts every visit on the job, cancelled and skipped included; Completed counts visits in Completed status; Cancelled and Skipped count those statuses; Remaining is Total − Completed − Cancelled − Skipped.",
+      "Job Total is the package job's price: its total when set, otherwise its rate (kept in sync with the job's service lines). Earned is completed visits × the per-visit amount — the visit's own rate × qty when every completed visit has one, otherwise Job Total split evenly across the deliverable (non-cancelled, non-skipped) visits. Pending is remaining visits × that per-visit amount (Job Total − Earned when visits carry their own rates). A package job with no visits generated yet shows entirely as Pending.",
     ],
     run: async ({ supabase }) => {
       interface Row {
         id: string;
+        job_number: number | null;
         package_name: string | null;
         total_cents: number | null;
+        rate_cents: number | null;
         scheduled_date: string | null;
+        clients: { display_name: string | null } | { display_name: string | null }[] | null;
       }
       const rows = await fetchAllRows<Row>(() =>
         supabase
           .from("crm_jobs")
-          .select("id, package_name, total_cents, scheduled_date")
+          .select("id, job_number, package_name, total_cents, rate_cents, scheduled_date, clients(display_name)")
           .eq("job_type", "package")
           .is("deleted_at", null)
       );
@@ -269,7 +272,8 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         total: number;
         completed: number;
         cancelled: number;
-        completedCents: number | null; // null until a completed visit lacks its own rate
+        skipped: number;
+        completedCents: number | null; // null once a completed visit lacks its own rate
         min: string | null;
         max: string | null;
       }
@@ -290,12 +294,16 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
             total: 0,
             completed: 0,
             cancelled: 0,
+            skipped: 0,
             completedCents: 0,
             min: null,
             max: null,
           };
           jv.total += 1;
           if (v.status === "cancelled") jv.cancelled += 1;
+          // E-06: a skipped visit is never delivered either — treat it like
+          // cancelled for Remaining and for the even split.
+          if (v.status === "skipped") jv.skipped += 1;
           if (v.status === "completed") {
             jv.completed += 1;
             if (v.rate_cents != null && jv.completedCents !== null) {
@@ -314,81 +322,73 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         }
       }
 
-      interface Summary {
-        package_name: string;
-        total_visits: number;
-        completed: number;
-        cancelled: number;
-        remaining: number;
-        first_date: string | null;
-        last_date: string | null;
-        earned_cents: number;
-        pending_cents: number;
-      }
-      const byPackage = new Map<string, Summary>();
-      for (const r of rows) {
-        const key = r.package_name || "(unnamed)";
-        let summary = byPackage.get(key);
-        if (!summary) {
-          summary = {
-            package_name: key,
-            total_visits: 0,
-            completed: 0,
-            cancelled: 0,
-            remaining: 0,
-            first_date: null,
-            last_date: null,
-            earned_cents: 0,
-            pending_cents: 0,
-          };
-          byPackage.set(key, summary);
-        }
+      // E-06: one row per package JOB (client + package), never merged across
+      // clients by package name — that hid which client's package was behind
+      // and mixed different jobs' totals.
+      const resultRows = rows.map((r) => {
+        const clientRow = Array.isArray(r.clients) ? r.clients[0] : r.clients;
         const jv = visitsByJob.get(r.id);
-        const jobTotal = r.total_cents ?? 0;
+        // crm_jobs.total_cents is 0 on most package jobs (nothing writes it);
+        // rate_cents is the job's price and a rollup trigger keeps it equal to
+        // Σ included service lines — so it's the reliable job total.
+        const jobTotal = (r.total_cents ?? 0) > 0 ? (r.total_cents ?? 0) : (r.rate_cents ?? 0);
         const total = jv?.total ?? 0;
         const completed = jv?.completed ?? 0;
         const cancelled = jv?.cancelled ?? 0;
-        // Cancelled visits are never delivered, so the even split of the job
-        // total is over the deliverable (non-cancelled) visits.
-        const deliverable = total - cancelled;
+        const skipped = jv?.skipped ?? 0;
+        const remaining = Math.max(total - completed - cancelled - skipped, 0);
+        // Cancelled/skipped visits are never delivered, so the even split of
+        // the job total is over the deliverable visits.
+        const deliverable = total - cancelled - skipped;
+        const perVisit = deliverable > 0 ? jobTotal / deliverable : 0;
         let earned = 0;
-        if (completed > 0) {
-          earned =
-            jv?.completedCents != null
-              ? jv.completedCents
-              : deliverable > 0
-                ? Math.round((jobTotal * completed) / deliverable)
-                : 0;
+        let pending: number;
+        if (completed > 0 && jv?.completedCents != null) {
+          // Every completed visit carries its own rate — trust those, and
+          // whatever is left of the job total is still pending.
+          earned = jv.completedCents;
+          pending = Math.max(jobTotal - earned, 0);
+        } else {
+          earned = completed > 0 ? Math.round(perVisit * completed) : 0;
+          // No visits generated yet → the whole job is pending.
+          pending = total === 0 ? jobTotal : Math.round(perVisit * remaining);
         }
-        summary.total_visits += total;
-        summary.completed += completed;
-        summary.cancelled += cancelled;
-        summary.earned_cents += earned;
-        summary.pending_cents += Math.max(jobTotal - earned, 0);
-
-        const earliest = r.scheduled_date ?? jv?.min ?? null;
-        const latest = jv?.max ?? r.scheduled_date ?? null;
-        if (earliest && (!summary.first_date || earliest < summary.first_date)) {
-          summary.first_date = earliest;
-        }
-        if (latest && (!summary.last_date || latest > summary.last_date)) {
-          summary.last_date = latest;
-        }
-      }
-
-      const resultRows = [...byPackage.values()]
-        .map((s) => ({ ...s, remaining: Math.max(s.total_visits - s.completed - s.cancelled, 0) }))
-        .sort((a, b) => a.package_name.localeCompare(b.package_name));
+        return {
+          client_name: clientRow?.display_name ?? "—",
+          package_name: r.package_name || "(unnamed)",
+          job_number: r.job_number,
+          total_visits: total,
+          completed,
+          cancelled,
+          skipped,
+          remaining,
+          first_date: r.scheduled_date ?? jv?.min ?? null,
+          last_date: jv?.max ?? r.scheduled_date ?? null,
+          job_total_cents: jobTotal,
+          earned_cents: earned,
+          pending_cents: pending,
+        };
+      });
+      resultRows.sort(
+        (a, b) =>
+          a.client_name.localeCompare(b.client_name) ||
+          a.package_name.localeCompare(b.package_name) ||
+          (a.job_number ?? 0) - (b.job_number ?? 0)
+      );
 
       return buildResult(
         [
+          col("client_name", "Client"),
           col("package_name", "Package"),
+          col("job_number", "Job #", "number", false),
           col("total_visits", "Total Visits", "number", false),
           col("completed", "Completed", "number", false),
           col("cancelled", "Cancelled", "number", false),
+          col("skipped", "Skipped", "number", false),
           col("remaining", "Remaining", "number", false),
           col("first_date", "First Visit", "date"),
           col("last_date", "Last Visit", "date"),
+          col("job_total_cents", "Job Total", "money"),
           col("earned_cents", "Earned", "money"),
           col("pending_cents", "Pending", "money"),
         ],

@@ -19,6 +19,7 @@ import type {
   TicketBreakdown,
 } from "@/types/company-report";
 import { runAnalysis } from "@/lib/reports/engine";
+import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
 import { logger } from "@/lib/logger";
 
 // ============================================================
@@ -75,17 +76,23 @@ function monthLabel(year: number, month0: number, isCurrent: boolean): string {
   return isCurrent ? `${name} ${year} MTD` : `${name} ${year}`;
 }
 
-/** The trailing 3 calendar months ending with the current month (today = MTD). */
+/**
+ * The trailing 3 calendar months ending with the current month (today = MTD).
+ * "Today" and the month boundaries are the calendar date in America/New_York
+ * (E-16: the server's UTC date rolled the header to "Sep 7" at 9:50 PM ET on
+ * Sep 6 and would have leaked tomorrow's boundary into every MTD window).
+ */
 function trailingMonths(now: Date): MonthWindow[] {
+  const today = nyDateParts(now);
   const windows: MonthWindow[] = [];
   for (let i = 2; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const year = d.getFullYear();
-    const month0 = d.getMonth();
+    // ymd() normalises month underflow (e.g. month -1 → December of last year).
+    const [year, month1] = ymd(today.year, today.month - i, 1).split("-").map(Number);
+    const month0 = month1 - 1;
     const isCurrent = i === 0;
-    const from = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
-    const lastDay = isCurrent ? now.getDate() : new Date(year, month0 + 1, 0).getDate();
-    const to = `${year}-${String(month0 + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const from = ymd(year, month0, 1);
+    // Day 0 of the next month = last day of this month.
+    const to = isCurrent ? isoNy(now) : ymd(year, month0 + 1, 0);
     windows.push({ label: monthLabel(year, month0, isCurrent), from, to, isCurrent });
   }
   return windows;
@@ -633,9 +640,10 @@ async function computeCollections(supabase: Client): Promise<CollectionsSection>
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 export async function computeCompanyReport(supabase: Client, now = new Date()): Promise<CompanyReportData> {
-  const year = now.getFullYear();
-  const ytdFrom = `${year}-01-01`;
-  const nowStr = now.toISOString().slice(0, 10);
+  // E-16: "as of" dates are the Eastern-time calendar date, never the UTC one.
+  const nowStr = isoNy(now);
+  const { year } = nyDateParts(now);
+  const ytdFrom = ymd(year, 0, 1);
   const months = trailingMonths(now);
 
   const areas: Array<[string, () => Promise<unknown>]> = [
@@ -676,7 +684,7 @@ export async function computeCompanyReport(supabase: Client, now = new Date()): 
   const operations = unwrap(operationsResult, "operations", emptyOps);
   const collections = unwrap(collectionsResult, "collections", emptyCollections);
 
-  const ytdLabel = `Jan 1 – ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${year}`;
+  const ytdLabel = `Jan 1 – ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}, ${year}`;
 
   const data: CompanyReportData = {
     generatedAt: new Date().toISOString(),

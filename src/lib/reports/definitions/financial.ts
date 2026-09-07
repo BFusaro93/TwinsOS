@@ -275,7 +275,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       const { from, to } = resolveDateRange(params, "this_year");
       let query = supabase
         .from("crm_invoices")
-        .select("invoice_date, subtotal_cents, tax_cents, total_cents")
+        .select("id, invoice_date, subtotal_cents, discount_cents, tax_cents, total_cents")
         .is("deleted_at", null)
         .in("status", ISSUED_INVOICE_STATUSES);
       if (from) query = query.gte("invoice_date", from);
@@ -284,24 +284,69 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       if (error) throw new Error(error.message);
 
       type Row = {
+        id: string;
         invoice_date: string | null;
         subtotal_cents: number | null;
+        discount_cents: number | null;
         tax_cents: number | null;
         total_cents: number | null;
       };
+      const invoices = (data ?? []) as unknown as Row[];
+
+      // E-08: the tax BASE is not the subtotal. It is the taxable lines net of
+      // their own line discounts, less the document-level discount (never
+      // negative) — the exact formula the app taxes with
+      // (increment_invoice_totals / useUpdateInvoiceFinancials), so
+      // base × rate = tax on every row. Pull the lines for the invoices in the
+      // window, chunked because the id list rides on the URL.
+      type LineRow = {
+        invoice_id: string;
+        total_cents: number | null;
+        discount_cents: number | null;
+        is_taxable: boolean | null;
+      };
+      const taxableNetByInvoice = new Map<string, number>();
+      const invoicesWithLines = new Set<string>();
+      const ids = invoices.map((r) => r.id);
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data: lines, error: linesError } = await supabase
+          .from("crm_invoice_line_items")
+          .select("invoice_id, total_cents, discount_cents, is_taxable")
+          .in("invoice_id", ids.slice(i, i + 200))
+          .limit(5000);
+        if (linesError) throw new Error(linesError.message);
+        for (const li of (lines ?? []) as unknown as LineRow[]) {
+          invoicesWithLines.add(li.invoice_id);
+          if (!li.is_taxable) continue;
+          const net = (li.total_cents ?? 0) - (li.discount_cents ?? 0);
+          taxableNetByInvoice.set(li.invoice_id, (taxableNetByInvoice.get(li.invoice_id) ?? 0) + net);
+        }
+      }
+
       const byMonth = new Map<
         string,
         { total: number; taxable: number; nonTaxable: number; tax: number }
       >();
-      for (const r of (data ?? []) as unknown as Row[]) {
+      for (const r of invoices) {
         const month = (r.invoice_date ?? "").slice(0, 7) || "(no date)";
         const bucket =
           byMonth.get(month) ?? { total: 0, taxable: 0, nonTaxable: 0, tax: 0 };
         const subtotal = r.subtotal_cents ?? 0;
+        const discount = r.discount_cents ?? 0;
         const tax = r.tax_cents ?? 0;
+        // Net sales excluding tax; the taxable/non-taxable split sums to this.
+        const netSales = Math.max(0, subtotal - discount);
+        let taxable: number;
+        if (invoicesWithLines.has(r.id)) {
+          const taxableNet = taxableNetByInvoice.get(r.id) ?? 0;
+          taxable = taxableNet > 0 ? Math.min(netSales, Math.max(0, taxableNet - discount)) : 0;
+        } else {
+          // Legacy header-only invoice: no line detail to work from.
+          taxable = tax > 0 ? netSales : 0;
+        }
         bucket.total += r.total_cents ?? 0;
-        if (tax > 0) bucket.taxable += subtotal;
-        else bucket.nonTaxable += subtotal;
+        bucket.taxable += taxable;
+        bucket.nonTaxable += netSales - taxable;
         bucket.tax += tax;
         byMonth.set(month, bucket);
       }
@@ -325,7 +370,10 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
           col("tax_collected_cents", "Tax Collected", "money"),
         ],
         rows,
-        ["Tax is reported on invoice date (accrual). Excludes draft and void invoices."]
+        [
+          "Tax is reported on invoice date (accrual). Excludes draft and void invoices.",
+          "Taxable Sales is the actual tax base: taxable line items net of their line discounts, less the invoice-level discount — so Taxable Sales × the tax rate = Tax Collected. Non-Taxable Sales is the rest of net sales (subtotal − discounts); Total Sales includes tax.",
+        ]
       );
     },
   },
