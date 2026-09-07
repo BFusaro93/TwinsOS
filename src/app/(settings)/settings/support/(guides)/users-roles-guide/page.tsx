@@ -177,7 +177,10 @@ export default function UsersRolesGuidePage() {
         <p>
           Without both, a user with a perfectly valid organization role (say, Manager) is blocked
           from the CRM module entirely — the CRM access gate checks for a <code>crm_role_id</code>,
-          not for anything on <code>profiles.role</code>.
+          not for anything on <code>profiles.role</code>. The Landscapt tile on their Home screen
+          reflects this too: it only appears once both conditions above are met, so an unlinked
+          user simply doesn&apos;t see a tile that would otherwise dead-end in a &quot;not
+          linked&quot; screen.
         </p>
         <Callout>
           <strong>Admins skip all of this.</strong> If <code>profiles.role === &quot;admin&quot;</code>,
@@ -223,12 +226,23 @@ export default function UsersRolesGuidePage() {
             is already registered elsewhere in the system, a password-reset link is sent instead so
             they land on the same set-password screen.
           </li>
-          <li>An Admin can resend a pending invite, change a user&apos;s role, or deactivate them at any time from the same table.</li>
+          <li>
+            An Admin can resend a pending invite, change a user&apos;s role, or deactivate them at
+            any time from the same table. Deactivating revokes their login outright — it&apos;s not
+            just a status label, it bans their account the same moment, so they&apos;re signed out
+            within the hour even if already logged in. A deactivated user shows an{" "}
+            <strong>Inactive</strong> badge and a reactivate icon in place of the trash icon;
+            clicking it restores their login immediately, with their role and any CRM employee link
+            untouched.
+          </li>
         </ol>
         <p>
           A separate <strong>Create Crew Account</strong> flow (also Admin-only, same page) creates a
           shared login for a field crew team rather than an individual — you set a team name and a
-          password directly, and the credentials are shown once, at creation time.
+          password directly, and the credentials are shown once, at creation time. If that password
+          is lost or needs changing later, an Admin can set a new one for the account directly from
+          the Users table — crew accounts use auto-generated addresses and can&apos;t receive a
+          normal password-reset email.
         </p>
       </Section>
 
