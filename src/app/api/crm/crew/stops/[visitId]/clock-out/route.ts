@@ -7,6 +7,11 @@ import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { allocateStopHours } from "@/lib/utils/visit-hours";
 import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { isoNy } from "@/lib/reports/ny-date";
+import { createServiceClient } from "@/lib/supabase/server";
+import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("crew/stops/clock-out");
 
 const Body = z.object({
   notes: z.string().optional(),
@@ -137,8 +142,13 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
   }
 
-  const startedAt = anchor.clocked_in_at
-    ?? openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
+  // Duration is measured from the OPEN visits' own clock-in. The anchor can
+  // be a sibling that was already completed earlier in the day (the crew home
+  // groups every visit for the client/day into one stop and links the first),
+  // and using its clock-in credited a fresh one-minute visit with 25 minutes.
+  const anchorIsOpen = openRows.some((r) => r.id === anchor.id);
+  const startedAt = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
+    ?? (anchorIsOpen ? anchor.clocked_in_at : null)
     ?? null;
   const menCount = anchor.men_count || 1;
 
@@ -186,7 +196,10 @@ export async function POST(
         status: "completed",
         actual_hours: allocation?.get(row.id) ?? undefined,
         men_count: menCount,
-        completion_notes: row.id === anchor.id ? (notes ?? null) : undefined,
+        // Notes belong to the anchor when it's part of this clock-out; when the
+        // anchor was already completed, the crew typed them for the visits
+        // being closed now — don't drop them.
+        completion_notes: (row.id === anchor.id || !anchorIsOpen) ? (notes ?? null) : undefined,
         updated_at: now,
       })
       .eq("id", row.id);
@@ -266,6 +279,28 @@ export async function POST(
     }
   } catch {
     // Non-fatal — labor cost rollup failure should not block clock-out response
+  }
+
+  // Billing + timeline + automations for every visit closed by this stop —
+  // the same side effects the office "Mark Complete" route and the per-visit
+  // crew clock-out apply. Crew accounts have no RLS access to invoice tables,
+  // so this runs under the service-role client pinned to the visit's org;
+  // ownership was proven by assertCallerOwnsVisit above. Non-fatal.
+  const serviceClient = createServiceClient();
+  for (const row of openRows) {
+    try {
+      const sideEffects = await applyVisitCompletionSideEffects({
+        supabase: serviceClient,
+        orgId: row.org_id,
+        visitId: row.id,
+        userId: user.id,
+      });
+      if (!sideEffects.ok) {
+        log.error("completion side effects failed", { visitId: row.id, error: sideEffects.error });
+      }
+    } catch (err) {
+      log.error("completion side effects threw", { visitId: row.id, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
