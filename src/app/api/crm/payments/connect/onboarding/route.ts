@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { syncConnectStatusFromStripe } from "@/lib/stripe/connect";
 import { logger } from "@/lib/logger";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
 
 const log = logger.child("stripe connect onboarding");
 
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
   // Check Stripe directly rather than trusting only the webhook-cached DB
   // columns — some Stripe workspaces only emit newer v2 Accounts API events,
   // which this app's webhook doesn't listen for, leaving the cache stale.
+  try {
   if (org.stripe_connect_account_id) {
     const synced = await syncConnectStatusFromStripe(stripe, org.id, org.stripe_connect_account_id);
     if (synced.chargesEnabled) {
@@ -110,4 +112,10 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({ url: accountLink.url });
+  } catch (err) {
+    // e.g. the platform key and this connected account are in different
+    // Stripe modes (live key, test-mode account) — surface Stripe's message
+    // instead of an empty 500 the settings page can't parse.
+    return stripeErrorResponse(err, log, { orgId: org.id, connectedAccountId: org.stripe_connect_account_id });
+  }
 }
