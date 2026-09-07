@@ -253,3 +253,20 @@ export function formatMonthDay(ymd: string | null | undefined): string {
   const [, m, d] = ymd.slice(0, 10).split("-").map(Number);
   return `${m}/${d}`;
 }
+
+/**
+ * "9:42 PM" from a 24h "HH:mm" / "HH:mm:ss" string — the shape a Postgres
+ * `time` column (crm_job_visits.start_time/end_time) or a native
+ * <input type="time"> value uses. Returns the input untouched when it isn't
+ * a parseable time so a bad value is still visible rather than blanked.
+ */
+export function formatTimeOfDay(value: string | null | undefined): string {
+  if (!value) return "";
+  const [hStr, mStr] = value.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr ?? "0");
+  if (Number.isNaN(h) || Number.isNaN(m)) return value;
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}

@@ -10,6 +10,7 @@ import { useCurrentUserStore } from "@/stores";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
 import { Button } from "@/components/ui/button";
 import { visitServiceNames } from "@/lib/utils/visit-stops";
+import { formatTimeOfDay } from "@/lib/utils";
 import type { Stop } from "@/lib/utils/visit-stops";
 import type { VisitStatus } from "@/types/crm-jobs";
 
@@ -54,7 +55,7 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
           {startTime && (
             <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {startTime}
+              {formatTimeOfDay(startTime)}
             </p>
           )}
         </div>

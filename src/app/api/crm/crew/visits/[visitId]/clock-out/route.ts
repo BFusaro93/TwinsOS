@@ -3,6 +3,11 @@ import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { isoNy } from "@/lib/reports/ny-date";
+import { createServiceClient } from "@/lib/supabase/server";
+import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("crew/clock-out");
 
 const Body = z.object({
   notes: z.string().optional(),
@@ -130,6 +135,27 @@ export async function POST(
     } catch {
       // Non-fatal — labor cost rollup failure should not block clock-out response
     }
+  }
+
+  // Billing + timeline + automations — the same side effects the office
+  // "Mark Complete" route applies, so a visit finished from the field is
+  // invoiced instead of silently dropping off the books. Crew accounts have
+  // no RLS access to invoice tables, so this runs under the service-role
+  // client, pinned to the visit's org; ownership of the visit was already
+  // proven by assertCallerOwnsVisit above. Non-fatal — the clock-out itself
+  // has already been recorded.
+  try {
+    const sideEffects = await applyVisitCompletionSideEffects({
+      supabase: createServiceClient(),
+      orgId: existing.org_id as string,
+      visitId,
+      userId: user.id,
+    });
+    if (!sideEffects.ok) {
+      log.error("completion side effects failed", { visitId, error: sideEffects.error });
+    }
+  } catch (err) {
+    log.error("completion side effects threw", { visitId, error: err instanceof Error ? err.message : String(err) });
   }
 
   return NextResponse.json(data);
