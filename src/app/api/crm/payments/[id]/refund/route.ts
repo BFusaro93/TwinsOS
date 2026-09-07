@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
 
@@ -85,13 +85,13 @@ export async function POST(
   }
 
   if (payment.stripe_payment_intent_id) {
-    if (!isStripeConfigured()) {
+    if (!isStripeConfigured() && !isStripeTestConfigured()) {
       return NextResponse.json({ error: "Card payments are not configured" }, { status: 400 });
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: org } = await (db as any)
       .from("organizations")
-      .select("stripe_connect_account_id")
+      .select("stripe_connect_account_id, stripe_connect_livemode")
       .eq("id", profile.org_id)
       .single();
     if (!org?.stripe_connect_account_id) {
@@ -99,7 +99,7 @@ export async function POST(
     }
 
     try {
-      const stripe = getStripe();
+      const stripe = getStripeForOrg(org.stripe_connect_livemode);
       await stripe.refunds.create(
         {
           payment_intent: payment.stripe_payment_intent_id,

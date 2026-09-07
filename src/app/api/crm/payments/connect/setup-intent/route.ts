@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { logger } from "@/lib/logger";
@@ -17,7 +17,7 @@ const CreateSchema = z.object({
  * one-off charge flow in create-intent/route.ts but creates a SetupIntent (no charge)
  * against a Stripe Customer on the org's connected account. */
 export async function POST(request: Request) {
-  if (!isStripeConfigured()) {
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
@@ -44,9 +44,11 @@ export async function POST(request: Request) {
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled")
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase.from("organizations") as any)
+    .select("stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode")
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const stripe = getStripe();
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
   if (paymentMethod === "us_bank_account") {
     if (!org.ach_payments_enabled) {
@@ -109,7 +111,7 @@ const SaveSchema = z.object({
 /** After the client confirms the SetupIntent with Stripe.js, this records the resulting
  * payment method on the client so autopay/invoices-to-charge can use it later. */
 export async function PUT(request: Request) {
-  if (!isStripeConfigured()) {
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
@@ -136,16 +138,18 @@ export async function PUT(request: Request) {
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("stripe_connect_account_id")
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase.from("organizations") as any)
+    .select("stripe_connect_account_id, stripe_connect_livemode")
     .eq("id", profile.org_id)
     .single();
   if (!org?.stripe_connect_account_id) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  const stripe = getStripe();
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
   const setupIntent = await stripe.setupIntents.retrieve(
     setupIntentId,
     { expand: ["payment_method"] },

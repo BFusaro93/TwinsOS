@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import {
   computeProcessingFee,
   decodeAllocations,
@@ -36,7 +36,7 @@ const BLOCKING_PAYMENT_INTENT_STATUSES = new Set([
  * invoices — the saved-method counterpart to create-intent-multi/route.ts. Reuses the same
  * off-session pattern as autopay/charge/route.ts, just for more than one invoice at a time. */
 export async function POST(request: Request) {
-  if (!isStripeConfigured()) {
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
@@ -103,10 +103,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: org } = await supabase
-    .from("organizations")
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase.from("organizations") as any)
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
     )
     .eq("id", profile.org_id)
     .single();
@@ -133,7 +135,7 @@ export async function POST(request: Request) {
         )
       : { feeCents: 0, totalChargeCents: balanceCents };
 
-  const stripe = getStripe();
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
   // chargeIdempotencyKey only collapses attempts within the same 10-second
   // bucket — a double-submit further apart than that (two staff, or one

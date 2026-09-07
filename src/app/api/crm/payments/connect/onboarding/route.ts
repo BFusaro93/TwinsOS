@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured, resolvedStripeMode } from "@/lib/stripe/server";
 import { syncConnectStatusFromStripe } from "@/lib/stripe/connect";
 import { logger } from "@/lib/logger";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
@@ -8,7 +8,9 @@ import { stripeErrorResponse } from "@/lib/stripe/errors";
 const log = logger.child("stripe connect onboarding");
 
 export async function POST(request: Request) {
-  if (!isStripeConfigured()) {
+  // A test-key-only setup (no live key at all) should still be able to onboard
+  // the sandbox/dogfood org against Stripe test mode.
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
@@ -26,14 +28,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only admins can manage payment settings" }, { status: 403 });
   }
 
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("id, name, stripe_connect_account_id")
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase.from("organizations") as any)
+    .select("id, name, stripe_connect_account_id, stripe_connect_livemode")
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
 
-  const stripe = getStripe();
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
+  const livemode = resolvedStripeMode(org.stripe_connect_livemode);
   const serviceClient = createServiceClient();
 
   // Check Stripe directly rather than trusting only the webhook-cached DB
@@ -41,7 +46,7 @@ export async function POST(request: Request) {
   // which this app's webhook doesn't listen for, leaving the cache stale.
   try {
   if (org.stripe_connect_account_id) {
-    const synced = await syncConnectStatusFromStripe(stripe, org.id, org.stripe_connect_account_id);
+    const synced = await syncConnectStatusFromStripe(stripe, org.id, org.stripe_connect_account_id, livemode);
     if (synced.chargesEnabled) {
       // Already fully onboarded. Standard accounts are the connected merchant's own,
       // independent Stripe account — createLoginLink() is an Express-only API and
@@ -63,9 +68,16 @@ export async function POST(request: Request) {
     });
     accountId = account.id;
 
-    const { error: updateError } = await serviceClient
-      .from("organizations")
-      .update({ stripe_connect_account_id: accountId, stripe_connect_status: "pending" })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see stripe_connect_livemode comment above
+    const { error: updateError } = await (serviceClient.from("organizations") as any)
+      .update({
+        stripe_connect_account_id: accountId,
+        stripe_connect_status: "pending",
+        // Stripe's Account object has no `livemode` field of its own — this
+        // account was just created with `stripe` above, so its mode is
+        // exactly the mode of that client.
+        stripe_connect_livemode: livemode,
+      })
       .eq("id", org.id);
     if (updateError) {
       log.error("failed to save connect account id", { error: updateError, orgId: org.id });

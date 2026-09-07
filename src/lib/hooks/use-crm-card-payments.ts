@@ -12,6 +12,10 @@ export interface ConnectStatus {
   status: "not_started" | "pending" | "active" | "restricted";
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
+  /** false = this org's Stripe Connect account is a Stripe TEST-mode account
+   * (e.g. the dogfood/sandbox org) — no real money moves through it. Absent/
+   * null/true = live mode (the normal case). */
+  livemode?: boolean | null;
 }
 
 export function useConnectStatus() {

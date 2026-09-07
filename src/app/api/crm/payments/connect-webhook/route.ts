@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { methodForPaymentIntent, decodeAllocations } from "@/lib/stripe/crm-payments";
 import { statusForAccount } from "@/lib/stripe/connect";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
@@ -32,16 +32,35 @@ async function eventAccountOwnedByOrg(
   return data?.stripe_connect_account_id === eventAccount;
 }
 
+/** Which platform key (live/test) to use for further API calls scoped to this
+ * org's connected account (e.g. `stripe.charges.list({ stripeAccount: ... })`)
+ * — mirrors getStripeForOrg()'s livemode contract. */
+async function stripeForOrgConnectedAccount(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string
+): Promise<Stripe> {
+  const { data } = await db
+    .from("organizations")
+    .select("stripe_connect_livemode")
+    .eq("id", orgId)
+    .single();
+  return getStripeForOrg(data?.stripe_connect_livemode ?? null);
+}
+
 export async function POST(request: Request) {
-  if (!isStripeConfigured() || !process.env.STRIPE_CONNECT_WEBHOOK_SECRET) {
+  if ((!isStripeConfigured() && !isStripeTestConfigured()) || !process.env.STRIPE_CONNECT_WEBHOOK_SECRET) {
     log.error("connect webhook received but not configured", {
-      hasSecretKey: isStripeConfigured(),
+      hasSecretKey: isStripeConfigured() || isStripeTestConfigured(),
       hasWebhookSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
     });
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
-  const stripe = getStripe();
+  // Signature verification is pure crypto against the webhook secret — it
+  // doesn't call the Stripe API, so any configured client works here
+  // regardless of which mode it holds a key for.
+  const stripe = isStripeConfigured() ? getStripe() : getStripeForOrg(false);
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
     log.error("connect webhook missing stripe-signature header");
@@ -88,6 +107,10 @@ export async function POST(request: Request) {
             stripe_connect_status: statusForAccount(account),
             stripe_connect_charges_enabled: account.charges_enabled,
             stripe_connect_payouts_enabled: account.payouts_enabled,
+            // Stripe's Account object itself has no `livemode` field — the
+            // enclosing Event does, and reflects the mode of the account the
+            // event fired on.
+            stripe_connect_livemode: event.livemode,
           })
           .eq("stripe_connect_account_id", account.id);
         if (error) throw error;
@@ -122,8 +145,8 @@ export async function POST(request: Request) {
       const source = paymentIntent.metadata?.source;
       const result =
         source === "crm_invoice_multi"
-          ? await applyCrmInvoiceMultiPayment(stripe, db, supabase, event)
-          : await applyCrmInvoicePayment(stripe, db, supabase, event);
+          ? await applyCrmInvoiceMultiPayment(db, supabase, event)
+          : await applyCrmInvoicePayment(db, supabase, event);
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
       }
@@ -250,7 +273,6 @@ export async function POST(request: Request) {
 /** Applies a succeeded crm_invoice PaymentIntent (from a connected account) to its invoice.
  * Mirrors the platform-account version this superseded in src/app/api/crm/payments/webhook/route.ts. */
 async function applyCrmInvoicePayment(
-  stripe: Stripe,
   // any: the generated Supabase types don't yet cover every table this webhook touches
   // (crm_payment_allocations, client_activity, stripe_webhook_events) — same pattern as
   // the pre-existing billing/crm-payments webhooks this one supersedes.
@@ -289,7 +311,12 @@ async function applyCrmInvoicePayment(
   const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
   if (!isAch) {
     try {
-      const charges = await stripe.charges.list(
+      // The passed-in `stripe` client is only guaranteed to hold whichever key
+      // verified the webhook signature — for a call actually scoped to this
+      // org's connected account, resolve the client matching that org's
+      // livemode instead (it may be the test-mode key for the sandbox org).
+      const orgStripe = await stripeForOrgConnectedAccount(db, orgId);
+      const charges = await orgStripe.charges.list(
         { payment_intent: paymentIntent.id, limit: 1 },
         { stripeAccount: event.account }
       );
@@ -402,7 +429,6 @@ async function applyCrmInvoicePayment(
  * update + allocation insert per invoice under a single crm_payments row, the same way a
  * manually-recorded multi-invoice payment is split via crm_payment_allocations. */
 async function applyCrmInvoiceMultiPayment(
-  stripe: Stripe,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -440,7 +466,11 @@ async function applyCrmInvoiceMultiPayment(
   const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
   if (!isAch) {
     try {
-      const charges = await stripe.charges.list(
+      // See the equivalent comment in applyCrmInvoicePayment above — resolve
+      // the client matching this org's livemode, not the generic one used to
+      // verify the webhook signature.
+      const orgStripe = await stripeForOrgConnectedAccount(db, orgId);
+      const charges = await orgStripe.charges.list(
         { payment_intent: paymentIntent.id, limit: 1 },
         { stripeAccount: event.account }
       );

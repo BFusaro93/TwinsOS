@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
@@ -30,7 +30,7 @@ const BLOCKING_PAYMENT_INTENT_STATUSES = new Set([
  * existing Connect webhook (payment_intent.succeeded) applies the payment to the
  * invoice exactly like a customer-initiated charge — the metadata contract matches. */
 export async function POST(request: Request) {
-  if (!isStripeConfigured()) {
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
@@ -81,10 +81,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "This client has no saved payment method on file" }, { status: 400 });
   }
 
-  const { data: org } = await supabase
-    .from("organizations")
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase.from("organizations") as any)
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
     )
     .eq("id", profile.org_id)
     .single();
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
         )
       : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 
-  const stripe = getStripe();
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
   // chargeIdempotencyKey only collapses attempts within the same 10-second
   // bucket — a double-submit further apart than that (two staff, or one

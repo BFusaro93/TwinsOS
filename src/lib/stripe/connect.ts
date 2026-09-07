@@ -15,6 +15,7 @@ export interface SyncedConnectStatus {
   status: ConnectAccountStatus;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
+  livemode: boolean;
 }
 
 /**
@@ -24,26 +25,39 @@ export interface SyncedConnectStatus {
  * (v2.core.account[...].updated) rather than the classic v1 account.updated
  * this app's webhook listens for, which can leave the cached DB status stuck
  * indefinitely — this gives every status check a live source of truth.
+ *
+ * `stripe` must already be the client for this account's mode (see
+ * getStripeForOrg() in src/lib/stripe/server.ts) — `accounts.retrieve()`
+ * throws "does not have access to account" otherwise. `livemode` is the mode
+ * of that same client: Stripe's Account object has no `livemode` field of its
+ * own, so a successful retrieve is itself the proof this mode is correct,
+ * which is what lets this self-heal `organizations.stripe_connect_livemode`
+ * for accounts connected before that column existed.
  */
 export async function syncConnectStatusFromStripe(
   stripe: Stripe,
   orgId: string,
-  accountId: string
+  accountId: string,
+  livemode: boolean
 ): Promise<SyncedConnectStatus> {
   const account = await stripe.accounts.retrieve(accountId);
   const synced: SyncedConnectStatus = {
     status: statusForAccount(account),
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
+    livemode,
   };
 
   const serviceClient = createServiceClient();
-  await serviceClient
-    .from("organizations")
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (serviceClient.from("organizations") as any)
     .update({
       stripe_connect_status: synced.status,
       stripe_connect_charges_enabled: synced.chargesEnabled,
       stripe_connect_payouts_enabled: synced.payoutsEnabled,
+      stripe_connect_livemode: synced.livemode,
     })
     .eq("id", orgId);
 

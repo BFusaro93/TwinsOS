@@ -1262,6 +1262,14 @@ function ConnectAccountSection() {
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor}`}>
           {CONNECT_STATUS_LABEL[status]}
         </span>
+        {connectStatus?.livemode === false && (
+          <span
+            className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700"
+            title="This Stripe account is in test mode — charges don't move real money."
+          >
+            Test mode
+          </span>
+        )}
       </div>
       <p className="text-sm text-slate-600">
         Connect a Stripe account to accept client card payments on invoices. Client payments go

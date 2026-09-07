@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 
@@ -21,7 +21,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  if (!isStripeConfigured()) {
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
@@ -61,7 +61,7 @@ export async function POST(
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
     )
     .eq("id", invoice.org_id)
     .single();
@@ -83,7 +83,7 @@ export async function POST(
     false
   );
 
-  const stripe = getStripe();
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
   // Created directly on the org's connected account (a "direct charge") so the
   // funds land in their own Stripe balance/payouts, never the platform's —
   // same as every other crm_invoice payment entry point (see create-intent.ts).

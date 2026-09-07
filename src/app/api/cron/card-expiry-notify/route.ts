@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isStripeConfigured()) {
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ checked: 0, fired: 0 });
   }
 
@@ -40,12 +40,11 @@ export async function GET(request: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
-  const stripe = getStripe();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: clients } = await (supabase as any)
     .from("clients")
-    .select("id, org_id, saved_payment_method_id, organizations(stripe_connect_account_id)")
+    .select("id, org_id, saved_payment_method_id, organizations(stripe_connect_account_id, stripe_connect_livemode)")
     .eq("saved_payment_method_type", "card")
     .not("saved_payment_method_id", "is", null)
     .is("deleted_at", null);
@@ -62,13 +61,14 @@ export async function GET(request: Request) {
     id: string;
     org_id: string;
     saved_payment_method_id: string;
-    organizations: { stripe_connect_account_id: string | null } | null;
+    organizations: { stripe_connect_account_id: string | null; stripe_connect_livemode: boolean | null } | null;
   }[]) {
     const connectAccountId = client.organizations?.stripe_connect_account_id;
     if (!connectAccountId) continue;
     checked++;
 
     try {
+      const stripe = getStripeForOrg(client.organizations?.stripe_connect_livemode);
       const pm = await stripe.paymentMethods.retrieve(
         client.saved_payment_method_id,
         {},

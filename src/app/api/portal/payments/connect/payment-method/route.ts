@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe saved payment method (portal)");
@@ -21,15 +21,17 @@ export async function DELETE() {
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
-  if (client.saved_payment_method_id && isStripeConfigured()) {
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("stripe_connect_account_id")
+  if (client.saved_payment_method_id && (isStripeConfigured() || isStripeTestConfigured())) {
+    // stripe_connect_livemode isn't in the generated Supabase types yet (added
+    // by a migration this session wrote but did not apply/regenerate types for).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: org } = await (supabase.from("organizations") as any)
+      .select("stripe_connect_account_id, stripe_connect_livemode")
       .eq("id", ctx.orgId)
       .single();
     if (org?.stripe_connect_account_id) {
       try {
-        await getStripe().paymentMethods.detach(client.saved_payment_method_id, {}, {
+        await getStripeForOrg(org.stripe_connect_livemode).paymentMethods.detach(client.saved_payment_method_id, {}, {
           stripeAccount: org.stripe_connect_account_id,
         });
       } catch (err) {

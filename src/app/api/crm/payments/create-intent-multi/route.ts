@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import {
   computeProcessingFee,
@@ -27,7 +27,7 @@ const CreateIntentSchema = z.object({
  * carries an encoded allocation list instead of one invoice_id so the webhook can apply the
  * charge across all of them, exactly like a manually-recorded multi-invoice payment. */
 export async function POST(request: Request) {
-  if (!isStripeConfigured()) {
+  if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
@@ -81,10 +81,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: org } = await supabase
-    .from("organizations")
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase.from("organizations") as any)
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )
     .eq("id", profile.org_id)
     .single();
@@ -96,7 +98,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const stripe = getStripe();
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
   if (paymentMethod === "us_bank_account") {
     if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
