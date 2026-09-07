@@ -90,6 +90,7 @@ function mapEstimate(row: any): Estimate {
     stage: row.stage,
     approvalStatus: (row.approval_status as Estimate['approvalStatus']) ?? 'not_required',
     sentAt: row.sent_at ?? null,
+    portalAcceptedAt: row.portal_accepted_at ?? null,
     showDiscounts: row.show_discounts,
     estimateDate: row.estimate_date,
     validUntilDate: row.valid_until_date,

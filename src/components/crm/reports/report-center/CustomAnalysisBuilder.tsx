@@ -50,7 +50,7 @@ import {
   useRunAnalysis,
   useUpdateCustomReport,
 } from "@/lib/hooks/use-report-center";
-import type { FormatRule, FormatRuleOp, ReportResult, VisualSpec, VisualType } from "@/types/crm-reports";
+import type { FormatRule, FormatRuleOp, ReportFieldType, ReportResult, VisualSpec, VisualType } from "@/types/crm-reports";
 import { FORMAT_COLORS } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
 import { chartInputFromResult, HeaderVisual } from "./HeaderVisual";
@@ -74,10 +74,25 @@ const FORMAT_RULE_OP_OPTIONS: { value: FormatRuleOp; label: string }[] = [
   { value: "neq", label: "≠ not equal to" },
 ];
 
+/** CSV cells are raw, machine-readable values (E-21): money as dollars with two
+ *  decimals and no symbol/thousands separators, numbers unformatted, null as
+ *  an empty cell. The on-screen table keeps formatCellValue's display strings. */
+function csvCellValue(value: unknown, type: ReportFieldType): string {
+  if (value === null || value === undefined) return "";
+  if (type === "money") return (Number(value) / 100).toFixed(2);
+  const raw = exportCellValue(value, type);
+  return raw === "—" ? "" : String(raw);
+}
+
 export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const router = useRouter();
   const { can, isLoading: permissionsLoading } = usePermissions();
-  const { data: existing, isLoading: loadingExisting } = useCustomReport(reportId);
+  /** Set on first save of a brand-new analysis. The URL is swapped in place
+   *  (history.replaceState) instead of router.push so the component — and
+   *  the preview the user just ran — stays mounted (E-20). */
+  const [savedReportId, setSavedReportId] = useState<string | null>(null);
+  const effectiveReportId = reportId ?? savedReportId;
+  const { data: existing, isLoading: loadingExisting } = useCustomReport(reportId ?? savedReportId ?? undefined);
   const createReport = useCreateCustomReport();
   const updateReport = useUpdateCustomReport();
   const deleteReport = useDeleteCustomReport();
@@ -211,9 +226,9 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     if (!config || !name.trim()) return;
     setSaveError(null);
     try {
-      if (reportId) {
+      if (effectiveReportId) {
         await updateReport.mutateAsync({
-          id: reportId,
+          id: effectiveReportId,
           name: name.trim(),
           description: description.trim() || null,
           config,
@@ -240,7 +255,14 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           headerVisual: headerVisual ?? null,
           headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
-        router.push(`/crm/admin/reports/analysis/${created.id}`);
+        // Stay mounted: the preview results / export buttons survive the save.
+        // Mark hydrated so the freshly-created record loading back in doesn't
+        // re-hydrate (and reset) the builder the user is still editing.
+        setHydrated(true);
+        setSavedReportId(created.id);
+        if (typeof window !== "undefined") {
+          window.history.replaceState(null, "", `/crm/admin/reports/analysis/${created.id}`);
+        }
       }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Save failed");
@@ -248,8 +270,8 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   };
 
   const handleDelete = async () => {
-    if (!reportId) return;
-    await deleteReport.mutateAsync(reportId);
+    if (!effectiveReportId) return;
+    await deleteReport.mutateAsync(effectiveReportId);
     router.push("/crm/admin/reports?tab=custom");
   };
 
@@ -259,7 +281,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     downloadCSV(
       `${name.trim() || "analysis"}.csv`,
       result.columns.map((c) => c.label),
-      result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type)))
+      result.rows.map((row) => result.columns.map((c) => csvCellValue(row[c.key], c.type)))
     );
   };
 
@@ -385,9 +407,9 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             </Button>
             <Button size="sm" onClick={handleSave} disabled={!canRun || saving || !name.trim()}>
               <Save className="mr-1.5 h-3.5 w-3.5" />
-              {saving ? "Saving…" : reportId ? "Save Changes" : "Save Analysis"}
+              {saving ? "Saving…" : effectiveReportId ? "Save Changes" : "Save Analysis"}
             </Button>
-            {reportId && (
+            {effectiveReportId && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="text-red-600">

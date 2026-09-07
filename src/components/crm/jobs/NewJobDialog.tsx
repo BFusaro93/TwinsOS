@@ -157,6 +157,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
   const [salesRepId, setSalesRepId] = useState<string | null>(null);
+  /** Date Sold — feeds the Sales by Date Sold / Approved Sales by Sales Rep reports. Defaults to today. */
+  const [dateSold, setDateSold] = useState(todayStr());
   const [crewId, setCrewId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
@@ -188,6 +190,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       const today = todayStr();
       setJobType(initialJobType ?? "one_time");
       setContractId(null);
+      setSalesRepId(null);
+      setDateSold(today);
       setCrewId(null);
       setNotesToCrew("");
       setStartDate(today);
@@ -434,7 +438,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         source: null,
         paymentType: null,
         poNumber: null,
-        dateSold: null,
+        dateSold: dateSold || todayStr(),
         whenToInvoice: null,
         invoiceSeparately: false,
         callAhead: false,
@@ -516,7 +520,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             )}
 
             {/* Client + Contract */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               {!defaultClientId ? (
                 <div className="flex flex-col gap-1.5">
                   <Label>Client *</Label>
@@ -555,6 +559,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Date Sold</Label>
+                <Input type="date" value={dateSold} onChange={(e) => setDateSold(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Crew{rf.req("crew")}</Label>

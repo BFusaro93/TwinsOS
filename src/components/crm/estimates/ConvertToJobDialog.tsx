@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,11 +20,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarDays, Briefcase, Plus } from "lucide-react";
+import { CalendarDays, Briefcase, Plus, Tag } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency, roundHours } from "@/lib/utils";
+import { formatCurrency, roundHours, todayLocalISODate } from "@/lib/utils";
+import { isoNy } from "@/lib/reports/ny-date";
 import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
+import { useEstimateShareTokens } from "@/lib/hooks/use-estimates";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
@@ -130,6 +133,28 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   );
   const [projectId,     setProjectId]     = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  /** Sales rep for the job — inherits the estimate's rep, overridable here (E-15). */
+  const [salesRepId,    setSalesRepId]    = useState<string | null>(estimate.salesRepId ?? null);
+  /** Date Sold — defaults to the estimate's acceptance date (portal or public
+   *  proposal), else today. Drives the Sales by Date Sold reports (E-09). */
+  const [dateSold,      setDateSold]      = useState(() =>
+    estimate.portalAcceptedAt ? isoNy(new Date(estimate.portalAcceptedAt)) : todayLocalISODate()
+  );
+  const [dateSoldTouched, setDateSoldTouched] = useState(false);
+  const { data: shareTokens } = useEstimateShareTokens(estimate.id);
+  useEffect(() => {
+    // A public-proposal acceptance is only known once the share tokens load;
+    // adopt it as the default unless the user already picked a date.
+    if (dateSoldTouched || estimate.portalAcceptedAt) return;
+    const accepted = (shareTokens ?? [])
+      .map((t) => t.acceptedAt)
+      .filter((d): d is string => !!d)
+      .sort()
+      .pop();
+    if (accepted) setDateSold(isoNy(new Date(accepted)));
+  }, [shareTokens, dateSoldTouched, estimate.portalAcceptedAt]);
+  const { data: employees } = useSelectableEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep || e.id === salesRepId);
 
   const { data: crews = [] } = useCRMCrews();
   const { data: crmSchedules = [] } = useCRMSchedules();
@@ -185,6 +210,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.error("Crew is required");
       return;
     }
+    if (rf.isRequired("sales_rep") && !salesRepId) {
+      toast.error("Sales Rep is required");
+      return;
+    }
 
     try {
       const { jobId } = await createJobs.mutateAsync({
@@ -198,6 +227,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         notesToCrew: notesToCrew || null,
         projectId: jobType === "project" ? projectId : null,
         eacHintCents,
+        salesRepId,
+        dateSold: dateSold || null,
         services: selectedItems.map((li) => ({
           serviceName:   li.serviceName ?? "Service",
           serviceId:     li.serviceId ?? null,
@@ -443,6 +474,34 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-medium text-slate-600">Sales Rep{rf.req("sales_rep")}</Label>
+            <Select value={salesRepId ?? "none"} onValueChange={(v) => setSalesRepId(v === "none" ? null : v)}>
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {salesReps.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-medium text-slate-600">
+              <Tag className="inline h-3.5 w-3.5 mr-1" />
+              Date Sold
+            </Label>
+            <Input
+              type="date"
+              value={dateSold}
+              onChange={(e) => { setDateSoldTouched(true); setDateSold(e.target.value); }}
+              className="text-sm"
+            />
           </div>
 
           <div className="flex flex-col gap-1">

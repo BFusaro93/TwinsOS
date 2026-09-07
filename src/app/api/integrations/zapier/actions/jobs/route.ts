@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { isoNy } from "@/lib/reports/ny-date";
 
 const createJobSchema = z.object({
   clientId: z.string().uuid(),
   jobType: z.enum(["recurring", "one_time", "waiting_list", "package", "snow", "project"]).optional(),
   scheduledDate: z.string().optional(),
   notes: z.string().optional(),
+  /** YYYY-MM-DD. Defaults to today (America/New_York) — drives the Sales by Date Sold reports. */
+  dateSold: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateSold must be YYYY-MM-DD").optional(),
 });
 
 /**
@@ -47,6 +50,7 @@ export async function POST(request: Request) {
       job_type: body.jobType ?? "one_time",
       scheduled_date: body.scheduledDate ?? null,
       notes: body.notes ?? null,
+      date_sold: body.dateSold ?? isoNy(new Date()),
       status: "scheduled",
     })
     .select("id, job_number, job_type, status, scheduled_date, created_at")

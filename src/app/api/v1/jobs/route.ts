@@ -3,6 +3,7 @@ import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { JOB_SELECT, shapeJob } from "./shape";
 import { createJobSchema } from "./validation";
+import { isoNy } from "@/lib/reports/ny-date";
 
 /** GET /api/v1/jobs — list the org's Landscapt jobs. Requires scope "jobs:read". */
 export async function GET(request: Request) {
@@ -48,6 +49,10 @@ export async function POST(request: Request) {
     const { data: crew } = await db.from("crm_crews").select("org_id").eq("id", body.crewId).maybeSingle();
     if (!crew || crew.org_id !== auth.orgId) return jsonError("Crew not found", 404);
   }
+  if (body.salesRepId) {
+    const { data: rep } = await db.from("crm_employees").select("org_id").eq("id", body.salesRepId).maybeSingle();
+    if (!rep || rep.org_id !== auth.orgId) return jsonError("Sales rep not found", 404);
+  }
 
   const { data, error } = await db
     .from("crm_jobs")
@@ -60,6 +65,9 @@ export async function POST(request: Request) {
       crew_id: body.crewId ?? null,
       rate_cents: body.rateCents ?? null,
       notes_to_crew: body.notesToCrew ?? null,
+      sales_rep_id: body.salesRepId ?? null,
+      // Date Sold feeds the Sales by Date Sold / Approved Sales by Sales Rep reports.
+      date_sold: body.dateSold ?? isoNy(new Date()),
       status: "scheduled",
     })
     .select(JOB_SELECT)

@@ -112,6 +112,9 @@ export interface Estimate {
   approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected';
   /** Set once, on first successful send. Anchor for "no response in N days" automation triggers. */
   sentAt: string | null;
+  /** Stamped when the client accepted through the client portal. Together with
+   *  estimate_share_tokens.accepted_at this is the estimate's "date sold". */
+  portalAcceptedAt: string | null;
   showDiscounts: boolean;
   estimateDate: string;
   validUntilDate: string | null;

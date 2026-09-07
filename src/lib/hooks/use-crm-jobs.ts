@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { roundHours, formatMonthDay } from "@/lib/utils";
+import { roundHours, formatMonthDay, todayLocalISODate } from "@/lib/utils";
+import { isoNy } from "@/lib/reports/ny-date";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow, BudgetMethod } from "@/types/crm-jobs";
@@ -1202,7 +1203,9 @@ export function useCreateClientJob() {
           source: values.source || null,
           payment_type: values.paymentType || null,
           po_number: values.poNumber || null,
-          date_sold: values.dateSold || null,
+          // Date Sold drives the Sales by Date Sold / Approved Sales by Sales Rep
+          // reports — never leave it null (the DB trigger also backstops this).
+          date_sold: values.dateSold || todayLocalISODate(),
           when_to_invoice: values.whenToInvoice || null,
           invoice_separately: values.invoiceSeparately,
           call_ahead: values.callAhead,
@@ -1746,6 +1749,8 @@ export function useCreateJobsFromEstimate() {
       projectId,
       eacHintCents,
       manCount,
+      salesRepId,
+      dateSold,
     }: {
       estimateId: string;
       clientId: string;
@@ -1771,6 +1776,11 @@ export function useCreateJobsFromEstimate() {
       projectId?: string | null;
       /** Estimate's all-in cost (revenue - net profit) — seeds the linked project's EAC if it's still unset. */
       eacHintCents?: number;
+      /** Sales rep for the job. `undefined` = inherit estimates.sales_rep_id; `null` = explicitly unassigned. */
+      salesRepId?: string | null;
+      /** Date Sold (YYYY-MM-DD). Omitted/null = the estimate's acceptance date (portal or public
+       *  proposal), falling back to today. Feeds the Sales by Date Sold reports. */
+      dateSold?: string | null;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -1783,12 +1793,36 @@ export function useCreateJobsFromEstimate() {
       // is taxable" — snapshot that per service (callers may override per
       // line via `isTaxable`).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: estimateTax } = await (supabase as any)
+      const { data: estimateRow } = await (supabase as any)
         .from("estimates")
-        .select("tax_rate_bps")
+        .select("tax_rate_bps, sales_rep_id, portal_accepted_at")
         .eq("id", estimateId)
         .maybeSingle();
-      const estimateIsTaxed = ((estimateTax as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? 0) > 0;
+      const estimateMeta = estimateRow as { tax_rate_bps: number | null; sales_rep_id: string | null; portal_accepted_at: string | null } | null;
+      const estimateIsTaxed = (estimateMeta?.tax_rate_bps ?? 0) > 0;
+
+      // Sales rep and Date Sold carry over from the estimate (E-15 / E-09): the
+      // job was sold when the client accepted — via the portal
+      // (portal_accepted_at) or a public proposal link (share token
+      // accepted_at) — otherwise the conversion itself is the sale (today).
+      const resolvedSalesRepId = salesRepId !== undefined ? salesRepId : (estimateMeta?.sales_rep_id ?? null);
+      let resolvedDateSold = dateSold || null;
+      if (!resolvedDateSold) {
+        let acceptedAt: string | null = estimateMeta?.portal_accepted_at ?? null;
+        if (!acceptedAt) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: tokenRow } = await (supabase as any)
+            .from("estimate_share_tokens")
+            .select("accepted_at")
+            .eq("estimate_id", estimateId)
+            .not("accepted_at", "is", null)
+            .order("accepted_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          acceptedAt = (tokenRow as { accepted_at: string | null } | null)?.accepted_at ?? null;
+        }
+        resolvedDateSold = acceptedAt ? isoNy(new Date(acceptedAt)) : todayLocalISODate();
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
@@ -1805,6 +1839,8 @@ export function useCreateJobsFromEstimate() {
           schedule: schedule ?? null,
           notes_to_crew: notesToCrew,
           source: "estimate",
+          sales_rep_id: resolvedSalesRepId,
+          date_sold: resolvedDateSold,
           rate_cents: services.reduce((s, sv) => s + sv.totalCents, 0),
           schedule_days: [],
           conflict_days: [],
