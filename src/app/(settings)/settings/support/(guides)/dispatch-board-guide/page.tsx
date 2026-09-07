@@ -13,8 +13,8 @@ const VISIT_STATUSES: [string, string][] = [
   ["Dispatched", "Sent to a crew — picked from the status menu, set by Dispatch Assigned, or automatically the first time you print or send a crew their day. Dispatching writes a “Visit dispatched” entry to the client's Activity timeline."],
   ["In Progress", "The crew is on site. Picked from the status menu, or set automatically once a crew member clocks in on the crew app."],
   ["Completed", "The visit is done. Picked from the status menu, or set automatically once a crew member clocks out."],
-  ["Skipped", "The crew did not perform this visit today, but it's expected to happen another time (weather, client not ready, access issue). Picked from the status menu or the visit detail sheet."],
-  ["Cancelled", "The visit was called off entirely and won't be rescheduled as-is. Picked from the status menu or the visit detail sheet."],
+  ["Skipped", "The crew did not perform this visit today, but it's expected to happen another time (weather, client not ready, access issue). Picked from the status menu or the visit detail sheet; you'll be asked for a reason, which is saved on the visit and logged on the client's Activity timeline."],
+  ["Cancelled", "The visit was called off entirely and won't be rescheduled as-is. Picked from the status menu or the visit detail sheet; asks for a reason the same way Skipped does."],
 ];
 
 const COLUMNS: [string, string][] = [
@@ -117,6 +117,24 @@ export default function DispatchBoardGuidePage() {
           happen as scheduled. They mean different things operationally, so pick deliberately — the
           menu shows both side by side.
         </Callout>
+        <p>
+          <strong>Both outcomes ask for a reason.</strong> Choosing Skipped or Cancelled — from the
+          status menu, a bulk status change, or the visit sheet — opens a short prompt with{" "}
+          <strong>Weather</strong>, <strong>Client requested delay</strong>,{" "}
+          <strong>Crew unavailable</strong>, or <strong>Other</strong> (with a free-text note). The
+          reason is saved on the visit, where it can be edited later from the visit sheet, and is
+          written to the client&apos;s Activity timeline as &quot;Visit skipped 9/9 — Weather&quot;
+          (or &quot;Visit cancelled …&quot;), so the office can answer &quot;why didn&apos;t you
+          come Tuesday?&quot; from the client record without opening the board.
+        </p>
+        <p>
+          <strong>Skipped and cancelled visits drop out of the day&apos;s numbers.</strong> The{" "}
+          <strong>Totals</strong> row, each crew&apos;s stat card, and the Unassigned card exclude
+          them from <strong>AMT</strong> and budgeted hours, so a day where three stops rained out
+          shows what the crews actually had in front of them, not what was originally on the
+          calendar. The visits themselves stay on the board (and under the Skipped / Cancelled status
+          tabs) — only the rollups leave them out.
+        </p>
         <p>
           Status also advances itself in a couple of places outside the board: dispatching a crew&apos;s
           day (or printing/sending it) can move visits to Dispatched, and a crew member clocking in
@@ -291,9 +309,15 @@ export default function DispatchBoardGuidePage() {
           </li>
         </ul>
         <p>
-          There&apos;s no live map or automatic route-optimization view on the board today — routing is
-          handled by the crew stop order (drag-to-reorder in Manual Route mode) and the printed route
-          sheets.
+          There&apos;s no live map view on the board — routing is handled by the crew stop order
+          (drag-to-reorder in Manual Route mode), the <strong>Optimize Route</strong> action, and the
+          printed route sheets. Optimize Route needs a Google Maps Platform API key with the Distance
+          Matrix API enabled, entered under <strong>Landscapt Settings → Integrations</strong> on the
+          Google Maps card. Type or paste the key and click <strong>Save Key</strong> — until you do,
+          the card reads &quot;Unsaved — click Save Key to connect&quot; and the board can&apos;t use
+          it. If the save comes back with &quot;you don&apos;t have permission to change organization
+          settings,&quot; your role lacks the settings permission and an admin needs to enter the key
+          instead.
         </p>
       </Section>
 

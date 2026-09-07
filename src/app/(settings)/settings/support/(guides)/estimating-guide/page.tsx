@@ -46,6 +46,7 @@ export default function EstimatingGuidePage() {
           <TOCLink href="#why-snapshot">Why budget method is snapshotted per-line</TOCLink>
           <TOCLink href="#reading-the-grid">Reading the line-item grid</TOCLink>
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
+          <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
           <TOCLink href="#converting">Converting an estimate to a job</TOCLink>
         </div>
       </div>
@@ -262,6 +263,45 @@ export default function EstimatingGuidePage() {
           Add Property dialog and not in a dedicated per-zone editor &mdash; there currently isn&rsquo;t
           one. If a production-rate line is coming out to 0 budgeted hours, check that the relevant
           measurement is actually filled in there.
+        </Callout>
+      </Section>
+
+      <Section id="proposal-link" title="The client-facing proposal link">
+        <p>
+          Every estimate has a public <strong>proposal page</strong> &mdash; the same page a client
+          lands on from the &ldquo;View Your Proposal&rdquo; button in the estimate email, where they
+          can review the line items and accept, decline, or request changes online. You don&rsquo;t
+          have to send an email to get at it:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Get link / Copy link</strong> in the estimate header puts the proposal URL on your
+            clipboard. It reads <strong>Get link</strong> when no live link exists yet (clicking it
+            creates one) and <strong>Copy link</strong> once there is.
+          </li>
+          <li>
+            <strong>Open</strong> opens that same proposal page in a new tab &mdash; handy for
+            checking exactly what the client will see before you send, or for walking a client
+            through it on a call.
+          </li>
+          <li>
+            The <strong>&ldquo;N links sent&rdquo;</strong> strip under the header offers the same
+            Copy link / Open shortcuts once at least one link has gone out.
+          </li>
+        </ul>
+        <p>
+          There is <strong>one live link per estimate</strong>. It&rsquo;s minted the first time you
+          ask for it (Get link / Open) or the first time the estimate is emailed, and every later
+          copy, open, or send reuses that same URL instead of minting a fresh one &mdash; so a link
+          you texted a client last week and the one in this week&rsquo;s reminder email land on the
+          same page. A link is good for <strong>30 days</strong>; after it expires (or the client
+          accepts through it) the next request creates a new one.
+        </p>
+        <Callout>
+          The <strong>Send</strong> dialog&rsquo;s Preview tab renders the real proposal URL behind the
+          &ldquo;View Your Proposal&rdquo; button when the estimate already has a live link, so you
+          can click straight through from the preview. If no link exists yet, the preview shows a
+          labelled placeholder and the link is generated the moment you send.
         </Callout>
       </Section>
 

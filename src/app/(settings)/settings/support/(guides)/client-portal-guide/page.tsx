@@ -85,9 +85,12 @@ export default function ClientPortalGuidePage() {
             <strong>Send Portal Invite</strong>.
           </li>
           <li>
-            Confirm (or edit) the email address. If that client already has a portal account, the dialog
-            tells you and offers to reset access instead — a client can only have one active portal
-            account at a time.
+            Confirm (or edit) the email address. The dialog reads the client&apos;s current portal
+            state: if an invite is already out, the button says <strong>Re-send invite</strong> and
+            the dialog notes whether the earlier one has expired or simply hasn&apos;t been accepted
+            yet; if the client already has an active portal login, it says so (with their last login)
+            and offers <strong>Revoke access &amp; send new invite</strong> instead — a client can
+            only have one active portal account at a time.
           </li>
           <li>
             An invite email goes out via Resend, branded with the org&apos;s name, containing a link to{" "}
@@ -103,6 +106,16 @@ export default function ClientPortalGuidePage() {
             characters, one uppercase, one lowercase, one number), and is signed in automatically.
           </li>
         </ol>
+        <p>
+          <strong>Checking where a client stands.</strong> The client&apos;s <strong>Details</strong>{" "}
+          tab has a Client Portal block showing the current status: <strong>No access</strong> (never
+          invited), <strong>Invited</strong> with the invite date and expiry — or{" "}
+          <strong>Invite expired</strong> once the 7 days are up — or <strong>Active</strong> with the
+          login email, registration date, and last login (&quot;Never signed in&quot; if they
+          registered but haven&apos;t been back). A button beneath it reads Send portal invite, Re-send
+          invite, or Manage portal access depending on that status, and opens the same dialog as the{" "}
+          <strong>…</strong> menu. Start here when a client says they can&apos;t log in.
+        </p>
         <p>
           Revoking access is the mirror action: the same <strong>…</strong> menu&apos;s portal dialog offers
           a reset that soft-deletes the <code>client_portal_users</code> row (recording <code>deleted_at</code>,
@@ -229,8 +242,10 @@ export default function ClientPortalGuidePage() {
 
       <Section id="branding" title="Branding and portal settings">
         <p>
-          Staff configure the portal from <strong>Landscapt Settings → Client Portal</strong> (the{" "}
-          <code>ClientPortalTab</code> component). Settings are per-org — there is one{" "}
+          Staff configure the portal from <strong>Landscapt Settings → Client Portal</strong>. Every
+          Landscapt Settings tab can be linked to directly with <code>?tab=</code> — for example{" "}
+          <code>/crm/settings?tab=client-portal</code> opens this tab, and switching tabs updates the
+          address bar so the link you copy reopens the tab you were on. Settings are per-org — there is one{" "}
           <code>client_portal_settings</code> row per org, and everything a client sees is white-labeled to
           that org&apos;s own name, color, and logo rather than showing &quot;Equipt&quot; or
           &quot;Landscapt&quot; branding anywhere in the shell.
@@ -259,7 +274,8 @@ export default function ClientPortalGuidePage() {
           <li>
             <strong>No portal access configured.</strong> A client with no <code>client_portal_users</code> row
             simply has no way in — there&apos;s no self-signup. If a client says they can&apos;t log in,
-            check whether an invite was ever sent (and hasn&apos;t expired) before assuming a bug.
+            check the portal status on their Details tab (No access / Invited / Invite expired /
+            Active) before assuming a bug.
           </li>
           <li>
             <strong>One portal account per client, but one login can span multiple clients/orgs.</strong> Don&apos;t

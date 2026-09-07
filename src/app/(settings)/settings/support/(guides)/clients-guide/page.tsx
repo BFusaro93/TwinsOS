@@ -51,7 +51,7 @@ const CONTACT_TYPES = [
 const TIMELINE_FILTERS: [string, string][] = [
   ["All History", "Everything below, in one chronological feed."],
   ["Notes", "Notes, calls, emails, and tickets."],
-  ["Visits", "Job created, scheduled job visits, visit moves and dispatches, and completed job records."],
+  ["Visits", "Job created, scheduled job visits, visit moves, dispatches, skips and cancellations (with the reason), and completed job records."],
   ["Transactions", "Invoices and payments."],
   ["Estimates", "Estimates and contracts."],
 ];
@@ -235,6 +235,16 @@ export default function ClientsGuidePage() {
           later gets acquired by a different management company, you&apos;d unlink it from Ridgeline
           before it could be linked under the new parent.
         </Callout>
+        <p>
+          <strong>Paying a sub-account&apos;s invoice from the parent.</strong> When Ridgeline mails
+          one check covering all three HOAs, record the payment on <strong>Ridgeline</strong> and
+          allocate it across the HOAs&apos; invoices in that single entry. Each HOA&apos;s own record
+          then shows the payment on its <strong>Accounting</strong> card, tagged{" "}
+          <strong>&quot;via Ridgeline Property Management&quot;</strong>, so someone looking at Oakview
+          alone can see how its invoice got paid without knowing to check the parent. Those rows are
+          read-only on the sub-account — edit or reverse the payment from the parent where it was
+          recorded.
+        </p>
       </Section>
 
       <Section id="properties" title="Properties">
@@ -295,8 +305,9 @@ export default function ClientsGuidePage() {
           ticket tied to a client lands in one chronological <strong>Activity Timeline</strong> on
           that client&apos;s record. Scheduling actions land here too: creating a job (including one
           converted from an estimate) logs &quot;Job created,&quot; moving a visit to another day
-          logs &quot;Visit moved 9/7 → 9/8,&quot; and dispatching one logs &quot;Visit
-          dispatched.&quot; In practice this is the fastest way to answer &quot;what&apos;s
+          logs &quot;Visit moved 9/7 → 9/8,&quot; dispatching one logs &quot;Visit
+          dispatched,&quot; and skipping or cancelling one logs the reason the dispatcher picked
+          (&quot;Visit skipped 9/9 — Client requested delay&quot;). In practice this is the fastest way to answer &quot;what&apos;s
           actually happened with this client&quot; without hopping between the invoices tab, the
           estimates tab, and a separate notes log — everything is one feed, newest first, and each
           row deep-links straight to the invoice, estimate, or job it references.

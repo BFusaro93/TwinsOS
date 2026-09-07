@@ -14,7 +14,7 @@ const PAYMENT_METHODS: [string, string][] = [
   ["ACH/E-Check", "Bank-to-bank transfer — either a manual entry, or a real ACH charge through a saved bank account (see Online Payments below)."],
   ["AutoPay", "Recorded automatically when a scheduled autopay charge succeeds — not something you pick by hand."],
   ["Credit Card– Visa / MasterCard / AmEx / Discover", "One method per card network, so reporting can split card volume by network."],
-  ["AR Write-off", "Zeroes out a balance you're not going to collect (bad debt) without pretending real money changed hands."],
+  ["AR Write-off", "Zeroes out a balance you're not going to collect (bad debt) without pretending real money changed hands. Non-cash — excluded from every cash/collected report. Offered in the invoice's Enter Payment dialog as well as on the Payments page, and can never exceed the invoice's remaining balance."],
   ["Other", "Anything that doesn't fit the above — barter, a manual adjustment, etc."],
 ];
 
@@ -43,6 +43,8 @@ export default function InvoicingGuidePage() {
         </h2>
         <div className="flex flex-col gap-1">
           <TOCLink href="#where-invoices-come-from">Where invoices come from</TOCLink>
+          <TOCLink href="#tax-on-auto-invoices">Sales tax on invoices generated from jobs</TOCLink>
+          <TOCLink href="#editing-and-sending">Editing and sending an invoice</TOCLink>
           <TOCLink href="#status-lifecycle">Invoice status lifecycle</TOCLink>
           <TOCLink href="#recording-payments">Recording payments</TOCLink>
           <TOCLink href="#partial-payment-example">Worked example: a partial payment</TOCLink>
@@ -90,6 +92,63 @@ export default function InvoicingGuidePage() {
           Snow billing runs storm-by-storm on per-inch/hourly rates a flat auto-invoice can&apos;t
           compute — see <a className="underline" href="/settings/support/snow-guide">Snow Invoicing</a>.
         </Callout>
+      </Section>
+
+      <Section id="tax-on-auto-invoices" title="Sales tax on invoices generated from jobs">
+        <p>
+          When a completed visit drafts an invoice, each line item carries a{" "}
+          <strong>taxable</strong> flag and the invoice picks a tax rate, so the tax the client
+          agreed to on the estimate is the tax that shows up on the bill:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Which lines are taxable.</strong> A job&apos;s services are taxable or not
+            according to the service catalog &mdash; unless the job was converted from an estimate,
+            in which case they follow the estimate: services converted from an estimate that
+            carried sales tax are taxable, and services from an untaxed estimate are not.
+          </li>
+          <li>
+            <strong>Which rate applies.</strong> A job converted from an estimate uses that
+            estimate&apos;s tax rate. Any other job uses the client&apos;s default tax rate. Tax is
+            computed on the taxable lines only.
+          </li>
+          <li>
+            <strong>Appending visits to an open draft.</strong> If a client is billed monthly and a
+            second completed visit lands on an already-open draft, the draft&apos;s tax is recomputed
+            from all of its taxable lines at the invoice&apos;s rate &mdash; the appended visit is taxed
+            too, not just the first one.
+          </li>
+        </ul>
+        <Callout>
+          <strong>Why this matters.</strong> An accepted estimate for $1,908 plus $119.25 tax should
+          produce a $2,027.25 invoice. If a job&apos;s invoice comes out with no tax line, check that the
+          estimate it was converted from actually had a tax rate set, and that the client has a
+          default tax rate for jobs that weren&apos;t estimated.
+        </Callout>
+      </Section>
+
+      <Section id="editing-and-sending" title="Editing and sending an invoice">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>No blank line items.</strong> An invoice can&apos;t be saved with only empty
+            lines &mdash; Save is refused with &quot;Add at least one line item with a description or
+            amount before saving this invoice.&quot; Every line that&apos;s kept needs a description or
+            an amount; rows you added and left blank are dropped.
+          </li>
+          <li>
+            <strong>Abandoned new invoices don&apos;t linger.</strong> Opening New Invoice creates a
+            draft immediately so you can start adding lines; if you close the sheet without saving
+            anything, that empty draft is removed rather than left on the client&apos;s Uninvoiced
+            list.
+          </li>
+          <li>
+            <strong>Undeliverable email addresses.</strong> If the mail provider rejects the
+            client&apos;s address when you email an invoice (a malformed or unroutable address, a
+            rate limit, a provider outage), the error you see is the provider&apos;s own reason
+            &mdash; not a generic &quot;failed to send&quot; &mdash; so you can tell a typo in the
+            client record apart from a problem on the sending side.
+          </li>
+        </ul>
       </Section>
 
       <Section id="status-lifecycle" title="Invoice status lifecycle">
@@ -168,8 +227,37 @@ export default function InvoicingGuidePage() {
           the Cash Received, Account Credit, and Net Amount (after refunds) columns.
         </p>
         <p>
-          Whatever portion of a payment isn&apos;t allocated to an invoice is tracked as unused —
-          available later as a credit rather than lost. Applying (or un-applying, if a payment gets
+          <strong>A payment can only be applied to an issued invoice.</strong> Draft invoices are
+          still uninvoiced work and Void invoices are dead, so neither appears in the allocation
+          list — send or print the draft first, then apply the payment.
+        </p>
+        <p>
+          <strong>Overpayments never push an invoice negative.</strong> A payment applies to an
+          invoice only up to that invoice&apos;s remaining balance; anything beyond it stays on the
+          payment as <strong>unused credit</strong>. If you type more than the balance into an
+          allocation box it&apos;s capped on the spot (&quot;Capped at this invoice&apos;s balance —
+          the rest stays as unused credit&quot;). An $80 check against a $55 invoice marks the invoice
+          Paid at $55 and leaves $25 unused; that $25 shows up on the client as{" "}
+          <strong>Credits</strong> and can be applied to a later invoice — it isn&apos;t lost and it
+          isn&apos;t reported as &quot;Paid −$80.&quot; The same limits are enforced on the server:
+          an invoice can never be allocated more than its total, and a payment can never allocate
+          more than its own amount.
+        </p>
+        <p>
+          <strong>Writing off a balance.</strong> The invoice&apos;s <strong>Enter Payment</strong>{" "}
+          dialog offers <strong>AR Write-off (non-cash)</strong> alongside the real payment methods.
+          A write-off is capped at the invoice&apos;s balance (&quot;A write-off can&apos;t exceed the
+          invoice balance&quot;) and, because no money changed hands, is excluded from every cash
+          collected figure — see &quot;What counts as collected&quot; above.
+        </p>
+        <p>
+          <strong>Typing amounts.</strong> Currency fields — payment allocations, contract amounts,
+          employee rates — keep exactly what you type while you&apos;re in the field and format it
+          (e.g. <code>55</code> → <code>$55.00</code>) when you leave it. Nothing is reformatted
+          mid-keystroke, so &quot;55&quot; can&apos;t turn into $5.01 on the way in.
+        </p>
+        <p>
+          Applying (or un-applying, if a payment gets
           edited) an allocation goes through a single database function that locks the invoice row,
           recomputes its balance, and derives the new status in one atomic step — so two payments
           landing on the same invoice at nearly the same moment can&apos;t silently overwrite each
@@ -196,10 +284,16 @@ export default function InvoicingGuidePage() {
           </li>
         </ol>
         <p>
-          If the client had instead overpaid — say $220.00 against that $300.00 remaining balance
-          — the invoice would stay <strong>Partial</strong> at a $80.00 balance; a later short
+          If the client had instead <em>under</em>paid — say $220.00 against that $300.00 remaining
+          balance — the invoice would stay <strong>Partial</strong> at an $80.00 balance; a later short
           payment doesn&apos;t skip straight to Paid just because a lot has accumulated. Only a balance
           that reaches exactly $0.00 (or is written off, or the invoice is voided) closes it out.
+        </p>
+        <p>
+          And if the client <em>over</em>paid — a $350.00 check against that $300.00 balance — the
+          invoice takes $300.00 and flips to <strong>Paid</strong>; the extra $50.00 stays on the
+          payment as unused credit, listed under the client&apos;s Credits until you apply it to the
+          next invoice.
         </p>
       </Section>
 
