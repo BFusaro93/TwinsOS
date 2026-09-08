@@ -52,39 +52,19 @@ export const metadata: Metadata = {
     // Safari has historically favored (and sometimes required) a plain
     // favicon.ico at the domain root over any <link> declaration.
     //
-    // icon.svg's <link> is intentionally dropped (see below).
-    //
-    // A white ring showed up around the icon in Safari's tab strip and
-    // Favorites bar, but NOT in Safari's address-bar site icon — same
-    // bytes, rendered cleanly in one Safari surface and haloed in two
-    // others, which ruled out a bad pixel in the source file (every
-    // frame of every candidate asset was inspected: alpha always fades
-    // transparent -> correct brand green, never toward white) and a
-    // from-source resize artifact (the halo persisted even after adding
-    // pre-rendered 16/32/48/64px PNGs, v3, so Safari resizing our source
-    // itself wasn't it either).
-    // What made it click: other apps' dark/saturated tab icons (e.g.
-    // AmEx's blue square) don't show this ring, but ours — a rounded
-    // square whose fill runs almost to the edge of the canvas (only a
-    // ~2% margin, per icon.svg's rect x="1" y="1" of a 48x48 viewBox) —
-    // does. Safari's tab/Favorites-bar chrome appears to draw its own
-    // subtle frame/shadow at the icon's outer bounding box; icons with
-    // real transparent padding around their artwork have that frame land
-    // in the transparent gutter (invisible against the dark tab), while
-    // ours had it land right on our opaque edge. Fix: re-rendered every
-    // favicon asset with ~20% transparent margin (content scaled to 80%
-    // of the canvas, centered) instead of touching the edges — v4,
-    // cache-busted again since Safari's favicon cache is a separate
-    // on-disk store that survives a normal reload or "Empty Caches".
+    // A faint white ring around this icon in Safari's tab strip/Favorites
+    // bar was investigated at length (source-pixel purity, cache-busted
+    // resize-safe PNGs at every size, ~20% padding around the mark) and
+    // none of it helped — the padding attempt made it visibly worse
+    // instead of better, so it was reverted back to this original set.
+    // Conclusion: this is Safari's own tab/Favorites-bar chrome rendering
+    // a frame around the icon, not something fixable via the asset.
     icon: [
-      { url: "/favicon-v4.ico", sizes: "any" },
-      { url: "/favicon-16v4.png", type: "image/png", sizes: "16x16" },
-      { url: "/favicon-32v4.png", type: "image/png", sizes: "32x32" },
-      { url: "/favicon-48v4.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicon-64v4.png", type: "image/png", sizes: "64x64" },
-      { url: "/favicon-128v4.png", type: "image/png", sizes: "128x128" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "128x128" },
+      { url: "/icon.svg", type: "image/svg+xml" },
     ],
-    shortcut: "/favicon-v4.ico",
+    shortcut: "/favicon.ico",
   },
 };
 
