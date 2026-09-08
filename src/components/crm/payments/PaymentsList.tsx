@@ -378,7 +378,15 @@ export function AddPaymentDialog({
       return;
     }
     try {
-      await chargeMultiSaved.mutateAsync({ clientId, allocations: chargeAllocations });
+      const result = await chargeMultiSaved.mutateAsync({ clientId, allocations: chargeAllocations });
+      if (result.status === "succeeded" && result.recorded === false) {
+        // Charged at Stripe but the ledger write failed — never let this read
+        // as "nothing happened".
+        toast.error(
+          "The charge went through at Stripe but could NOT be recorded against these invoices. Do not retry — reconcile it in Stripe first.",
+          { duration: 15000 }
+        );
+      }
       setChargeSucceeded(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to charge saved payment method");

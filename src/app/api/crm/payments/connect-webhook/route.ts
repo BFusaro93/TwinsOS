@@ -2,51 +2,23 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
-import { methodForPaymentIntent, decodeAllocations } from "@/lib/stripe/crm-payments";
 import { statusForAccount } from "@/lib/stripe/connect";
+import { recordStripeCharge, accountOwnedByOrg } from "@/lib/stripe/record-charge";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect webhook");
 
-/** A Standard connected account is a full, independent Stripe account — its
- * owner can call the Stripe API directly and create a PaymentIntent with
- * ARBITRARY metadata (including another org's org_id/invoice_id). Never trust
- * PaymentIntent.metadata.org_id on its own: confirm the account the event
- * actually fired on (event.account) is the one on file for that org first. */
-async function eventAccountOwnedByOrg(
-  // any: the generated Supabase types don't yet cover every table this webhook touches
-  // (crm_payment_allocations, client_activity, stripe_webhook_events) — same pattern as
-  // the pre-existing billing/crm-payments webhooks this one supersedes.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
-  orgId: string,
-  eventAccount: string
-): Promise<boolean> {
-  const { data } = await db
-    .from("organizations")
-    .select("stripe_connect_account_id")
-    .eq("id", orgId)
-    .single();
-  return data?.stripe_connect_account_id === eventAccount;
-}
-
-/** Which platform key (live/test) to use for further API calls scoped to this
- * org's connected account (e.g. `stripe.charges.list({ stripeAccount: ... })`)
- * — mirrors getStripeForOrg()'s livemode contract. */
-async function stripeForOrgConnectedAccount(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
-  orgId: string
-): Promise<Stripe> {
-  const { data } = await db
-    .from("organizations")
-    .select("stripe_connect_livemode")
-    .eq("id", orgId)
-    .single();
-  return getStripeForOrg(data?.stripe_connect_livemode ?? null);
-}
+/** Whether the connected account an event fired on is the one on file for
+ * this org — see accountOwnedByOrg()'s own comment for why this check is not
+ * optional. Re-exported through the shared recorder so both the webhook and
+ * the synchronous charge routes apply the identical rule. */
+// any: the generated Supabase types don't cover every table this webhook touches
+// (crm_payment_allocations, client_activity, stripe_webhook_events).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const eventAccountOwnedByOrg = (db: any, orgId: string, eventAccount: string) =>
+  accountOwnedByOrg(db, orgId, eventAccount);
 
 /**
  * Stripe signs each event with the signing secret of the endpoint that sent
@@ -100,10 +72,23 @@ export async function POST(request: Request) {
     }
   }
   if (!event) {
-    log.error("signature verification failed", {
-      error: lastVerifyError,
-      secretsTried: webhookSecrets.length,
-    });
+    log.error(
+      "Stripe Connect webhook signature verification FAILED — no configured signing secret matched. " +
+        "This is almost always a misconfigured/rotated STRIPE_CONNECT_WEBHOOK_SECRET (live) or " +
+        "STRIPE_CONNECT_WEBHOOK_SECRET_TEST (test/sandbox): the value must be the 'Signing secret' " +
+        "(whsec_...) of the SPECIFIC Stripe webhook endpoint delivering these events, in the SAME mode " +
+        "as the connected account. Card payments confirmed in the browser are applied to invoices ONLY " +
+        "by this webhook, so while this fails those payments will not be recorded.",
+      {
+        error: lastVerifyError,
+        secretsTried: webhookSecrets.length,
+        // Names only — never the values.
+        secretEnvVarsPresent: [
+          process.env.STRIPE_CONNECT_WEBHOOK_SECRET ? "STRIPE_CONNECT_WEBHOOK_SECRET" : null,
+          process.env.STRIPE_CONNECT_WEBHOOK_SECRET_TEST ? "STRIPE_CONNECT_WEBHOOK_SECRET_TEST" : null,
+        ].filter(Boolean),
+      }
+    );
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -300,12 +285,20 @@ export async function POST(request: Request) {
   return NextResponse.json({ received: true });
 }
 
-/** Applies a succeeded crm_invoice PaymentIntent (from a connected account) to its invoice.
- * Mirrors the platform-account version this superseded in src/app/api/crm/payments/webhook/route.ts. */
+/**
+ * Applies a succeeded crm_invoice / crm_invoice_multi PaymentIntent (from a
+ * connected account) to its invoice(s).
+ *
+ * The actual ledger write lives in src/lib/stripe/record-charge.ts and is
+ * shared with the synchronous charge routes (autopay/charge,
+ * autopay/charge-multi), which now record the payment the moment Stripe
+ * confirms it off-session. This webhook is therefore a backstop: it stays the
+ * ONLY applier for browser-confirmed intents (create-intent /
+ * create-intent-multi) and for ACH (which confirms as `processing` and only
+ * succeeds days later), and is a no-op when the synchronous path already
+ * recorded the charge — deduped in the database on the PaymentIntent id.
+ */
 async function applyCrmInvoicePayment(
-  // any: the generated Supabase types don't yet cover every table this webhook touches
-  // (crm_payment_allocations, client_activity, stripe_webhook_events) — same pattern as
-  // the pre-existing billing/crm-payments webhooks this one supersedes.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -318,146 +311,11 @@ async function applyCrmInvoicePayment(
     log.error("payment_intent.succeeded with no connected account on event", { paymentIntentId: paymentIntent.id });
     return "error";
   }
-
-  const { org_id: orgId, invoice_id: invoiceId, client_id: clientId } = paymentIntent.metadata;
-  const balanceCents = parseInt(paymentIntent.metadata.balance_cents, 10);
-  const feeCents = parseInt(paymentIntent.metadata.fee_cents, 10);
-
-  if (!orgId || !invoiceId || !clientId || !Number.isFinite(balanceCents) || !Number.isFinite(feeCents)) {
-    log.error("missing/invalid metadata on payment intent", { paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  if (!(await eventAccountOwnedByOrg(db, orgId, event.account))) {
-    log.error("payment intent metadata org_id does not own the connected account the event fired on", {
-      paymentIntentId: paymentIntent.id,
-      orgId,
-      eventAccount: event.account,
-    });
-    return "error";
-  }
-
-  let cardBrand: string | null = null;
-  const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
-  if (!isAch) {
-    try {
-      // The passed-in `stripe` client is only guaranteed to hold whichever key
-      // verified the webhook signature — for a call actually scoped to this
-      // org's connected account, resolve the client matching that org's
-      // livemode instead (it may be the test-mode key for the sandbox org).
-      const orgStripe = await stripeForOrgConnectedAccount(db, orgId);
-      const charges = await orgStripe.charges.list(
-        { payment_intent: paymentIntent.id, limit: 1 },
-        { stripeAccount: event.account }
-      );
-      cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
-    } catch {
-      cardBrand = null;
-    }
-  }
-  const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
-
-  // `balanceCents` is the balance the intent was created against, captured at
-  // create-intent time — if a second PaymentIntent for the same invoice was
-  // created before the first settled (e.g. the customer opened the pay link
-  // on two devices), both can genuinely succeed as real charges, each
-  // quoting the FULL balance owed at creation time. Re-check the invoice's
-  // actual remaining balance right before applying this payment and clamp to
-  // it, crediting any excess as unused/prepayment credit — same pattern as
-  // the legacy platform-account webhook this one supersedes
-  // (src/app/api/crm/payments/webhook/route.ts).
-  const { data: invoiceBefore, error: invoiceBeforeErr } = await db
-    .from("crm_invoices")
-    .select("total_cents, amount_paid_cents, status")
-    .eq("id", invoiceId)
-    .eq("org_id", orgId)
-    .single();
-  if (invoiceBeforeErr) {
-    log.error("failed to load invoice before applying payment", { error: invoiceBeforeErr, paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  const currentBalanceCents = Math.max(0, invoiceBefore.total_cents - invoiceBefore.amount_paid_cents);
-  const appliedCents = Math.min(balanceCents, currentBalanceCents);
-  const overpaidCents = balanceCents - appliedCents;
-
-  const { data: inserted, error: insertErr } = await db
-    .from("crm_payments")
-    .insert({
-      org_id: orgId,
-      invoice_id: invoiceId,
-      client_id: clientId,
-      amount_cents: balanceCents,
-      unused_amount_cents: overpaidCents,
-      payment_date: new Date().toISOString().slice(0, 10),
-      method,
-      memo: overpaidCents > 0
-        ? `Paid online via ${isAch ? "bank transfer" : "card"} (exceeds invoice balance — excess credited to account)`
-        : `Paid online via ${isAch ? "bank transfer" : "card"}`,
-      is_prepayment: false,
-      processing_fee_cents: feeCents,
-      stripe_payment_intent_id: paymentIntent.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
-      return "skipped";
-    }
-    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  try {
-    // Row-locked (SELECT ... FOR UPDATE inside the RPC) so a concurrent
-    // recording/edit/refund against this same invoice can't read the same
-    // stale amount_paid_cents and clobber this write — see
-    // apply_payment_to_invoice()'s own migration comment. A plain
-    // read-then-write here would reintroduce exactly the race that RPC was
-    // built to close.
-    const { data: rpcResult, error: rpcErr } = await db.rpc("apply_payment_to_invoice", {
-      p_invoice_id: invoiceId,
-      p_delta_cents: appliedCents,
-    });
-    if (rpcErr) throw rpcErr;
-    const wasNewlyPaid = !!rpcResult?.[0]?.was_newly_paid;
-
-    if (wasNewlyPaid) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
-    }
-
-    if (appliedCents > 0) {
-      const { error: allocErr } = await db
-        .from("crm_payment_allocations")
-        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: appliedCents });
-      if (allocErr) throw allocErr;
-    }
-
-    await db.rpc("sync_client_balance", { p_client_id: clientId });
-
-    await db.from("client_activity").insert({
-      org_id: orgId,
-      client_id: clientId,
-      activity_type: "payment",
-      subject: `Payment received: ${method} (online)${overpaidCents > 0 ? " — partly credited to account" : ""}`,
-      amount_cents: balanceCents,
-      ref_id: inserted.id,
-      ref_table: "crm_payments",
-    });
-  } catch (err) {
-    log.error("recorded payment but failed to apply it", { error: err, paymentId: inserted.id });
-    return "error";
-  }
-
-  return "applied";
+  const result = await recordStripeCharge({ db, supabase, paymentIntent, connectedAccountId: event.account });
+  return result === "already_recorded" ? "skipped" : result;
 }
 
-/** Applies a succeeded crm_invoice_multi PaymentIntent — one charge split across several
- * invoices for the same client — mirrors applyCrmInvoicePayment above but loops the invoice
- * update + allocation insert per invoice under a single crm_payments row, the same way a
- * manually-recorded multi-invoice payment is split via crm_payment_allocations. */
+/** Multi-invoice counterpart — see applyCrmInvoicePayment above. */
 async function applyCrmInvoiceMultiPayment(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -471,149 +329,6 @@ async function applyCrmInvoiceMultiPayment(
     log.error("payment_intent.succeeded with no connected account on event", { paymentIntentId: paymentIntent.id });
     return "error";
   }
-
-  const { org_id: orgId, client_id: clientId, allocations: encodedAllocations } = paymentIntent.metadata;
-  const feeCents = parseInt(paymentIntent.metadata.fee_cents, 10);
-
-  if (!orgId || !clientId || !encodedAllocations || !Number.isFinite(feeCents)) {
-    log.error("missing/invalid metadata on multi-invoice payment intent", { paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  if (!(await eventAccountOwnedByOrg(db, orgId, event.account))) {
-    log.error("payment intent metadata org_id does not own the connected account the event fired on", {
-      paymentIntentId: paymentIntent.id,
-      orgId,
-      eventAccount: event.account,
-    });
-    return "error";
-  }
-
-  const allocations = decodeAllocations(encodedAllocations);
-  const totalCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
-
-  let cardBrand: string | null = null;
-  const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
-  if (!isAch) {
-    try {
-      // See the equivalent comment in applyCrmInvoicePayment above — resolve
-      // the client matching this org's livemode, not the generic one used to
-      // verify the webhook signature.
-      const orgStripe = await stripeForOrgConnectedAccount(db, orgId);
-      const charges = await orgStripe.charges.list(
-        { payment_intent: paymentIntent.id, limit: 1 },
-        { stripeAccount: event.account }
-      );
-      cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
-    } catch {
-      cardBrand = null;
-    }
-  }
-  const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
-
-  // Re-check each allocated invoice's actual remaining balance right before
-  // applying this payment and clamp each allocation to it, crediting any
-  // excess as unused/prepayment credit — same race and same fix as
-  // applyCrmInvoicePayment above (e.g. the customer opened the pay link on
-  // two devices and both multi-invoice charges settled).
-  const clampedAllocations: { invoiceId: string; amountCents: number }[] = [];
-  let overpaidCents = 0;
-  for (const alloc of allocations) {
-    // Scoped by client_id as well as org_id/id: metadata.client_id and the encoded
-    // allocation list are two independently-editable metadata keys on a PaymentIntent
-    // a connected account's own owner can forge — this stops a same-org mismatch
-    // between the two from applying one client's charge to another client's invoice.
-    const { data: invoice, error: invoiceErr } = await db
-      .from("crm_invoices")
-      .select("total_cents, amount_paid_cents")
-      .eq("id", alloc.invoiceId)
-      .eq("org_id", orgId)
-      .eq("client_id", clientId)
-      .single();
-    if (invoiceErr) {
-      log.error("failed to load invoice before applying multi-invoice payment", { error: invoiceErr, paymentIntentId: paymentIntent.id });
-      return "error";
-    }
-
-    const currentBalanceCents = Math.max(0, invoice.total_cents - invoice.amount_paid_cents);
-    const appliedCents = Math.min(alloc.amountCents, currentBalanceCents);
-    clampedAllocations.push({ invoiceId: alloc.invoiceId, amountCents: appliedCents });
-    overpaidCents += alloc.amountCents - appliedCents;
-  }
-
-  const { data: inserted, error: insertErr } = await db
-    .from("crm_payments")
-    .insert({
-      org_id: orgId,
-      invoice_id: allocations.length === 1 ? allocations[0].invoiceId : null,
-      client_id: clientId,
-      amount_cents: totalCents,
-      unused_amount_cents: overpaidCents,
-      payment_date: new Date().toISOString().slice(0, 10),
-      method,
-      memo: overpaidCents > 0
-        ? `Paid online via ${isAch ? "bank transfer" : "card"} (exceeds invoice balance — excess credited to account)`
-        : `Paid online via ${isAch ? "bank transfer" : "card"}`,
-      is_prepayment: false,
-      processing_fee_cents: feeCents,
-      stripe_payment_intent_id: paymentIntent.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
-      return "skipped";
-    }
-    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  try {
-    const newlyPaidInvoiceIds: string[] = [];
-
-    for (const alloc of clampedAllocations) {
-      // Row-locked via apply_payment_to_invoice() instead of a manual
-      // read-then-write — see applyCrmInvoicePayment above for why (two
-      // concurrent payments landing on the same invoice must serialize, not
-      // race on a stale amount_paid_cents read).
-      const { data: rpcResult, error: rpcErr } = await db.rpc("apply_payment_to_invoice", {
-        p_invoice_id: alloc.invoiceId,
-        p_delta_cents: alloc.amountCents,
-      });
-      if (rpcErr) throw rpcErr;
-      const wasNewlyPaid = !!rpcResult?.[0]?.was_newly_paid;
-
-      if (wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
-
-      if (alloc.amountCents > 0) {
-        const { error: allocErr } = await db
-          .from("crm_payment_allocations")
-          .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: alloc.invoiceId, amount_cents: alloc.amountCents });
-        if (allocErr) throw allocErr;
-      }
-    }
-
-    for (const invoiceId of newlyPaidInvoiceIds) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
-    }
-
-    await db.rpc("sync_client_balance", { p_client_id: clientId });
-
-    await db.from("client_activity").insert({
-      org_id: orgId,
-      client_id: clientId,
-      activity_type: "payment",
-      subject: `Payment received: ${method} (online) — ${allocations.length} invoices${overpaidCents > 0 ? ", partly credited to account" : ""}`,
-      amount_cents: totalCents,
-      ref_id: inserted.id,
-      ref_table: "crm_payments",
-    });
-  } catch (err) {
-    log.error("recorded multi-invoice payment but failed to apply it", { error: err, paymentId: inserted.id });
-    return "error";
-  }
-
-  return "applied";
+  const result = await recordStripeCharge({ db, supabase, paymentIntent, connectedAccountId: event.account });
+  return result === "already_recorded" ? "skipped" : result;
 }

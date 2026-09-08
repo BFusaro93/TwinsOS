@@ -94,7 +94,14 @@ export function ChargeCardDialog({
 
   async function handleChargeSaved() {
     try {
-      await chargeSaved.mutateAsync({ invoiceId });
+      const result = await chargeSaved.mutateAsync({ invoiceId });
+      if (result.status === "succeeded" && result.recorded === false) {
+        // The payment method WAS charged — only the ledger write failed.
+        toast.error(
+          "The charge went through at Stripe but could NOT be recorded on this invoice. Do not retry — reconcile it in Stripe first.",
+          { duration: 15000 }
+        );
+      }
       setSucceeded(true);
       onCharged();
     } catch (err) {

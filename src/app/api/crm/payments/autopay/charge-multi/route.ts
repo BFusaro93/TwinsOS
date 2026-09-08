@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import {
   computeProcessingFee,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { recordStripeCharge } from "@/lib/stripe/record-charge";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe multi-invoice charge");
@@ -34,7 +35,11 @@ const BLOCKING_PAYMENT_INTENT_STATUSES = new Set([
 
 /** Charges a client's saved payment method once for a combined total split across multiple
  * invoices — the saved-method counterpart to create-intent-multi/route.ts. Reuses the same
- * off-session pattern as autopay/charge/route.ts, just for more than one invoice at a time. */
+ * off-session pattern as autopay/charge/route.ts, just for more than one invoice at a time.
+ *
+ * Like that route, a terminal `succeeded` is recorded SYNCHRONOUSLY through the shared
+ * recorder rather than waiting on the Connect webhook — see autopay/charge/route.ts for
+ * why. ACH (`processing`) is left to the webhook. */
 export async function POST(request: Request) {
   if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
@@ -199,11 +204,48 @@ export async function POST(request: Request) {
       }
     );
 
+    // Only a terminal success is real money — `processing` (ACH) and
+    // `requires_action` stay the webhook's job.
+    let recorded = true;
+    let recordingError: string | null = null;
+    if (paymentIntent.status === "succeeded") {
+      try {
+        // Service-role: the ledger write is the same one the webhook does, and
+        // org scoping is re-verified inside the recorder against the connected
+        // account. The caller's own org was already established above.
+        const service = createServiceClient();
+        const result = await recordStripeCharge({
+          db: service,
+          supabase: service,
+          paymentIntent,
+          connectedAccountId: org.stripe_connect_account_id,
+        });
+        recorded = result === "applied" || result === "already_recorded";
+        if (!recorded) recordingError = "The payment could not be applied to the invoices.";
+      } catch (err) {
+        recorded = false;
+        recordingError = "The payment could not be applied to the invoices.";
+        log.error(
+          "CHARGE SUCCEEDED BUT RECORDING FAILED — the customer's payment method was debited at Stripe " +
+            "and no crm_payments row exists. Reconcile manually against this PaymentIntent.",
+          { error: err, clientId, paymentIntentId: paymentIntent.id, amountCents: totalChargeCents }
+        );
+      }
+    } else {
+      // ACH sits in `processing` for days; the Connect webhook records it when
+      // it actually succeeds.
+      recorded = false;
+    }
+
+    // Deliberately NOT a 500: the money already moved.
     return NextResponse.json({
       status: paymentIntent.status,
       balanceCents,
       feeCents,
       totalChargeCents,
+      paymentIntentId: paymentIntent.id,
+      recorded,
+      recordingError,
     });
   } catch (err) {
     return stripeErrorResponse(err, log, { clientId });

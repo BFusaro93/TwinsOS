@@ -6,6 +6,13 @@ export interface ChargeAutopayInvoiceResult {
   feeCents: number;
   totalChargeCents: number;
   clientId: string;
+  paymentIntentId?: string;
+  /** False when the charge succeeded at Stripe but the payment could NOT be
+   * written to the ledger (or, harmlessly, when an ACH debit is still
+   * `processing` and the webhook will record it on settlement). Callers must
+   * surface the first case — the customer has been debited. */
+  recorded?: boolean;
+  recordingError?: string | null;
 }
 
 /** Charges an invoice's balance against its client's saved payment method (card or

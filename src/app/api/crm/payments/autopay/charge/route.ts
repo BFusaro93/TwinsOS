@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { recordStripeCharge } from "@/lib/stripe/record-charge";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe autopay charge");
@@ -26,9 +27,18 @@ const BLOCKING_PAYMENT_INTENT_STATUSES = new Set([
 
 /** Charges an invoice's balance against the client's saved payment method (card or
  * ACH) off-session — the "Invoices to Charge" / "ACH Invoices to Charge" queues use
- * this instead of the customer confirming a PaymentElement themselves. On success the
- * existing Connect webhook (payment_intent.succeeded) applies the payment to the
- * invoice exactly like a customer-initiated charge — the metadata contract matches. */
+ * this instead of the customer confirming a PaymentElement themselves.
+ *
+ * The confirm is off-session, so Stripe returns a TERMINAL status right here: a card
+ * comes back `succeeded`. We therefore record the payment SYNCHRONOUSLY (shared
+ * recorder in src/lib/stripe/record-charge.ts) instead of waiting for the Connect
+ * webhook. Relying on the webhook alone meant a webhook outage or a misconfigured
+ * signing secret silently produced charged-but-unrecorded payments — the customer's
+ * card was debited and the invoice stayed Overdue. The webhook still fires and is now
+ * an idempotent no-op (deduped in the DB on the PaymentIntent id).
+ *
+ * ACH is the exception: it confirms as `processing` and only succeeds days later, so
+ * the status guard below leaves it entirely to the webhook. */
 export async function POST(request: Request) {
   if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
@@ -175,12 +185,51 @@ export async function POST(request: Request) {
       }
     );
 
+    // Only a terminal success is real money — `processing` (ACH) and
+    // `requires_action` stay the webhook's job.
+    let recorded = true;
+    let recordingError: string | null = null;
+    if (paymentIntent.status === "succeeded") {
+      try {
+        // Service-role: the ledger write is the same one the webhook does, and
+        // org scoping is re-verified inside the recorder against the connected
+        // account. The caller's own org was already established above.
+        const service = createServiceClient();
+        const result = await recordStripeCharge({
+          db: service,
+          supabase: service,
+          paymentIntent,
+          connectedAccountId: org.stripe_connect_account_id,
+        });
+        recorded = result === "applied" || result === "already_recorded";
+        if (!recorded) recordingError = "The payment could not be applied to the invoice.";
+      } catch (err) {
+        recorded = false;
+        recordingError = "The payment could not be applied to the invoice.";
+        log.error(
+          "CHARGE SUCCEEDED BUT RECORDING FAILED — the customer's payment method was debited at Stripe " +
+            "and no crm_payments row exists. Reconcile manually against this PaymentIntent.",
+          { error: err, invoiceId, paymentIntentId: paymentIntent.id, amountCents: totalChargeCents }
+        );
+      }
+    } else {
+      // Not an error — an ACH debit sits in `processing` for days; the Connect
+      // webhook records it when it actually succeeds.
+      recorded = false;
+    }
+
+    // Deliberately NOT a 500: the money already moved. Tell the caller the
+    // charge succeeded and whether it made it into the ledger, so the UI can
+    // say so rather than implying nothing happened.
     return NextResponse.json({
       status: paymentIntent.status,
       balanceCents: invoice.balance_cents,
       feeCents,
       totalChargeCents,
       clientId: invoice.client_id,
+      paymentIntentId: paymentIntent.id,
+      recorded,
+      recordingError,
     });
   } catch (err) {
     return stripeErrorResponse(err, log, { invoiceId });

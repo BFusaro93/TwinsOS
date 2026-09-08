@@ -417,11 +417,21 @@ export function InvoicesList({ clientId }: Props) {
     setChargingId(inv.id);
     try {
       const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
-      toast.success(
-        `Charged ${inv.clientName} ${formatCurrency(result.totalChargeCents)}${
-          result.feeCents > 0 ? ` (incl. ${formatCurrency(result.feeCents)} fee)` : ""
-        }`
-      );
+      if (result.status === "succeeded" && result.recorded === false) {
+        // The card WAS charged — the ledger write is what failed. Never let
+        // this read as "nothing happened": staff must reconcile it in Stripe.
+        toast.error(
+          `Charged ${inv.clientName} ${formatCurrency(result.totalChargeCents)}, but it could NOT be recorded on the invoice. ` +
+            `Do not retry — reconcile this payment in Stripe first.`,
+          { duration: 15000 }
+        );
+      } else {
+        toast.success(
+          `Charged ${inv.clientName} ${formatCurrency(result.totalChargeCents)}${
+            result.feeCents > 0 ? ` (incl. ${formatCurrency(result.feeCents)} fee)` : ""
+          }`
+        );
+      }
       refetchInvoices();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Failed to charge invoice #${inv.invoiceNumber}`);
@@ -436,10 +446,13 @@ export function InvoicesList({ clientId }: Props) {
     setChargingAll(true);
     let succeeded = 0;
     let failed = 0;
+    let unrecorded = 0;
     for (const inv of filtered) {
       try {
-        await chargeInvoice.mutateAsync({ invoiceId: inv.id });
+        const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
         succeeded++;
+        // Charged at Stripe but not written to the ledger — see handleCharge.
+        if (result.status === "succeeded" && result.recorded === false) unrecorded++;
       } catch {
         failed++;
       }
@@ -447,6 +460,12 @@ export function InvoicesList({ clientId }: Props) {
     setChargingAll(false);
     if (succeeded > 0) toast.success(`Charged ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
     if (failed > 0) toast.error(`Failed to charge ${failed} invoice${failed !== 1 ? "s" : ""}`);
+    if (unrecorded > 0) {
+      toast.error(
+        `${unrecorded} charge${unrecorded !== 1 ? "s" : ""} went through at Stripe but could NOT be recorded on the invoice — reconcile in Stripe before retrying.`,
+        { duration: 15000 }
+      );
+    }
     refetchInvoices();
   }
 

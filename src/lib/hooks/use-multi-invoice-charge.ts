@@ -48,6 +48,10 @@ export interface ChargeMultiResult {
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
+  paymentIntentId?: string;
+  /** See ChargeAutopayInvoiceResult.recorded in use-autopay-invoices.ts. */
+  recorded?: boolean;
+  recordingError?: string | null;
 }
 
 /** Charges the client's saved payment method once for a combined total split across multiple
