@@ -48,11 +48,31 @@ async function stripeForOrgConnectedAccount(
   return getStripeForOrg(data?.stripe_connect_livemode ?? null);
 }
 
+/**
+ * Stripe signs each event with the signing secret of the endpoint that sent
+ * it, and endpoints are per-mode: a live endpoint and a test/sandbox endpoint
+ * have different secrets. An org whose Connect account is test-mode (see
+ * getStripeForOrg) therefore delivers events signed with the TEST endpoint's
+ * secret, which would fail verification against the live one and silently
+ * leave its invoices unpaid — the webhook is the only thing that applies a
+ * card payment to an invoice.
+ *
+ * Try every configured secret. This cannot produce a false accept: a
+ * signature only validates against the exact secret that produced it.
+ */
+function connectWebhookSecrets(): string[] {
+  return [
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET_TEST,
+  ].filter((v): v is string => Boolean(v));
+}
+
 export async function POST(request: Request) {
-  if ((!isStripeConfigured() && !isStripeTestConfigured()) || !process.env.STRIPE_CONNECT_WEBHOOK_SECRET) {
+  const webhookSecrets = connectWebhookSecrets();
+  if ((!isStripeConfigured() && !isStripeTestConfigured()) || webhookSecrets.length === 0) {
     log.error("connect webhook received but not configured", {
       hasSecretKey: isStripeConfigured() || isStripeTestConfigured(),
-      hasWebhookSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
+      hasWebhookSecret: webhookSecrets.length > 0,
     });
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
@@ -69,11 +89,21 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_CONNECT_WEBHOOK_SECRET);
-  } catch (err) {
-    log.error("signature verification failed", { error: err });
+  let event: Stripe.Event | null = null;
+  let lastVerifyError: unknown = null;
+  for (const secret of webhookSecrets) {
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+      break;
+    } catch (err) {
+      lastVerifyError = err;
+    }
+  }
+  if (!event) {
+    log.error("signature verification failed", {
+      error: lastVerifyError,
+      secretsTried: webhookSecrets.length,
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
