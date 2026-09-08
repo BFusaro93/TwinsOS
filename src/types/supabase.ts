@@ -1308,8 +1308,10 @@ export type Database = {
           gross_sqft: number | null
           id: string
           is_master: boolean
+          lat: number | null
           linear_ft_edging: number | null
           linear_ft_perimeter: number | null
+          lng: number | null
           map_code: string | null
           mulch_bed_sqft: number | null
           name: string | null
@@ -1335,8 +1337,10 @@ export type Database = {
           gross_sqft?: number | null
           id?: string
           is_master?: boolean
+          lat?: number | null
           linear_ft_edging?: number | null
           linear_ft_perimeter?: number | null
+          lng?: number | null
           map_code?: string | null
           mulch_bed_sqft?: number | null
           name?: string | null
@@ -1362,8 +1366,10 @@ export type Database = {
           gross_sqft?: number | null
           id?: string
           is_master?: boolean
+          lat?: number | null
           linear_ft_edging?: number | null
           linear_ft_perimeter?: number | null
+          lng?: number | null
           map_code?: string | null
           mulch_bed_sqft?: number | null
           name?: string | null
@@ -1500,8 +1506,10 @@ export type Database = {
           invoice_frequency: string | null
           is_taxable: boolean
           last_name: string | null
+          lat: number | null
           linear_ft_edging: number | null
           linear_ft_perimeter: number | null
+          lng: number | null
           map_code: string | null
           mulch_bed_sqft: number | null
           notes_to_crew: string | null
@@ -1573,8 +1581,10 @@ export type Database = {
           invoice_frequency?: string | null
           is_taxable?: boolean
           last_name?: string | null
+          lat?: number | null
           linear_ft_edging?: number | null
           linear_ft_perimeter?: number | null
+          lng?: number | null
           map_code?: string | null
           mulch_bed_sqft?: number | null
           notes_to_crew?: string | null
@@ -1646,8 +1656,10 @@ export type Database = {
           invoice_frequency?: string | null
           is_taxable?: boolean
           last_name?: string | null
+          lat?: number | null
           linear_ft_edging?: number | null
           linear_ft_perimeter?: number | null
+          lng?: number | null
           map_code?: string | null
           mulch_bed_sqft?: number | null
           notes_to_crew?: string | null
@@ -2985,6 +2997,67 @@ export type Database = {
           },
           {
             foreignKeyName: "crm_crew_daily_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_crew_drive_segments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          crew_id: string
+          ended_at: string | null
+          id: string
+          minutes: number | null
+          org_id: string
+          started_at: string
+          updated_at: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          crew_id: string
+          ended_at?: string | null
+          id?: string
+          minutes?: number | null
+          org_id?: string
+          started_at: string
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          crew_id?: string
+          ended_at?: string | null
+          id?: string
+          minutes?: number | null
+          org_id?: string
+          started_at?: string
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_crew_drive_segments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_drive_segments_crew_id_fkey"
+            columns: ["crew_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_drive_segments_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -4866,6 +4939,7 @@ export type Database = {
           days_count: number
           id: string
           included: boolean
+          is_taxable: boolean | null
           job_id: string
           min_days: number | null
           org_id: string
@@ -4889,6 +4963,7 @@ export type Database = {
           days_count?: number
           id?: string
           included?: boolean
+          is_taxable?: boolean | null
           job_id: string
           min_days?: number | null
           org_id?: string
@@ -4912,6 +4987,7 @@ export type Database = {
           days_count?: number
           id?: string
           included?: boolean
+          is_taxable?: boolean | null
           job_id?: string
           min_days?: number | null
           org_id?: string
@@ -4971,6 +5047,7 @@ export type Database = {
           actual_labor_cost_cents: number
           asset_type: string | null
           assigned_employee_id: string | null
+          break_minutes: number
           budgeted_hours: number | null
           client_id: string
           clocked_in_at: string | null
@@ -4994,6 +5071,7 @@ export type Database = {
           notes_to_crew: string | null
           order_num: number | null
           org_id: string
+          paused_at: string | null
           priority: number
           qty: number | null
           rate_cents: number | null
@@ -5013,6 +5091,7 @@ export type Database = {
           actual_labor_cost_cents?: number
           asset_type?: string | null
           assigned_employee_id?: string | null
+          break_minutes?: number
           budgeted_hours?: number | null
           client_id: string
           clocked_in_at?: string | null
@@ -5036,6 +5115,7 @@ export type Database = {
           notes_to_crew?: string | null
           order_num?: number | null
           org_id?: string
+          paused_at?: string | null
           priority?: number
           qty?: number | null
           rate_cents?: number | null
@@ -5055,6 +5135,7 @@ export type Database = {
           actual_labor_cost_cents?: number
           asset_type?: string | null
           assigned_employee_id?: string | null
+          break_minutes?: number
           budgeted_hours?: number | null
           client_id?: string
           clocked_in_at?: string | null
@@ -5078,6 +5159,7 @@ export type Database = {
           notes_to_crew?: string | null
           order_num?: number | null
           org_id?: string
+          paused_at?: string | null
           priority?: number
           qty?: number | null
           rate_cents?: number | null
@@ -10357,6 +10439,7 @@ export type Database = {
           cc_processing_fee_threshold_cents: number
           cost_method: string
           created_at: string
+          crew_hide_pricing: boolean
           customizations: Json
           default_billing_terms: string
           default_invoice_delivery: string
@@ -10373,6 +10456,7 @@ export type Database = {
           slug: string
           stripe_connect_account_id: string | null
           stripe_connect_charges_enabled: boolean
+          stripe_connect_livemode: boolean | null
           stripe_connect_payouts_enabled: boolean
           stripe_connect_status: string
           stripe_customer_id: string | null
@@ -10398,6 +10482,7 @@ export type Database = {
           cc_processing_fee_threshold_cents?: number
           cost_method?: string
           created_at?: string
+          crew_hide_pricing?: boolean
           customizations?: Json
           default_billing_terms?: string
           default_invoice_delivery?: string
@@ -10414,6 +10499,7 @@ export type Database = {
           slug: string
           stripe_connect_account_id?: string | null
           stripe_connect_charges_enabled?: boolean
+          stripe_connect_livemode?: boolean | null
           stripe_connect_payouts_enabled?: boolean
           stripe_connect_status?: string
           stripe_customer_id?: string | null
@@ -10439,6 +10525,7 @@ export type Database = {
           cc_processing_fee_threshold_cents?: number
           cost_method?: string
           created_at?: string
+          crew_hide_pricing?: boolean
           customizations?: Json
           default_billing_terms?: string
           default_invoice_delivery?: string
@@ -10455,6 +10542,7 @@ export type Database = {
           slug?: string
           stripe_connect_account_id?: string | null
           stripe_connect_charges_enabled?: boolean
+          stripe_connect_livemode?: boolean | null
           stripe_connect_payouts_enabled?: boolean
           stripe_connect_status?: string
           stripe_customer_id?: string | null
@@ -13167,6 +13255,17 @@ export type Database = {
         }
         Relationships: []
       }
+      rpt_crew_drive_time: {
+        Row: {
+          crew_name: string | null
+          ended_at: string | null
+          id: string | null
+          minutes: number | null
+          started_at: string | null
+          work_date: string | null
+        }
+        Relationships: []
+      }
       rpt_employees: {
         Row: {
           applicator_license: string | null
@@ -13348,9 +13447,11 @@ export type Database = {
           job_id: string | null
           job_service_id: string | null
           job_status: string | null
+          line_revenue_cents: number | null
           man_count: number | null
           qty: number | null
           rate_variance_bps: number | null
+          revenue_share: number | null
           scheduled_date: string | null
           service_category: string | null
           service_id: string | null
@@ -13405,6 +13506,7 @@ export type Database = {
           completed_at: string | null
           crew_name: string | null
           id: string | null
+          labor_cost_source: string | null
           man_hours: number | null
           men_count: number | null
           org_id: string | null
@@ -13421,6 +13523,7 @@ export type Database = {
           status: string | null
           sub_status: string | null
           variance_hours: number | null
+          worked_date: string | null
         }
         Relationships: []
       }
@@ -13744,11 +13847,34 @@ export type Database = {
         Args: { p_secret: string }
         Returns: string
       }
+      crm_kpi_scorecard_ensure: {
+        Args: { p_config: Json }
+        Returns: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          org_id: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "crm_kpi_scorecards"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       crm_recompute_job_actual_hours: {
         Args: { p_job_id: string }
         Returns: undefined
       }
       crm_recompute_job_budgeted_hours: {
+        Args: { p_job_id: string }
+        Returns: undefined
+      }
+      crm_recompute_job_rate_cents: {
         Args: { p_job_id: string }
         Returns: undefined
       }
@@ -13775,7 +13901,7 @@ export type Database = {
       }
       get_org_twilio_api_secret: { Args: { p_org_id: string }; Returns: string }
       get_org_twilio_auth_token: { Args: { p_org_id: string }; Returns: string }
-      has_crm_access: { Args: Record<PropertyKey, never>; Returns: boolean }
+      has_crm_access: { Args: never; Returns: boolean }
       has_settings_permission: { Args: { p_key: string }; Returns: boolean }
       increment_api_key_rate_limit: {
         Args: { p_api_key_id: string; p_window_start: string }

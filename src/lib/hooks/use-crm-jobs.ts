@@ -603,6 +603,8 @@ export function mapVisit(row: any): CRMJobVisit {
     dispatchedAt:        row.dispatched_at ?? null,
     clockedInAt:         row.clocked_in_at ?? null,
     clockedOutAt:        row.clocked_out_at ?? null,
+    pausedAt:            row.paused_at ?? null,
+    breakMinutes:        row.break_minutes ?? 0,
     acknowledgedNotesAt: row.acknowledged_notes_at ?? null,
     skipReason:          row.skip_reason ?? null,
     createdAt:           row.created_at,
@@ -2634,6 +2636,29 @@ export function useClientServiceHistory() {
       });
 
       return { scheduled, completed };
+    },
+  });
+}
+
+// ── useDrivingCrewIds ─────────────────────────────────────────────────────────
+// Office-side (dispatch board) view of which crews are CURRENTLY driving —
+// only meaningful for today, since drive time is a live clock, not a
+// schedule. Returns an empty set for any other date without querying.
+
+export function useDrivingCrewIds(date: string) {
+  return useQuery<Set<string>>({
+    queryKey: ["driving-crew-ids", date],
+    enabled: date === todayLocalISODate(),
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_crew_drive_segments")
+        .select("crew_id")
+        .eq("work_date", date)
+        .is("ended_at", null);
+      if (error) throw error;
+      return new Set((data as { crew_id: string }[]).map((r) => r.crew_id));
     },
   });
 }

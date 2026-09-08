@@ -46,6 +46,8 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "job-cost-summary": ["sched_rpt_job_cost_summary"],
   "job-costing-report": ["sched_rpt_job_costing"],
   "job-hours-summary": ["sched_rpt_job_hours_summary"],
+  "drive-time-summary": ["sched_rpt_job_hours_summary"],
+  "drive-time-detail": ["sched_rpt_job_hours_summary"],
   "new-leads": ["crm_rpt_new_leads"],
   "lead-aging-summary": ["crm_rpt_lead_aging_summary"],
   "closed-leads-summary": ["crm_rpt_closed_leads_summary"],
@@ -104,6 +106,7 @@ const ESTIMATE_DATASET_KEYS = [
 export const DATASET_PERMISSION_KEYS: Record<string, string[]> = {
   rpt_employees: ["sched_rpt_employee_directory"],
   rpt_timesheets: ["sched_rpt_job_hours_summary", "sched_rpt_employee_directory"],
+  rpt_crew_drive_time: ["sched_rpt_job_hours_summary"],
   rpt_invoices: ACCOUNTING_DATASET_KEYS,
   rpt_invoice_line_items: ACCOUNTING_DATASET_KEYS,
   rpt_payments: ["acct_rpt_payment_audit_summary", ...ACCOUNTING_DATASET_KEYS],

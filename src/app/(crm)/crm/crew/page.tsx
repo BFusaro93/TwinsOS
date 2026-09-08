@@ -3,16 +3,29 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { format } from "date-fns";
-import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2 } from "lucide-react";
-import { useMyCrewStops, useMyCrewInfo } from "@/lib/hooks/use-crew-app";
+import { format, parseISO, differenceInMinutes } from "date-fns";
+import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
+import { useMyCrewStops, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
 import { Button } from "@/components/ui/button";
 import { visitServiceNames } from "@/lib/utils/visit-stops";
 import { formatTimeOfDay } from "@/lib/utils";
+import { openInMaps } from "@/lib/utils/maps";
 import type { Stop } from "@/lib/utils/visit-stops";
 import type { VisitStatus } from "@/types/crm-jobs";
+
+function DriveElapsed({ start }: { start: string }) {
+  const [, forceUpdate] = useState(0);
+  useState(() => {
+    const id = setInterval(() => forceUpdate((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  });
+  const mins = Math.max(0, differenceInMinutes(new Date(), parseISO(start)));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return <span>{h > 0 ? `${h}h ${m}m` : `${m}m`}</span>;
+}
 
 const STATUS_CONFIG: Record<VisitStatus, { label: string; color: string; icon: React.ReactNode }> = {
   scheduled:   { label: "Not Started",  color: "bg-slate-100 text-slate-600",   icon: <Clock className="h-3 w-3" /> },
@@ -29,9 +42,12 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
   const startTime = stop.visits.find((v) => v.startTime)?.startTime;
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="w-full text-left bg-white rounded-xl border border-slate-200 p-4 shadow-sm active:bg-slate-50 transition-colors"
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
+      className="w-full text-left bg-white rounded-xl border border-slate-200 p-4 shadow-sm active:bg-slate-50 transition-colors cursor-pointer"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
@@ -44,10 +60,13 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
             )}
           </div>
           {stop.address && (
-            <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5 truncate">
+            <button
+              onClick={(e) => { e.stopPropagation(); openInMaps(stop.address); }}
+              className="text-sm text-blue-600 flex items-center gap-1 mt-0.5 truncate"
+            >
               <MapPin className="h-3 w-3 shrink-0" />
-              {stop.address}
-            </p>
+              <span className="truncate">{stop.address}</span>
+            </button>
           )}
           {services && (
             <p className="text-sm text-slate-600 mt-1 truncate">{services}</p>
@@ -65,7 +84,11 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
             {cfg.label}
           </span>
           {stop.clockedInAt && !stop.clockedOutAt && (
-            <span className="text-xs text-amber-600 font-medium">Running</span>
+            stop.pausedAt ? (
+              <span className="text-xs text-blue-600 font-medium">On Break</span>
+            ) : (
+              <span className="text-xs text-amber-600 font-medium">Running</span>
+            )
           )}
           <ChevronRight className="h-4 w-4 text-slate-300 mt-1" />
         </div>
@@ -77,7 +100,7 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
           </p>
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -86,11 +109,15 @@ export default function CrewSchedulePage() {
   const today = format(new Date(), "yyyy-MM-dd");
   const { data: stops = [], isLoading } = useMyCrewStops(today);
   const { data: crewInfo } = useMyCrewInfo();
+  const { data: drive } = useCrewDriveToday(today);
+  const startDrive = useStartDrive();
+  const endDrive = useEndDrive();
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
   const [editCrewOpen, setEditCrewOpen] = useState(false);
 
   const completed = stops.filter(s => s.derivedStatus === "completed").length;
   const total     = stops.length;
+  const anyJobActive = stops.some(s => s.derivedStatus === "in_progress");
 
   return (
     <div className="flex flex-col min-h-dvh">
@@ -150,6 +177,55 @@ export default function CrewSchedulePage() {
                 style={{ width: `${(completed / total) * 100}%` }}
               />
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Drive time — day-level, not tied to any one stop (yard to first
+          stop, between stops, last stop back to yard). */}
+      <div className="px-4 pt-4">
+        {drive?.openSegment ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-blue-800 flex items-center gap-1.5">
+                <Car className="h-3.5 w-3.5" />
+                Driving
+              </p>
+              <p className="text-xs text-blue-600">
+                Since {format(parseISO(drive.openSegment.startedAt), "h:mm a")}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-blue-700 font-mono font-bold text-lg">
+                <DriveElapsed start={drive.openSegment.startedAt} />
+              </span>
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 gap-1.5"
+                onClick={() => endDrive.mutate()}
+                disabled={endDrive.isPending}
+              >
+                {endDrive.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
+                Arrived
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+              onClick={() => startDrive.mutate()}
+              disabled={startDrive.isPending || anyJobActive}
+              title={anyJobActive ? "Stop the active job before starting drive time" : undefined}
+            >
+              {startDrive.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Car className="h-4 w-4" />}
+              Start Drive
+            </Button>
+            {!!drive?.totalMinutes && (
+              <p className="text-xs text-slate-400">Drive today: {drive.totalMinutes}m</p>
+            )}
           </div>
         )}
       </div>

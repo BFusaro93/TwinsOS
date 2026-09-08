@@ -99,6 +99,8 @@ function mapVisit(row: Record<string, unknown>): CRMJobVisit {
     dispatchedAt:         row.dispatched_at as string | null,
     clockedInAt:          row.clocked_in_at as string | null,
     clockedOutAt:         row.clocked_out_at as string | null,
+    pausedAt:             row.paused_at as string | null,
+    breakMinutes:         (row.break_minutes as number) ?? 0,
     acknowledgedNotesAt:  row.acknowledged_notes_at as string | null,
     skipReason:           row.skip_reason as string | null,
     createdAt:            row.created_at as string,
@@ -372,6 +374,53 @@ export function useMyCrewInfo() {
   });
 }
 
+// ── useCrewDriveToday ─────────────────────────────────────────────────────────
+// Day-level drive-time segments for the logged-in crew — yard-to-first-stop,
+// between stops, and last-stop-to-yard all land in the same list, since
+// crm_crew_drive_segments isn't tied to any one crm_job_visits row.
+
+export interface CrewDriveSegment {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  minutes: number | null;
+}
+
+export function useCrewDriveToday(date: string) {
+  return useQuery<{ segments: CrewDriveSegment[]; openSegment: CrewDriveSegment | null; totalMinutes: number }>({
+    queryKey: ["crew-drive-today", date],
+    queryFn: async () => {
+      const { supabase, userId } = await getAuthContext();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: crew } = await (supabase as any)
+        .from("crm_crews")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!crew) return { segments: [], openSegment: null, totalMinutes: 0 };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_crew_drive_segments")
+        .select("id, started_at, ended_at, minutes")
+        .eq("crew_id", crew.id)
+        .eq("work_date", date)
+        .order("started_at", { ascending: true });
+      if (error) throw error;
+
+      const segments: CrewDriveSegment[] = (data as Record<string, unknown>[]).map((r) => ({
+        id: r.id as string,
+        startedAt: r.started_at as string,
+        endedAt: (r.ended_at as string) ?? null,
+        minutes: (r.minutes as number) ?? null,
+      }));
+      const openSegment = segments.find((s) => !s.endedAt) ?? null;
+      const totalMinutes = segments.reduce((sum, s) => sum + (s.minutes ?? 0), 0);
+      return { segments, openSegment, totalMinutes };
+    },
+  });
+}
+
 // ── mutations ─────────────────────────────────────────────────────────────────
 
 export function useClockIn() {
@@ -436,8 +485,78 @@ export function useStopClockIn() {
       qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      // Clock-in auto-closes any open drive segment server-side (see
+      // stops/[visitId]/clock-in/route.ts) — refresh so the home screen
+      // stops showing "Driving" the moment a job actually starts.
+      qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
     },
     onError: () => toast.error("Failed to start job — check your connection and try again"),
+  });
+}
+
+export function useStartDrive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/crm/crew/drive/start", { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
+    },
+    onError: () => toast.error("Failed to start drive time — check your connection and try again"),
+  });
+}
+
+export function useEndDrive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/crm/crew/drive/end", { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
+    },
+    onError: () => toast.error("Failed to end drive time — check your connection and try again"),
+  });
+}
+
+export function useStopPause() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (anchorVisitId: string) => {
+      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/pause`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: (_data, anchorVisitId) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+    onError: () => toast.error("Failed to pause — check your connection and try again"),
+  });
+}
+
+export function useStopResume() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (anchorVisitId: string) => {
+      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/resume`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: (_data, anchorVisitId) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+    onError: () => toast.error("Failed to resume — check your connection and try again"),
   });
 }
 

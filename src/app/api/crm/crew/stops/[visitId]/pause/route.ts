@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { z } from "zod";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
-import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
-
-const Body = z.object({
-  // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
-  // so the actual local time-of-day must come from the client's browser clock.
-  localTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-});
 
 interface VisitRow {
   id: string;
@@ -20,6 +12,8 @@ interface VisitRow {
   crew_id: string | null;
   status: string;
   clocked_in_at: string | null;
+  clocked_out_at: string | null;
+  paused_at: string | null;
   crm_jobs: { property_id: string | null; service_address: string | null; service_city: string | null } | null;
 }
 
@@ -34,15 +28,13 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at, crm_jobs(property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at, clocked_out_at, paused_at, crm_jobs(property_id, service_address, service_city)";
 
 /**
- * Clocks in every visit that makes up "this stop" (same client/day/crew/
- * address as the anchor visit in the URL) with one action — the crew tablet
- * groups these into a single card, but the underlying data model still has
- * one crm_job_visits row per service so office-side reporting stays
- * per-service accurate. Derives the sibling set itself from the anchor
- * rather than trusting a client-supplied list.
+ * Pauses every open visit in this stop (lunch, stopping for the day) without
+ * completing or billing it — sets paused_at, leaves status/clocked_in_at
+ * untouched so resume can pick the visit back up. Mirrors the sibling-set
+ * derivation in clock-in/clock-out.
  */
 export async function POST(
   request: Request,
@@ -59,9 +51,6 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { visitId: anchorVisitId } = await params;
-  const body = await request.json().catch(() => ({}));
-  const parsed = Body.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: anchorRow, error: anchorErr } = await (supabase as any)
@@ -73,9 +62,6 @@ export async function POST(
   if (anchorErr || !anchorRow) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   const anchor = anchorRow as VisitRow;
 
-  // Guard against clocking in another crew's visit — RLS on crm_job_visits
-  // only checks org_id, not crew_id, so a caller who obtains another crew's
-  // visitId could otherwise still act on it. See assertCallerOwnsVisit().
   if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor.crew_id))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
@@ -91,44 +77,24 @@ export async function POST(
   if (candErr) return NextResponse.json({ error: candErr.message }, { status: 500 });
 
   const anchorKey = stopKeyForVisit(toStopKeyInput(anchor));
-  const siblingIds = (candidateRows as VisitRow[])
-    .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
-    // Defense in depth: stopKeyForVisit already encodes crew_id, so a match
-    // on anchorKey mathematically implies r.crew_id === anchor.crew_id (the
-    // crew whose ownership was just verified above) — this filter makes that
-    // invariant explicit rather than implicit, so no row outside the caller's
-    // crew can ever enter the mutation set below.
+  const openIds = (candidateRows as VisitRow[])
     .filter((r) => r.crew_id === anchor.crew_id)
-    .filter((r) => !r.clocked_in_at) // already clocked in — idempotent/double-tap safe
+    .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
+    .filter((r) => r.clocked_in_at && !r.clocked_out_at && !r.paused_at)
     .map((r) => r.id);
 
-  if (siblingIds.length === 0) {
-    return NextResponse.json({ error: "Nothing to clock in for this stop" }, { status: 400 });
+  if (openIds.length === 0) {
+    return NextResponse.json({ error: "Nothing to pause for this stop" }, { status: 400 });
   }
 
   const now = new Date().toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_visits")
-    .update({
-      clocked_in_at: now,
-      start_time: parsed.data.localTime ? `${parsed.data.localTime}:00` : undefined,
-      status: "in_progress",
-      updated_at: now,
-    })
-    .in("id", siblingIds)
+    .update({ paused_at: now, updated_at: now })
+    .in("id", openIds)
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Safety net: a crew that forgets to hit "Arrived" before starting the
-  // next job shouldn't leave a drive segment open for the rest of the day —
-  // starting a job means they've clearly stopped driving. Non-fatal.
-  try {
-    await closeOpenDriveSegment(supabase, anchor.crew_id!);
-  } catch (err) {
-    console.error("[crew/stops/clock-in] auto-close drive segment failed:", err);
-  }
-
-  return NextResponse.json({ visitIds: siblingIds, visits: data });
+  return NextResponse.json({ visitIds: openIds, visits: data });
 }

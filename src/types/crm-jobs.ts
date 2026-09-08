@@ -293,6 +293,10 @@ export interface CRMJobVisit {
   dispatchedAt: string | null
   clockedInAt: string | null
   clockedOutAt: string | null
+  /** Set while the crew is on a break (lunch, stopping for the day) mid-visit; cleared on resume. */
+  pausedAt: string | null
+  /** Accumulated break minutes across every pause/resume cycle on this visit, subtracted from actual hours at final clock-out. */
+  breakMinutes: number
   acknowledgedNotesAt: string | null
   skipReason: string | null
   createdAt: string

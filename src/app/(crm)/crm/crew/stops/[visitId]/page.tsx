@@ -6,13 +6,15 @@ import { format, parseISO, differenceInMinutes } from "date-fns";
 import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
-  Image as ImageIcon, Send, Loader2, CheckCircle2,
+  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee,
 } from "lucide-react";
 import {
   useStopDetail,
   useVisitPhotos,
   useStopClockIn,
   useStopClockOut,
+  useStopPause,
+  useStopResume,
   useSkipVisit,
   useAcknowledgeNotes,
   useAddCrewNote,
@@ -29,6 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { visitServices } from "@/lib/utils/visit-stops";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { openInMaps } from "@/lib/utils/maps";
 
 function ElapsedTimer({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
@@ -48,9 +52,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const router = useRouter();
   const { data: stop, isLoading } = useStopDetail(anchorVisitId);
   const { data: photos = [] } = useVisitPhotos(anchorVisitId);
+  const { data: orgSettings } = useOrgSettings();
+  const hidePricing = orgSettings?.crewHidePricing ?? false;
 
   const stopClockIn  = useStopClockIn();
   const stopClockOut = useStopClockOut();
+  const stopPause    = useStopPause();
+  const stopResume   = useStopResume();
   const skipVisit     = useSkipVisit();
   const acknowledge   = useAcknowledgeNotes();
   const addNote       = useAddCrewNote();
@@ -68,14 +76,23 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const acknowledged = !!anchor?.acknowledgedNotesAt;
   const isActive = stop?.derivedStatus === "in_progress";
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped";
+  const isPaused = isActive && !!stop?.pausedAt;
 
   function openMaps() {
     if (!stop?.address) return;
-    window.open(`https://maps.apple.com/?q=${encodeURIComponent(stop.address)}`, "_blank");
+    openInMaps(stop.address);
   }
 
   async function handleClockIn() {
     await stopClockIn.mutateAsync(anchorVisitId);
+  }
+
+  async function handlePause() {
+    await stopPause.mutateAsync(anchorVisitId);
+  }
+
+  async function handleResume() {
+    await stopResume.mutateAsync(anchorVisitId);
   }
 
   async function handleClockOut() {
@@ -166,17 +183,34 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <main className="flex-1 px-4 py-4 space-y-4 pb-8">
         {/* Clock status */}
         {isActive && stop.clockedInAt && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-amber-800">Job Running</p>
-              <p className="text-xs text-amber-600">
-                Started {format(parseISO(stop.clockedInAt), "h:mm a")}
-              </p>
+          isPaused && stop.pausedAt ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-800 flex items-center gap-1.5">
+                  <Coffee className="h-3.5 w-3.5" />
+                  On Break
+                </p>
+                <p className="text-xs text-blue-600">
+                  Since {format(parseISO(stop.pausedAt), "h:mm a")}
+                </p>
+              </div>
+              <div className="text-blue-700 font-mono font-bold text-lg">
+                <ElapsedTimer start={stop.pausedAt} />
+              </div>
             </div>
-            <div className="text-amber-700 font-mono font-bold text-lg">
-              <ElapsedTimer start={stop.clockedInAt} />
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-800">Job Running</p>
+                <p className="text-xs text-amber-600">
+                  Started {format(parseISO(stop.clockedInAt), "h:mm a")}
+                </p>
+              </div>
+              <div className="text-amber-700 font-mono font-bold text-lg">
+                <ElapsedTimer start={stop.clockedInAt} />
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {/* Services checklist — one row per visit in this stop, each its own service */}
@@ -206,7 +240,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {svc?.rateCents != null && (
+                    {!hidePricing && svc?.rateCents != null && (
                       <p className="text-sm text-slate-400">{formatCurrency(svc.rateCents)}</p>
                     )}
                     {v.status === "skipped" ? (
@@ -284,13 +318,35 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 Start Job
               </Button>
             ) : (
-              <Button
-                className="w-full h-14 text-base font-bold bg-red-600 hover:bg-red-700 gap-2"
-                onClick={() => setClockOutOpen(true)}
-              >
-                <StopIcon className="h-5 w-5" />
-                Stop Job
-              </Button>
+              <>
+                {isPaused ? (
+                  <Button
+                    className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 gap-2"
+                    onClick={handleResume}
+                    disabled={stopResume.isPending}
+                  >
+                    {stopResume.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
+                    Resume Job
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full h-14 text-base font-bold gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    onClick={handlePause}
+                    disabled={stopPause.isPending}
+                  >
+                    {stopPause.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Coffee className="h-5 w-5" />}
+                    Take a Break
+                  </Button>
+                )}
+                <Button
+                  className="w-full h-14 text-base font-bold bg-red-600 hover:bg-red-700 gap-2"
+                  onClick={() => setClockOutOpen(true)}
+                >
+                  <StopIcon className="h-5 w-5" />
+                  Stop Job
+                </Button>
+              </>
             )}
           </div>
         )}

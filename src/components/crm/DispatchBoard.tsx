@@ -12,6 +12,7 @@ import {
   useCRMCrews,
   useCRMJobProducts,
   useReturnVisitToWaitingList,
+  useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { WeekStrip } from "./WeekStrip";
@@ -63,6 +64,7 @@ import {
   MessageSquareText,
   Clock,
   Undo2,
+  Car,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import {
@@ -232,7 +234,7 @@ function VisitOutcomeReasonDialog({
   );
 }
 
-function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
+function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving?: boolean }) {
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
   // Skipped / Cancelled go through the reason prompt first (D-10).
   const [pendingOutcome, setPendingOutcome] = useState<OutcomeStatus | null>(null);
@@ -268,10 +270,10 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
         <button
           onClick={(e) => e.stopPropagation()}
           disabled={isPending}
-          title={`Status: ${visit.status.replace(/_/g, " ")} — click to change`}
+          title={isDriving ? "Crew is driving to this stop — click to change status" : `Status: ${visit.status.replace(/_/g, " ")} — click to change`}
           className={cn("flex items-center justify-center rounded transition-opacity", isPending && "opacity-50")}
         >
-          <VisitStatusIcon status={visit.status} />
+          {isDriving ? <Car className="h-4 w-4 text-blue-500" /> : <VisitStatusIcon status={visit.status} />}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40" onClick={(e) => e.stopPropagation()}>
@@ -1957,6 +1959,7 @@ function VisitRow({
   memberTimes,
   anchorVisitId,
   allVisits,
+  drivingCrewIds,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1987,6 +1990,10 @@ function VisitRow({
   /** Every visit on the board for the selected date — used to warn when a
    * Start/End edit overlaps another stop already assigned to this crew. */
   allVisits: CRMJobVisit[];
+  /** crew_ids with an open crm_crew_drive_segments row right now (today
+   * only — see useDrivingCrewIds). Used to swap this row's status icon for
+   * a driving icon when this is that crew's next not-yet-started stop. */
+  drivingCrewIds: Set<string>;
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -2011,6 +2018,17 @@ function VisitRow({
   const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
   const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
+  // Swap this row's status icon for a driving icon when the crew is
+  // currently driving AND this is the next stop they haven't started yet —
+  // ordered by `priority` (what manual drag/route-optimize saves, see
+  // handleSaveOrder), not allVisits' own array order.
+  const isDrivingToThis = !!effectiveCrewId && drivingCrewIds.has(effectiveCrewId) && (() => {
+    const nextForCrew = allVisits
+      .filter((v) => (v.crewId ?? v.job?.crewId ?? null) === effectiveCrewId)
+      .filter((v) => v.status === "scheduled" || v.status === "dispatched")
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))[0];
+    return nextForCrew?.id === visit.id;
+  })();
   const budgetedHours = computeBudgetedHours(visit);
   const actualHours = computeActualHours(visit);
 
@@ -2240,7 +2258,7 @@ function VisitRow({
 
       {/* St */}
       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-        <StatusCycleButton visit={visit} />
+        <StatusCycleButton visit={visit} isDriving={isDrivingToThis} />
       </td>
 
       {/* Client (+ address below, like the Jobs screen — City/Zip stay in
@@ -2724,6 +2742,7 @@ export function DispatchBoard() {
   // times to detect per-member time divergence, and firing one query per
   // visible row would be its own N+1 problem.
   const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
+  const { data: drivingCrewIds = new Set<string>() } = useDrivingCrewIds(selectedDate);
   const allVisits = visits ?? [];
   // A "stop" (same client/day/crew/address) clocks in and out as one unit —
   // crm_crew_member_times rows are only ever written against the stop's
@@ -3774,6 +3793,7 @@ export function DispatchBoard() {
                   memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                   allVisits={allVisits}
+                  drivingCrewIds={drivingCrewIds}
                 />
               ))
             )}

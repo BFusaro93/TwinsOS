@@ -48,7 +48,7 @@ export async function getRouteAuth(request: Request): Promise<{
  * in as the crew itself — see crew/visits/route.ts), scoped to org so a
  * cross-org id can never match.
  */
-async function resolveCallerCrewId(
+export async function resolveCallerCrewId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   userId: string,

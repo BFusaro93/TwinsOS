@@ -32,6 +32,8 @@ interface VisitRow {
   men_count: number | null;
   clocked_in_at: string | null;
   clocked_out_at: string | null;
+  paused_at: string | null;
+  break_minutes: number | null;
   start_time: string | null;
   crm_jobs: {
     property_id: string | null;
@@ -54,7 +56,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 
 const VISIT_SELECT = `
   id, org_id, job_id, client_id, scheduled_date, crew_id, job_service_id, status,
-  men_count, clocked_in_at, clocked_out_at, start_time,
+  men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
   crm_jobs(property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
 
@@ -152,9 +154,25 @@ export async function POST(
     ?? null;
   const menCount = anchor.men_count || 1;
 
+  // Break time (lunch, stopping for the day) doesn't count toward billed/
+  // actual duration. Siblings pause/resume together so break_minutes is
+  // normally in sync across them — take the max in case one didn't update
+  // for some reason — and roll in an in-progress pause (crew clocked out
+  // directly from a break without hitting Resume first) as of right now.
+  const finalBreakMinutes = new Map<string, number>();
+  for (const row of openRows) {
+    let mins = row.break_minutes ?? 0;
+    if (row.paused_at) {
+      mins += Math.max(0, Math.round((new Date(now).getTime() - new Date(row.paused_at).getTime()) / 60_000));
+    }
+    finalBreakMinutes.set(row.id, mins);
+  }
+  const stopBreakMinutes = Math.max(0, ...Array.from(finalBreakMinutes.values()));
+
   let durationHours: number | null = null;
   if (startedAt) {
-    durationHours = (new Date(now).getTime() - new Date(startedAt).getTime()) / 3_600_000;
+    durationHours = (new Date(now).getTime() - new Date(startedAt).getTime()) / 3_600_000 - stopBreakMinutes / 60;
+    if (durationHours < 0) durationHours = 0;
   } else if (anchor.start_time && localTime) {
     const [sh, sm] = anchor.start_time.split(":").map(Number);
     const [eh, em] = localTime.split(":").map(Number);
@@ -196,6 +214,8 @@ export async function POST(
         status: "completed",
         actual_hours: allocation?.get(row.id) ?? undefined,
         men_count: menCount,
+        paused_at: null,
+        break_minutes: finalBreakMinutes.get(row.id) ?? row.break_minutes ?? 0,
         // Notes belong to the anchor when it's part of this clock-out; when the
         // anchor was already completed, the crew typed them for the visits
         // being closed now — don't drop them.

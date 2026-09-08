@@ -474,6 +474,19 @@ export const REPORT_DATASETS: ReportDataset[] = [
     ],
   },
   {
+    key: "rpt_crew_drive_time",
+    label: "Crew Drive Time",
+    description: "Recorded crew drive-time segments (yard to first stop, between stops, last stop to yard).",
+    defaultDateField: "work_date",
+    fields: [
+      { key: "work_date", label: "Date", type: "date" },
+      { key: "crew_name", label: "Crew", type: "text" },
+      { key: "started_at", label: "Started", type: "datetime" },
+      { key: "ended_at", label: "Ended", type: "datetime" },
+      { key: "minutes", label: "Minutes", type: "number" },
+    ],
+  },
+  {
     key: "rpt_employees",
     label: "Employees",
     description: "Employee directory with employment and compensation details.",

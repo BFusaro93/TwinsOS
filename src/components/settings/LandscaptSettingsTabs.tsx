@@ -667,6 +667,13 @@ function CRMTab() {
         <ClientDefaultsSection />
       </AccordionSection>
       <AccordionSection
+        title="Crew App"
+        count={0}
+        description="Settings for the crew tablet clock-in app"
+      >
+        <CrewAppSection />
+      </AccordionSection>
+      <AccordionSection
         title="Cancellation Reasons"
         count={cancellationReasons.length}
       >
@@ -687,6 +694,40 @@ function CRMTab() {
       <AccordionSection title="Custom Client Fields" count={0} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
         <CustomFieldDefsEditor />
       </AccordionSection>
+    </div>
+  );
+}
+
+// ── CrewAppSection ────────────────────────────────────────────────────────────
+
+function CrewAppSection() {
+  const { data: orgSettings } = useOrgSettings();
+  const { mutateAsync: updateOrg } = useUpdateOrgSettings();
+  const [saving, setSaving] = useState(false);
+
+  async function toggleHidePricing(next: boolean) {
+    setSaving(true);
+    try {
+      await updateOrg({ crewHidePricing: next });
+      toast.success(next ? "Pricing hidden from crew app" : "Pricing shown in crew app");
+    } catch {
+      toast.error("Failed to update setting");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 p-4">
+      <Checkbox
+        id="crew-hide-pricing"
+        checked={orgSettings?.crewHidePricing ?? false}
+        disabled={saving}
+        onCheckedChange={(v) => toggleHidePricing(v === true)}
+      />
+      <Label htmlFor="crew-hide-pricing" className="font-normal">
+        Hide service pricing from the crew app
+      </Label>
     </div>
   );
 }

@@ -49,6 +49,8 @@ export interface Stop {
   derivedStatus: VisitStatus;
   clockedInAt: string | null;
   clockedOutAt: string | null;
+  /** Set while the stop is on a break — see crm_job_visits.paused_at. */
+  pausedAt: string | null;
   notesToCrew: string | null;
 }
 
@@ -148,6 +150,7 @@ export function groupVisitsIntoStops(visits: CRMJobVisit[]): Stop[] {
         ?? stopVisits.find((v) => v.clockedInAt)?.clockedInAt
         ?? null,
       clockedOutAt: stopVisits.every((v) => v.clockedOutAt) ? (anchor.clockedOutAt ?? null) : null,
+      pausedAt: stopVisits.find((v) => v.clockedInAt && !v.clockedOutAt && v.pausedAt)?.pausedAt ?? null,
       notesToCrew: [...new Set(stopVisits.map((v) => v.notesToCrew || v.job?.notesToCrew).filter(Boolean))].join("\n") || null,
     };
   });

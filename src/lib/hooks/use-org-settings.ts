@@ -25,6 +25,7 @@ export interface OrgSettingsData {
   ccProcessingFeePercent: number;
   ccProcessingFeeThresholdDollars: number;
   achPaymentsEnabled: boolean;
+  crewHidePricing: boolean;
 }
 
 export interface UpdateOrgSettingsInput {
@@ -46,6 +47,7 @@ export interface UpdateOrgSettingsInput {
   ccProcessingFeePercent?: number;
   ccProcessingFeeThresholdDollars?: number;
   achPaymentsEnabled?: boolean;
+  crewHidePricing?: boolean;
 }
 
 function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
@@ -78,6 +80,7 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     ccProcessingFeeThresholdDollars:
       typeof row.cc_processing_fee_threshold_cents === "number" ? row.cc_processing_fee_threshold_cents / 100 : 500,
     achPaymentsEnabled: typeof row.ach_payments_enabled === "boolean" ? row.ach_payments_enabled : false,
+    crewHidePricing: typeof row.crew_hide_pricing === "boolean" ? row.crew_hide_pricing : false,
   };
 }
 
@@ -88,7 +91,7 @@ async function fetchOrgSettings(queryClient: QueryClient): Promise<OrgSettingsDa
   const supabase = createClient();
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled")
+    .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled, crew_hide_pricing")
     .eq("id", profile.orgId)
     .single();
   if (error) throw error;
@@ -130,6 +133,7 @@ export function useUpdateOrgSettings() {
       if (input.ccProcessingFeeThresholdDollars !== undefined)
         patch.cc_processing_fee_threshold_cents = Math.round(input.ccProcessingFeeThresholdDollars * 100);
       if (input.achPaymentsEnabled !== undefined) patch.ach_payments_enabled = input.achPaymentsEnabled;
+      if (input.crewHidePricing !== undefined) patch.crew_hide_pricing = input.crewHidePricing;
 
       // Merge customizations with existing values instead of replacing them
       if (input.googleMapsApiKey !== undefined) {
