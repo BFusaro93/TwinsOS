@@ -1,5 +1,21 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+/** Thrown when the server refuses a charge because one covering the same
+ * invoice is already in flight. Carries its own type so a bulk run can report
+ * "already in progress" separately from a genuine failure — an ACH debit stays
+ * in flight for days, so a daily pass over the ACH queue hits this for every
+ * debit still settling, and calling those "failed" would be actively
+ * misleading. */
+export class DuplicateChargeError extends Error {
+  /** True when the existing charge is a bank debit still settling. */
+  readonly inFlight: boolean;
+  constructor(message: string, inFlight: boolean) {
+    super(message);
+    this.name = "DuplicateChargeError";
+    this.inFlight = inFlight;
+  }
+}
+
 export interface ChargeAutopayInvoiceResult {
   status: string;
   balanceCents: number;
@@ -28,7 +44,12 @@ export function useChargeAutopayInvoice() {
         body: JSON.stringify({ invoiceId }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed to charge invoice");
+      if (!res.ok) {
+        if (res.status === 409 && body.code === "duplicate_charge") {
+          throw new DuplicateChargeError(body.error ?? "A charge for this invoice is already in progress", Boolean(body.inFlight));
+        }
+        throw new Error(body.error ?? "Failed to charge invoice");
+      }
       return body as ChargeAutopayInvoiceResult;
     },
     onSuccess: (data) => {

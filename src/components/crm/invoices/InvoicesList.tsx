@@ -22,7 +22,7 @@ import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDow
 import { toast } from "sonner";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { isInvoiceOverdue } from "@/lib/invoice-status";
-import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
+import { useChargeAutopayInvoice, DuplicateChargeError } from "@/lib/hooks/use-autopay-invoices";
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
 import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
@@ -201,6 +201,7 @@ export function InvoicesList({ clientId }: Props) {
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const [voidTarget, setVoidTarget] = useState<CRMInvoice | null>(null);
   const [bulkVoidOpen, setBulkVoidOpen] = useState(false);
+  const [chargeAllOpen, setChargeAllOpen] = useState(false);
   const [voiding, setVoiding] = useState(false);
   // `?open=<id>` deep link. Applied only when the param VALUE changes: the
   // effect used to re-run on every new `searchParams` object (a fresh instance
@@ -433,6 +434,9 @@ export function InvoicesList({ clientId }: Props) {
   const [chargingId, setChargingId] = useState<string | null>(null);
   const [chargingAll, setChargingAll] = useState(false);
   const onChargeTab = quickFilter === "to_charge_card" || quickFilter === "to_charge_ach";
+  // Balances only — any card processing fee is added on top of each invoice
+  // server-side, so this is a floor, not the exact amount that will be taken.
+  const totalToCharge = onChargeTab ? filtered.reduce((sum, i) => sum + i.balanceCents, 0) : 0;
 
   async function handleCharge(inv: CRMInvoice) {
     setChargingId(inv.id);
@@ -461,25 +465,53 @@ export function InvoicesList({ clientId }: Props) {
     }
   }
 
-  async function handleChargeAll() {
+  // Charging every invoice in the tab used to sit behind a native confirm() —
+  // the same defect already fixed for Void in this file (see requestVoid): a
+  // native dialog blocks the renderer's main thread, is invisible to the DOM,
+  // and returns false outright when auto-dismissed, so the handler silently
+  // early-returned and "Charge All" appeared to do nothing at all. On a button
+  // that moves customers' money that failure mode is far worse than on Void,
+  // so it's a real Radix dialog now.
+  async function confirmChargeAll() {
+    setChargeAllOpen(false);
     if (filtered.length === 0) return;
-    if (!confirm(`Charge all ${filtered.length} invoice(s) in this tab now?`)) return;
     setChargingAll(true);
     let succeeded = 0;
     let failed = 0;
     let unrecorded = 0;
+    let submitted = 0;
+    let alreadyInFlight = 0;
     for (const inv of filtered) {
       try {
         const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
         succeeded++;
         // Charged at Stripe but not written to the ledger — see handleCharge.
         if (result.status === "succeeded" && result.recorded === false) unrecorded++;
-      } catch {
-        failed++;
+        // An ACH debit confirms as `processing` and only settles days later —
+        // it is NOT money collected yet, so don't report it as "charged".
+        if (result.status === "processing") submitted++;
+      } catch (err) {
+        // A debit still settling isn't a failure — it's the server correctly
+        // refusing to take the client's money twice.
+        if (err instanceof DuplicateChargeError) alreadyInFlight++;
+        else failed++;
       }
     }
     setChargingAll(false);
-    if (succeeded > 0) toast.success(`Charged ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
+    const charged = succeeded - submitted;
+    if (charged > 0) toast.success(`Charged ${charged} invoice${charged !== 1 ? "s" : ""}`);
+    if (submitted > 0) {
+      toast.success(
+        `Submitted ${submitted} bank debit${submitted !== 1 ? "s" : ""} — these settle in a few business days ` +
+          `and the invoice${submitted !== 1 ? "s" : ""} stay open until they do.`,
+        { duration: 10000 }
+      );
+    }
+    if (alreadyInFlight > 0) {
+      toast.info(
+        `Skipped ${alreadyInFlight} invoice${alreadyInFlight !== 1 ? "s" : ""} with a payment already in progress.`
+      );
+    }
     if (failed > 0) toast.error(`Failed to charge ${failed} invoice${failed !== 1 ? "s" : ""}`);
     if (unrecorded > 0) {
       toast.error(
@@ -666,7 +698,7 @@ export function InvoicesList({ clientId }: Props) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     disabled={filtered.length === 0 || chargingAll}
-                    onSelect={() => void handleChargeAll()}
+                    onSelect={() => setChargeAllOpen(true)}
                   >
                     {chargingAll ? "Charging…" : `Charge All (${filtered.length})`}
                   </DropdownMenuItem>
@@ -956,6 +988,29 @@ export function InvoicesList({ clientId }: Props) {
             <Button variant="outline" size="sm" onClick={() => setVoidTarget(null)}>Cancel</Button>
             <Button variant="destructive" size="sm" onClick={confirmVoid} disabled={voiding}>
               {voiding ? "Voiding…" : "Void Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={chargeAllOpen} onOpenChange={setChargeAllOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Charge {filtered.length} invoice{filtered.length === 1 ? "" : "s"}?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            {quickFilter === "to_charge_ach"
+              ? `Each client's saved bank account will be debited for their invoice balance. Bank debits take a few business days to settle, so these invoices stay open until they do — don't run this again in the meantime.`
+              : `Each client's saved card will be charged for their invoice balance${
+                  totalToCharge > 0 ? ` — ${formatCurrency(totalToCharge)} in total, plus any processing fee` : ""
+                }. This moves real money and can't be undone from here; a charge has to be refunded.`}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setChargeAllOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => void confirmChargeAll()} disabled={chargingAll}>
+              {chargingAll ? "Charging…" : quickFilter === "to_charge_ach" ? "Submit Debits" : "Charge All"}
             </Button>
           </DialogFooter>
         </DialogContent>

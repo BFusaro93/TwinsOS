@@ -5,6 +5,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { findDuplicateChargeIntent, duplicateChargeMessage } from "@/lib/stripe/duplicate-charge";
 import { recordStripeCharge } from "@/lib/stripe/record-charge";
 import { logger } from "@/lib/logger";
 
@@ -12,18 +13,6 @@ const log = logger.child("stripe autopay charge");
 
 const ChargeSchema = z.object({ invoiceId: z.string().uuid() });
 
-// See the duplicate-charge guard below: how far back to look for an
-// already-in-flight/succeeded PaymentIntent against the same invoice, and
-// which statuses count as "still real money that might land" rather than a
-// dead end the staff member is free to retry past.
-const RECENT_CHARGE_WINDOW_SECONDS = 120;
-const BLOCKING_PAYMENT_INTENT_STATUSES = new Set([
-  "succeeded",
-  "processing",
-  "requires_capture",
-  "requires_action",
-  "requires_confirmation",
-]);
 
 /** Charges an invoice's balance against the client's saved payment method (card or
  * ACH) off-session — the "Invoices to Charge" / "ACH Invoices to Charge" queues use
@@ -131,24 +120,20 @@ export async function POST(request: Request) {
   // separate, real charges. Ask Stripe directly whether a PaymentIntent for
   // this exact invoice already exists from the last few minutes and hasn't
   // definitively failed, and refuse to charge again if so.
+  const isAch = paymentMethod === "us_bank_account";
   try {
-    const recentIntents = await stripe.paymentIntents.list(
-      {
-        customer: client.stripe_customer_id,
-        created: { gte: Math.floor(Date.now() / 1000) - RECENT_CHARGE_WINDOW_SECONDS },
-        limit: 20,
-      },
-      { stripeAccount: org.stripe_connect_account_id }
-    );
-    const duplicate = recentIntents.data.find(
-      (pi) => pi.metadata?.invoice_id === invoice.id && BLOCKING_PAYMENT_INTENT_STATUSES.has(pi.status)
-    );
+    const duplicate = await findDuplicateChargeIntent({
+      stripe,
+      connectedAccountId: org.stripe_connect_account_id,
+      customerId: client.stripe_customer_id,
+      invoiceIds: [invoice.id],
+      isAch,
+    });
     if (duplicate) {
       return NextResponse.json(
-        {
-          error:
-            "A charge was already just submitted for this invoice. Please wait a moment or check Payment History before retrying.",
-        },
+        // The caller distinguishes this from a real failure: a bulk run over
+        // the ACH queue legitimately hits it for every debit still settling.
+        { error: duplicateChargeMessage(duplicate), code: "duplicate_charge", inFlight: duplicate.status === "processing" },
         { status: 409 }
       );
     }
