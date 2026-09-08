@@ -11,6 +11,7 @@ import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { findDuplicateChargeIntent, duplicateChargeMessage } from "@/lib/stripe/duplicate-charge";
 import { recordStripeCharge } from "@/lib/stripe/record-charge";
+import { markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe multi-invoice charge");
@@ -215,6 +216,17 @@ export async function POST(request: Request) {
       // ACH sits in `processing` for days; the Connect webhook records it when
       // it actually succeeds.
       recorded = false;
+      // Nothing lands in crm_payments until it settles, so mark each invoice
+      // this charge covers as pending — otherwise they keep their balances and
+      // their place in the "To Charge" queue, indistinguishable from untouched
+      // invoices. Each row records only its own share of the combined charge.
+      if (isPendingChargeStatus(paymentIntent.status)) {
+        await markInvoicesPendingCharge({
+          db: createServiceClient(),
+          paymentIntent,
+          amountsByInvoiceId: new Map(allocations.map((a) => [a.invoiceId, a.amountCents])),
+        });
+      }
     }
 
     // Deliberately NOT a 500: the money already moved.

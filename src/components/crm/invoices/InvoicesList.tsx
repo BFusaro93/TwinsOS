@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
+import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { isInvoiceOverdue } from "@/lib/invoice-status";
@@ -145,6 +145,30 @@ function isChargeableBy(i: CRMInvoice, method: "card" | "us_bank_account") {
     i.clientSavedPaymentMethodType === method &&
     i.clientAutopayEnabled !== false
   );
+}
+
+/** True when a Stripe charge is already in flight against this invoice. An ACH
+ * debit stays in flight for days and writes nothing to crm_payments until it
+ * settles, so the invoice keeps its full balance and stays in this queue the
+ * whole time — the marker is the only thing distinguishing it from an invoice
+ * nobody has charged yet. */
+function hasPaymentInFlight(i: CRMInvoice) {
+  return i.pendingPaymentCents != null;
+}
+
+/** Says what's pending and since when, so staff don't have to guess whether a
+ * debit is genuinely moving or stuck. */
+function pendingChargeTooltip(i: CRMInvoice): string {
+  const what = i.pendingPaymentMethod === "us_bank_account" ? "Bank debit" : "Card charge";
+  const amount = i.pendingPaymentCents != null ? ` of ${formatCurrency(i.pendingPaymentCents)}` : "";
+  const when = i.pendingPaymentAt
+    ? ` submitted ${new Date(i.pendingPaymentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    : "";
+  const settles =
+    i.pendingPaymentMethod === "us_bank_account"
+      ? " — bank debits take a few business days to settle, and the invoice stays open until they do."
+      : " — awaiting confirmation.";
+  return `${what}${amount}${when}${settles}`;
 }
 
 // A client's invoice_delivery preference ("email" | "print" | "both") gates which
@@ -436,7 +460,12 @@ export function InvoicesList({ clientId }: Props) {
   const onChargeTab = quickFilter === "to_charge_card" || quickFilter === "to_charge_ach";
   // Balances only — any card processing fee is added on top of each invoice
   // server-side, so this is a floor, not the exact amount that will be taken.
-  const totalToCharge = onChargeTab ? filtered.reduce((sum, i) => sum + i.balanceCents, 0) : 0;
+  // "Charge All" deliberately skips invoices with a payment already in flight:
+  // the server would refuse them anyway, and offering them invites staff to
+  // submit a second debit for money that's already on its way.
+  const chargeableNow = onChargeTab ? filtered.filter((i) => !hasPaymentInFlight(i)) : [];
+  const pendingInQueue = onChargeTab ? filtered.length - chargeableNow.length : 0;
+  const totalToCharge = chargeableNow.reduce((sum, i) => sum + i.balanceCents, 0);
 
   async function handleCharge(inv: CRMInvoice) {
     setChargingId(inv.id);
@@ -474,14 +503,14 @@ export function InvoicesList({ clientId }: Props) {
   // so it's a real Radix dialog now.
   async function confirmChargeAll() {
     setChargeAllOpen(false);
-    if (filtered.length === 0) return;
+    if (chargeableNow.length === 0) return;
     setChargingAll(true);
     let succeeded = 0;
     let failed = 0;
     let unrecorded = 0;
     let submitted = 0;
     let alreadyInFlight = 0;
-    for (const inv of filtered) {
+    for (const inv of chargeableNow) {
       try {
         const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
         succeeded++;
@@ -697,10 +726,10 @@ export function InvoicesList({ clientId }: Props) {
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    disabled={filtered.length === 0 || chargingAll}
+                    disabled={chargeableNow.length === 0 || chargingAll}
                     onSelect={() => setChargeAllOpen(true)}
                   >
-                    {chargingAll ? "Charging…" : `Charge All (${filtered.length})`}
+                    {chargingAll ? "Charging…" : `Charge All (${chargeableNow.length})`}
                   </DropdownMenuItem>
                 </>
               )}
@@ -891,6 +920,19 @@ export function InvoicesList({ clientId }: Props) {
                             <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", overdue ? STATUS_COLOR.overdue : STATUS_COLOR[inv.status])}>
                               {showOverdueLabel ? "overdue" : inv.status}
                             </span>
+                            {/* A charge already on its way. Worth its own pill
+                                rather than folding into the status: the status
+                                is still legitimately "sent"/"overdue" — the
+                                money just hasn't arrived yet. */}
+                            {hasPaymentInFlight(inv) && (
+                              <span
+                                className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                                title={pendingChargeTooltip(inv)}
+                              >
+                                <Clock className="h-2.5 w-2.5" />
+                                Pending
+                              </span>
+                            )}
                           </td>
                         );
                       }
@@ -928,13 +970,17 @@ export function InvoicesList({ clientId }: Props) {
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenInvoiceId(inv.id)}>
                         <FileText className="mr-1 h-3 w-3" /> Open
                       </Button>
+                      {/* Charge is disabled while a payment is in flight — the
+                          server refuses it anyway, so don't present it as an
+                          available action. */}
                       {inv.clientSavedPaymentMethodType && inv.balanceCents > 0 && inv.status !== "void" && can("acct_add_modify_payments") && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs text-brand-600 hover:text-brand-700"
                           onClick={(e) => { e.stopPropagation(); void handleCharge(inv); }}
-                          disabled={chargingId === inv.id || chargingAll}
+                          disabled={chargingId === inv.id || chargingAll || hasPaymentInFlight(inv)}
+                          title={hasPaymentInFlight(inv) ? pendingChargeTooltip(inv) : undefined}
                         >
                           {chargingId === inv.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                           Charge
@@ -997,10 +1043,16 @@ export function InvoicesList({ clientId }: Props) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              Charge {filtered.length} invoice{filtered.length === 1 ? "" : "s"}?
+              Charge {chargeableNow.length} invoice{chargeableNow.length === 1 ? "" : "s"}?
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-600">
+            {pendingInQueue > 0 && (
+              <span className="mb-2 block font-medium text-amber-700">
+                {pendingInQueue} invoice{pendingInQueue === 1 ? "" : "s"} in this tab {pendingInQueue === 1 ? "has" : "have"}{" "}
+                a payment already in progress and will be skipped.
+              </span>
+            )}
             {quickFilter === "to_charge_ach"
               ? `Each client's saved bank account will be debited for their invoice balance. Bank debits take a few business days to settle, so these invoices stay open until they do — don't run this again in the meantime.`
               : `Each client's saved card will be charged for their invoice balance${

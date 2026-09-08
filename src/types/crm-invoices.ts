@@ -118,6 +118,13 @@ export interface CRMInvoice {
   clientSavedPaymentMethodType?: "card" | "us_bank_account" | null;
   clientSavedPaymentMethodSummary?: string | null;
   clientAutopayEnabled?: boolean;
+  /** A Stripe charge is in flight against this invoice but hasn't settled — an
+   * ACH debit takes days. Nothing is written to crm_payments until it settles
+   * (that table only holds settled money), so without this the invoice looks
+   * untouched: same balance, same place in the "To Charge" queue. */
+  pendingPaymentCents?: number | null;
+  pendingPaymentMethod?: "card" | "us_bank_account" | null;
+  pendingPaymentAt?: string | null;
   salesRepName?: string | null;
   clientInvoiceDelivery?: 'email' | 'print' | 'both';
   lineItems?: InvoiceLineItem[];
