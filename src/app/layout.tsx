@@ -55,28 +55,26 @@ export const metadata: Metadata = {
     images: [DEFAULT_OG_IMAGE],
   },
   icons: {
-    // Explicit list, not the app/icon.* file convention — Next only ever
-    // emits a single <link rel="icon"> for that convention, silently
-    // picking one format when both a .svg and .png exist for the same
-    // name. Listing both here generates a <link> for each, so browsers
-    // that render SVG favicons fine (Chrome, Firefox) get the scalable
-    // rounded mark, and browsers with SVG-favicon quirks or link-tag
-    // resolution issues (Safari) have a classic .ico/.png fallback —
-    // Safari has historically favored (and sometimes required) a plain
-    // favicon.ico at the domain root over any <link> declaration.
+    // One entry, one static .ico carrying 16/32/48/128/256 frames. Earlier
+    // versions listed a per-size PNG for each, but that only ever existed
+    // to chase a resize theory that turned out to be wrong.
     //
-    // Single entry on purpose: /brand-icon.ico is a route handler that
-    // picks the tile colour from the User-Agent — the brand's dark green
-    // for Chromium/Firefox, white for Safari. See that route for why the
-    // branch exists (Safari draws a contrast outline around favicons too
-    // dark for its tab bar) and why it can't be done with static links.
-    // The .ico carries 16/32/48/128/256 frames, so no per-size PNG links
-    // are needed; those were only ever added to chase a resize theory
-    // that turned out to be wrong.
+    // The mark inside the tile is drawn at 80% rather than a more typical
+    // ~65%, and that crop is load-bearing: Safari draws a contrast outline
+    // around any tab-bar favicon it reads as too dark, and it judges the
+    // icon as a whole, not its border. Measured at 32px, the same tile
+    // rang at mean luminance 95.8 (mark at 70%) and came back clean at
+    // 104.7 (mark at 80%), while the edge barely moved either way
+    // (69.3 -> 69.9). Adding padding back drops the mean toward the
+    // ringing side of a roughly 9-point margin, so don't shrink the mark
+    // without brightening the tile to compensate.
     //
-    // icon.svg stays off this list — it's the dark-green rounded mark,
-    // right for the JSON-LD logo above, but Safari picking it as a
-    // favicon would put the ring straight back.
+    // If the ring ever returns, public/icon-mark.ico is the proven escape
+    // hatch: the bare mark on transparency, no tile, mean 168 / edge 255.
+    //
+    // icon.svg stays off this list — it's the dark-green rounded mark at
+    // the old small scale, right for the JSON-LD logo above, but Safari
+    // picking it as a favicon would put the ring straight back.
     icon: [{ url: "/brand-icon.ico", sizes: "any" }],
     shortcut: "/brand-icon.ico",
     // Without an apple-touch-icon, Safari's Start Page tiles and the iOS
