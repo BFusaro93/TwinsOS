@@ -510,7 +510,7 @@ export function AddPaymentDialog({
       .filter((g) => g.rows.length > 0);
   }, [hasChildAccounts, allocations, childClients, clientId, selectedClient]);
 
-  const chargeStripeJs = chargeIntent ? getScopedStripeJs(chargeIntent.connectedAccountId) : null;
+  const chargeStripeJs = chargeIntent ? getScopedStripeJs(chargeIntent.connectedAccountId, chargeIntent.livemode) : null;
 
   if (chargeSucceeded) {
     return (

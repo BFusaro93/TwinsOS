@@ -103,7 +103,7 @@ export function SavedPaymentMethodDialog({
     }
   }
 
-  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId, intent.livemode) : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

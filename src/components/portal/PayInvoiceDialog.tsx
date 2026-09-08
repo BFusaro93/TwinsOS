@@ -70,7 +70,7 @@ export function PayInvoiceDialog({
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createIntent = useCreatePortalPaymentIntent();
-  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId, intent.livemode) : null;
 
   if (!open) return null;
 

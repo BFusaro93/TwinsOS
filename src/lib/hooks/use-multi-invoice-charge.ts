@@ -8,6 +8,7 @@ export interface MultiChargeAllocation {
 export interface CreateMultiPaymentIntentResult {
   clientSecret: string;
   connectedAccountId: string;
+  livemode: boolean;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;

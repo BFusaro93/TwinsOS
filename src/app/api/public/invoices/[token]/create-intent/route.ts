@@ -110,6 +110,7 @@ export async function POST(
   return NextResponse.json({
     clientSecret: paymentIntent.client_secret,
     connectedAccountId: org.stripe_connect_account_id,
+    livemode: org.stripe_connect_livemode ?? true,
     balanceCents: invoice.balance_cents,
     feeCents,
     totalChargeCents,

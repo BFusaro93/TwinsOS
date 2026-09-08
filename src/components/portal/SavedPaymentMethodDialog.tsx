@@ -98,7 +98,7 @@ export function SavedPaymentMethodDialog({
     }
   }
 
-  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId, intent.livemode) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

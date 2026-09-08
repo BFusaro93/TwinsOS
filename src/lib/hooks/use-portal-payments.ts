@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 export interface CreatePaymentIntentResult {
   clientSecret: string;
   connectedAccountId: string;
+  livemode: boolean;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;

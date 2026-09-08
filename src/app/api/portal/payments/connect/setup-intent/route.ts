@@ -87,6 +87,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     clientSecret: setupIntent.client_secret,
     connectedAccountId: org.stripe_connect_account_id,
+    livemode: org.stripe_connect_livemode ?? true,
   });
 }
 
