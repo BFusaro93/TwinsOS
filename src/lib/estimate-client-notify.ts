@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 import { EMAIL_FROM } from "@/lib/email/send";
+import { renderEstimatePDF } from "@/lib/estimate-pdf";
 
 // Notifies staff when a CLIENT accepts or declines an estimate — via either
 // the public proposal link or the logged-in client portal. Separate from the
@@ -84,6 +85,20 @@ export async function notifyStaffOfEstimateDecision(
   const link = `${siteUrl}/crm/estimates/${estimateId}`;
   const color = decision === "accepted" ? "#60ab45" : "#dc2626";
 
+  // Attach the accepted estimate's PDF (with its final, won line items) so
+  // staff don't have to open the app just to see what was accepted. Render
+  // failure is non-fatal — the notification email still sends without it.
+  let pdfAttachment: { filename: string; content: string } | undefined;
+  if (decision === "accepted") {
+    const buffer = await renderEstimatePDF(supabase, estimateId, orgId).catch(() => null);
+    if (buffer) {
+      pdfAttachment = {
+        filename: `estimate-${estimateNumber}.pdf`,
+        content: buffer.toString("base64"),
+      };
+    }
+  }
+
   for (const p of emailEligible) {
     await resend.emails.send({
       from: EMAIL_FROM,
@@ -95,6 +110,7 @@ export async function notifyStaffOfEstimateDecision(
         <p style="margin:0 0 24px;color:#475569"><strong>${clientName}</strong> has <strong style="color:${color}">${verb}</strong> Estimate <strong>#${estimateNumber}</strong>.</p>
         <a href="${link}" style="display:inline-block;padding:12px 24px;background:${color};color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Estimate</a>
       </div>`,
+      ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
     }).catch(() => {
       // Non-fatal — one recipient's email failing shouldn't block the others
     });
