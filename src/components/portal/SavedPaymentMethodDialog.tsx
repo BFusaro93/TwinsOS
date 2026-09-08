@@ -9,6 +9,7 @@ import {
   type CreateSetupIntentResult,
 } from "@/lib/hooks/use-portal-saved-payment-method";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
+import { STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
 
 function SetupForm({ onSuccess }: { onSuccess: (setupIntentId: string) => void }) {
   const stripe = useStripe();
@@ -38,7 +39,10 @@ function SetupForm({ onSuccess }: { onSuccess: (setupIntentId: string) => void }
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement />
+      {/* Fixed floor so Stripe's accordion can't resize the dialog under the pointer (F-07). */}
+      <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
+        <PaymentElement />
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         onClick={handleConfirm}

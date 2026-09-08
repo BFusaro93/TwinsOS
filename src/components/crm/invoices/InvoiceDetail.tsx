@@ -15,6 +15,7 @@ import {
   useDeleteInvoice,
   LINE_ITEM_MUTATION_KEY,
   useVoidInvoice,
+  voidBlockedMessage,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -880,11 +881,24 @@ export function InvoiceDetail({
       await voidInvoice({ id: invoice.id, clientId: invoice.clientId });
       toast.success("Invoice voided");
       setConfirmVoidOpen(false);
-    } catch { toast.error("Failed to void invoice"); }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+    }
     finally { setVoiding(false); }
   }
 
   const displayAddress = invoice.serviceAddress ?? invoice.clientAddress;
+
+  // Voiding an invoice that has payments applied would orphan those payment
+  // allocations, so it is blocked here, re-checked in useVoidInvoice, and
+  // enforced by a DB trigger. Being locked does NOT block a void: the lock
+  // freezes the invoice's amounts and is set as soon as it is sent or
+  // printed, and voiding an issued-but-unpaid invoice is the normal way to
+  // cancel one.
+  const voidBlocked: string | null =
+    invoice.amountPaidCents > 0
+      ? voidBlockedMessage(invoice.amountPaidCents)
+      : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -961,7 +975,14 @@ export function InvoiceDetail({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {invoice.status !== "void" && (
-                <DropdownMenuItem onSelect={() => setConfirmVoidOpen(true)}>
+                <DropdownMenuItem
+                  disabled={voidBlocked !== null}
+                  title={voidBlocked ?? undefined}
+                  onSelect={() => {
+                    if (voidBlocked) { toast.error(voidBlocked); return; }
+                    setConfirmVoidOpen(true);
+                  }}
+                >
                   <Ban className="mr-2 h-3.5 w-3.5 text-slate-500" /> Void Invoice
                 </DropdownMenuItem>
               )}
@@ -987,17 +1008,14 @@ export function InvoiceDetail({
             {invoice.invoiceNumber != null
               ? `Invoice #${invoice.invoiceNumber} will be marked void and its balance removed from the client's account.`
               : "This draft invoice will be marked void."}
-            {" "}The record and any payment history stay intact for your audit trail.
-            {invoice.amountPaidCents > 0 && (
-              <span className="mt-2 block font-medium text-red-600">
-                This invoice has {formatCurrency(invoice.amountPaidCents)} in recorded payments. Voiding it will
-                not reverse those payments — refund them first if that money needs to go back to the client.
-              </span>
+            {" "}The record stays intact for your audit trail.
+            {voidBlocked && (
+              <span className="mt-2 block font-medium text-red-600">{voidBlocked}</span>
             )}
           </p>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setConfirmVoidOpen(false)}>Cancel</Button>
-            <Button variant="destructive" size="sm" onClick={handleVoid} disabled={voiding}>
+            <Button variant="destructive" size="sm" onClick={handleVoid} disabled={voiding || voidBlocked !== null}>
               {voiding ? "Voiding…" : "Void Invoice"}
             </Button>
           </DialogFooter>

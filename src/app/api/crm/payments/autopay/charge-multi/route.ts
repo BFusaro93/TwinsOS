@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import {
   computeProcessingFee,
-  decodeAllocations,
   encodeAllocations,
   MAX_ALLOCATION_METADATA_LENGTH,
 } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { findDuplicateChargeIntent, duplicateChargeMessage } from "@/lib/stripe/duplicate-charge";
+import { recordStripeCharge } from "@/lib/stripe/record-charge";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe multi-invoice charge");
@@ -19,22 +20,14 @@ const ChargeSchema = z.object({
   allocations: z.array(z.object({ invoiceId: z.string().uuid(), amountCents: z.number().int().positive() })).min(1),
 });
 
-// See the duplicate-charge guard below: how far back to look for an
-// already-in-flight/succeeded PaymentIntent covering any of the same
-// invoices, and which statuses count as "still real money that might land"
-// rather than a dead end the staff member is free to retry past.
-const RECENT_CHARGE_WINDOW_SECONDS = 120;
-const BLOCKING_PAYMENT_INTENT_STATUSES = new Set([
-  "succeeded",
-  "processing",
-  "requires_capture",
-  "requires_action",
-  "requires_confirmation",
-]);
 
 /** Charges a client's saved payment method once for a combined total split across multiple
  * invoices — the saved-method counterpart to create-intent-multi/route.ts. Reuses the same
- * off-session pattern as autopay/charge/route.ts, just for more than one invoice at a time. */
+ * off-session pattern as autopay/charge/route.ts, just for more than one invoice at a time.
+ *
+ * Like that route, a terminal `succeeded` is recorded SYNCHRONOUSLY through the shared
+ * recorder rather than waiting on the Connect webhook — see autopay/charge/route.ts for
+ * why. ACH (`processing`) is left to the webhook. */
 export async function POST(request: Request) {
   if (!isStripeConfigured() && !isStripeTestConfigured()) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
@@ -144,26 +137,18 @@ export async function POST(request: Request) {
   // covering any of these same invoices already exists from the last few
   // minutes and hasn't definitively failed, and refuse to charge again if so.
   try {
-    const recentIntents = await stripe.paymentIntents.list(
-      {
-        customer: client.stripe_customer_id,
-        created: { gte: Math.floor(Date.now() / 1000) - RECENT_CHARGE_WINDOW_SECONDS },
-        limit: 20,
-      },
-      { stripeAccount: org.stripe_connect_account_id }
-    );
-    const duplicate = recentIntents.data.find((pi) => {
-      if (!BLOCKING_PAYMENT_INTENT_STATUSES.has(pi.status)) return false;
-      if (pi.metadata?.source !== "crm_invoice_multi" || !pi.metadata?.allocations) return false;
-      const priorInvoiceIds = decodeAllocations(pi.metadata.allocations).map((a) => a.invoiceId);
-      return priorInvoiceIds.some((id) => invoiceIds.includes(id));
+    const duplicate = await findDuplicateChargeIntent({
+      stripe,
+      connectedAccountId: org.stripe_connect_account_id,
+      customerId: client.stripe_customer_id,
+      invoiceIds,
+      isAch: paymentMethod === "us_bank_account",
     });
     if (duplicate) {
       return NextResponse.json(
-        {
-          error:
-            "A charge was already just submitted for one or more of these invoices. Please wait a moment or check Payment History before retrying.",
-        },
+        // The caller distinguishes this from a real failure: a bulk run over
+        // the ACH queue legitimately hits it for every debit still settling.
+        { error: duplicateChargeMessage(duplicate, true), code: "duplicate_charge", inFlight: duplicate.status === "processing" },
         { status: 409 }
       );
     }
@@ -199,11 +184,48 @@ export async function POST(request: Request) {
       }
     );
 
+    // Only a terminal success is real money — `processing` (ACH) and
+    // `requires_action` stay the webhook's job.
+    let recorded = true;
+    let recordingError: string | null = null;
+    if (paymentIntent.status === "succeeded") {
+      try {
+        // Service-role: the ledger write is the same one the webhook does, and
+        // org scoping is re-verified inside the recorder against the connected
+        // account. The caller's own org was already established above.
+        const service = createServiceClient();
+        const result = await recordStripeCharge({
+          db: service,
+          supabase: service,
+          paymentIntent,
+          connectedAccountId: org.stripe_connect_account_id,
+        });
+        recorded = result === "applied" || result === "already_recorded";
+        if (!recorded) recordingError = "The payment could not be applied to the invoices.";
+      } catch (err) {
+        recorded = false;
+        recordingError = "The payment could not be applied to the invoices.";
+        log.error(
+          "CHARGE SUCCEEDED BUT RECORDING FAILED — the customer's payment method was debited at Stripe " +
+            "and no crm_payments row exists. Reconcile manually against this PaymentIntent.",
+          { error: err, clientId, paymentIntentId: paymentIntent.id, amountCents: totalChargeCents }
+        );
+      }
+    } else {
+      // ACH sits in `processing` for days; the Connect webhook records it when
+      // it actually succeeds.
+      recorded = false;
+    }
+
+    // Deliberately NOT a 500: the money already moved.
     return NextResponse.json({
       status: paymentIntent.status,
       balanceCents,
       feeCents,
       totalChargeCents,
+      paymentIntentId: paymentIntent.id,
+      recorded,
+      recordingError,
     });
   } catch (err) {
     return stripeErrorResponse(err, log, { clientId });

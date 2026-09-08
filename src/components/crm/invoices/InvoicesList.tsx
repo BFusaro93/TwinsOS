@@ -1,9 +1,14 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useInvoices, useUpdateInvoiceStatus, useBulkImportInvoices } from "@/lib/hooks/use-invoices";
+import {
+  useInvoices,
+  useUpdateInvoiceStatus,
+  useBulkImportInvoices,
+  voidBlockedMessage,
+} from "@/lib/hooks/use-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -17,12 +22,11 @@ import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDow
 import { toast } from "sonner";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { isInvoiceOverdue } from "@/lib/invoice-status";
-import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
+import { useChargeAutopayInvoice, DuplicateChargeError } from "@/lib/hooks/use-autopay-invoices";
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
 import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { useConfirm } from "@/components/shared/useConfirm";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import {
@@ -32,6 +36,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+/**
+ * Why an invoice may not be voided, or null when it may.
+ *
+ * Voiding an invoice that carries payments would orphan those payment
+ * allocations, and a locked invoice is deliberately frozen — both are blocked
+ * here, re-checked in the mutation, and enforced by a DB trigger.
+ */
+function voidBlockedReason(inv: CRMInvoice): string | null {
+  if (inv.status === "void") return "This invoice is already void.";
+  // A locked (sent/printed) invoice is still voidable — the lock guards
+  // amounts, not cancellation. Only applied payments block a void.
+  if (inv.amountPaidCents > 0) return voidBlockedMessage(inv.amountPaidCents);
+  return null;
+}
 
 const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "number",      label: "Invoice #",  locked: true },
@@ -171,13 +197,25 @@ export function InvoicesList({ clientId }: Props) {
   const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(effectiveClientId);
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
   const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
-  const [confirm, confirmDialog] = useConfirm();
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const [voidTarget, setVoidTarget] = useState<CRMInvoice | null>(null);
+  const [bulkVoidOpen, setBulkVoidOpen] = useState(false);
+  const [chargeAllOpen, setChargeAllOpen] = useState(false);
+  const [voiding, setVoiding] = useState(false);
+  // `?open=<id>` deep link. Applied only when the param VALUE changes: the
+  // effect used to re-run on every new `searchParams` object (a fresh instance
+  // on each navigation/render), which re-forced the URL's invoice over
+  // whichever row the user had since clicked — the same "opened a different
+  // invoice" symptom as F-10, from the other direction.
+  const appliedOpenParam = useRef<string | null>(null);
+  const openParam = searchParams.get("open");
   useEffect(() => {
-    const id = searchParams.get("open");
-    if (id) setOpenInvoiceId(id);
-  }, [searchParams]);
+    if (openParam && appliedOpenParam.current !== openParam) {
+      appliedOpenParam.current = openParam;
+      setOpenInvoiceId(openParam);
+    }
+  }, [openParam]);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => {
     const f = searchParams.get("filter");
     return (QUICK_FILTERS.some((q) => q.key === f) ? f : "all") as QuickFilter;
@@ -256,7 +294,19 @@ export function InvoicesList({ clientId }: Props) {
         case "balance": av = a.balanceCents; bv = b.balanceCents; break;
       }
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-      return sortDir === "asc" ? cmp : -cmp;
+      if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+      // Total order, or rows move under the pointer (F-10): Array#sort is
+      // stable, so tied rows (same invoice_date under the default sort — a
+      // batch of generated invoices ties by the dozen) kept whatever order the
+      // fetch happened to return, and Postgres returns tied rows in physical
+      // heap order, which changes as soon as any one of them is UPDATEd. A
+      // background refetch (TanStack refetch-on-focus / post-mutation
+      // invalidation) then reshuffled the visible rows a few positions and the
+      // click landed on a neighbour — opening, and offering to Charge, the
+      // wrong client's invoice. Tie-break on identity so the order a fetch
+      // returns can never affect the rendered order.
+      if (a.invoiceNumber !== b.invoiceNumber) return b.invoiceNumber - a.invoiceNumber;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
   }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir]);
@@ -273,32 +323,78 @@ export function InvoicesList({ clientId }: Props) {
       : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600" />;
   }
 
-  async function markVoid(inv: CRMInvoice) {
-    if (!(await confirm({
-      title: `Void invoice #${inv.invoiceNumber}?`,
-      description: "The invoice stays on the client's record but is no longer collectible.",
-      confirmLabel: "Void Invoice",
-      destructive: true,
-    }))) return;
+  // The single-row Void button used to call the browser's native `confirm()`.
+  // That blocks the whole tab's main thread until the dialog is answered (and
+  // is auto-dismissed outright in some embedded/automated contexts, silently
+  // returning false), which read as "Void does nothing, and sometimes freezes
+  // the tab". It's a real Radix dialog now.
+  function requestVoid(inv: CRMInvoice) {
+    const blocked = voidBlockedReason(inv);
+    if (blocked) {
+      toast.error(blocked);
+      return;
+    }
+    setVoidTarget(inv);
+  }
+
+  async function confirmVoid() {
+    const inv = voidTarget;
+    if (!inv) return;
+    setVoiding(true);
     try {
       await updateStatus({ id: inv.id, status: "void" });
-      toast.success("Invoice voided");
-    } catch {
-      toast.error("Failed to void invoice");
+      toast.success(`Invoice #${inv.invoiceNumber} voided`);
+      setVoidTarget(null);
+      refetchInvoices();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+    } finally {
+      setVoiding(false);
     }
   }
 
   async function bulkUpdateStatus(status: InvoiceStatus) {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    try {
-      await Promise.all(ids.map((id) => updateStatus({ id, status })));
-      toast.success(`${ids.length} invoice${ids.length > 1 ? "s" : ""} updated`);
-      setSelectedIds(new Set());
-      refetchInvoices();
-    } catch {
-      toast.error("Failed to update invoices");
+    const results = await Promise.allSettled(
+      ids.map((id) => updateStatus({ id, status }))
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected"
+    );
+    if (succeeded > 0) {
+      toast.success(`${succeeded} invoice${succeeded > 1 ? "s" : ""} updated`);
     }
+    if (failures.length > 0) {
+      // Surface the actual reason (locked / has payments) rather than a
+      // generic "failed" — one toast per distinct reason.
+      const reasons = Array.from(
+        new Set(
+          failures.map((f) =>
+            f.reason instanceof Error ? f.reason.message : "Failed to update invoice"
+          )
+        )
+      );
+      reasons.forEach((r) => toast.error(`${failures.length} skipped — ${r}`));
+    }
+    setSelectedIds(new Set());
+    refetchInvoices();
+  }
+
+  function requestBulkVoid() {
+    const selected = allInvoices.filter((i) => selectedIds.has(i.id));
+    const blocked = selected.filter((i) => voidBlockedReason(i) !== null);
+    if (blocked.length === selected.length && selected.length > 0) {
+      toast.error(voidBlockedReason(selected[0])!);
+      return;
+    }
+    setBulkVoidOpen(true);
+  }
+
+  async function confirmBulkVoid() {
+    setBulkVoidOpen(false);
+    await bulkUpdateStatus("void");
   }
 
   // Actually sends an email per selected invoice (via the same endpoint the
@@ -338,16 +434,29 @@ export function InvoicesList({ clientId }: Props) {
   const [chargingId, setChargingId] = useState<string | null>(null);
   const [chargingAll, setChargingAll] = useState(false);
   const onChargeTab = quickFilter === "to_charge_card" || quickFilter === "to_charge_ach";
+  // Balances only — any card processing fee is added on top of each invoice
+  // server-side, so this is a floor, not the exact amount that will be taken.
+  const totalToCharge = onChargeTab ? filtered.reduce((sum, i) => sum + i.balanceCents, 0) : 0;
 
   async function handleCharge(inv: CRMInvoice) {
     setChargingId(inv.id);
     try {
       const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
-      toast.success(
-        `Charged ${inv.clientName} ${formatCurrency(result.totalChargeCents)}${
-          result.feeCents > 0 ? ` (incl. ${formatCurrency(result.feeCents)} fee)` : ""
-        }`
-      );
+      if (result.status === "succeeded" && result.recorded === false) {
+        // The card WAS charged — the ledger write is what failed. Never let
+        // this read as "nothing happened": staff must reconcile it in Stripe.
+        toast.error(
+          `Charged ${inv.clientName} ${formatCurrency(result.totalChargeCents)}, but it could NOT be recorded on the invoice. ` +
+            `Do not retry — reconcile this payment in Stripe first.`,
+          { duration: 15000 }
+        );
+      } else {
+        toast.success(
+          `Charged ${inv.clientName} ${formatCurrency(result.totalChargeCents)}${
+            result.feeCents > 0 ? ` (incl. ${formatCurrency(result.feeCents)} fee)` : ""
+          }`
+        );
+      }
       refetchInvoices();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Failed to charge invoice #${inv.invoiceNumber}`);
@@ -356,28 +465,60 @@ export function InvoicesList({ clientId }: Props) {
     }
   }
 
-  async function handleChargeAll() {
+  // Charging every invoice in the tab used to sit behind a native confirm() —
+  // the same defect already fixed for Void in this file (see requestVoid): a
+  // native dialog blocks the renderer's main thread, is invisible to the DOM,
+  // and returns false outright when auto-dismissed, so the handler silently
+  // early-returned and "Charge All" appeared to do nothing at all. On a button
+  // that moves customers' money that failure mode is far worse than on Void,
+  // so it's a real Radix dialog now.
+  async function confirmChargeAll() {
+    setChargeAllOpen(false);
     if (filtered.length === 0) return;
-    if (!(await confirm({
-      title: `Charge all ${filtered.length} invoice(s) in this tab now?`,
-      description: "Each invoice's saved payment method is charged immediately. This cannot be undone.",
-      confirmLabel: `Charge ${filtered.length} Invoice${filtered.length === 1 ? "" : "s"}`,
-      destructive: true,
-    }))) return;
     setChargingAll(true);
     let succeeded = 0;
     let failed = 0;
+    let unrecorded = 0;
+    let submitted = 0;
+    let alreadyInFlight = 0;
     for (const inv of filtered) {
       try {
-        await chargeInvoice.mutateAsync({ invoiceId: inv.id });
+        const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
         succeeded++;
-      } catch {
-        failed++;
+        // Charged at Stripe but not written to the ledger — see handleCharge.
+        if (result.status === "succeeded" && result.recorded === false) unrecorded++;
+        // An ACH debit confirms as `processing` and only settles days later —
+        // it is NOT money collected yet, so don't report it as "charged".
+        if (result.status === "processing") submitted++;
+      } catch (err) {
+        // A debit still settling isn't a failure — it's the server correctly
+        // refusing to take the client's money twice.
+        if (err instanceof DuplicateChargeError) alreadyInFlight++;
+        else failed++;
       }
     }
     setChargingAll(false);
-    if (succeeded > 0) toast.success(`Charged ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
+    const charged = succeeded - submitted;
+    if (charged > 0) toast.success(`Charged ${charged} invoice${charged !== 1 ? "s" : ""}`);
+    if (submitted > 0) {
+      toast.success(
+        `Submitted ${submitted} bank debit${submitted !== 1 ? "s" : ""} — these settle in a few business days ` +
+          `and the invoice${submitted !== 1 ? "s" : ""} stay open until they do.`,
+        { duration: 10000 }
+      );
+    }
+    if (alreadyInFlight > 0) {
+      toast.info(
+        `Skipped ${alreadyInFlight} invoice${alreadyInFlight !== 1 ? "s" : ""} with a payment already in progress.`
+      );
+    }
     if (failed > 0) toast.error(`Failed to charge ${failed} invoice${failed !== 1 ? "s" : ""}`);
+    if (unrecorded > 0) {
+      toast.error(
+        `${unrecorded} charge${unrecorded !== 1 ? "s" : ""} went through at Stripe but could NOT be recorded on the invoice — reconcile in Stripe before retrying.`,
+        { duration: 15000 }
+      );
+    }
     refetchInvoices();
   }
 
@@ -557,7 +698,7 @@ export function InvoicesList({ clientId }: Props) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     disabled={filtered.length === 0 || chargingAll}
-                    onSelect={() => void handleChargeAll()}
+                    onSelect={() => setChargeAllOpen(true)}
                   >
                     {chargingAll ? "Charging…" : `Charge All (${filtered.length})`}
                   </DropdownMenuItem>
@@ -589,15 +730,7 @@ export function InvoicesList({ clientId }: Props) {
               <DropdownMenuItem
                 disabled={!someSelected}
                 className="text-red-600 focus:text-red-600"
-                onSelect={async () => {
-                  if (!(await confirm({
-                    title: `Void ${selectedIds.size} invoice(s)?`,
-                    description: "The invoices stay on their client records but are no longer collectible.",
-                    confirmLabel: "Void Selected",
-                    destructive: true,
-                  }))) return;
-                  bulkUpdateStatus("void");
-                }}
+                onSelect={requestBulkVoid}
               >
                 Void Selected
               </DropdownMenuItem>
@@ -807,11 +940,21 @@ export function InvoicesList({ clientId }: Props) {
                           Charge
                         </Button>
                       )}
-                      {inv.status !== "void" && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-slate-400 hover:text-red-500" onClick={() => markVoid(inv)}>
-                          Void
-                        </Button>
-                      )}
+                      {inv.status !== "void" && (() => {
+                        const blocked = voidBlockedReason(inv);
+                        return (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-slate-400 hover:text-red-500 disabled:opacity-40 disabled:hover:text-slate-400"
+                            disabled={blocked !== null}
+                            title={blocked ?? "Void this invoice"}
+                            onClick={(e) => { e.stopPropagation(); requestVoid(inv); }}
+                          >
+                            Void
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
@@ -830,7 +973,65 @@ export function InvoicesList({ clientId }: Props) {
         invoiceId={openInvoiceId}
         onOpenChange={(open) => !open && setOpenInvoiceId(null)}
       />
-      {confirmDialog}
+      <Dialog open={voidTarget !== null} onOpenChange={(o) => !o && setVoidTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Void Invoice?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            {voidTarget
+              ? `Invoice #${voidTarget.invoiceNumber} will be marked void and its balance removed from the client's account.`
+              : ""}
+            {" "}The record stays intact for your audit trail.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setVoidTarget(null)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={confirmVoid} disabled={voiding}>
+              {voiding ? "Voiding…" : "Void Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={chargeAllOpen} onOpenChange={setChargeAllOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Charge {filtered.length} invoice{filtered.length === 1 ? "" : "s"}?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            {quickFilter === "to_charge_ach"
+              ? `Each client's saved bank account will be debited for their invoice balance. Bank debits take a few business days to settle, so these invoices stay open until they do — don't run this again in the meantime.`
+              : `Each client's saved card will be charged for their invoice balance${
+                  totalToCharge > 0 ? ` — ${formatCurrency(totalToCharge)} in total, plus any processing fee` : ""
+                }. This moves real money and can't be undone from here; a charge has to be refunded.`}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setChargeAllOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => void confirmChargeAll()} disabled={chargingAll}>
+              {chargingAll ? "Charging…" : quickFilter === "to_charge_ach" ? "Submit Debits" : "Charge All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkVoidOpen} onOpenChange={setBulkVoidOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Void {selectedIds.size} invoice{selectedIds.size === 1 ? "" : "s"}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            Their balances are removed from the clients&apos; accounts. Locked invoices and
+            invoices with payments applied are skipped — you&apos;ll get a reason for each.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setBulkVoidOpen(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={confirmBulkVoid}>Void Selected</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {mergeOpen && (
         <MergeInvoicesDialog
           invoices={allInvoices.filter((i) => selectedIds.has(i.id))}

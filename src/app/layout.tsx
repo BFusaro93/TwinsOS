@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
@@ -17,6 +17,20 @@ const ORGANIZATION_JSON_LD = {
     { "@type": "Brand", name: "Landscapt" },
     { "@type": "Brand", name: "Equipt" },
   ],
+};
+
+// Next 15 only reads viewport/colorScheme/themeColor from this export —
+// declaring them inside `metadata` (as this file used to) silently emits
+// nothing, which is why the served HTML carried Next's default viewport
+// tag and no theme-color at all.
+//
+// Deliberately NOT carrying over the old `maximum-scale=1`: it was never
+// actually in effect, and switching it on now would newly block pinch-zoom.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  colorScheme: "dark light",
+  themeColor: "#ffffff",
 };
 
 export const metadata: Metadata = {
@@ -40,16 +54,6 @@ export const metadata: Metadata = {
     description: "CRM, field service, work orders, purchasing & asset management",
     images: [DEFAULT_OG_IMAGE],
   },
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
-  // Previously undeclared — with no color-scheme meta, Safari doesn't know
-  // this origin supports dark rendering and may default any UI plate it
-  // draws behind transparent regions (tab/Favorites-bar favicon included)
-  // to a light background. Every comparison site in the tab strip that
-  // rendered its favicon cleanly is a large, well-established product —
-  // plausibly because they already declare this. Untested until now since
-  // every prior attempt at this bug stayed at the asset-pixel level.
-  colorScheme: "dark light",
-  themeColor: "#005642",
   icons: {
     // Explicit list, not the app/icon.* file convention — Next only ever
     // emits a single <link rel="icon"> for that convention, silently
@@ -61,36 +65,35 @@ export const metadata: Metadata = {
     // Safari has historically favored (and sometimes required) a plain
     // favicon.ico at the domain root over any <link> declaration.
     //
-    // These assets are deliberately FULL-BLEED and FULLY OPAQUE (no
-    // rounded corners, zero alpha) to kill a white ring that Safari drew
-    // around the icon in its tab strip and Favorites bar.
+    // Single entry on purpose: /brand-icon.ico is a route handler that
+    // picks the tile colour from the User-Agent — the brand's dark green
+    // for Chromium/Firefox, white for Safari. See that route for why the
+    // branch exists (Safari draws a contrast outline around favicons too
+    // dark for its tab bar) and why it can't be done with static links.
+    // The .ico carries 16/32/48/128/256 frames, so no per-size PNG links
+    // are needed; those were only ever added to chase a resize theory
+    // that turned out to be wrong.
     //
-    // The ring was never in the asset — every frame of every candidate
-    // was scanned and contains no white pixel at any alpha. What gave it
-    // away: adding transparent padding around the mark made the white
-    // BIGGER, not smaller. That's the signature of a light backplate
-    // drawn behind the icon at full canvas size — the white isn't around
-    // our icon, it's behind it, showing through wherever we're
-    // transparent. Our rounded corners were 9-17% transparent pixels
-    // (higher share at small sizes), so the plate peeked out as a ring.
-    // Safari's address-bar site icon draws no such plate, which is why
-    // the same bytes looked clean there, and every comparison favicon in
-    // the tab strip that rendered clean (AmEx, Gusto, DocuSign,
-    // QuickBooks, SiteOne) is likewise a full-bleed opaque square.
+    // icon.svg stays off this list — it's the dark-green rounded mark,
+    // right for the JSON-LD logo above, but Safari picking it as a
+    // favicon would put the ring straight back.
+    icon: [{ url: "/brand-icon.ico", sizes: "any" }],
+    shortcut: "/brand-icon.ico",
+    // Without an apple-touch-icon, Safari's Start Page tiles and the iOS
+    // Home Screen fall back to centring the small favicon on a plate of
+    // their own — which is the "transparent box" around the icon, and why
+    // it read smaller than every neighbouring tile.
     //
-    // So: no transparency, nothing to show through. icon.svg is left off
-    // this list for the same reason — its rounded rect (rx="11") is
-    // transparency by definition. It stays on disk for the JSON-LD logo
-    // reference above, where the rounded mark is still the right look.
-    icon: [
-      { url: "/favicon-v5.ico", sizes: "any" },
-      { url: "/favicon-16v5.png", type: "image/png", sizes: "16x16" },
-      { url: "/favicon-32v5.png", type: "image/png", sizes: "32x32" },
-      { url: "/favicon-48v5.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicon-64v5.png", type: "image/png", sizes: "64x64" },
-      { url: "/favicon-128v5.png", type: "image/png", sizes: "128x128" },
+    // These are deliberately full-bleed, opaque and NOT rounded: iOS
+    // applies its own squircle mask, so baking in corners (or leaving
+    // transparency for it to fill) is what produces a boxed-in look.
+    // Green rather than the tab bar's white, because Safari's contrast
+    // outline only applies to the dark tab strip — on a tile these read
+    // like the bold single-colour icons they sit next to.
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/apple-touch-icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    shortcut: "/favicon-v5.ico",
   },
 };
 

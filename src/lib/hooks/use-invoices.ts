@@ -26,6 +26,65 @@ function throwIfLockedInvoiceError(error: any): never {
   throw error;
 }
 
+// ── void eligibility ──────────────────────────────────────────────────────────
+
+// Voiding an invoice that already has payments applied would orphan those
+// payment allocations (the money stays recorded against a record that no
+// longer counts toward AR). It is blocked in three places so no path can slip
+// through: the UI disables the action, these hooks re-check server-truth
+// before the UPDATE, and a DB trigger
+// (20260907210000_crm_invoice_void_guards.sql) rejects it outright.
+export function voidBlockedMessage(amountPaidCents: number): string {
+  return `Refund or unapply the ${formatCents(amountPaidCents)} in payments before voiding this invoice.`;
+}
+
+function formatCents(cents: number): string {
+  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+/**
+ * Reads the invoice's current locked / amount_paid state straight from the DB
+ * and throws a user-facing Error when it must not be voided. Runs before the
+ * UPDATE so the caller's `catch` can show a real reason instead of a silent
+ * no-op.
+ */
+async function assertVoidable(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  id: string,
+): Promise<{ clientId: string | null }> {
+  const { data, error } = await supabase
+    .from("crm_invoices")
+    .select("client_id, status, locked, amount_paid_cents")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error("Invoice not found.");
+  if (data.status === "void") throw new Error("This invoice is already void.");
+  // `locked` deliberately does NOT block voiding. The lock guards the invoice's
+  // AMOUNTS (see crm_invoice_block_locked_financial_update, which only covers
+  // subtotal/discount/tax/total) and is set the moment an invoice is sent or
+  // printed — voiding an issued-but-unpaid invoice is the normal way to cancel
+  // one, so requiring unlock-then-void would gate the most common case.
+  const paid = Number(data.amount_paid_cents ?? 0);
+  if (paid > 0) throw new Error(voidBlockedMessage(paid));
+  return { clientId: data.client_id ?? null };
+}
+
+/**
+ * The DB-side void guards raise plain Postgres exceptions; Postgrest surfaces
+ * the RAISE message verbatim. Re-throw them as-is (they are already written
+ * for a user) rather than letting a raw driver error reach a generic toast.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function throwIfVoidGuardError(error: any): never {
+  const message: string = error?.message ?? "";
+  if (message.toLowerCase().includes("cannot be voided")) {
+    throw new Error(message);
+  }
+  throw error;
+}
+
 // ── mappers ───────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,7 +214,14 @@ export function useInvoices(clientId?: string | string[]) {
         .from("crm_invoices")
         .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
         .is("deleted_at", null)
-        .order("invoice_date", { ascending: false });
+        // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
+        // Without a tiebreaker Postgres returns tied rows in physical heap
+        // order, which changes whenever one of them is UPDATEd — so the same
+        // query returned the same invoices in a DIFFERENT order after any
+        // edit, and the list visibly reshuffled on refetch (F-10). Order by
+        // invoice_number as well so the sequence is stable across fetches.
+        .order("invoice_date", { ascending: false })
+        .order("invoice_number", { ascending: false });
       if (clientIds.length === 1) q = q.eq("client_id", clientIds[0]);
       else if (clientIds.length > 1) q = q.in("client_id", clientIds);
       const { data, error } = await q;
@@ -506,12 +572,13 @@ export function useVoidInvoice() {
   return useMutation({
     mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
+      await assertVoidable(supabase, id);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_invoices")
         .update({ status: "void", balance_cents: 0 })
         .eq("id", id);
-      if (error) throw error;
+      if (error) throwIfVoidGuardError(error);
       // Re-sync the client's outstanding balance now that this invoice is excluded
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
@@ -537,21 +604,16 @@ export function useUpdateInvoiceStatus() {
       // useVoidInvoice — otherwise a voided invoice keeps its old
       // balance_cents and keeps counting toward what the client owes.
       if (status === "void") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: inv } = await (supabase as any)
-          .from("crm_invoices")
-          .select("client_id")
-          .eq("id", id)
-          .single();
+        const inv = await assertVoidable(supabase, id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
           .from("crm_invoices")
           .update({ status, balance_cents: 0 })
           .eq("id", id);
-        if (error) throw error;
-        if (inv?.client_id) {
+        if (error) throwIfVoidGuardError(error);
+        if (inv?.clientId) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.client_id });
+          await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.clientId });
         }
         return;
       }
