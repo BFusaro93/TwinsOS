@@ -61,36 +61,36 @@ export const metadata: Metadata = {
     // Safari has historically favored (and sometimes required) a plain
     // favicon.ico at the domain root over any <link> declaration.
     //
-    // These assets are deliberately FULL-BLEED and FULLY OPAQUE (no
-    // rounded corners, zero alpha) to kill a white ring that Safari drew
-    // around the icon in its tab strip and Favorites bar.
+    // The mark sits on a WHITE tile here, not the brand's forest green,
+    // and that is load-bearing — it's what stops Safari drawing a light
+    // ring around the icon in its tab strip and Favorites bar.
     //
-    // The ring was never in the asset — every frame of every candidate
-    // was scanned and contains no white pixel at any alpha. What gave it
-    // away: adding transparent padding around the mark made the white
-    // BIGGER, not smaller. That's the signature of a light backplate
-    // drawn behind the icon at full canvas size — the white isn't around
-    // our icon, it's behind it, showing through wherever we're
-    // transparent. Our rounded corners were 9-17% transparent pixels
-    // (higher share at small sizes), so the plate peeked out as a ring.
-    // Safari's address-bar site icon draws no such plate, which is why
-    // the same bytes looked clean there, and every comparison favicon in
-    // the tab strip that rendered clean (AmEx, Gusto, DocuSign,
-    // QuickBooks, SiteOne) is likewise a full-bleed opaque square.
+    // The ring was never a pixel in our asset (every frame of every
+    // candidate was scanned: no white at any alpha). It's the contrast
+    // outline macOS/Safari adds to a favicon too dark to read against
+    // the dark tab bar. Measured edge luminance, tab bar ~50: ours on
+    // #005642 was 66 — nearly invisible — while every icon that rendered
+    // clean sat far above it (Amazon 124, AmEx 109). On white we measure
+    // 255, roughly double Amazon's margin.
     //
-    // So: no transparency, nothing to show through. icon.svg is left off
-    // this list for the same reason — its rounded rect (rx="11") is
-    // transparency by definition. It stays on disk for the JSON-LD logo
-    // reference above, where the rounded mark is still the right look.
+    // This also explains what misled three earlier attempts: transparency
+    // was never the trigger (Amazon has rounded corners and renders
+    // clean), so pixel-purity checks, exact-size PNGs, and full opacity
+    // all failed, and padding made it worse only because the outline is
+    // drawn at the icon's bounding box.
+    //
+    // icon.svg is left off this list — it's still the dark-green rounded
+    // mark, which is right for the JSON-LD logo above but would
+    // reintroduce the ring if Safari picked it as a favicon.
     icon: [
-      { url: "/favicon-v5.ico", sizes: "any" },
-      { url: "/favicon-16v5.png", type: "image/png", sizes: "16x16" },
-      { url: "/favicon-32v5.png", type: "image/png", sizes: "32x32" },
-      { url: "/favicon-48v5.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicon-64v5.png", type: "image/png", sizes: "64x64" },
-      { url: "/favicon-128v5.png", type: "image/png", sizes: "128x128" },
+      { url: "/favicon-v6.ico", sizes: "any" },
+      { url: "/favicon-16v6.png", type: "image/png", sizes: "16x16" },
+      { url: "/favicon-32v6.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48v6.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicon-64v6.png", type: "image/png", sizes: "64x64" },
+      { url: "/favicon-128v6.png", type: "image/png", sizes: "128x128" },
     ],
-    shortcut: "/favicon-v5.ico",
+    shortcut: "/favicon-v6.ico",
   },
 };
 
