@@ -14,6 +14,7 @@ import { useCreateCrmPaymentIntent, type CreatePaymentIntentResult } from "@/lib
 import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
+import { guardStripeDialogDismiss, STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
   const stripe = useStripe();
@@ -44,7 +45,10 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
   return (
     <div className="flex flex-col gap-4">
       {/* Staff are entering the client's card, not their own — see SavedPaymentMethodDialog. */}
-      <PaymentElement options={{ wallets: { link: "never" } }} />
+      {/* Fixed floor so Stripe's accordion can't resize the dialog under the pointer (F-07). */}
+      <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
+        <PaymentElement options={{ wallets: { link: "never" } }} />
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -136,7 +140,11 @@ export function ChargeCardDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent
+        className="max-w-sm"
+        onPointerDownOutside={guardStripeDialogDismiss}
+        onInteractOutside={guardStripeDialogDismiss}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-brand-500" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -202,10 +202,19 @@ export function InvoicesList({ clientId }: Props) {
   const [voidTarget, setVoidTarget] = useState<CRMInvoice | null>(null);
   const [bulkVoidOpen, setBulkVoidOpen] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  // `?open=<id>` deep link. Applied only when the param VALUE changes: the
+  // effect used to re-run on every new `searchParams` object (a fresh instance
+  // on each navigation/render), which re-forced the URL's invoice over
+  // whichever row the user had since clicked — the same "opened a different
+  // invoice" symptom as F-10, from the other direction.
+  const appliedOpenParam = useRef<string | null>(null);
+  const openParam = searchParams.get("open");
   useEffect(() => {
-    const id = searchParams.get("open");
-    if (id) setOpenInvoiceId(id);
-  }, [searchParams]);
+    if (openParam && appliedOpenParam.current !== openParam) {
+      appliedOpenParam.current = openParam;
+      setOpenInvoiceId(openParam);
+    }
+  }, [openParam]);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => {
     const f = searchParams.get("filter");
     return (QUICK_FILTERS.some((q) => q.key === f) ? f : "all") as QuickFilter;
@@ -284,7 +293,19 @@ export function InvoicesList({ clientId }: Props) {
         case "balance": av = a.balanceCents; bv = b.balanceCents; break;
       }
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-      return sortDir === "asc" ? cmp : -cmp;
+      if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+      // Total order, or rows move under the pointer (F-10): Array#sort is
+      // stable, so tied rows (same invoice_date under the default sort — a
+      // batch of generated invoices ties by the dozen) kept whatever order the
+      // fetch happened to return, and Postgres returns tied rows in physical
+      // heap order, which changes as soon as any one of them is UPDATEd. A
+      // background refetch (TanStack refetch-on-focus / post-mutation
+      // invalidation) then reshuffled the visible rows a few positions and the
+      // click landed on a neighbour — opening, and offering to Charge, the
+      // wrong client's invoice. Tie-break on identity so the order a fetch
+      // returns can never affect the rendered order.
+      if (a.invoiceNumber !== b.invoiceNumber) return b.invoiceNumber - a.invoiceNumber;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
   }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir]);

@@ -214,7 +214,14 @@ export function useInvoices(clientId?: string | string[]) {
         .from("crm_invoices")
         .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
         .is("deleted_at", null)
-        .order("invoice_date", { ascending: false });
+        // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
+        // Without a tiebreaker Postgres returns tied rows in physical heap
+        // order, which changes whenever one of them is UPDATEd — so the same
+        // query returned the same invoices in a DIFFERENT order after any
+        // edit, and the list visibly reshuffled on refetch (F-10). Order by
+        // invoice_number as well so the sequence is stable across fetches.
+        .order("invoice_date", { ascending: false })
+        .order("invoice_number", { ascending: false });
       if (clientIds.length === 1) q = q.eq("client_id", clientIds[0]);
       else if (clientIds.length > 1) q = q.in("client_id", clientIds);
       const { data, error } = await q;

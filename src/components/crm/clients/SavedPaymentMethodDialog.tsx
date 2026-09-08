@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useCreateSetupIntent, useSaveSetupIntent, type CreateSetupIntentResult } from "@/lib/hooks/use-saved-payment-methods";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
+import { guardStripeDialogDismiss, STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
 
 function SetupForm({ onSuccess }: { onSuccess: (setupIntentId: string) => void }) {
   const stripe = useStripe();
@@ -44,7 +45,10 @@ function SetupForm({ onSuccess }: { onSuccess: (setupIntentId: string) => void }
        * autofill/1-click network) defaults to "auto" and puts itself ahead of the
        * plain card fields, which only makes sense when the person filling in the
        * form owns the card. */}
-      <PaymentElement options={{ wallets: { link: "never" } }} />
+      {/* Fixed floor so Stripe's accordion can't resize the dialog under the pointer (F-07). */}
+      <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
+        <PaymentElement options={{ wallets: { link: "never" } }} />
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -107,7 +111,11 @@ export function SavedPaymentMethodDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent
+        className="max-w-sm"
+        onPointerDownOutside={guardStripeDialogDismiss}
+        onInteractOutside={guardStripeDialogDismiss}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-brand-500" />

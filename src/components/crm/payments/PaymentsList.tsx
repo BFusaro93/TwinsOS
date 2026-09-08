@@ -15,6 +15,7 @@ import {
   type CreateMultiPaymentIntentResult,
 } from "@/lib/hooks/use-multi-invoice-charge";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
+import { guardStripeDialogDismiss, STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { exportCSV } from "@/lib/csv";
@@ -132,7 +133,10 @@ function ChargeMultiForm({ totalChargeCents, onSuccess }: { totalChargeCents: nu
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement options={{ wallets: { link: "never" } }} />
+      {/* Fixed floor so Stripe's accordion can't resize the dialog under the pointer (F-07). */}
+      <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
+        <PaymentElement options={{ wallets: { link: "never" } }} />
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -542,7 +546,11 @@ export function AddPaymentDialog({
   if (chargeIntent) {
     return (
       <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent
+          className="max-w-3xl"
+          onPointerDownOutside={guardStripeDialogDismiss}
+          onInteractOutside={guardStripeDialogDismiss}
+        >
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Charge Payment Method</DialogTitle>
           </DialogHeader>
