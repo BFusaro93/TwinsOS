@@ -3,7 +3,12 @@
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useInvoices, useUpdateInvoiceStatus, useBulkImportInvoices } from "@/lib/hooks/use-invoices";
+import {
+  useInvoices,
+  useUpdateInvoiceStatus,
+  useBulkImportInvoices,
+  voidBlockedMessage,
+} from "@/lib/hooks/use-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -31,6 +36,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+/**
+ * Why an invoice may not be voided, or null when it may.
+ *
+ * Voiding an invoice that carries payments would orphan those payment
+ * allocations, and a locked invoice is deliberately frozen — both are blocked
+ * here, re-checked in the mutation, and enforced by a DB trigger.
+ */
+function voidBlockedReason(inv: CRMInvoice): string | null {
+  if (inv.status === "void") return "This invoice is already void.";
+  // A locked (sent/printed) invoice is still voidable — the lock guards
+  // amounts, not cancellation. Only applied payments block a void.
+  if (inv.amountPaidCents > 0) return voidBlockedMessage(inv.amountPaidCents);
+  return null;
+}
 
 const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "number",      label: "Invoice #",  locked: true },
@@ -172,6 +199,9 @@ export function InvoicesList({ clientId }: Props) {
   const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const [voidTarget, setVoidTarget] = useState<CRMInvoice | null>(null);
+  const [bulkVoidOpen, setBulkVoidOpen] = useState(false);
+  const [voiding, setVoiding] = useState(false);
   useEffect(() => {
     const id = searchParams.get("open");
     if (id) setOpenInvoiceId(id);
@@ -271,27 +301,78 @@ export function InvoicesList({ clientId }: Props) {
       : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600" />;
   }
 
-  async function markVoid(inv: CRMInvoice) {
-    if (!confirm(`Void invoice #${inv.invoiceNumber}?`)) return;
+  // The single-row Void button used to call the browser's native `confirm()`.
+  // That blocks the whole tab's main thread until the dialog is answered (and
+  // is auto-dismissed outright in some embedded/automated contexts, silently
+  // returning false), which read as "Void does nothing, and sometimes freezes
+  // the tab". It's a real Radix dialog now.
+  function requestVoid(inv: CRMInvoice) {
+    const blocked = voidBlockedReason(inv);
+    if (blocked) {
+      toast.error(blocked);
+      return;
+    }
+    setVoidTarget(inv);
+  }
+
+  async function confirmVoid() {
+    const inv = voidTarget;
+    if (!inv) return;
+    setVoiding(true);
     try {
       await updateStatus({ id: inv.id, status: "void" });
-      toast.success("Invoice voided");
-    } catch {
-      toast.error("Failed to void invoice");
+      toast.success(`Invoice #${inv.invoiceNumber} voided`);
+      setVoidTarget(null);
+      refetchInvoices();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+    } finally {
+      setVoiding(false);
     }
   }
 
   async function bulkUpdateStatus(status: InvoiceStatus) {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    try {
-      await Promise.all(ids.map((id) => updateStatus({ id, status })));
-      toast.success(`${ids.length} invoice${ids.length > 1 ? "s" : ""} updated`);
-      setSelectedIds(new Set());
-      refetchInvoices();
-    } catch {
-      toast.error("Failed to update invoices");
+    const results = await Promise.allSettled(
+      ids.map((id) => updateStatus({ id, status }))
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected"
+    );
+    if (succeeded > 0) {
+      toast.success(`${succeeded} invoice${succeeded > 1 ? "s" : ""} updated`);
     }
+    if (failures.length > 0) {
+      // Surface the actual reason (locked / has payments) rather than a
+      // generic "failed" — one toast per distinct reason.
+      const reasons = Array.from(
+        new Set(
+          failures.map((f) =>
+            f.reason instanceof Error ? f.reason.message : "Failed to update invoice"
+          )
+        )
+      );
+      reasons.forEach((r) => toast.error(`${failures.length} skipped — ${r}`));
+    }
+    setSelectedIds(new Set());
+    refetchInvoices();
+  }
+
+  function requestBulkVoid() {
+    const selected = allInvoices.filter((i) => selectedIds.has(i.id));
+    const blocked = selected.filter((i) => voidBlockedReason(i) !== null);
+    if (blocked.length === selected.length && selected.length > 0) {
+      toast.error(voidBlockedReason(selected[0])!);
+      return;
+    }
+    setBulkVoidOpen(true);
+  }
+
+  async function confirmBulkVoid() {
+    setBulkVoidOpen(false);
+    await bulkUpdateStatus("void");
   }
 
   // Actually sends an email per selected invoice (via the same endpoint the
@@ -577,10 +658,7 @@ export function InvoicesList({ clientId }: Props) {
               <DropdownMenuItem
                 disabled={!someSelected}
                 className="text-red-600 focus:text-red-600"
-                onSelect={() => {
-                  if (!confirm(`Void ${selectedIds.size} invoice(s)?`)) return;
-                  bulkUpdateStatus("void");
-                }}
+                onSelect={requestBulkVoid}
               >
                 Void Selected
               </DropdownMenuItem>
@@ -790,11 +868,21 @@ export function InvoicesList({ clientId }: Props) {
                           Charge
                         </Button>
                       )}
-                      {inv.status !== "void" && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-slate-400 hover:text-red-500" onClick={() => markVoid(inv)}>
-                          Void
-                        </Button>
-                      )}
+                      {inv.status !== "void" && (() => {
+                        const blocked = voidBlockedReason(inv);
+                        return (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-slate-400 hover:text-red-500 disabled:opacity-40 disabled:hover:text-slate-400"
+                            disabled={blocked !== null}
+                            title={blocked ?? "Void this invoice"}
+                            onClick={(e) => { e.stopPropagation(); requestVoid(inv); }}
+                          >
+                            Void
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
@@ -813,6 +901,42 @@ export function InvoicesList({ clientId }: Props) {
         invoiceId={openInvoiceId}
         onOpenChange={(open) => !open && setOpenInvoiceId(null)}
       />
+      <Dialog open={voidTarget !== null} onOpenChange={(o) => !o && setVoidTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Void Invoice?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            {voidTarget
+              ? `Invoice #${voidTarget.invoiceNumber} will be marked void and its balance removed from the client's account.`
+              : ""}
+            {" "}The record stays intact for your audit trail.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setVoidTarget(null)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={confirmVoid} disabled={voiding}>
+              {voiding ? "Voiding…" : "Void Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkVoidOpen} onOpenChange={setBulkVoidOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Void {selectedIds.size} invoice{selectedIds.size === 1 ? "" : "s"}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            Their balances are removed from the clients&apos; accounts. Locked invoices and
+            invoices with payments applied are skipped — you&apos;ll get a reason for each.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setBulkVoidOpen(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={confirmBulkVoid}>Void Selected</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {mergeOpen && (
         <MergeInvoicesDialog
           invoices={allInvoices.filter((i) => selectedIds.has(i.id))}
