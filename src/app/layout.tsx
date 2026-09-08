@@ -61,19 +61,36 @@ export const metadata: Metadata = {
     // Safari has historically favored (and sometimes required) a plain
     // favicon.ico at the domain root over any <link> declaration.
     //
-    // A faint white ring around this icon in Safari's tab strip/Favorites
-    // bar was investigated at length (source-pixel purity, cache-busted
-    // resize-safe PNGs at every size, ~20% padding around the mark) and
-    // none of it helped — the padding attempt made it visibly worse
-    // instead of better, so it was reverted back to this original set.
-    // Conclusion: this is Safari's own tab/Favorites-bar chrome rendering
-    // a frame around the icon, not something fixable via the asset.
+    // These assets are deliberately FULL-BLEED and FULLY OPAQUE (no
+    // rounded corners, zero alpha) to kill a white ring that Safari drew
+    // around the icon in its tab strip and Favorites bar.
+    //
+    // The ring was never in the asset — every frame of every candidate
+    // was scanned and contains no white pixel at any alpha. What gave it
+    // away: adding transparent padding around the mark made the white
+    // BIGGER, not smaller. That's the signature of a light backplate
+    // drawn behind the icon at full canvas size — the white isn't around
+    // our icon, it's behind it, showing through wherever we're
+    // transparent. Our rounded corners were 9-17% transparent pixels
+    // (higher share at small sizes), so the plate peeked out as a ring.
+    // Safari's address-bar site icon draws no such plate, which is why
+    // the same bytes looked clean there, and every comparison favicon in
+    // the tab strip that rendered clean (AmEx, Gusto, DocuSign,
+    // QuickBooks, SiteOne) is likewise a full-bleed opaque square.
+    //
+    // So: no transparency, nothing to show through. icon.svg is left off
+    // this list for the same reason — its rounded rect (rx="11") is
+    // transparency by definition. It stays on disk for the JSON-LD logo
+    // reference above, where the rounded mark is still the right look.
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon.png", type: "image/png", sizes: "128x128" },
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon-v5.ico", sizes: "any" },
+      { url: "/favicon-16v5.png", type: "image/png", sizes: "16x16" },
+      { url: "/favicon-32v5.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48v5.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicon-64v5.png", type: "image/png", sizes: "64x64" },
+      { url: "/favicon-128v5.png", type: "image/png", sizes: "128x128" },
     ],
-    shortcut: "/favicon.ico",
+    shortcut: "/favicon-v5.ico",
   },
 };
 
