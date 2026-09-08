@@ -79,6 +79,21 @@ export const metadata: Metadata = {
     // favicon would put the ring straight back.
     icon: [{ url: "/brand-icon.ico", sizes: "any" }],
     shortcut: "/brand-icon.ico",
+    // Without an apple-touch-icon, Safari's Start Page tiles and the iOS
+    // Home Screen fall back to centring the small favicon on a plate of
+    // their own — which is the "transparent box" around the icon, and why
+    // it read smaller than every neighbouring tile.
+    //
+    // These are deliberately full-bleed, opaque and NOT rounded: iOS
+    // applies its own squircle mask, so baking in corners (or leaving
+    // transparency for it to fill) is what produces a boxed-in look.
+    // Green rather than the tab bar's white, because Safari's contrast
+    // outline only applies to the dark tab strip — on a tile these read
+    // like the bold single-colour icons they sit next to.
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/apple-touch-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   },
 };
 
