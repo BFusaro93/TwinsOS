@@ -19,24 +19,25 @@ import { NextResponse, type NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Safari gets the bare mark on transparency, no tile. A tile was only ever
-// there to lift the icon over the contrast threshold, and it cost size: the
-// tile filled the canvas while the mark sat at 70% inside it, so the mark
-// read smaller than tile-less neighbours (Gusto, DocuSign, QuickBooks) whose
-// glyphs span the full 16px. The mark's own strokes are bright on their own
-// — blue 146, green 148, yellow-green 194, mean 168, all above Amazon's 124
-// — so it clears the threshold with no tile and spans 94% of the canvas.
 const MARK = "icon-mark.ico";
 const GREEN = "icon-green.ico";
+
+// Which variant Safari gets. Currently the green tile, on the chance that
+// enlarging the mark (70% -> 80% of the tile) lifts the icon over Safari's
+// contrast rule: it takes the mean from 95.8 to 104.7. But the tile's EDGE
+// luminance is still 69.9 — barely moved, and under AmEx's 109 — and the
+// edge is what the original ring tracked. If the ring is back, flip this to
+// MARK: the bare mark on transparency measures mean 168 / edge 255 and is
+// confirmed clean, at the cost of the green tile.
+const SAFARI_VARIANT = GREEN;
 
 // Chromium and Firefox both put "Safari" in their UA strings, so real Safari
 // is identified by the absence of every other engine's marker rather than by
 // the presence of "Safari". Anything unrecognised (or an empty UA) falls
-// through to the bare mark: it is the variant that is safe everywhere, so an
-// unknown client gets a correct-looking icon rather than a possible ring.
+// through to Safari's variant rather than Chromium's.
 function pickVariant(ua: string): string {
   const isChromiumOrFirefox = /(?:Chrome|Chromium|CriOS|Edg|EdgiOS|EdgA|OPR|Firefox|FxiOS)\//.test(ua);
-  return isChromiumOrFirefox ? GREEN : MARK;
+  return isChromiumOrFirefox ? GREEN : SAFARI_VARIANT;
 }
 
 export async function GET(request: NextRequest) {
