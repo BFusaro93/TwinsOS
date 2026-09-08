@@ -46,6 +46,7 @@ import { PhoneInput } from "@/components/shared/PhoneInput";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -1227,6 +1228,7 @@ export function EmployeesTable({
 }: {
   onSelect: (e: CRMEmployee) => void;
 }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: employees, isLoading } = useEmployees(false);
   const { mutateAsync: deactivate } = useDeactivateEmployee();
   const { mutateAsync: activate } = useActivateEmployee();
@@ -1243,7 +1245,12 @@ export function EmployeesTable({
   });
 
   async function handleDeactivate(id: string, name: string) {
-    if (!confirm(`Deactivate ${name}?`)) return;
+    if (!(await confirm({
+      title: `Deactivate ${name}?`,
+      description: "They stop appearing on crew and assignment lists. Historical data is preserved.",
+      confirmLabel: "Deactivate",
+      destructive: true,
+    }))) return;
     try {
       await deactivate(id);
       toast.success(`${name} deactivated`);
@@ -1291,6 +1298,7 @@ export function EmployeesTable({
           colSpan={9}
         />
       </div>
+      {confirmDialog}
     </div>
   );
 }

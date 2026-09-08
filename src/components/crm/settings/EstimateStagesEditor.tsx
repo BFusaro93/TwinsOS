@@ -14,6 +14,7 @@ import {
   useSeedDefaultStages,
   type EstimateStage,
 } from "@/lib/hooks/use-estimate-stages";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 function bpsToPercent(bps: number): string {
   return (bps / 100).toFixed(0);
@@ -26,6 +27,7 @@ function percentToBps(pct: string): number {
 }
 
 function StageRow({ stage }: { stage: EstimateStage }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { mutateAsync: upsert } = useUpsertEstimateStage();
   const { mutateAsync: remove } = useDeleteEstimateStage();
   const [editingName, setEditingName] = useState(false);
@@ -76,7 +78,7 @@ function StageRow({ stage }: { stage: EstimateStage }) {
 
   async function handleDelete() {
     if (stage.isSystem) return;
-    if (!confirm(`Delete stage "${stage.name}"?`)) return;
+    if (!(await confirm({ title: `Delete stage "${stage.name}"?`, confirmLabel: "Delete Stage", destructive: true }))) return;
     try {
       await remove(stage.id);
       toast.success("Stage deleted");
@@ -171,6 +173,7 @@ function StageRow({ stage }: { stage: EstimateStage }) {
           <X className="h-4 w-4" />
         </button>
       )}
+      {confirmDialog}
     </div>
   );
 }

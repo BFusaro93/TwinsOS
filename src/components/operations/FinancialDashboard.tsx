@@ -32,6 +32,7 @@ import {
 } from "@/lib/hooks/use-financial-periods";
 import { parseFinancialPdf } from "@/lib/utils/parse-financial-pdf";
 import { todayLocalISODate } from "@/lib/utils";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 
@@ -1263,6 +1264,7 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
 // ── Data Entry Tab ────────────────────────────────────────────────────────────
 
 function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRecord[]; budgets: FinancialPeriodRecord[]; ytdActuals: FinancialPeriodRecord[] }) {
+  const [confirm, confirmDialog] = useConfirm();
   const [adding, setAdding] = useState(false);
   const [addingType, setAddingType] = useState<RecordType>("actual");
   const [editing, setEditing] = useState<FinancialPeriodRecord | null>(null);
@@ -1373,8 +1375,8 @@ function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRe
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (confirm(`Delete ${monthLabel(r.periodMonth)} ${r.recordType}?`)) {
+                        onClick={async () => {
+                          if (await confirm({ title: `Delete ${monthLabel(r.periodMonth)} ${r.recordType}?`, confirmLabel: "Delete", destructive: true })) {
                             deletePeriod.mutate(r.id);
                           }
                         }}
@@ -1390,6 +1392,7 @@ function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRe
           </table>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

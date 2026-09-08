@@ -91,6 +91,7 @@ import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -224,6 +225,7 @@ interface Props {
 }
 
 export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const { can } = usePermissions();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
@@ -1711,7 +1713,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           const day = parseInt(v);
                           const entry = days.find((d) => d.day === day);
                           if (!entry) return;
-                          if (!confirm(`Remove all ${entry.count} scheduled ${entry.name} visits? This cannot be undone.`)) return;
+                          if (!(await confirm({
+                            title: `Remove all ${entry.count} scheduled ${entry.name} visits?`,
+                            description: "This cannot be undone.",
+                            confirmLabel: "Remove Visits",
+                            destructive: true,
+                          }))) return;
                           const removed = await deleteVisitsByDay.mutateAsync({ jobId: job.id, dayOfWeek: day });
                           toast.success(`Removed ${removed} ${entry.name} visits`);
                         }}
@@ -1855,7 +1862,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         isChemicalJob={isChemicalJob}
                         crews={crews}
                         onDelete={async () => {
-                          if (!confirm("Delete this visit?")) return;
+                          if (!(await confirm({ title: "Delete this visit?", confirmLabel: "Delete Visit", destructive: true }))) return;
                           await deleteVisit.mutateAsync(v.id);
                           toast.success("Visit deleted");
                         }}
@@ -2024,6 +2031,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         open={projectSheetOpen}
         onOpenChange={setProjectSheetOpen}
       />
+      {confirmDialog}
     </div>
   );
 }

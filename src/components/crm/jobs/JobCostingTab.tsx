@@ -13,6 +13,7 @@ import {
   useDeleteJobMaterial,
 } from "@/lib/hooks/use-job-costing";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 interface Props {
   jobId: string;
@@ -215,6 +216,7 @@ function AddMaterialForm({ jobId, onDone }: AddMaterialFormProps) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function JobCostingTab({ jobId, estimateId }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const [addingMaterial, setAddingMaterial] = useState(false);
   const [linesExpanded, setLinesExpanded] = useState(false);
 
@@ -223,7 +225,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
   const deleteMaterial = useDeleteJobMaterial(jobId);
 
   async function handleDeleteMaterial(id: string) {
-    if (!confirm("Remove this material?")) return;
+    if (!(await confirm({ title: "Remove this material?", confirmLabel: "Remove", destructive: true }))) return;
     try {
       await deleteMaterial.mutateAsync(id);
       toast.success("Material removed");
@@ -546,6 +548,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
           )}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

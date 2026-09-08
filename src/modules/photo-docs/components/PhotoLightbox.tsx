@@ -12,6 +12,7 @@ import { useUpdatePhoto } from "../hooks/useJobPhotos";
 import { useClearAnnotation } from "../hooks/useAnnotations";
 import { isHeicMimeType } from "../lib/fileType";
 import type { JobPhoto } from "../types/photo.types";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 interface PhotoLightboxProps {
   photo: JobPhoto;
@@ -34,6 +35,7 @@ export function PhotoLightbox({
   onDelete,
   projectId,
 }: PhotoLightboxProps) {
+  const [confirm, confirmDialog] = useConfirm();
   const currentIndex = photos.findIndex((p) => p.id === photo.id);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < photos.length - 1;
@@ -346,8 +348,13 @@ export function PhotoLightbox({
                 variant="outline"
                 className="w-full gap-1.5 border-slate-600 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                 disabled={clearingAnnotation}
-                onClick={() => {
-                  if (confirm("Remove annotation from this photo? The original photo is kept.")) {
+                onClick={async () => {
+                  if (await confirm({
+                    title: "Remove annotation from this photo?",
+                    description: "The original photo is kept.",
+                    confirmLabel: "Remove Annotation",
+                    destructive: true,
+                  })) {
                     clearAnnotation(undefined, {
                       onSuccess: () => toast.success("Annotation removed"),
                       onError: () => toast.error("Failed to remove annotation"),
@@ -398,6 +405,7 @@ export function PhotoLightbox({
 
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 

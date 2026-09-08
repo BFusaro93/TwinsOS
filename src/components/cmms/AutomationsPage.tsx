@@ -25,6 +25,7 @@ import {
   useUpdateAutomation,
   useDeleteAutomation,
 } from "@/lib/hooks/use-automations";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── Pre-built templates ───────────────────────────────────────────────────────
 
@@ -119,6 +120,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export function AutomationsPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: rules = [], isLoading } = useAutomations();
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
@@ -141,8 +143,8 @@ export function AutomationsPage() {
     updateAutomation.mutate({ id, enabled: !currentEnabled });
   }
 
-  function handleDelete(id: string) {
-    if (window.confirm("Delete this automation?")) {
+  async function handleDelete(id: string) {
+    if (await confirm({ title: "Delete this automation?", confirmLabel: "Delete", destructive: true })) {
       deleteAutomation.mutate(id);
     }
   }
@@ -294,7 +296,7 @@ export function AutomationsPage() {
                       variant="ghost"
                       size="sm"
                       className="text-slate-400 hover:text-red-600"
-                      onClick={() => handleDelete(rule.id)}
+                      onClick={() => void handleDelete(rule.id)}
                       aria-label={`Delete ${rule.name}`}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -323,6 +325,7 @@ export function AutomationsPage() {
         initialData={editingRule}
         onSave={() => setEditingRule(null)}
       />
+      {confirmDialog}
     </div>
   );
 }

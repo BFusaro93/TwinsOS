@@ -104,6 +104,7 @@ import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { useConnectStatus, useStartConnectOnboarding, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { LANDSCAPT_TAB_PERMISSIONS } from "@/lib/permissions/settings-access";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -300,6 +301,7 @@ function UsersTab() {
 // ── CRMTab ────────────────────────────────────────────────────────────────────
 
 function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlaceholder?: string }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: items = [], isLoading } = useOrgList(listName);
   const { mutateAsync: addItem } = useAddOrgListItem();
   const { mutateAsync: deleteItem } = useDeleteOrgListItem();
@@ -317,7 +319,7 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Remove this option?")) return;
+    if (!(await confirm({ title: "Remove this option?", confirmLabel: "Remove", destructive: true }))) return;
     try { await deleteItem({ id, listName }); toast.success("Removed"); }
     catch { toast.error("Failed to remove"); }
   }
@@ -354,6 +356,7 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
           </button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -361,6 +364,7 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
 // ── Discounts editor (name + a real percent or flat-dollar rate) ───────────────
 
 function DiscountsEditor() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: discounts = [], isLoading } = useDiscounts();
   const { mutateAsync: createDiscount } = useCreateDiscount();
   const { mutateAsync: updateDiscount } = useUpdateDiscount();
@@ -410,7 +414,7 @@ function DiscountsEditor() {
   }
 
   async function handleRemove(id: string) {
-    if (!confirm("Remove this discount?")) return;
+    if (!(await confirm({ title: "Remove this discount?", confirmLabel: "Remove", destructive: true }))) return;
     try { await deleteDiscount(id); toast.success("Discount removed"); }
     catch { toast.error("Failed to remove discount"); }
   }
@@ -514,6 +518,7 @@ function DiscountsEditor() {
           </button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -735,6 +740,7 @@ function CrewAppSection() {
 // ── CustomFieldDefsEditor ─────────────────────────────────────────────────────
 
 function CustomFieldDefsEditor() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: defs = [], isLoading } = useCustomFieldDefs();
   const { mutateAsync: create, isPending: creating } = useCreateCustomFieldDef();
   const { mutateAsync: update } = useUpdateCustomFieldDef();
@@ -764,7 +770,12 @@ function CustomFieldDefsEditor() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete custom field "${name}"? Existing values on clients will be lost.`)) return;
+    if (!(await confirm({
+      title: `Delete custom field "${name}"?`,
+      description: "Existing values on clients will be lost.",
+      confirmLabel: "Delete Field",
+      destructive: true,
+    }))) return;
     try {
       await remove(id);
       toast.success("Field deleted");
@@ -930,6 +941,7 @@ function CustomFieldDefsEditor() {
           </button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

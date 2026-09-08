@@ -11,6 +11,7 @@ import {
   useUploadPortalDocument,
   useDeletePortalDocument,
 } from "@/lib/hooks/use-portal-documents";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 function formatSize(bytes: number | null) {
   if (!bytes) return "";
@@ -20,6 +21,7 @@ function formatSize(bytes: number | null) {
 }
 
 export function PortalDocumentLibrary() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: documents, isLoading } = usePortalDocuments();
   const { mutate: upload, isPending: uploading } = useUploadPortalDocument();
   const { mutate: remove } = useDeletePortalDocument();
@@ -51,8 +53,12 @@ export function PortalDocumentLibrary() {
     );
   }
 
-  function handleDelete(id: string, storagePath: string, docTitle: string) {
-    if (!confirm(`Remove "${docTitle}" from the document library?`)) return;
+  async function handleDelete(id: string, storagePath: string, docTitle: string) {
+    if (!(await confirm({
+      title: `Remove "${docTitle}" from the document library?`,
+      confirmLabel: "Remove",
+      destructive: true,
+    }))) return;
     remove({ id, storagePath }, {
       onSuccess: () => toast.success("Document removed"),
       onError: () => toast.error("Failed to remove document"),
@@ -140,7 +146,7 @@ export function PortalDocumentLibrary() {
                   size="sm"
                   variant="ghost"
                   className="h-7 gap-1 text-xs text-red-500 hover:text-red-600 shrink-0"
-                  onClick={() => handleDelete(doc.id, doc.storagePath, doc.title)}
+                  onClick={() => void handleDelete(doc.id, doc.storagePath, doc.title)}
                 >
                   <Trash2 className="h-3 w-3" /> Remove
                 </Button>
@@ -149,6 +155,7 @@ export function PortalDocumentLibrary() {
           </div>
         )}
       </div>
+      {confirmDialog}
     </section>
   );
 }

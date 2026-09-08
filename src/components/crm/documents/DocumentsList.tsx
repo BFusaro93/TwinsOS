@@ -41,6 +41,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { DOC_TYPE_LABELS, PLAIN_TEXT_DOC_TYPES } from "@/types/crm-documents";
 import type { DocStatus, DocType, DocumentTemplate } from "@/types/crm-documents";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -288,6 +289,7 @@ function DocumentRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
   const canEdit = can("document_template_edit");
   const canDelete = can("document_template_delete");
@@ -336,7 +338,9 @@ function DocumentRow({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-red-600 focus:text-red-600"
-                  onClick={() => { if (confirm("Delete this document template?")) onDelete(); }}
+                  onClick={async () => {
+                    if (await confirm({ title: "Delete this document template?", confirmLabel: "Delete Template", destructive: true })) onDelete();
+                  }}
                 >
                   <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
                 </DropdownMenuItem>
@@ -344,6 +348,7 @@ function DocumentRow({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        {confirmDialog}
       </td>
     </tr>
   );

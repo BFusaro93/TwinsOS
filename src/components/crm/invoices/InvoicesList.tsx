@@ -22,6 +22,7 @@ import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
 import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import {
@@ -170,6 +171,7 @@ export function InvoicesList({ clientId }: Props) {
   const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(effectiveClientId);
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
   const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
+  const [confirm, confirmDialog] = useConfirm();
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   useEffect(() => {
@@ -272,7 +274,12 @@ export function InvoicesList({ clientId }: Props) {
   }
 
   async function markVoid(inv: CRMInvoice) {
-    if (!confirm(`Void invoice #${inv.invoiceNumber}?`)) return;
+    if (!(await confirm({
+      title: `Void invoice #${inv.invoiceNumber}?`,
+      description: "The invoice stays on the client's record but is no longer collectible.",
+      confirmLabel: "Void Invoice",
+      destructive: true,
+    }))) return;
     try {
       await updateStatus({ id: inv.id, status: "void" });
       toast.success("Invoice voided");
@@ -351,7 +358,12 @@ export function InvoicesList({ clientId }: Props) {
 
   async function handleChargeAll() {
     if (filtered.length === 0) return;
-    if (!confirm(`Charge all ${filtered.length} invoice(s) in this tab now?`)) return;
+    if (!(await confirm({
+      title: `Charge all ${filtered.length} invoice(s) in this tab now?`,
+      description: "Each invoice's saved payment method is charged immediately. This cannot be undone.",
+      confirmLabel: `Charge ${filtered.length} Invoice${filtered.length === 1 ? "" : "s"}`,
+      destructive: true,
+    }))) return;
     setChargingAll(true);
     let succeeded = 0;
     let failed = 0;
@@ -577,8 +589,13 @@ export function InvoicesList({ clientId }: Props) {
               <DropdownMenuItem
                 disabled={!someSelected}
                 className="text-red-600 focus:text-red-600"
-                onSelect={() => {
-                  if (!confirm(`Void ${selectedIds.size} invoice(s)?`)) return;
+                onSelect={async () => {
+                  if (!(await confirm({
+                    title: `Void ${selectedIds.size} invoice(s)?`,
+                    description: "The invoices stay on their client records but are no longer collectible.",
+                    confirmLabel: "Void Selected",
+                    destructive: true,
+                  }))) return;
                   bulkUpdateStatus("void");
                 }}
               >
@@ -813,6 +830,7 @@ export function InvoicesList({ clientId }: Props) {
         invoiceId={openInvoiceId}
         onOpenChange={(open) => !open && setOpenInvoiceId(null)}
       />
+      {confirmDialog}
       {mergeOpen && (
         <MergeInvoicesDialog
           invoices={allInvoices.filter((i) => selectedIds.has(i.id))}

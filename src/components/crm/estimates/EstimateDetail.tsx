@@ -104,6 +104,7 @@ import {
   useSeedDefaultStages,
   type EstimateStage as DBEstimateStage,
 } from "@/lib/hooks/use-estimate-stages";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // Stage colors are keyed by stage_key — fallback palette for system stages
 const DEFAULT_STAGE_COLORS: Record<string, string> = {
@@ -137,6 +138,7 @@ type Tab = "details" | "payment" | "display" | "notes" | "photos" | "attachments
 // ── Attachments tab ────────────────────────────────────────────────────────────
 
 function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: attachments = [], isLoading } = useAttachments("estimate", estimateId);
   const upload = useUploadAttachment("estimate", estimateId);
   const remove = useDeleteAttachment("estimate", estimateId);
@@ -223,7 +225,7 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
                 </button>
                 <button
                   onClick={async () => {
-                    if (!confirm(`Remove ${a.fileName}?`)) return;
+                    if (!(await confirm({ title: `Remove ${a.fileName}?`, confirmLabel: "Remove", destructive: true }))) return;
                     await remove.mutateAsync({ id: a.id, storagePath: a.storagePath });
                     toast.success("Attachment removed");
                   }}
@@ -237,6 +239,7 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

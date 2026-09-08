@@ -21,6 +21,7 @@ import {
   useDeleteInvoicePDFTemplate,
 } from "@/lib/hooks/use-invoice-pdf-templates";
 import type { InvoicePDFLayoutKey, InvoicePDFTemplate } from "@/types/crm-invoices";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // Add an entry here when a new layoutKey is implemented in InvoiceDocument.tsx
 // (e.g. after importing a customer's own Service Autopilot-style template).
@@ -147,6 +148,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
 }
 
 export function InvoiceTemplatesEditor() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: templates = [], isLoading } = useInvoicePDFTemplates();
   const create = useCreateInvoicePDFTemplate();
   const setDefault = useSetDefaultInvoicePDFTemplate();
@@ -176,9 +178,14 @@ export function InvoiceTemplatesEditor() {
     setDefault.mutate(id, { onError: () => toast.error("Failed to set default template") });
   }
 
-  function handleDelete(id: string, isDefault: boolean) {
+  async function handleDelete(id: string, isDefault: boolean) {
     if (isDefault) { toast.error("Set a different template as default before deleting this one."); return; }
-    if (!window.confirm("Delete this template? Invoices using it will fall back to the org default.")) return;
+    if (!(await confirm({
+      title: "Delete this template?",
+      description: "Invoices using it will fall back to the org default.",
+      confirmLabel: "Delete Template",
+      destructive: true,
+    }))) return;
     del.mutate(id, { onError: () => toast.error("Failed to delete template") });
   }
 
@@ -220,7 +227,7 @@ export function InvoiceTemplatesEditor() {
             </button>
             <button
               type="button"
-              onClick={() => handleDelete(t.id, t.isDefault)}
+              onClick={() => void handleDelete(t.id, t.isDefault)}
               className="rounded p-1 text-slate-300 hover:text-red-500"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -277,6 +284,7 @@ export function InvoiceTemplatesEditor() {
         to override its logo, accent color, and whether notes show — or the eye icon to preview it
         with sample data.
       </p>
+      {confirmDialog}
     </div>
   );
 }

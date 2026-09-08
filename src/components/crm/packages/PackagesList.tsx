@@ -9,6 +9,7 @@ import { usePackages, useDeletePackage } from "@/lib/hooks/use-packages";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMPackage } from "@/types/crm-packages";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 interface Props {
   onAdd: () => void;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function PackagesList({ onAdd, onEdit }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
   const canAdd = can("package_add");
   const canEdit = can("package_edit");
@@ -105,8 +107,8 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                     )}
                     {canDelete && (
                       <button
-                        onClick={() => {
-                          if (confirm(`Delete "${pkg.name}"?`)) {
+                        onClick={async () => {
+                          if (await confirm({ title: `Delete "${pkg.name}"?`, confirmLabel: "Delete Package", destructive: true })) {
                             deletePackage.mutate(pkg.id, {
                               onError: () => toast.error(`Failed to delete "${pkg.name}"`),
                             });
@@ -123,6 +125,7 @@ export function PackagesList({ onAdd, onEdit }: Props) {
           </tbody>
         </table>
       </div>
+      {confirmDialog}
     </div>
   );
 }

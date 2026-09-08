@@ -16,6 +16,7 @@ import {
 import type { DriverData, SafetyWeekData } from "@/lib/hooks/use-safety-weeks";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
 import { useCurrentUserStore } from "@/stores";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Tab = "overview" | "history" | "import";
@@ -170,6 +171,7 @@ function KpiCard({
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function SafetyDashboard() {
+  const [confirm, confirmDialog] = useConfirm();
   const [tab, setTab] = useState<Tab>("overview");
   const [viewWeekEnd, setViewWeekEnd] = useState<string | null>(null);
   const [weekWindowEnd, setWeekWindowEnd] = useState<number | null>(null);
@@ -615,7 +617,9 @@ export function SafetyDashboard() {
                               title="Edit week"
                             ><Pencil className="h-4 w-4" /></button>
                             <button
-                              onClick={() => { if (confirm("Delete " + (w.data.label || fmtDate(w.weekEnd)) + "?")) del.mutate(w.weekEnd); }}
+                              onClick={async () => {
+                                if (await confirm({ title: "Delete " + (w.data.label || fmtDate(w.weekEnd)) + "?", confirmLabel: "Delete", destructive: true })) del.mutate(w.weekEnd);
+                              }}
                               className="text-red-400 hover:text-red-600"
                             ><Trash2 className="h-4 w-4" /></button>
                           </div>
@@ -889,6 +893,7 @@ export function SafetyDashboard() {
           {tab === "import" && canManageWeeks && Import()}
         </>
       )}
+      {confirmDialog}
     </div>
   );
 }
