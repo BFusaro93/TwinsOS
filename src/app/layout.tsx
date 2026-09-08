@@ -65,36 +65,20 @@ export const metadata: Metadata = {
     // Safari has historically favored (and sometimes required) a plain
     // favicon.ico at the domain root over any <link> declaration.
     //
-    // The mark sits on a WHITE tile here, not the brand's forest green,
-    // and that is load-bearing — it's what stops Safari drawing a light
-    // ring around the icon in its tab strip and Favorites bar.
+    // Single entry on purpose: /brand-icon.ico is a route handler that
+    // picks the tile colour from the User-Agent — the brand's dark green
+    // for Chromium/Firefox, white for Safari. See that route for why the
+    // branch exists (Safari draws a contrast outline around favicons too
+    // dark for its tab bar) and why it can't be done with static links.
+    // The .ico carries 16/32/48/128/256 frames, so no per-size PNG links
+    // are needed; those were only ever added to chase a resize theory
+    // that turned out to be wrong.
     //
-    // The ring was never a pixel in our asset (every frame of every
-    // candidate was scanned: no white at any alpha). It's the contrast
-    // outline macOS/Safari adds to a favicon too dark to read against
-    // the dark tab bar. Measured edge luminance, tab bar ~50: ours on
-    // #005642 was 66 — nearly invisible — while every icon that rendered
-    // clean sat far above it (Amazon 124, AmEx 109). On white we measure
-    // 255, roughly double Amazon's margin.
-    //
-    // This also explains what misled three earlier attempts: transparency
-    // was never the trigger (Amazon has rounded corners and renders
-    // clean), so pixel-purity checks, exact-size PNGs, and full opacity
-    // all failed, and padding made it worse only because the outline is
-    // drawn at the icon's bounding box.
-    //
-    // icon.svg is left off this list — it's still the dark-green rounded
-    // mark, which is right for the JSON-LD logo above but would
-    // reintroduce the ring if Safari picked it as a favicon.
-    icon: [
-      { url: "/favicon-v6.ico", sizes: "any" },
-      { url: "/favicon-16v6.png", type: "image/png", sizes: "16x16" },
-      { url: "/favicon-32v6.png", type: "image/png", sizes: "32x32" },
-      { url: "/favicon-48v6.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicon-64v6.png", type: "image/png", sizes: "64x64" },
-      { url: "/favicon-128v6.png", type: "image/png", sizes: "128x128" },
-    ],
-    shortcut: "/favicon-v6.ico",
+    // icon.svg stays off this list — it's the dark-green rounded mark,
+    // right for the JSON-LD logo above, but Safari picking it as a
+    // favicon would put the ring straight back.
+    icon: [{ url: "/brand-icon.ico", sizes: "any" }],
+    shortcut: "/brand-icon.ico",
   },
 };
 
