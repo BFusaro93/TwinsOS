@@ -41,6 +41,15 @@ export const metadata: Metadata = {
     images: [DEFAULT_OG_IMAGE],
   },
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  // Previously undeclared — with no color-scheme meta, Safari doesn't know
+  // this origin supports dark rendering and may default any UI plate it
+  // draws behind transparent regions (tab/Favorites-bar favicon included)
+  // to a light background. Every comparison site in the tab strip that
+  // rendered its favicon cleanly is a large, well-established product —
+  // plausibly because they already declare this. Untested until now since
+  // every prior attempt at this bug stayed at the asset-pixel level.
+  colorScheme: "dark light",
+  themeColor: "#005642",
   icons: {
     // Explicit list, not the app/icon.* file convention — Next only ever
     // emits a single <link rel="icon"> for that convention, silently
