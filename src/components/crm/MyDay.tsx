@@ -135,9 +135,9 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{(openTickets ?? []).length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {ticketsLoading ? <Skeleton className="h-3 w-20" /> : `${overdueCount} overdue`}
-          </p>
+          </div>
         </div>
 
         {/* Pending Estimates */}
@@ -151,13 +151,13 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{pendingEstimates.length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {estimatesLoading ? (
               <Skeleton className="h-3 w-24" />
             ) : (
               `${formatCurrency(pipelineValueCents)} pipeline`
             )}
-          </p>
+          </div>
         </div>
 
         {/* Outstanding Invoices */}
@@ -171,13 +171,13 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{outstandingInvoices.length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {invoicesLoading ? (
               <Skeleton className="h-3 w-24" />
             ) : (
               `${formatCurrency(totalBalanceCents)} outstanding`
             )}
-          </p>
+          </div>
         </div>
 
         {/* Active Clients */}
@@ -191,13 +191,13 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{activeClients.length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {clientsLoading ? (
               <Skeleton className="h-3 w-24" />
             ) : (
               `${newThisMonth} added this month`
             )}
-          </p>
+          </div>
         </div>
       </div>
 
