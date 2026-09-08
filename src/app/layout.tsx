@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
@@ -17,6 +17,20 @@ const ORGANIZATION_JSON_LD = {
     { "@type": "Brand", name: "Landscapt" },
     { "@type": "Brand", name: "Equipt" },
   ],
+};
+
+// Next 15 only reads viewport/colorScheme/themeColor from this export —
+// declaring them inside `metadata` (as this file used to) silently emits
+// nothing, which is why the served HTML carried Next's default viewport
+// tag and no theme-color at all.
+//
+// Deliberately NOT carrying over the old `maximum-scale=1`: it was never
+// actually in effect, and switching it on now would newly block pinch-zoom.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  colorScheme: "dark light",
+  themeColor: "#ffffff",
 };
 
 export const metadata: Metadata = {
@@ -40,16 +54,6 @@ export const metadata: Metadata = {
     description: "CRM, field service, work orders, purchasing & asset management",
     images: [DEFAULT_OG_IMAGE],
   },
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
-  // Previously undeclared — with no color-scheme meta, Safari doesn't know
-  // this origin supports dark rendering and may default any UI plate it
-  // draws behind transparent regions (tab/Favorites-bar favicon included)
-  // to a light background. Every comparison site in the tab strip that
-  // rendered its favicon cleanly is a large, well-established product —
-  // plausibly because they already declare this. Untested until now since
-  // every prior attempt at this bug stayed at the asset-pixel level.
-  colorScheme: "dark light",
-  themeColor: "#005642",
   icons: {
     // Explicit list, not the app/icon.* file convention — Next only ever
     // emits a single <link rel="icon"> for that convention, silently
