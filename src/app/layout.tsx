@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
 import { SITE_NAME, SITE_URL, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import "./globals.css";
@@ -50,10 +51,32 @@ export const metadata: Metadata = {
     // resolution issues (Safari) have a classic .ico/.png fallback —
     // Safari has historically favored (and sometimes required) a plain
     // favicon.ico at the domain root over any <link> declaration.
+    //
+    // icon.svg's <link> is intentionally dropped (see below for why the
+    // halo persisted even after that change).
+    //
+    // The white ring in Safari's dark-mode tab strip persisted even with
+    // only favicon.ico/.png in play, despite every frame of both files
+    // being pixel-inspected clean (alpha fades transparent -> correct
+    // brand green, never toward white, and no alpha=0 pixel stores a
+    // light RGB that could bleed through a resize). The remaining
+    // explanation: Safari was resizing our single 128px/256px source down
+    // to its own tab-icon size itself, and resizing straight (non-
+    // premultiplied) alpha at a hard transparent/opaque edge is a classic
+    // source of light "ringing" fringe — invisible against light browser
+    // chrome (Chrome/Firefox tabs), visible against Safari's dark tab.
+    // Fix: ship pre-rendered, premultiplied-alpha-correct PNGs at the
+    // exact sizes Safari's tab strip actually needs (16/32/48/64), so it
+    // never has to resize our source itself. Filenames are cache-busted
+    // (v3) since Safari's favicon cache is a separate on-disk store that
+    // survives a normal reload or even Safari's own "Empty Caches".
     icon: [
       { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16v3.png", type: "image/png", sizes: "16x16" },
+      { url: "/favicon-32v3.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48v3.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicon-64v3.png", type: "image/png", sizes: "64x64" },
       { url: "/favicon.png", type: "image/png", sizes: "128x128" },
-      { url: "/icon.svg", type: "image/svg+xml" },
     ],
     shortcut: "/favicon.ico",
   },
@@ -72,6 +95,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_JSON_LD) }}
         />
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
