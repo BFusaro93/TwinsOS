@@ -52,33 +52,39 @@ export const metadata: Metadata = {
     // Safari has historically favored (and sometimes required) a plain
     // favicon.ico at the domain root over any <link> declaration.
     //
-    // icon.svg's <link> is intentionally dropped (see below for why the
-    // halo persisted even after that change).
+    // icon.svg's <link> is intentionally dropped (see below).
     //
-    // The white ring in Safari's dark-mode tab strip persisted even with
-    // only favicon.ico/.png in play, despite every frame of both files
-    // being pixel-inspected clean (alpha fades transparent -> correct
-    // brand green, never toward white, and no alpha=0 pixel stores a
-    // light RGB that could bleed through a resize). The remaining
-    // explanation: Safari was resizing our single 128px/256px source down
-    // to its own tab-icon size itself, and resizing straight (non-
-    // premultiplied) alpha at a hard transparent/opaque edge is a classic
-    // source of light "ringing" fringe — invisible against light browser
-    // chrome (Chrome/Firefox tabs), visible against Safari's dark tab.
-    // Fix: ship pre-rendered, premultiplied-alpha-correct PNGs at the
-    // exact sizes Safari's tab strip actually needs (16/32/48/64), so it
-    // never has to resize our source itself. Filenames are cache-busted
-    // (v3) since Safari's favicon cache is a separate on-disk store that
-    // survives a normal reload or even Safari's own "Empty Caches".
+    // A white ring showed up around the icon in Safari's tab strip and
+    // Favorites bar, but NOT in Safari's address-bar site icon — same
+    // bytes, rendered cleanly in one Safari surface and haloed in two
+    // others, which ruled out a bad pixel in the source file (every
+    // frame of every candidate asset was inspected: alpha always fades
+    // transparent -> correct brand green, never toward white) and a
+    // from-source resize artifact (the halo persisted even after adding
+    // pre-rendered 16/32/48/64px PNGs, v3, so Safari resizing our source
+    // itself wasn't it either).
+    // What made it click: other apps' dark/saturated tab icons (e.g.
+    // AmEx's blue square) don't show this ring, but ours — a rounded
+    // square whose fill runs almost to the edge of the canvas (only a
+    // ~2% margin, per icon.svg's rect x="1" y="1" of a 48x48 viewBox) —
+    // does. Safari's tab/Favorites-bar chrome appears to draw its own
+    // subtle frame/shadow at the icon's outer bounding box; icons with
+    // real transparent padding around their artwork have that frame land
+    // in the transparent gutter (invisible against the dark tab), while
+    // ours had it land right on our opaque edge. Fix: re-rendered every
+    // favicon asset with ~20% transparent margin (content scaled to 80%
+    // of the canvas, centered) instead of touching the edges — v4,
+    // cache-busted again since Safari's favicon cache is a separate
+    // on-disk store that survives a normal reload or "Empty Caches".
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon-16v3.png", type: "image/png", sizes: "16x16" },
-      { url: "/favicon-32v3.png", type: "image/png", sizes: "32x32" },
-      { url: "/favicon-48v3.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicon-64v3.png", type: "image/png", sizes: "64x64" },
-      { url: "/favicon.png", type: "image/png", sizes: "128x128" },
+      { url: "/favicon-v4.ico", sizes: "any" },
+      { url: "/favicon-16v4.png", type: "image/png", sizes: "16x16" },
+      { url: "/favicon-32v4.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48v4.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicon-64v4.png", type: "image/png", sizes: "64x64" },
+      { url: "/favicon-128v4.png", type: "image/png", sizes: "128x128" },
     ],
-    shortcut: "/favicon.ico",
+    shortcut: "/favicon-v4.ico",
   },
 };
 
