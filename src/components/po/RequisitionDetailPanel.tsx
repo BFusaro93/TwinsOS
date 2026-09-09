@@ -119,11 +119,10 @@ function DetailsTab({
   }
 
   /** Compute updated requisition totals from a new subtotal. Sales tax applies
-   *  to the full subtotal (requisitions have no per-line taxable flag), after
-   *  subtracting the manual discount from the taxable base. */
+   *  to the full subtotal (requisitions have no per-line taxable flag); the
+   *  manual discount comes off after tax and does not reduce it. */
   function totals(newSubtotal: number) {
-    const taxableAfterDiscount = Math.max(0, newSubtotal - req.discountCost);
-    const salesTax = Math.round((taxableAfterDiscount * req.taxRatePercent) / 100);
+    const salesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
     const grandTotal = newSubtotal - req.discountCost + salesTax + req.shippingCost;
     return { subtotal: newSubtotal, salesTax, grandTotal };
   }

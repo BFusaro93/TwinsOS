@@ -217,8 +217,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     .reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
   const taxRate = parseFloat(taxRatePercent) || 0;
   const discountDollars = parseFloat(discountCost) || 0;
-  const taxableAfterDiscountDollars = Math.max(0, taxableSubtotalDollars - discountDollars);
-  const taxDollars = taxableAfterDiscountDollars * (taxRate / 100);
+  const taxDollars = taxableSubtotalDollars * (taxRate / 100);
   const shippingDollars = parseFloat(shippingCost) || 0;
   const grandTotalDollars = subtotalDollars - discountDollars + taxDollars + shippingDollars;
 
@@ -306,12 +305,11 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       // In edit mode, line items aren't shown — preserve the existing subtotal
       // and only recalculate sales tax and grand total from the updated rates.
       // Tax applies only to taxable line items, same as PODetailPanel's totals(),
-      // and only after the discount is subtracted from the taxable base.
+      // and on the full taxable subtotal — the discount comes off after tax.
       const taxableSubtotalCents = Math.round(
         initialData.lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0)
       );
-      const taxableAfterDiscountCents = Math.max(0, taxableSubtotalCents - discountCents);
-      const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
+      const salesTaxCents = Math.round(taxableSubtotalCents * (taxRate / 100));
       updatePO(
         {
           id: initialData.id,
@@ -338,8 +336,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const taxableSubtotalCents = Math.round(
       lineItems.filter((li) => li.taxable).reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
     );
-    const taxableAfterDiscountCents = Math.max(0, taxableSubtotalCents - discountCents);
-    const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
+    const salesTaxCents = Math.round(taxableSubtotalCents * (taxRate / 100));
     const now = new Date().toISOString();
 
     // PO number is generated server-side (an atomic per-org counter) — see
@@ -738,12 +735,18 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                 const subtotalCents = isEditing
                   ? (initialData?.subtotal ?? 0)
                   : Math.round(subtotalDollars * 100);
+                // Mirror handleSubmit: only taxable lines are taxed, and tax is
+                // computed on the full taxable subtotal — the discount comes off
+                // after tax, so it never reduces the tax.
                 const taxableSubtotalCents = isEditing
-                  ? subtotalCents   // existing PO: we don't know per-line taxability here, use full subtotal as approximation
+                  ? Math.round(
+                      (initialData?.lineItems ?? [])
+                        .filter((li) => li.taxable !== false)
+                        .reduce((sum, li) => sum + li.quantity * li.unitCost, 0)
+                    )
                   : Math.round(taxableSubtotalDollars * 100);
                 const discountCents = Math.round(discountDollars * 100);
-                const taxableAfterDiscountCents = Math.max(0, taxableSubtotalCents - discountCents);
-                const taxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
+                const taxCents = Math.round(taxableSubtotalCents * (taxRate / 100));
                 const shippingCents = Math.round(shippingDollars * 100);
                 const grandTotalCents = subtotalCents - discountCents + taxCents + shippingCents;
                 return (

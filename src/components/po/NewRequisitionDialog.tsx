@@ -216,8 +216,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   );
   const taxRate = parseFloat(taxRatePercent) || 0;
   const discountDollars = parseFloat(discountCost) || 0;
-  const taxableAfterDiscountDollars = Math.max(0, subtotalDollars - discountDollars);
-  const taxDollars = taxableAfterDiscountDollars * (taxRate / 100);
+  const taxDollars = subtotalDollars * (taxRate / 100);
   const shippingDollars = parseFloat(shippingCost) || 0;
   const grandTotalDollars = subtotalDollars - discountDollars + taxDollars + shippingDollars;
 
@@ -304,10 +303,9 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
 
     if (isEditing && initialData) {
       // In edit mode, line items aren't shown — preserve the existing subtotal
-      // and only recalculate sales tax and grand total from the updated rates,
-      // after subtracting the discount from the taxable base.
-      const taxableAfterDiscountCents = Math.max(0, initialData.subtotal - discountCents);
-      const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
+      // and only recalculate sales tax and grand total from the updated rates.
+      // Tax is on the full subtotal — the discount comes off after tax.
+      const salesTaxCents = Math.round(initialData.subtotal * (taxRate / 100));
       updateRequisition.mutate(
         {
           id: initialData.id,
@@ -329,8 +327,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     const subtotalCents = Math.round(
       lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
     );
-    const taxableAfterDiscountCents = Math.max(0, subtotalCents - discountCents);
-    const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
+    const salesTaxCents = Math.round(subtotalCents * (taxRate / 100));
 
     createRequisition.mutate(
       {

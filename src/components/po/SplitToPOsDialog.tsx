@@ -112,7 +112,7 @@ export function SplitToPOsDialog({
     // any one vendor's share — allocate both proportionally by each group's
     // share of the requisition's total subtotal, so the split POs' combined
     // totals reconcile back to the source requisition instead of dropping
-    // the discount/shipping and overstating tax (computed pre-discount).
+    // the discount/shipping entirely.
     const requisitionSubtotal = requisition.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
     let discountRemaining = requisition.discountCost;
     let shippingRemaining = requisition.shippingCost;
@@ -132,8 +132,8 @@ export function SplitToPOsDialog({
         discountRemaining -= discountCost;
         shippingRemaining -= shippingCost;
 
-        const taxableAfterDiscount = Math.max(0, subtotal - discountCost);
-        const salesTax = Math.round((taxableAfterDiscount * requisition.taxRatePercent) / 100);
+        // Tax is on the full subtotal — the discount comes off after tax.
+        const salesTax = Math.round((subtotal * requisition.taxRatePercent) / 100);
         const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
         const result = await createPO({

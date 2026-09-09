@@ -106,13 +106,12 @@ function DetailsTab({
 
   /** Compute updated PO totals from a new items array. All values are rounded to
    *  whole cents so they satisfy the integer columns in purchase_orders.
-   *  Sales tax is applied only to taxable line items, after subtracting the
-   *  manual discount from the taxable base. */
+   *  Sales tax is applied only to taxable line items, on the full taxable
+   *  subtotal — the manual discount comes off after tax and does not reduce it. */
   function totals(newItems: LineItem[]) {
     const subtotal = Math.round(newItems.reduce((s, li) => s + li.quantity * li.unitCost, 0));
     const taxableSubtotal = Math.round(newItems.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
-    const taxableAfterDiscount = Math.max(0, taxableSubtotal - po.discountCost);
-    const salesTax = Math.round(taxableAfterDiscount * po.taxRatePercent / 100);
+    const salesTax = Math.round(taxableSubtotal * po.taxRatePercent / 100);
     const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
     return { subtotal, salesTax, grandTotal };
   }
@@ -125,9 +124,8 @@ function DetailsTab({
 
   const subtotalForSubmit = Math.round(lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
   const taxableSubtotalForSubmit = Math.round(lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
-  const taxableAfterDiscountForSubmit = Math.max(0, taxableSubtotalForSubmit - po.discountCost);
   const grandTotalForSubmit =
-    subtotalForSubmit - po.discountCost + Math.round((taxableAfterDiscountForSubmit * po.taxRatePercent) / 100) + po.shippingCost;
+    subtotalForSubmit - po.discountCost + Math.round((taxableSubtotalForSubmit * po.taxRatePercent) / 100) + po.shippingCost;
 
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
@@ -169,8 +167,7 @@ function DetailsTab({
 
   const subtotal = Math.round(lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
   const taxableSubtotal = Math.round(lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
-  const taxableAfterDiscount = Math.max(0, taxableSubtotal - po.discountCost);
-  const salesTax = Math.round(taxableAfterDiscount * po.taxRatePercent / 100);
+  const salesTax = Math.round(taxableSubtotal * po.taxRatePercent / 100);
   const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
   const taxLabel = po.taxRatePercent > 0 ? `Sales Tax (${po.taxRatePercent}%)` : "Sales Tax";
   const isError = status === "rejected" || status === "canceled";
