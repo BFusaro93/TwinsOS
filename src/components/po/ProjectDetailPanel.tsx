@@ -78,6 +78,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { usePhotoJobByProjectId } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useTicketsLinkedTo } from "@/lib/hooks/use-tickets";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 import { TicketDetailSheet } from "@/components/crm/tickets/TicketDetailSheet";
 import { Ticket as TicketIcon } from "lucide-react";
 import {
@@ -325,7 +326,12 @@ function MaterialsTab({ project }: { project: Project }) {
           const rawId = i.productKey.replace(/^(product:|part:)/, "");
           const unitCostCents = Math.round(i.unitCost * 100);
           runningSubtotal += i.quantity * unitCostCents;
-          const salesTax = Math.round((runningSubtotal * req.taxRatePercent) / 100);
+          const salesTax = computeSalesTax({
+            taxableSubtotal: runningSubtotal,
+            taxRatePercent: req.taxRatePercent,
+            discountCost: req.discountCost,
+            discountReducesTax: req.discountReducesTax,
+          });
           const grandTotal = runningSubtotal - req.discountCost + salesTax + req.shippingCost;
           await addReqLineItem({
             requisitionId: req.id,
@@ -382,7 +388,12 @@ function MaterialsTab({ project }: { project: Project }) {
           items = [...items, newItem];
           const subtotal = Math.round(items.reduce((s, li) => s + li.quantity * li.unitCost, 0));
           const taxableSubtotal = Math.round(items.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
-          const salesTax = Math.round((taxableSubtotal * po.taxRatePercent) / 100);
+          const salesTax = computeSalesTax({
+            taxableSubtotal,
+            taxRatePercent: po.taxRatePercent,
+            discountCost: po.discountCost,
+            discountReducesTax: po.discountReducesTax,
+          });
           const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
           await addPOLineItem({ poId: po.id, item: newItem, subtotal, salesTax, grandTotal });
         }

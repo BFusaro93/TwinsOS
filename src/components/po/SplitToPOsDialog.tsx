@@ -19,6 +19,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useCreatePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
 import type { Requisition, LineItem, PurchaseOrder } from "@/types";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 interface SplitToPOsDialogProps {
   open: boolean;
@@ -132,8 +133,12 @@ export function SplitToPOsDialog({
         discountRemaining -= discountCost;
         shippingRemaining -= shippingCost;
 
-        // Tax is on the full subtotal — the discount comes off after tax.
-        const salesTax = Math.round((subtotal * requisition.taxRatePercent) / 100);
+        const salesTax = computeSalesTax({
+          taxableSubtotal: subtotal,
+          taxRatePercent: requisition.taxRatePercent,
+          discountCost,
+          discountReducesTax: requisition.discountReducesTax,
+        });
         const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
         const result = await createPO({
@@ -148,6 +153,7 @@ export function SplitToPOsDialog({
           salesTax,
           shippingCost,
           discountCost,
+          discountReducesTax: requisition.discountReducesTax,
           grandTotal,
           requisitionId: requisition.id,
           paymentSubmittedToAP: false,
