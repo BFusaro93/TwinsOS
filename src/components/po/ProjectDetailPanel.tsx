@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSettingsStore } from "@/stores/settings-store";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, ExternalLink, Download, Building2, Camera } from "lucide-react";
+import { Pencil, Trash2, Plus, ExternalLink, Download, Building2, Camera, Archive, ArchiveRestore } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { printProject } from "@/lib/print";
 import { formatCurrency, formatDate, formatAddress } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -324,8 +325,7 @@ function MaterialsTab({ project }: { project: Project }) {
           const rawId = i.productKey.replace(/^(product:|part:)/, "");
           const unitCostCents = Math.round(i.unitCost * 100);
           runningSubtotal += i.quantity * unitCostCents;
-          const taxableAfterDiscount = Math.max(0, runningSubtotal - req.discountCost);
-          const salesTax = Math.round((taxableAfterDiscount * req.taxRatePercent) / 100);
+          const salesTax = Math.round((runningSubtotal * req.taxRatePercent) / 100);
           const grandTotal = runningSubtotal - req.discountCost + salesTax + req.shippingCost;
           await addReqLineItem({
             requisitionId: req.id,
@@ -382,8 +382,7 @@ function MaterialsTab({ project }: { project: Project }) {
           items = [...items, newItem];
           const subtotal = Math.round(items.reduce((s, li) => s + li.quantity * li.unitCost, 0));
           const taxableSubtotal = Math.round(items.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
-          const taxableAfterDiscount = Math.max(0, taxableSubtotal - po.discountCost);
-          const salesTax = Math.round((taxableAfterDiscount * po.taxRatePercent) / 100);
+          const salesTax = Math.round((taxableSubtotal * po.taxRatePercent) / 100);
           const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
           await addPOLineItem({ poId: po.id, item: newItem, subtotal, salesTax, grandTotal });
         }
@@ -1468,10 +1467,12 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             PDF
           </Button>
           <EditButton onClick={() => setEditOpen(true)} />
+          {/* Matches the Job Photos archive button (JobPhotosPage) — outline
+              with an Archive/ArchiveRestore icon, brand-colored when archived. */}
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className={project.isArchived ? "text-amber-600 hover:text-amber-700" : "text-slate-400 hover:text-slate-600"}
+            className={cn("gap-1.5", project.isArchived ? "border-brand-400 text-brand-600" : "border-slate-300 text-slate-500")}
             disabled={archiving}
             onClick={() => archiveProject(
               { id: project.id, archived: !project.isArchived },
@@ -1479,7 +1480,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             )}
             title={project.isArchived ? "Unarchive project" : "Archive project"}
           >
-            {project.isArchived ? "Unarchive" : "Archive"}
+            {project.isArchived ? <><ArchiveRestore className="h-3.5 w-3.5" /> Unarchive</> : <><Archive className="h-3.5 w-3.5" /> Archive</>}
           </Button>
           <Button
             variant="ghost"
