@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
@@ -267,7 +268,7 @@ export function isValidContractStatusTransition(from: ContractStatus, to: Contra
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function cancelFutureContractVisits(supabase: any, contractId: string) {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = isoNy(new Date());
   const { data: visits, error } = await supabase
     .from("crm_job_visits")
     .select("id, job_comments, status, crm_jobs!inner(contract_id)")

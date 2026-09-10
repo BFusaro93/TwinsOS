@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { isoNy } from "@/lib/reports/ny-date";
 import type { Database } from "@/types/supabase";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { logger } from "@/lib/logger";
@@ -138,7 +139,7 @@ export async function applyVisitCompletionSideEffects(
 ): Promise<VisitCompletionSideEffectsResult> {
   const { supabase, orgId, visitId, userId } = args;
   const fireAutomations = args.fireAutomations ?? true;
-  const today = args.today ?? new Date().toISOString().slice(0, 10);
+  const today = args.today ?? isoNy(new Date());
 
   const result: VisitCompletionSideEffectsResult = {
     ok: false,

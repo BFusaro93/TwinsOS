@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { isoNy } from "@/lib/reports/ny-date";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient } from "@/lib/supabase/server";
 import PortalServicesPage from "@/components/portal/PortalServicesPage";
@@ -8,7 +9,7 @@ export default async function ServicesPage() {
   if (!ctx) redirect("/portal/login");
 
   const supabase = await createClient();
-  const today = new Date().toISOString().split("T")[0];
+  const today = isoNy(new Date());
 
   const [upcomingRes, completedRes] = await Promise.all([
     supabase

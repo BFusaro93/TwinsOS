@@ -1,5 +1,6 @@
 import type { InvoicePDFStatementData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 
+import { isoNy } from "@/lib/reports/ny-date";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -32,7 +33,7 @@ export async function buildInvoiceStatementData(
     .neq("status", "void")
     .neq("status", "draft")
     .is("deleted_at", null)
-    .lte("invoice_date", inv.invoice_date ?? new Date().toISOString().slice(0, 10))
+    .lte("invoice_date", inv.invoice_date ?? isoNy(new Date()))
     .order("invoice_date", { ascending: false });
 
   const previousBalanceCents = (otherInvoices ?? []).reduce(

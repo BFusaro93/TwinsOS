@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { computeLineItem, getBreakevenRateCents, recalcEstimateTotals } from "@/lib/estimate-calc";
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
       org_id: auth.orgId,
       client_id: body.clientId,
       description: body.description ?? service.name,
-      estimate_date: body.estimateDate ?? new Date().toISOString().slice(0, 10),
+      estimate_date: body.estimateDate ?? isoNy(new Date()),
       valid_until_date: body.validUntilDate ?? null,
       stage: "draft",
       overhead_rate_bps: overheadRow?.flat_overhead_rate_bps ?? 0,

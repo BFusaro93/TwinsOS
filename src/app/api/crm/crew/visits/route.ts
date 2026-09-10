@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
 
 /**
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
   const dateParam = searchParams.get("date");
   const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
     ? dateParam
-    : new Date().toISOString().slice(0, 10);
+    : isoNy(new Date());
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any)

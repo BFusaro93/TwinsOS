@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@supabase/supabase-js";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = isoNy(new Date());
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: overdue } = await (supabase as any)

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -328,7 +329,7 @@ export async function POST(
   // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
   // Advance from today (actual generation date) so that generating early
   // doesn't push the next due date further out than one interval from now.
-  const today = clientToday ?? new Date().toISOString().slice(0, 10);
+  const today = clientToday ?? isoNy(new Date());
   const nextDue = advanceDate(today, schedule.frequency);
   await adminClient
     .from("pm_schedules")

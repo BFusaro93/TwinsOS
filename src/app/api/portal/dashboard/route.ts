@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient } from "@/lib/supabase/server";
 
@@ -7,7 +8,7 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = await createClient();
-  const today = new Date().toISOString().split("T")[0];
+  const today = isoNy(new Date());
 
   const [invoicesRes, visitsRes, estimatesRes] = await Promise.all([
     supabase

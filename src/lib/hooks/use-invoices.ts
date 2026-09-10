@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
@@ -466,7 +467,7 @@ export function useBulkImportInvoices() {
             created_by: user?.id ?? null,
             client_id: clientId,
             description: r.description.trim(),
-            invoice_date: r.invoiceDate?.trim() || new Date().toISOString().split("T")[0],
+            invoice_date: r.invoiceDate?.trim() || isoNy(new Date()),
             due_date: r.dueDate?.trim() || null,
             po_number: r.poNumber?.trim() || null,
             status: r.status?.trim().toLowerCase() || "draft",
@@ -1299,7 +1300,7 @@ export function useBulkImportPayments() {
           invoice_id: invoiceId,
           amount_cents: amountCents,
           unused_amount_cents: invoiceId ? 0 : amountCents,
-          payment_date: r.paymentDate?.trim() || new Date().toISOString().split("T")[0],
+          payment_date: r.paymentDate?.trim() || isoNy(new Date()),
           method,
           reference: r.reference?.trim() || null,
           memo: r.memo?.trim() || null,

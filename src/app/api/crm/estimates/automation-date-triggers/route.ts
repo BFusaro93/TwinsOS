@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
@@ -36,7 +37,7 @@ async function handleRun(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = isoNy(new Date());
 
   const { data: triggers } = await supabase
     .from("crm_sequence_triggers")

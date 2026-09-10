@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
@@ -303,7 +304,7 @@ export function useBulkImportEstimates() {
           created_by: user?.id ?? null,
           client_id: clientId,
           description,
-          estimate_date: r.estimateDate?.trim() || new Date().toISOString().split("T")[0],
+          estimate_date: r.estimateDate?.trim() || isoNy(new Date()),
           valid_until_date: r.validUntilDate?.trim() || null,
           po_number: r.poNumber?.trim() || null,
           stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",
