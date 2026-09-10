@@ -12,6 +12,7 @@ import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 const SERVICE_TEMPLATE_COLUMNS = [
   "name", "code", "category", "unit", "defaultRate", "productionRate", "isActive",
@@ -54,6 +55,7 @@ interface Props {
 }
 
 export function ServicesList({ onAdd, onEdit }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
   const canAdd = can("service_add");
   const canEdit = can("service_edit");
@@ -72,8 +74,13 @@ export function ServicesList({ onAdd, onEdit }: Props) {
     return true;
   });
 
-  function handleDelete(s: CRMService) {
-    if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
+  async function handleDelete(s: CRMService) {
+    if (!(await confirm({
+      title: `Delete "${s.name}"?`,
+      description: "This cannot be undone.",
+      confirmLabel: "Delete Service",
+      destructive: true,
+    }))) return;
     deleteService.mutate(s.id, {
       onError: () => toast.error(`Failed to delete "${s.name}"`),
     });
@@ -218,7 +225,7 @@ export function ServicesList({ onAdd, onEdit }: Props) {
                     )}
                     {canDelete && (
                       <button
-                        onClick={() => handleDelete(s)}
+                        onClick={() => void handleDelete(s)}
                         className="rounded p-1 hover:bg-red-50"
                         title="Delete"
                       >
@@ -232,6 +239,7 @@ export function ServicesList({ onAdd, onEdit }: Props) {
           </tbody>
         </table>
       </div>
+      {confirmDialog}
     </div>
   );
 }

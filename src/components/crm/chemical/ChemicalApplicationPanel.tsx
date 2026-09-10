@@ -29,6 +29,7 @@ import { SendApplicationNoticeDialog } from "./SendApplicationNoticeDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 interface Props {
   jobId: string;
@@ -82,6 +83,7 @@ function ApplicationRow({
   areasTreated: { id: string; name: string }[];
   employees: { id: string; name: string; applicatorLicense: string | null }[];
 }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
   const canEdit = can("chem_add_edit_usage");
   const save = useSaveChemicalApplication();
@@ -149,8 +151,8 @@ function ApplicationRow({
             variant="ghost"
             size="icon"
             className="h-6 w-6 text-slate-400 hover:text-red-500"
-            onClick={() => {
-              if (!confirm(`Remove ${productName} from this visit?`)) return;
+            onClick={async () => {
+              if (!(await confirm({ title: `Remove ${productName} from this visit?`, confirmLabel: "Remove", destructive: true }))) return;
               del.mutate({ id: application.id, visitId }, {
                 onError: () => toast.error("Failed to remove chemical application"),
               });
@@ -256,6 +258,7 @@ function ApplicationRow({
           </Button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

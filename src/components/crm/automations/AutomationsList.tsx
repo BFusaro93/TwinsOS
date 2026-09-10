@@ -39,6 +39,7 @@ import {
 import type { EventType, TriggerType } from "@/types/crm-automations";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 interface AutomationTemplate {
   name: string;
@@ -145,6 +146,7 @@ interface Props {
 }
 
 export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const { can } = usePermissions();
   const canModify = can("automation_create_modify");
@@ -214,7 +216,12 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete automation "${name}"? This cannot be undone.`)) return;
+    if (!(await confirm({
+      title: `Delete automation "${name}"?`,
+      description: "This cannot be undone.",
+      confirmLabel: "Delete Automation",
+      destructive: true,
+    }))) return;
     try {
       await deleteAutomation.mutateAsync(id);
     } catch {
@@ -357,7 +364,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-slate-400 hover:text-red-600"
-                          onClick={() => handleDelete(a.id, a.name)}
+                          onClick={() => void handleDelete(a.id, a.name)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -409,6 +416,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </>
   );
 }

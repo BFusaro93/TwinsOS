@@ -14,6 +14,7 @@ import {
   useDeleteEmailTemplate,
 } from "@/lib/hooks/use-email-templates";
 import type { CRMEmailTemplate } from "@/types/crm-proposals";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 type FormState = {
   id?: string;
@@ -44,6 +45,7 @@ interface EmailTemplatesEditorProps {
 // back both estimate and invoice "Documents"-style default/dropdown template
 // pickers (SendEstimateDialog / InvoiceEmailDialog) from one implementation.
 export function EmailTemplatesEditor({ templateType, description, mergeTags, emptyMessage }: EmailTemplatesEditorProps) {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: templates = [], isLoading } = useEmailTemplates(templateType);
   const upsert = useUpsertEmailTemplate();
   const deleteMutation = useDeleteEmailTemplate();
@@ -101,7 +103,12 @@ export function EmailTemplatesEditor({ templateType, description, mergeTags, emp
   }
 
   async function handleDelete(t: CRMEmailTemplate) {
-    if (!window.confirm(`Delete "${t.name}"? This cannot be undone.`)) return;
+    if (!(await confirm({
+      title: `Delete "${t.name}"?`,
+      description: "This cannot be undone.",
+      confirmLabel: "Delete Template",
+      destructive: true,
+    }))) return;
     try {
       await deleteMutation.mutateAsync(t.id);
       toast.success("Template deleted.");
@@ -320,6 +327,7 @@ export function EmailTemplatesEditor({ templateType, description, mergeTags, emp
           </table>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

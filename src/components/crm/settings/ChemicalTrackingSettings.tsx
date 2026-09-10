@@ -32,6 +32,7 @@ import {
 import { CHEMICAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import type { CRMEmailTemplate } from "@/types/crm-proposals";
 import type { ChemicalConditionsDisplay, ChemicalLookupType } from "@/types/chemical-tracking";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 function Section({
   title,
@@ -292,6 +293,7 @@ type NoticeFormState = {
 const EMPTY_NOTICE_FORM: NoticeFormState = { name: "", subject: "", bodyHtml: "", isDefault: false };
 
 function NoticeEmailTemplatesEditor() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: templates = [], isLoading } = useEmailTemplates("chemical_application");
   const upsert = useUpsertEmailTemplate();
   const deleteMutation = useDeleteEmailTemplate();
@@ -335,7 +337,12 @@ function NoticeEmailTemplatesEditor() {
   }
 
   async function handleDelete(t: CRMEmailTemplate) {
-    if (!window.confirm(`Delete "${t.name}"? This cannot be undone.`)) return;
+    if (!(await confirm({
+      title: `Delete "${t.name}"?`,
+      description: "This cannot be undone.",
+      confirmLabel: "Delete Template",
+      destructive: true,
+    }))) return;
     try {
       await deleteMutation.mutateAsync(t.id);
       toast.success("Template deleted.");
@@ -498,7 +505,7 @@ function NoticeEmailTemplatesEditor() {
                       </Button>
                       <Button
                         size="icon" variant="ghost" className="h-7 w-7 text-red-400 hover:text-red-600"
-                        onClick={() => handleDelete(t)} title="Delete" disabled={deleteMutation.isPending}
+                        onClick={() => void handleDelete(t)} title="Delete" disabled={deleteMutation.isPending}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -510,6 +517,7 @@ function NoticeEmailTemplatesEditor() {
           </table>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMForm, FormStatus } from "@/types/crm-forms";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,7 @@ function NewFormDialog({ open, onOpenChange }: NewFormDialogProps) {
 // ── Row actions menu ──────────────────────────────────────────────────────────
 
 function FormRowMenu({ form }: { form: CRMForm }) {
+  const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const { can } = usePermissions();
   const canEdit = can("forms_edit");
@@ -125,6 +127,7 @@ function FormRowMenu({ form }: { form: CRMForm }) {
   const toggleStatus = form.status === "published" ? "draft" : "published";
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex h-7 w-7 items-center justify-center rounded hover:bg-slate-100">
@@ -152,8 +155,8 @@ function FormRowMenu({ form }: { form: CRMForm }) {
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-red-600"
-              onSelect={() => {
-                if (confirm(`Delete "${form.name}"?`)) {
+              onSelect={async () => {
+                if (await confirm({ title: `Delete "${form.name}"?`, confirmLabel: "Delete Form", destructive: true })) {
                   deleteForm.mutate(form.id, { onError: () => toast.error("Failed to delete form") });
                 }
               }}
@@ -165,6 +168,8 @@ function FormRowMenu({ form }: { form: CRMForm }) {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    {confirmDialog}
+    </>
   );
 }
 
