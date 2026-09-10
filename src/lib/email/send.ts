@@ -1,3 +1,4 @@
+import "server-only";
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";

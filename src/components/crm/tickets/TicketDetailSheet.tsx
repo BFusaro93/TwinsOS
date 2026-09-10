@@ -52,6 +52,7 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { AlertTriangle, Download, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 // ── status flow ───────────────────────────────────────────────────────────────
 
@@ -91,14 +92,8 @@ const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Billing", "Change Ser
 // upstream (submit-form-response.ts). Interpolating them unescaped into
 // document.write() lets a crafted "Full Name" or subject field execute
 // script in a staff member's browser session the moment they click Print.
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+// (escapeHtml itself now lives in lib/utils/escape-html — see its own
+// comment for why it isn't imported from lib/email/send.)
 
 function printTicket(ticket: CRMTicket) {
   const win = window.open("", "_blank", "width=700,height=900");

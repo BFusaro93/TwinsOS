@@ -3,6 +3,7 @@ import type { WorkOrder } from "@/types";
 import { useSettingsStore } from "@/stores/settings-store";
 import { stripMentionTokens } from "@/lib/mentions";
 import { computeSalesTax } from "@/lib/utils/po-tax";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank", "width=900,height=700");
@@ -38,14 +39,6 @@ function formatDateTimeStr(iso: string | null | undefined): string {
     minute: "2-digit",
     hour12: true,
   });
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function formatStatus(status: string): string {

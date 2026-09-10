@@ -68,6 +68,7 @@
     "react-hook-form": "^7.72.0",
     "recharts": "^2.13.3",
     "resend": "^6.12.0",
+    "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "stripe": "^22.3.2",
     "svix": "^1.99.1",

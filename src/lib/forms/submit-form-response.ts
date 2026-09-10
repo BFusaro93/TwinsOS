@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 /** File-upload answers are stored as `{path, name, size}` objects (see
  *  FormResponses.tsx) — plain string interpolation of one produces
@@ -18,15 +19,8 @@ function formatFormFieldValue(value: unknown): string {
 // formData is submitted through the fully anonymous public form endpoint —
 // interpolating it unescaped into the notification email's HTML body let a
 // crafted field value inject markup (link/button spoofing, layout
-// injection) into the staff-facing email.
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+// injection) into the staff-facing email. (escapeHtml itself now lives in
+// lib/utils/escape-html — see its own comment for why.)
 
 interface FormEmailNotification {
   recipients: string; // comma-separated emails, or "account" for the submitter
