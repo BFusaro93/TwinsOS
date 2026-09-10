@@ -29,6 +29,9 @@ export interface Requisition extends BaseRecord {
   salesTax: number; // cents
   shippingCost: number; // cents
   discountCost: number; // cents — positive magnitude, subtracted from grandTotal
+  /** See PurchaseOrder.discountReducesTax — whether the discount comes off
+   *  the taxable base before tax, or off the total after it. */
+  discountReducesTax: boolean;
   grandTotal: number; // cents
   notes: string | null;
   workOrderId: string | null;

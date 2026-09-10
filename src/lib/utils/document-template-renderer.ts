@@ -1,5 +1,5 @@
 import type { BlockType } from "@/types/crm-documents";
-import { escapeHtml } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 // ── Merge tag resolution ─────────────────────────────────────────────────────
 // Matches the pattern used by the estimate/invoice send routes so preview and

@@ -4,6 +4,8 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { statusForAccount } from "@/lib/stripe/connect";
 import { recordStripeCharge, accountOwnedByOrg } from "@/lib/stripe/record-charge";
+import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
+import { decodeAllocations } from "@/lib/stripe/crm-payments";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
@@ -151,6 +153,45 @@ export async function POST(request: Request) {
           clientId: failedClientId,
           triggerType: "credit_card_charge_failed",
         });
+        // The charge is dead — drop the "payment in flight" marker so the
+        // invoice becomes chargeable again instead of looking pending forever.
+        await clearPendingCharge(db, failedIntent.id);
+      }
+      break;
+    }
+
+    // A customer paying by bank account on the portal confirms the intent in
+    // their own browser, so the server never sees a status for it — only this
+    // event does. The autopay routes mark their own in-flight charges
+    // synchronously; this covers every other path uniformly.
+    case "payment_intent.processing": {
+      const pendingIntent = event.data.object as Stripe.PaymentIntent;
+      const pendingSource = pendingIntent.metadata?.source;
+      const pendingOrgId = pendingIntent.metadata?.org_id;
+      if (
+        !event.account ||
+        !pendingOrgId ||
+        !isPendingChargeStatus(pendingIntent.status) ||
+        (pendingSource !== "crm_invoice" && pendingSource !== "crm_invoice_multi") ||
+        !(await eventAccountOwnedByOrg(db, pendingOrgId, event.account))
+      ) {
+        break;
+      }
+      const amounts = new Map<string, number>();
+      if (pendingSource === "crm_invoice_multi" && pendingIntent.metadata?.allocations) {
+        for (const a of decodeAllocations(pendingIntent.metadata.allocations)) {
+          amounts.set(a.invoiceId, a.amountCents);
+        }
+      } else if (pendingIntent.metadata?.invoice_id) {
+        // Balance rather than the charged amount: the amount can include a
+        // processing fee, and what's pending against the invoice is its balance.
+        amounts.set(
+          pendingIntent.metadata.invoice_id,
+          Number(pendingIntent.metadata.balance_cents) || pendingIntent.amount
+        );
+      }
+      if (amounts.size > 0) {
+        await markInvoicesPendingCharge({ db, paymentIntent: pendingIntent, amountsByInvoiceId: amounts });
       }
       break;
     }
@@ -165,6 +206,10 @@ export async function POST(request: Request) {
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
       }
+      // Settled: the payment is recorded and the balance is down, so the
+      // pending marker has done its job. Cleared by intent id, so this covers
+      // single and combined charges alike and is safe to run twice.
+      await clearPendingCharge(db, paymentIntent.id);
       break;
     }
 

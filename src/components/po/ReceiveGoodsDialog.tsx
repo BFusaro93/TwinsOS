@@ -39,6 +39,7 @@ import { useReceivePartCostLayer } from "@/lib/hooks/use-parts";
 import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -170,7 +171,6 @@ export function ReceiveGoodsDialog({
     })
     .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
   );
-  const salesTax = Math.round(taxableSubtotal * (po.taxRatePercent / 100));
   // A PO-level discount is a single flat amount for the whole order, but
   // receiving can happen across multiple partial receipts — applying it in
   // full to every receipt would double- (or triple-) count it, while
@@ -180,6 +180,14 @@ export function ReceiveGoodsDialog({
   const discountShare = po.discountCost > 0 && po.subtotal > 0
     ? Math.round(po.discountCost * (subtotal / po.subtotal))
     : 0;
+  // The prorated share is what this receipt's tax has to work from when the
+  // PO discounts before tax, for the same reason.
+  const salesTax = computeSalesTax({
+    taxableSubtotal,
+    taxRatePercent: po.taxRatePercent,
+    discountCost: discountShare,
+    discountReducesTax: po.discountReducesTax,
+  });
   const grandTotal = subtotal - discountShare + salesTax + po.shippingCost;
 
   // Compares the CUMULATIVE received quantity (this receipt + everything

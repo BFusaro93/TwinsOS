@@ -6,19 +6,12 @@ import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
 import { notifyStaffOfNewTicket, ticketLink } from "@/lib/ticket-notify";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 import { orgEmailFrom } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 // subject/body/category/clientName below all originate from the anonymous
 // portal user's own POST body — interpolating them unescaped into the
 // notification email HTML let a crafted ticket subject or body execute
 // script/markup in the recipient staff member's email client.
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export async function GET() {
   const ctx = await getPortalContext();

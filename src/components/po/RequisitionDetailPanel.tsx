@@ -57,6 +57,7 @@ import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { useUpdateRequisitionStatus, useAddRequisitionLineItem, useUpdateRequisitionLineItem, useDeleteRequisitionLineItem, useDeleteRequisition } from "@/lib/hooks/use-requisitions";
 import { useCurrentUserStore } from "@/stores";
 import type { Requisition, LineItem, ApprovalStatus, PurchaseOrder } from "@/types";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 interface RequisitionDetailPanelProps {
   requisition: Requisition;
@@ -119,11 +120,15 @@ function DetailsTab({
   }
 
   /** Compute updated requisition totals from a new subtotal. Sales tax applies
-   *  to the full subtotal (requisitions have no per-line taxable flag), after
-   *  subtracting the manual discount from the taxable base. */
+   *  to the full subtotal (requisitions have no per-line taxable flag); whether
+   *  the discount comes off that base first is the requisition's own flag. */
   function totals(newSubtotal: number) {
-    const taxableAfterDiscount = Math.max(0, newSubtotal - req.discountCost);
-    const salesTax = Math.round((taxableAfterDiscount * req.taxRatePercent) / 100);
+    const salesTax = computeSalesTax({
+      taxableSubtotal: newSubtotal,
+      taxRatePercent: req.taxRatePercent,
+      discountCost: req.discountCost,
+      discountReducesTax: req.discountReducesTax,
+    });
     const grandTotal = newSubtotal - req.discountCost + salesTax + req.shippingCost;
     return { subtotal: newSubtotal, salesTax, grandTotal };
   }

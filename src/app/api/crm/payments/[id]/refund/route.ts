@@ -129,33 +129,15 @@ export async function POST(
     return NextResponse.json({ error: "Refund processed with Stripe but failed to record — contact support" }, { status: 500 });
   }
 
-  // Reverse the refund across every invoice this payment was actually
-  // allocated to, proportionally — a payment split across multiple
-  // invoices has no single invoice_id.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: allocations } = await (db as any)
-    .from("crm_payment_allocations")
-    .select("invoice_id, amount_cents")
-    .eq("payment_id", paymentId);
-
-  if (allocations && allocations.length > 0) {
-    const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
-    let remaining = refundAmountCents;
-    for (let i = 0; i < allocations.length; i++) {
-      const a = allocations[i];
-      const share = i === allocations.length - 1
-        ? remaining
-        : Math.round((refundAmountCents * a.amount_cents) / totalAllocated);
-      remaining -= share;
-      if (share > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: a.invoice_id, p_delta_cents: -share });
-      }
-    }
-  } else if (payment.invoice_id) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: payment.invoice_id, p_delta_cents: -refundAmountCents });
-  }
+  // The refund reversal — refunded_amount_cents, the allocation rows, and each
+  // invoice's amount_paid/balance — all happens inside refund_payment() as one
+  // transaction (20260908160000). It used to be split across that RPC and a
+  // proportional-split loop here that reversed the invoices but never touched
+  // crm_payment_allocations, so every partial refund left the allocations
+  // claiming the pre-refund amount. That broke sum(allocations) =
+  // amount_paid_cents, which then made the NEXT charge on the invoice succeed
+  // at Stripe and fail to record, since the allocation insert is the last step
+  // of recording a payment.
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });

@@ -2,6 +2,8 @@ import type { PurchaseOrder, Project } from "@/types";
 import type { WorkOrder } from "@/types";
 import { useSettingsStore } from "@/stores/settings-store";
 import { stripMentionTokens } from "@/lib/mentions";
+import { computeSalesTax } from "@/lib/utils/po-tax";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank", "width=900,height=700");
@@ -37,14 +39,6 @@ function formatDateTimeStr(iso: string | null | undefined): string {
     minute: "2-digit",
     hour12: true,
   });
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function formatStatus(status: string): string {
@@ -442,9 +436,20 @@ export function printPO(
 ): void {
   const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
 
+  // Mirrors PODetailPanel's totals(): only lines flagged taxable are taxed, the
+  // discount is a real line on the printout, and whether it comes off the
+  // taxable base first is the PO's own discountReducesTax.
   const subtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-  const tax = Math.round((subtotal * po.taxRatePercent) / 100);
-  const grandTotal = subtotal + tax + po.shippingCost;
+  const taxableSubtotal = po.lineItems
+    .filter((li) => li.taxable !== false)
+    .reduce((s, li) => s + li.quantity * li.unitCost, 0);
+  const tax = computeSalesTax({
+    taxableSubtotal,
+    taxRatePercent: po.taxRatePercent,
+    discountCost: po.discountCost,
+    discountReducesTax: po.discountReducesTax,
+  });
+  const grandTotal = subtotal - po.discountCost + tax + po.shippingCost;
 
   const addressLines = [
     companyAddress.street,
@@ -505,6 +510,11 @@ export function printPO(
   const totalsRows = [
     `<div class="totals-row"><span class="totals-label">Subtotal</span><span class="totals-value">${formatMoney(subtotal)}</span></div>`,
   ];
+  if (po.discountCost > 0) {
+    totalsRows.push(
+      `<div class="totals-row"><span class="totals-label">Discount</span><span class="totals-value">-${formatMoney(po.discountCost)}</span></div>`
+    );
+  }
   if (po.taxRatePercent > 0) {
     totalsRows.push(
       `<div class="totals-row"><span class="totals-label">Tax (${po.taxRatePercent}%)</span><span class="totals-value">${formatMoney(tax)}</span></div>`

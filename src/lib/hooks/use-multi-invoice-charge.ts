@@ -71,6 +71,8 @@ export function useChargeMultiSaved() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      // See use-autopay-invoices.ts — payments are their own query.
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
     },

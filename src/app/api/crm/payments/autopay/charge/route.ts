@@ -7,6 +7,7 @@ import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { findDuplicateChargeIntent, duplicateChargeMessage } from "@/lib/stripe/duplicate-charge";
 import { recordStripeCharge } from "@/lib/stripe/record-charge";
+import { markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe autopay charge");
@@ -117,9 +118,10 @@ export async function POST(request: Request) {
   // chargeIdempotencyKey only collapses attempts within the same 10-second
   // bucket — a double-submit further apart than that (two staff, or one
   // staff in two tabs) would otherwise sail through as two genuinely
-  // separate, real charges. Ask Stripe directly whether a PaymentIntent for
-  // this exact invoice already exists from the last few minutes and hasn't
-  // definitively failed, and refuse to charge again if so.
+  // separate, real charges. Ask Stripe directly whether a PaymentIntent
+  // covering this invoice already exists and hasn't definitively failed, and
+  // refuse to charge again if so — see findDuplicateChargeIntent for why the
+  // ACH window is days rather than minutes.
   const isAch = paymentMethod === "us_bank_account";
   try {
     const duplicate = await findDuplicateChargeIntent({
@@ -201,6 +203,17 @@ export async function POST(request: Request) {
       // Not an error — an ACH debit sits in `processing` for days; the Connect
       // webhook records it when it actually succeeds.
       recorded = false;
+      // Nothing lands in crm_payments until it settles, so without a marker
+      // this invoice keeps its full balance and its place in the "To Charge"
+      // queue, looking exactly like one nobody has touched. Flag it so the
+      // queue can show it as pending and leave it out of "Charge All".
+      if (isPendingChargeStatus(paymentIntent.status)) {
+        await markInvoicesPendingCharge({
+          db: createServiceClient(),
+          paymentIntent,
+          amountsByInvoiceId: new Map([[invoice.id, invoice.balance_cents]]),
+        });
+      }
     }
 
     // Deliberately NOT a 500: the money already moved. Tell the caller the

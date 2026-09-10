@@ -1,5 +1,7 @@
+import "server-only";
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 export const EMAIL_FROM = "Landscapt <noreply@landscapt.com>";
 /** Same mailbox/domain as EMAIL_FROM — only the display name differs, for CMMS/Equipt-triggered notifications (work orders, maintenance requests, PO/requisitions). */
@@ -21,22 +23,11 @@ export function orgEmailFrom(orgName: string | null | undefined): string {
   return friendly ? `${friendly} <${EMAIL_FROM_ADDRESS}>` : EMAIL_FROM;
 }
 
-/**
- * Escapes text for safe interpolation into HTML markup. Merge-tag values
- * here originate from freeform fields (client display name, org name/phone)
- * that staff — or in some flows an external submitter — control; without
- * this, a name containing `<`/`&`/quotes breaks the HTML or, worse, injects
- * markup/script into an email actually delivered to a real recipient (same
- * class of bug fixed for form-submission notification emails).
- */
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+// escapeHtml now lives in lib/utils/escape-html so the document template
+// renderer (which client components import) can use it without pulling this
+// module — and with it the Resend SDK — into the browser bundle. Re-exported
+// for the server-side callers that already import it from here.
+export { escapeHtml };
 
 /** Replaces `[token]` placeholders (case-insensitive) with resolved values. */
 export function resolveMergeTags(template: string, vars: Record<string, string>): string {

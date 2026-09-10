@@ -1557,6 +1557,12 @@ export function InvoiceDetail({
         onCharged={() => {
           const invalidate = () => {
             queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
+            // Payments are a separate query from invoices — see
+            // use-autopay-invoices.ts. Omitting this left the new payment out
+            // of the client's Accounting box and the Payments page until a
+            // hard reload, even though the invoice's own Payment History
+            // (nested in the invoice query) showed it right away.
+            queryClient.invalidateQueries({ queryKey: ["crm-payments"] });
             queryClient.invalidateQueries({ queryKey: ["clients", invoice.clientId] });
             queryClient.invalidateQueries({ queryKey: ["clients"] });
           };

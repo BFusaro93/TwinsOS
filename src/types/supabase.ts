@@ -4530,6 +4530,10 @@ export type Database = {
           notes: string | null
           org_id: string
           pdf_template_id: string | null
+          pending_payment_at: string | null
+          pending_payment_cents: number | null
+          pending_payment_intent_id: string | null
+          pending_payment_method: string | null
           po_number: string | null
           preferred_payment_method: string | null
           qbo_invoice_id: string | null
@@ -4569,6 +4573,10 @@ export type Database = {
           notes?: string | null
           org_id?: string
           pdf_template_id?: string | null
+          pending_payment_at?: string | null
+          pending_payment_cents?: number | null
+          pending_payment_intent_id?: string | null
+          pending_payment_method?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
           qbo_invoice_id?: string | null
@@ -4608,6 +4616,10 @@ export type Database = {
           notes?: string | null
           org_id?: string
           pdf_template_id?: string | null
+          pending_payment_at?: string | null
+          pending_payment_cents?: number | null
+          pending_payment_intent_id?: string | null
+          pending_payment_method?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
           qbo_invoice_id?: string | null
@@ -11826,6 +11838,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           discount_cost: number
+          discount_reduces_tax: boolean
           grand_total: number
           id: string
           invoice_number: string | null
@@ -11853,6 +11866,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           discount_cost?: number
+          discount_reduces_tax?: boolean
           grand_total?: number
           id?: string
           invoice_number?: string | null
@@ -11880,6 +11894,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           discount_cost?: number
+          discount_reduces_tax?: boolean
           grand_total?: number
           id?: string
           invoice_number?: string | null
@@ -12111,6 +12126,7 @@ export type Database = {
           crm_job_id: string | null
           deleted_at: string | null
           discount_cost: number
+          discount_reduces_tax: boolean
           grand_total: number
           id: string
           notes: string | null
@@ -12136,6 +12152,7 @@ export type Database = {
           crm_job_id?: string | null
           deleted_at?: string | null
           discount_cost?: number
+          discount_reduces_tax?: boolean
           grand_total?: number
           id?: string
           notes?: string | null
@@ -12161,6 +12178,7 @@ export type Database = {
           crm_job_id?: string | null
           deleted_at?: string | null
           discount_cost?: number
+          discount_reduces_tax?: boolean
           grand_total?: number
           id?: string
           notes?: string | null
