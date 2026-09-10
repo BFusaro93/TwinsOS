@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
       client_id: clientId,
       amount_cents: balanceCents,
       unused_amount_cents: overpaidCents,
-      payment_date: new Date().toISOString().slice(0, 10),
+      payment_date: isoNy(new Date()),
       method: methodForCardBrand(cardBrand),
       memo: overpaidCents > 0
         ? "Paid online via card (exceeds invoice balance — excess credited to account)"

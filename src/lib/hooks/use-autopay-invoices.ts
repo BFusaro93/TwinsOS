@@ -54,6 +54,12 @@ export function useChargeAutopayInvoice() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      // The payment list is a SEPARATE query from the invoice list. Without
+      // this, a charge landed in the DB but the client's Accounting box and
+      // the Payments page kept showing stale rows until a hard reload — while
+      // the invoice's own Payment History (nested in the invoice query, which
+      // IS invalidated here) showed it immediately.
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", data.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
     },
