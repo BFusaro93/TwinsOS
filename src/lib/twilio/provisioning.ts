@@ -154,22 +154,30 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     body: {
       Type: "customer_profile_business_information",
       FriendlyName: "Business Information",
-      "Attributes.business_name": reg.legal_business_name ?? "",
-      "Attributes.business_registration_number": reg.ein ?? "",
-      "Attributes.business_type": twilioBusinessType,
-      "Attributes.business_industry": reg.business_industry ?? "",
-      // Twilio's enum has no "USA only" distinct from "USA and Canada" — every
-      // org here operates only in the US, so this always resolves to the one
-      // value Twilio actually has for North America regardless of which of
-      // the two options the org picked in the form (that choice still matters
-      // for the org's own consent-scope description, just not to Twilio).
-      "Attributes.business_regions_of_operation": "USA_AND_CANADA",
-      "Attributes.business_registration_identifier": "EIN",
-      "Attributes.website_url": reg.business_website ?? "",
-      // Every org onboarding through this pipeline is Landscapt's own direct
-      // customer, receiving service directly rather than reselling messaging
-      // to further sub-customers of its own.
-      "Attributes.business_identity": "direct_customer",
+      // Twilio's EndUsers API silently ignores dot-flattened "Attributes.x"
+      // form params — confirmed by testing directly against the real API:
+      // the created resource comes back with attributes: {}, no error, no
+      // rejection, just silently empty. It requires ONE Attributes param
+      // whose value is the JSON-stringified object.
+      Attributes: JSON.stringify({
+        business_name: reg.legal_business_name ?? "",
+        business_registration_number: reg.ein ?? "",
+        business_type: twilioBusinessType,
+        business_industry: reg.business_industry ?? "",
+        // Twilio's enum has no "USA only" distinct from "USA and Canada" —
+        // every org here operates only in the US, so this always resolves to
+        // the one value Twilio actually has for North America regardless of
+        // which of the two options the org picked in the form (that choice
+        // still matters for the org's own consent-scope description, just
+        // not to Twilio).
+        business_regions_of_operation: "USA_AND_CANADA",
+        business_registration_identifier: "EIN",
+        website_url: reg.business_website ?? "",
+        // Every org onboarding through this pipeline is Landscapt's own
+        // direct customer, receiving service directly rather than reselling
+        // messaging to further sub-customers of its own.
+        business_identity: "direct_customer",
+      }),
     },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {
@@ -180,10 +188,12 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     body: {
       Type: "authorized_representative_1",
       FriendlyName: "Authorized Representative",
-      "Attributes.first_name": reg.contact_first_name ?? "",
-      "Attributes.last_name": reg.contact_last_name ?? "",
-      "Attributes.email": reg.contact_email ?? "",
-      "Attributes.phone_number": reg.contact_phone ?? "",
+      Attributes: JSON.stringify({
+        first_name: reg.contact_first_name ?? "",
+        last_name: reg.contact_last_name ?? "",
+        email: reg.contact_email ?? "",
+        phone_number: reg.contact_phone ?? "",
+      }),
     },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {
@@ -203,7 +213,11 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     },
   });
   const addressDoc = await subaccountRequest(TRUSTHUB, "/SupportingDocuments", creds, {
-    body: { Type: "customer_profile_address", FriendlyName: "Business Address", "Attributes.address_sids": address.sid },
+    body: {
+      Type: "customer_profile_address",
+      FriendlyName: "Business Address",
+      Attributes: JSON.stringify({ address_sids: [address.sid] }),
+    },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {
     body: { ObjectSid: addressDoc.sid },
