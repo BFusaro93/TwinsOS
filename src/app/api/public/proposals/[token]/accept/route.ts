@@ -86,12 +86,41 @@ export async function POST(
   // logged-in portal's own accept route (api/portal/estimates/[id]/action).
   const { data: currentEstimate } = await supabase
     .from("estimates")
-    .select("stage")
+    .select("stage, total_cents")
     .eq("id", shareToken.estimate_id)
     .single();
   if (!currentEstimate || currentEstimate.stage !== "sent") {
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
+
+  // The deposit block is anyone-with-the-link input and had no validation at
+  // all — the TypeScript cast on `body` above is erased at runtime. An
+  // arbitrary depositAmount was written straight to an integer cents column,
+  // so a decimal ("100.50") threw, and because the update's error was never
+  // checked the request still returned 200 with the deposit silently dropped.
+  // A caller could equally claim a deposit far larger than the job.
+  const DEPOSIT_METHODS = new Set(["cash", "check", "ach", "credit_card", "other"]);
+  let depositAmountCents: number | null = null;
+  if (body.depositMethod !== undefined || body.depositAmount !== undefined) {
+    if (!body.depositMethod || !DEPOSIT_METHODS.has(body.depositMethod)) {
+      return NextResponse.json({ error: "Invalid deposit method" }, { status: 400 });
+    }
+    if (
+      typeof body.depositAmount !== "number" ||
+      !Number.isInteger(body.depositAmount) ||
+      body.depositAmount <= 0
+    ) {
+      return NextResponse.json({ error: "Deposit amount must be a whole number of cents" }, { status: 400 });
+    }
+    // A deposit is a down payment on this job; it can never exceed it.
+    const estimateTotal = currentEstimate.total_cents ?? 0;
+    if (estimateTotal > 0 && body.depositAmount > estimateTotal) {
+      return NextResponse.json({ error: "Deposit amount exceeds the proposal total" }, { status: 400 });
+    }
+    depositAmountCents = body.depositAmount;
+  }
+  const depositReference = body.depositReference?.slice(0, 200) ?? null;
+  const depositNotes = body.depositNotes?.slice(0, 2000) ?? null;
 
   const now = new Date().toISOString();
 
@@ -125,18 +154,36 @@ export async function POST(
     .update({ stage: "accepted", updated_at: now })
     .eq("id", shareToken.estimate_id);
 
-  // 2b. Record deposit if provided
-  if (body.depositMethod && body.depositAmount && body.depositAmount > 0) {
-    await supabase
+  // 2b. Record the deposit the client says they are sending.
+  //
+  // This is a CLAIM, not money received: the client picks a method and types
+  // an amount on the proposal page, and nothing is charged. So it is recorded
+  // for staff to chase and reconcile — deliberately NOT turned into a
+  // crm_payments row or an invoice credit, which would book money that may
+  // never arrive. It is also not yet deducted from what the job invoices; see
+  // the note below.
+  if (depositAmountCents !== null) {
+    const { error: depositErr } = await supabase
       .from("estimates")
       .update({
         deposit_method: body.depositMethod,
-        deposit_reference: body.depositReference ?? null,
-        deposit_notes: body.depositNotes ?? null,
-        deposit_collected_cents: body.depositAmount,
+        deposit_reference: depositReference,
+        deposit_notes: depositNotes,
+        deposit_collected_cents: depositAmountCents,
         deposit_collected_at: now,
       })
       .eq("id", shareToken.estimate_id);
+    // Previously unchecked, so a rejected write (e.g. a non-integer amount)
+    // was invisible: the client saw their deposit accepted and no record of it
+    // existed. The acceptance itself is already committed and must stand, so
+    // this logs loudly rather than failing the request.
+    if (depositErr) {
+      log.error("failed to record proposal deposit", {
+        error: depositErr,
+        estimateId: shareToken.estimate_id,
+        depositAmountCents,
+      });
+    }
   }
 
   // 3. Update line items → won/lost based on tier selection and explicit id list
