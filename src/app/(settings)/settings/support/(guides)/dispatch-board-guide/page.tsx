@@ -190,15 +190,26 @@ export default function DispatchBoardGuidePage() {
           </li>
           <li>
             <strong>Real clock-in/out punches</strong> — if a crew member clocked in and out on the
-            crew app for this visit, actual hours = (clock-out time − clock-in time) × crew size.
+            crew app for this visit, actual hours = (clock-out time − clock-in time − recorded break)
+            × crew size.
           </li>
           <li>
             <strong>Scheduled Start/End time, as a fallback</strong> — if there&apos;s no clock data and
-            no override, actual hours = (scheduled end time − scheduled start time) × the number of
-            crew members assigned to the visit. This is the formula used for the vast majority of
-            everyday visits, since most crews don&apos;t punch in/out per stop.
+            no override, actual hours = (scheduled end time − scheduled start time − recorded break)
+            × the number of crew members assigned to the visit. This is the formula used for the vast
+            majority of everyday visits, since most crews don&apos;t punch in/out per stop.
           </li>
         </ol>
+        <Callout>
+          <strong>Break time is not billed or costed as worked time.</strong> Minutes recorded with
+          the crew app&apos;s <strong>Pause</strong> button are subtracted from the measured duration
+          before it is multiplied by crew size, so a one-hour lunch inside a nine-hour day with a
+          three-person crew reports <strong>24.00</strong> hours, not 27.00. The deduction is applied
+          identically on the board, in the job&apos;s rolled-up Actual Hours, and in every Report
+          Center hours and job-costing figure. A break longer than the shift floors the visit at zero
+          rather than going negative. An explicit override is left exactly as typed — it is assumed
+          to already be the real worked figure.
+        </Callout>
         <p>
           Editing a visit&apos;s Start or End time clears any stale override so the number recalculates
           from the new times rather than silently keeping a number measured against the old schedule.

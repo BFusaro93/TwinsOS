@@ -159,6 +159,16 @@ export default function OnlinePaymentsGuidePage() {
             then updates the invoice record once Stripe confirms it went through.
           </li>
           <li>
+            <strong>A refund comes out of unapplied credit before it comes off an invoice.</strong>{" "}
+            When a payment is larger than what it was applied to — an overpayment, or a prepayment
+            only partly used — the leftover sits on the payment as unapplied credit. Refunding now
+            consumes that credit first and only reaches into the invoices once it runs out. So
+            refunding a $50 overpayment on a paid $100 invoice returns the $50 and leaves the invoice
+            paid; it no longer reopens a settled invoice and pushes it back into the charge queue.
+            Refund more than the unapplied amount and the remainder is taken back off the invoices
+            proportionally, as before.
+          </li>
+          <li>
             <strong>Fee waivers and overrides are staff-only.</strong> A client paying through their
             portal or a public link always sees the standard configured fee — they can&apos;t adjust
             or skip it themselves.

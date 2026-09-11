@@ -682,6 +682,14 @@ export default function ReportsReferenceGuidePage() {
             From/To, a bare date) is evaluated on Eastern calendar days, and hours columns on
             visit-based reports are man-hours (crew hours × number of men).
           </li>
+          <li>
+            <strong>Break time is excluded from hours.</strong> Minutes a crew records with the
+            Pause button are subtracted from a visit&apos;s measured duration before it is multiplied
+            by the number of men, so every man-hours, variance, revenue-per-man-hour and labor-cost
+            figure counts worked time only. A one-hour lunch in a nine-hour day with three crew
+            reports 24.00 man-hours, not 27.00. Hours a dispatcher typed in by hand are used exactly
+            as entered.
+          </li>
         </ul>
       </Callout>
 

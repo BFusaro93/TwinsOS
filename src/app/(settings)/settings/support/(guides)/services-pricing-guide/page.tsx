@@ -213,7 +213,9 @@ export default function ServicesPricingGuidePage() {
           </li>
           <li>
             <strong>Run Price Adjustments</strong> — shows the Price Adjustments and Adjustment
-            History tabs. Enforced on the server too, not just hidden in the UI.
+            History tabs. Enforced in the database itself, not just hidden in the UI: applying or
+            reverting a run re-checks this permission at the point the prices are written, so a user
+            without it cannot re-price anything by any route.
           </li>
         </ul>
       </Section>

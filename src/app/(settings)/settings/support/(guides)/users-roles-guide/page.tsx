@@ -281,6 +281,20 @@ export default function UsersRolesGuidePage() {
             to job sites. It has no access to purchasing, assets, inventory, settings, or the rest
             of the CRM module — even attempting to load a CRM route outside the crew surface is
             blocked, regardless of what a <code>crm_role_id</code> might otherwise allow.
+            <p className="mt-2">
+              What a crew login can <em>change</em> is deliberately narrow: it may update only the
+              visits belonging to its own crew, and cannot move a visit to a different crew. Jobs and
+              job service lines are read-only to a crew account, so a crew can never alter a
+              service&apos;s price — pricing is only editable by staff roles with the relevant
+              permission. Invoices and payments are not readable by a crew login at all.
+            </p>
+          </li>
+          <li>
+            <strong>Hiding prices from crews.</strong>{" "}
+            <strong>Settings → Landscapt → Hide pricing from crew accounts</strong> stops service
+            prices from being sent to crew devices at all — not merely hidden on screen. With it on,
+            no rate is included in the data the crew app requests, so prices can&apos;t be recovered
+            from a shared tablet. Leave it off if you want crews to see what a job is worth.
           </li>
           <li>
             <strong>Client portal accounts</strong> — an entirely different login system for

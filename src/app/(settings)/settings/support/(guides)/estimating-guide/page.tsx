@@ -342,6 +342,15 @@ export default function EstimatingGuidePage() {
           produces a job priced 10% off, not one priced at the undiscounted subtotal.
         </Callout>
         <Callout>
+          <strong>A multi-visit line becomes a per-visit price.</strong> An estimate line priced
+          across several visits &mdash; 30 mows at $60 &mdash; is quoted to the client as the full
+          $1,800, but the job stores <strong>$60 per visit</strong>, because that is what each
+          completed visit invoices. The quantity and the number of visits are both divided back out,
+          so quantity × rate × visits still equals the amount the client accepted, discounts
+          included. If you are reconciling a converted job against its estimate, compare the
+          estimate&rsquo;s line total against rate × visits, not against the per-visit rate.
+        </Callout>
+        <Callout>
           <strong>Package</strong> and <strong>Snow</strong> jobs aren&rsquo;t created this way
           &mdash; they&rsquo;re created directly from <strong>Jobs &rarr; Add Job</strong> rather
           than converted from an estimate.
