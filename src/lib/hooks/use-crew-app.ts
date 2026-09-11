@@ -781,3 +781,66 @@ export function useDeleteCrewMemberTime() {
     onError: () => toast.error("Failed to remove crew member time"),
   });
 }
+
+// ── field upsells ────────────────────────────────────────────────────────────
+
+/**
+ * Services the office has opened up for crews to suggest. An empty list hides
+ * the Suggest work button entirely, which is deliberately the feature's on/off
+ * switch — there's no separate permission key to keep in sync.
+ */
+export function useFieldUpsellServices() {
+  return useQuery({
+    queryKey: ["crew-app-upsell-services"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_services")
+        .select("id, name, upsell_pitch")
+        .eq("show_in_field_upsells", true)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string; upsell_pitch: string | null }[];
+    },
+  });
+}
+
+/**
+ * Submits one suggestion. Everything — ticket, photo, job link, client
+ * timeline entry, office notification — happens in the one route so a crew on
+ * a patchy connection makes a single request rather than a partial chain.
+ */
+export function useSubmitFieldUpsell() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      visitId,
+      serviceId,
+      note,
+      file,
+    }: {
+      visitId: string;
+      serviceId: string;
+      note: string;
+      file?: File | null;
+    }) => {
+      const form = new FormData();
+      form.append("serviceId", serviceId);
+      form.append("note", note);
+      if (file) form.append("file", file);
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/upsell`, {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Couldn't send the suggestion");
+      return json as { id: string; ticketNumber: number; photoAttached: boolean };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+  });
+}

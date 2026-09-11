@@ -117,6 +117,8 @@ function mapService(row: any): CRMService {
     defaultBHrs: Number(row.default_b_hrs ?? 0),
     defaultBCostCents: row.default_b_cost_cents ?? 0,
     showInSnowDispatch: row.show_in_snow_dispatch ?? false,
+    showInFieldUpsells: row.show_in_field_upsells ?? false,
+    upsellPitch: row.upsell_pitch ?? null,
     onlyForEstimates: row.only_for_estimates ?? false,
     trackChemicals: row.track_chemicals ?? false,
     invoiceDescription: row.invoice_description ?? null,

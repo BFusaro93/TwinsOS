@@ -62,7 +62,8 @@ export default function TicketsGuidePage() {
           <TOCLink href="#assignment">Assignment</TOCLink>
           <TOCLink href="#lifecycle">Worked example: a form-to-close lifecycle</TOCLink>
           <TOCLink href="#detail-sheet">The ticket detail sheet</TOCLink>
-          <TOCLink href="#client-link">Client link &amp; activity timeline</TOCLink>
+          <TOCLink href="#client-link">Client link &amp; activity timeline</TOCLink>          <TOCLink href="#field-upsells">Field upsells from crews</TOCLink>
+
           <TOCLink href="#automations-integrations">Automations, Zapier &amp; notifications</TOCLink>
         </div>
       </div>
@@ -292,6 +293,36 @@ export default function TicketsGuidePage() {
           captured no phone number, <code>sms_consent_pending_phone</code> is set true and the detail
           sheet shows a dismissible amber banner until a phone number is collected and the warning is
           cleared.
+        </p>
+      </Section>
+
+      <Section id="field-upsells" title="Field upsells from crews">
+        <p>
+          When a crew spots work a property needs, they send it in from the crew app and it arrives
+          here as an ordinary ticket with the category <strong>Upsell</strong> — so it inherits
+          assignment, due dates, priority, comments, automations and the audit trail without being a
+          separate thing to check.
+        </p>
+        <p>
+          Each one carries the crew&apos;s note, who spotted it, the date, the property, and the
+          service they suggested. Any photo they took is on the <strong>Files</strong> tab, which is
+          usually enough to price the work without a trip out to look. The ticket is linked back to
+          the job the crew was on.
+        </p>
+        <Callout>
+          <strong>Crews never see or set a price.</strong> They pick from a list you control and
+          describe what they saw; pricing stays with the office. Open a service up for suggesting by
+          ticking <strong>Show in field upsells</strong> on it under Services &amp; Pricing, and give
+          it a short prompt so crews know what to look for. With no services ticked, the Suggest work
+          button doesn&apos;t appear in the crew app at all — that is how the feature is switched on
+          and off, so there is no separate permission to manage.
+        </Callout>
+        <p>
+          To take one forward, quote it as normal and <strong>link the estimate to the ticket</strong>
+          from the detail sheet. That link is what turns the suggestion into a number you can report
+          on: the estimate carries the real sales pipeline (Sent → Accepted → Won/Lost), so a crew&apos;s
+          suggestion reaching Won is measurable, while the ticket&apos;s own open/closed only ever means
+          whether the office has dealt with it.
         </p>
       </Section>
 

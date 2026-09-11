@@ -24,6 +24,9 @@ export interface CRMService {
   defaultBCostCents: number;
   showInSnowDispatch: boolean;
   onlyForEstimates: boolean;
+  /** Crews can suggest this service from the crew app — see field upsells. */
+  showInFieldUpsells: boolean;
+  upsellPitch: string | null;
   trackChemicals: boolean;
   invoiceDescription: string | null;
   descriptionOnEstimate: string | null;

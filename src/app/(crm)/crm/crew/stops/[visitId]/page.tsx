@@ -6,7 +6,7 @@ import { format, parseISO, differenceInMinutes } from "date-fns";
 import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
-  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee,
+  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles,
 } from "lucide-react";
 import {
   useStopDetail,
@@ -19,6 +19,8 @@ import {
   useAcknowledgeNotes,
   useAddCrewNote,
   useUploadVisitPhoto,
+  useFieldUpsellServices,
+  useSubmitFieldUpsell,
 } from "@/lib/hooks/use-crew-app";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +35,7 @@ import { formatCurrency } from "@/lib/utils";
 import { visitServices } from "@/lib/utils/visit-stops";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
+import { toast } from "sonner";
 
 function ElapsedTimer({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
@@ -63,8 +66,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const acknowledge   = useAcknowledgeNotes();
   const addNote       = useAddCrewNote();
   const uploadPhoto   = useUploadVisitPhoto();
+  const { data: upsellServices = [] } = useFieldUpsellServices();
+  const submitUpsell  = useSubmitFieldUpsell();
 
   const [noteText, setNoteText]       = useState("");
+  const [upsellOpen, setUpsellOpen]       = useState(false);
+  const [upsellServiceId, setUpsellServiceId] = useState("");
+  const [upsellNote, setUpsellNote]       = useState("");
+  const [upsellPhoto, setUpsellPhoto]     = useState<File | null>(null);
   const [skipReason, setSkipReason]   = useState("");
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [clockOutNotes, setClockOutNotes] = useState("");
@@ -116,6 +125,31 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     if (!noteText.trim()) return;
     await addNote.mutateAsync({ visitId: anchorVisitId, note: noteText });
     setNoteText("");
+  }
+
+  async function handleSubmitUpsell() {
+    if (!upsellServiceId) return;
+    try {
+      const res = await submitUpsell.mutateAsync({
+        visitId: anchorVisitId,
+        serviceId: upsellServiceId,
+        note: upsellNote,
+        file: upsellPhoto,
+      });
+      // The photo is best-effort server-side — say so rather than implying it
+      // went through, since a crew can't tell from here.
+      toast.success(
+        res.photoAttached || !upsellPhoto
+          ? `Sent to the office — ticket #${res.ticketNumber}.`
+          : `Sent to the office — ticket #${res.ticketNumber}, but the photo didn't upload.`
+      );
+      setUpsellOpen(false);
+      setUpsellServiceId("");
+      setUpsellNote("");
+      setUpsellPhoto(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send the suggestion");
+    }
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -416,6 +450,23 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           )}
         </div>
 
+        {/* Suggest work — hidden unless the office has opened up services for
+            crews to suggest, which is how the feature is switched on. */}
+        {upsellServices.length > 0 && (
+          <button
+            onClick={() => setUpsellOpen(true)}
+            className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left active:bg-emerald-100"
+          >
+            <span className="flex items-center gap-2 font-semibold text-emerald-800">
+              <Sparkles className="h-4 w-4" />
+              Suggest work
+            </span>
+            <span className="mt-0.5 block text-xs text-emerald-700">
+              Spotted something this property needs? Send it to the office.
+            </span>
+          </button>
+        )}
+
         {/* Notes / Comments */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100">
@@ -452,6 +503,90 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         </div>
       </main>
+
+      {/* Suggest work — crews never see or set a price here; the office prices
+          it from the photo and note. */}
+      <Dialog open={upsellOpen} onOpenChange={setUpsellOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Suggest work</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-slate-700">What does it need?</p>
+              <div className="flex flex-col gap-1.5">
+                {upsellServices.map((svc) => {
+                  const picked = upsellServiceId === svc.id;
+                  return (
+                    <button
+                      key={svc.id}
+                      onClick={() => setUpsellServiceId(svc.id)}
+                      className={`rounded-lg border px-3 py-2.5 text-left ${
+                        picked
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 active:bg-slate-50"
+                      }`}
+                    >
+                      <span className={`block text-sm font-medium ${picked ? "text-emerald-800" : "text-slate-800"}`}>
+                        {svc.name}
+                      </span>
+                      {svc.upsell_pitch && (
+                        <span className="mt-0.5 block text-xs text-slate-500">{svc.upsell_pitch}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-slate-700">
+                Anything the office should know?
+              </p>
+              <Textarea
+                placeholder="e.g. front beds are thin, client mentioned it too"
+                value={upsellNote}
+                onChange={(e) => setUpsellNote(e.target.value)}
+                className="min-h-[80px] resize-none text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 active:bg-slate-50">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(e) => setUpsellPhoto(e.target.files?.[0] ?? null)}
+                />
+                <Camera className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-600">
+                  {upsellPhoto ? "Photo attached — tap to replace" : "Add a photo"}
+                </span>
+              </label>
+              <p className="mt-1 text-xs text-slate-400">
+                A photo usually saves the office a trip out to quote it.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpsellOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitUpsell}
+              disabled={!upsellServiceId || submitUpsell.isPending}
+            >
+              {submitUpsell.isPending ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Sending…</>
+              ) : (
+                "Send to office"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Skip dialog — targets one service row at a time */}
       <Dialog open={!!skipTargetId} onOpenChange={(open) => !open && setSkipTargetId(null)}>

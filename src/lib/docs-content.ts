@@ -1071,6 +1071,11 @@ export const DOC_SECTIONS: DocSection[] = [
             href: "/settings/support/tickets-guide",
             linkLabel: "Open the Tickets guide",
           },
+          {
+            step: "Field upsells from crews",
+            detail:
+              "Work a crew spots at a property arrives as a normal ticket with category 'Upsell', carrying their note, who spotted it, the date, the property, the suggested service, and any photo they took (on the Files tab — usually enough to price it without a trip out). The ticket is linked back to the job. Crews never see or set a price; they pick from a list you control by ticking 'Show in field upsells' on a service under Services & Pricing. With no services ticked the Suggest work button doesn't appear in the crew app, which is how the feature is switched on and off. To take one forward, quote it and link the estimate to the ticket — the estimate's Won/Lost stage is what makes a crew's suggestion measurable, since ticket open/closed only means whether the office has dealt with it.",
+          },
         ],
       },
       {

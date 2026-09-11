@@ -71,6 +71,8 @@ interface FormState {
   isActive: boolean;
   showInSnowDispatch: boolean;
   onlyForEstimates: boolean;
+  showInFieldUpsells: boolean;
+  upsellPitch: string;
   trackChemicals: boolean;
   invoiceDescription: string;
   descriptionOnEstimate: string;
@@ -94,6 +96,7 @@ function emptyForm(): FormState {
     taskColor: "#3B82F6",
     isActive: true, showInSnowDispatch: false,
     onlyForEstimates: false, trackChemicals: false,
+    showInFieldUpsells: false, upsellPitch: "",
     invoiceDescription: "", descriptionOnEstimate: "",
     rateMatrixField: "", rateMatrixCalc: "qty_x_rate_x_visits",
     matrixTailEveryQty: "", matrixTailOverQty: "",
@@ -120,6 +123,8 @@ function serviceToForm(s: CRMService): FormState {
     isActive: s.isActive,
     showInSnowDispatch: s.showInSnowDispatch,
     onlyForEstimates: s.onlyForEstimates,
+    showInFieldUpsells: s.showInFieldUpsells,
+    upsellPitch: s.upsellPitch ?? "",
     trackChemicals: s.trackChemicals,
     invoiceDescription: s.invoiceDescription ?? "",
     descriptionOnEstimate: s.descriptionOnEstimate ?? "",
@@ -686,6 +691,8 @@ export function ServiceDialog({ open, service, onClose }: Props) {
       is_active: form.isActive,
       show_in_snow_dispatch: form.showInSnowDispatch,
       only_for_estimates: form.onlyForEstimates,
+      show_in_field_upsells: form.showInFieldUpsells,
+      upsell_pitch: form.upsellPitch.trim() || null,
       track_chemicals: form.trackChemicals,
       invoice_description: form.invoiceDescription.trim() || null,
       description_on_estimate: form.descriptionOnEstimate.trim() || null,
@@ -963,6 +970,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
               {([
                 { key: "isActive",           label: "Active" },
                 { key: "showInSnowDispatch", label: "Show in Snow Dispatch" },
+                { key: "showInFieldUpsells", label: "Show in Field Upsells" },
                 { key: "onlyForEstimates",   label: "Only for Estimates" },
                 { key: "trackChemicals",     label: "Track Chemicals" },
               ] as { key: keyof FormState; label: string }[]).map(({ key, label }) => (
@@ -975,6 +983,23 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                 </label>
               ))}
             </div>
+
+            {/* The crew-facing cue for this service — crews see the name and
+                this line, never a price. */}
+            {form.showInFieldUpsells && (
+              <Field label="Field upsell prompt">
+                <Input
+                  value={form.upsellPitch}
+                  onChange={(e) => setForm({ ...form, upsellPitch: e.target.value })}
+                  placeholder="e.g. Beds look thin or washed out?"
+                  className="text-sm"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Shown under the service name when a crew suggests work, so they know what to
+                  look for.
+                </p>
+              </Field>
+            )}
           </div>
         )}
 
