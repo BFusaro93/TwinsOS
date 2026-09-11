@@ -305,6 +305,9 @@ export function useCreateInvoiceFromEstimate() {
       poNumber,
       lineItems,
       subtotalCents,
+      discountCents,
+      discountType,
+      discountValue,
       taxRateBps,
       taxCents,
       totalCents,
@@ -319,8 +322,17 @@ export function useCreateInvoiceFromEstimate() {
       lineItems: {
         name?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
         discountCents?: number; discountType?: "percent" | "flat" | null; discountValue?: number | null;
+        isTaxable?: boolean;
       }[];
       subtotalCents: number;
+      // The estimate's header discount. Previously not passed at all, so the
+      // invoice was born with discount_cents = 0 while total_cents already had
+      // the discount taken off it. The first recalc (deleting a line, or any
+      // financial edit) recomputed total as subtotal - 0 + tax and silently
+      // added the discount back onto what the client owed.
+      discountCents?: number;
+      discountType?: "percent" | "flat" | null;
+      discountValue?: number | null;
       taxRateBps: number;
       taxCents: number;
       totalCents: number;
@@ -346,6 +358,9 @@ export function useCreateInvoiceFromEstimate() {
           due_date: dueDate ?? null,
           po_number: poNumber ?? null,
           subtotal_cents: subtotalCents,
+          discount_cents: discountCents ?? 0,
+          discount_type: discountType ?? null,
+          discount_value: discountValue ?? null,
           tax_rate_bps: taxRateBps,
           tax_cents: taxCents,
           total_cents: totalCents,
@@ -370,6 +385,11 @@ export function useCreateInvoiceFromEstimate() {
             discount_cents: li.discountCents ?? 0,
             discount_type: li.discountType ?? null,
             discount_value: li.discountValue ?? null,
+            // crm_invoice_line_items.is_taxable defaults to false and, unlike
+            // crm_job_services, has no trigger to fill it in. Leaving it unset
+            // made every invoice-from-estimate untaxable, so the first recalc
+            // wiped the tax the client had been quoted.
+            is_taxable: li.isTaxable ?? false,
             sort_order: i,
           }))
         );

@@ -854,28 +854,61 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               if (!estimate) return;
               try {
                 const today = todayLocalISODate();
+                const taxRateBps = estimate.taxRateBps ?? 0;
+                // recalcEstimateTotals taxes the whole discounted subtotal —
+                // estimate lines carry no per-line taxability — so every
+                // invoice line has to be taxable for the invoice to reproduce
+                // the tax the client was quoted.
+                const isTaxable = taxRateBps > 0;
+
+                const invoiceLines = (estimate.lineItems ?? [])
+                  .filter((li) => !li.deletedAt && li.status !== "lost")
+                  .map((li) => ({
+                    name: li.serviceName ?? li.serviceId ?? "Service",
+                    description: li.invoiceDesc ?? "",
+                    qty: li.qty,
+                    rateCents: li.rateCents,
+                    totalCents: li.totalCents,
+                    discountCents: li.discountCents,
+                    discountType: li.discountType,
+                    discountValue: li.discountValue,
+                    isTaxable,
+                  }));
+
+                // Derive the header from the lines actually being written,
+                // using the same arithmetic the invoice recalc uses
+                // (deleteInvoiceLineItemAndRecalc / useUpdateInvoiceFinancials),
+                // rather than copying the estimate's own rollups. Copying them
+                // produced an invoice whose stored header disagreed with its
+                // own lines, so the first edit "recalculated" the client's
+                // total to a different number.
+                //
+                // Note: estimate subitem revenue is not carried onto the
+                // invoice (there are no subitem rows in any org today). If
+                // subitems ever ship, they need their own invoice lines here —
+                // otherwise this subtotal would under-bill them.
+                const netLine = (li: { totalCents: number; discountCents?: number }) =>
+                  li.totalCents - (li.discountCents ?? 0);
+                const subtotalCents = invoiceLines.reduce((s, li) => s + netLine(li), 0);
+                const discountCents = Math.max(0, Math.min(estimate.discountCents ?? 0, subtotalCents));
+                const taxableBase = Math.max(0, (isTaxable ? subtotalCents : 0) - discountCents);
+                const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
+                const totalCents = subtotalCents - discountCents + taxCents;
+
                 const invoice = await createInvoice({
                   estimateId: estimate.id,
                   clientId: estimate.clientId,
                   salesRepId: estimate.salesRepId,
                   description: estimate.description ?? `Invoice for estimate #${estimate.estimateNumber}`,
                   invoiceDate: today,
-                  lineItems: (estimate.lineItems ?? [])
-                    .filter((li) => !li.deletedAt && li.status !== "lost")
-                    .map((li) => ({
-                      name: li.serviceName ?? li.serviceId ?? "Service",
-                      description: li.invoiceDesc ?? "",
-                      qty: li.qty,
-                      rateCents: li.rateCents,
-                      totalCents: li.totalCents,
-                      discountCents: li.discountCents,
-                      discountType: li.discountType,
-                      discountValue: li.discountValue,
-                    })),
-                  subtotalCents: estimate.subtotalCents ?? 0,
-                  taxRateBps: estimate.taxRateBps ?? 0,
-                  taxCents: estimate.taxCents ?? 0,
-                  totalCents: estimate.totalCents ?? 0,
+                  lineItems: invoiceLines,
+                  subtotalCents,
+                  discountCents,
+                  discountType: estimate.discountType,
+                  discountValue: estimate.discountValue,
+                  taxRateBps,
+                  taxCents,
+                  totalCents,
                 });
                 await updateStage({ id: estimate.id, stage: "invoiced" });
                 toast.success("Invoice created");
