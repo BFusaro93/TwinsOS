@@ -26,6 +26,20 @@ import {
 
 const EDITABLE_STATUSES: SmsRegistrationStatus[] = ["not_started", "profile_rejected", "brand_rejected", "campaign_rejected"];
 
+// Statuses advanceRegistration() actually has a next step for (mirrors its
+// switch in provisioning.ts) — deliberately a SEPARATE list from
+// EDITABLE_STATUSES: "not_started" is both editable (the form should be
+// fillable) and advanceable (there's a next step once it's saved), so
+// gating the button on "not editable" hid it at exactly the moment it's
+// needed most, right after the first save.
+const ADVANCEABLE_STATUSES: SmsRegistrationStatus[] = [
+  "not_started",
+  "subaccount_created",
+  "profile_approved",
+  "brand_approved",
+  "number_provisioned",
+];
+
 const STATUS_LABEL: Record<SmsRegistrationStatus, string> = {
   not_started: "Not started",
   subaccount_created: "Twilio subaccount created",
@@ -144,7 +158,7 @@ export function SmsOnboardingSettings() {
               Check status
             </Button>
           )}
-          {!isEditable && status !== "complete" && !["profile_submitted", "brand_submitted", "campaign_submitted"].includes(status) && (
+          {ADVANCEABLE_STATUSES.includes(status) && (
             <Button size="sm" onClick={handleAdvance} disabled={advance.isPending}>
               {advance.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Continue setup
