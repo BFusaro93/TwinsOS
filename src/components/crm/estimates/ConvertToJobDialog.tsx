@@ -89,6 +89,22 @@ function allocateHeaderDiscount(
   return result;
 }
 
+/**
+ * The per-visit unit rate a job service must carry so that
+ * qty x rate_cents x visits reproduces `net`, the amount the client actually
+ * accepted for that line.
+ *
+ * Holds for both calc types: a per-unit line's total is qty x rate x visits,
+ * and a fixed-total line's total IS the rate (estimate-calc.ts), so a fixed
+ * line with qty > 1 also needs the qty divided back out or the invoice bills
+ * it qty times over.
+ */
+function rateFromNet(li: EstimateLineItem, net: number): number {
+  const units = (li.qty || 0) * Math.max(1, li.visits || 1);
+  if (units <= 0) return li.adjRateCents ?? li.rateCents;
+  return Math.round(net / units);
+}
+
 interface Props {
   open: boolean;
   estimate: Estimate;
@@ -240,11 +256,26 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           // service, so anything re-deriving a price from qty x rate
           // (job value rollups, invoice line items) billed a different
           // number than the client actually accepted.
-          // When a header discount applies, re-derive the unit rate from the
-          // net line total so qty x rate still reproduces what the job bills.
-          rateCents:     netByLineId.get(li.id) === li.totalCents - li.discountCents
-            ? (li.adjRateCents ?? li.rateCents)
-            : (li.qty > 0 ? Math.round((netByLineId.get(li.id) ?? 0) / li.qty) : (li.adjRateCents ?? li.rateCents)),
+          // crm_job_services.rate_cents is a PER-VISIT unit rate: the
+          // visit-completion auto-invoice bills qty x rate_cents on every
+          // completed visit (complete-visit-side-effects.ts). The estimate
+          // line's net, by contrast, covers the whole engagement --
+          // totalCents is qty x rate x visits for a per-unit line
+          // (estimate-calc.ts) -- so the rate has to be divided back out by
+          // BOTH qty and visits.
+          //
+          // Dividing by qty alone left rate_cents holding rate x visits, and
+          // every single visit then billed the entire multi-visit contract:
+          // a 30-visit mow at $60 with any header discount produced
+          // rate_cents = $1,620, i.e. $48,600 billed instead of $1,620.
+          //
+          // Always deriving from the net (rather than only when a header
+          // discount is detected) also fixes the other half of that branch:
+          // the equality check treated "no header discount" as "use the raw
+          // rate", which silently dropped any LINE-level discount. With no
+          // discount at all, net = qty x rate x visits, so this reduces to
+          // the raw rate exactly.
+          rateCents:     rateFromNet(li, netByLineId.get(li.id) ?? 0),
           totalCents:    netByLineId.get(li.id) ?? 0,
           budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
           budgetMethod:  li.budgetMethod,
