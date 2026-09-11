@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { TWILIO_BUSINESS_INDUSTRIES } from "@/lib/twilio/industries";
 
 // Maps a Zod issue's dot-path to the label shown on the actual form field
 // (SmsOnboardingSettings.tsx), so a validation failure names the field the
@@ -41,7 +42,7 @@ const businessInfoSchema = z.object({
   legal_business_name: z.string().min(1),
   ein: z.string().min(1),
   business_type: z.enum(["sole_proprietorship", "partnership", "llc", "corporation", "nonprofit"]),
-  business_industry: z.string().min(1),
+  business_industry: z.enum(TWILIO_BUSINESS_INDUSTRIES),
   business_website: z.string().url(),
   business_address: z.object({
     street: z.string().min(1),

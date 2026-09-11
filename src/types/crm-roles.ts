@@ -321,6 +321,8 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           service_add: "Add Service",
           service_edit: "Edit Service",
           service_delete: "Delete Service",
+          service_bulk_price: "Bulk Update Catalog Prices",
+          pricing_adjustment_run: "Run Price Adjustments",
         },
       },
       package_access: {

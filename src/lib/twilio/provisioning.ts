@@ -1,5 +1,19 @@
 import { parentRequest, subaccountRequest, getOrgTwilioCreds, createParentSubaccount } from "./client";
 
+// Twilio's actual accepted enum strings for the customer_profile_business_
+// information EndUser type — confirmed against Twilio's "Gather the
+// Required Business Information" docs, 2026-09-11, after a submission
+// failed evaluation with every one of these fields flagged invalid. Twilio
+// has no Sole Proprietor entry here at all — that business type requires an
+// entirely different EndUser type (a "vertical" field instead of
+// business_type/business_industry) that this pipeline doesn't build.
+const TWILIO_BUSINESS_TYPE: Partial<Record<string, string>> = {
+  llc: "Limited Liability Corporation",
+  corporation: "Corporation",
+  partnership: "Partnership",
+  nonprofit: "Non-profit Corporation",
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -128,17 +142,34 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
   });
   const profileSid = profile.sid;
 
+  const twilioBusinessType = TWILIO_BUSINESS_TYPE[reg.business_type ?? ""];
+  if (!twilioBusinessType) {
+    throw new Error(
+      `Business type "${reg.business_type}" isn't supported by this pipeline yet — Twilio has no Sole Proprietor ` +
+        "path built here (it requires a different EndUser type entirely). Pick LLC, Corporation, Partnership, or Nonprofit."
+    );
+  }
+
   const businessInfo = await subaccountRequest(TRUSTHUB, "/EndUsers", creds, {
     body: {
       Type: "customer_profile_business_information",
       FriendlyName: "Business Information",
       "Attributes.business_name": reg.legal_business_name ?? "",
       "Attributes.business_registration_number": reg.ein ?? "",
-      "Attributes.business_type": reg.business_type ?? "",
+      "Attributes.business_type": twilioBusinessType,
       "Attributes.business_industry": reg.business_industry ?? "",
-      "Attributes.business_regions_of_operation": reg.business_regions_of_operation ?? "usa_only",
+      // Twilio's enum has no "USA only" distinct from "USA and Canada" — every
+      // org here operates only in the US, so this always resolves to the one
+      // value Twilio actually has for North America regardless of which of
+      // the two options the org picked in the form (that choice still matters
+      // for the org's own consent-scope description, just not to Twilio).
+      "Attributes.business_regions_of_operation": "USA_AND_CANADA",
       "Attributes.business_registration_identifier": "EIN",
       "Attributes.website_url": reg.business_website ?? "",
+      // Every org onboarding through this pipeline is Landscapt's own direct
+      // customer, receiving service directly rather than reselling messaging
+      // to further sub-customers of its own.
+      "Attributes.business_identity": "direct_customer",
     },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {

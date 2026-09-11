@@ -23,6 +23,7 @@ import {
   type SmsRegistrationBusinessInfo,
   type SmsRegistrationStatus,
 } from "@/lib/hooks/use-sms-onboarding";
+import { TWILIO_BUSINESS_INDUSTRIES, industryLabel } from "@/lib/twilio/industries";
 
 const EDITABLE_STATUSES: SmsRegistrationStatus[] = ["not_started", "profile_rejected", "brand_rejected", "campaign_rejected"];
 
@@ -203,11 +204,20 @@ export function SmsOnboardingSettings() {
           </div>
           <div>
             <Label>Industry</Label>
-            <Input
-              value={form.business_industry}
-              onChange={(e) => setForm({ ...form, business_industry: e.target.value })}
-              placeholder="Landscaping"
-            />
+            <Select value={form.business_industry} onValueChange={(v) => setForm({ ...form, business_industry: v })}>
+              <SelectTrigger><SelectValue placeholder="Pick the closest fit" /></SelectTrigger>
+              <SelectContent>
+                {TWILIO_BUSINESS_INDUSTRIES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {industryLabel(value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-slate-500">
+              Twilio requires one of a fixed list — landscaping isn&apos;t its own category, so pick the closest (most
+              landscaping/lawn-care businesses fit under Construction or Agriculture).
+            </p>
           </div>
           <div>
             <Label>Website</Label>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, DollarSign } from "lucide-react";
 import { useAllCRMServices, useDeleteCRMService, useBulkImportCRMServices } from "@/lib/hooks/use-crm-jobs";
 import type { CRMService } from "@/types/crm-jobs";
 import { formatCurrency } from "@/lib/utils";
@@ -12,6 +12,7 @@ import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
+import { BulkServicePriceDialog } from "./BulkServicePriceDialog";
 
 const SERVICE_TEMPLATE_COLUMNS = [
   "name", "code", "category", "unit", "defaultRate", "productionRate", "isActive",
@@ -58,11 +59,13 @@ export function ServicesList({ onAdd, onEdit }: Props) {
   const canAdd = can("service_add");
   const canEdit = can("service_edit");
   const canDelete = can("service_delete");
+  const canBulkPrice = can("service_bulk_price");
   const { data: services = [], isLoading } = useAllCRMServices();
   const deleteService = useDeleteCRMService();
   const { mutateAsync: bulkImportServices } = useBulkImportCRMServices();
   const [tab, setTab] = useState<Tab>("active");
   const [search, setSearch] = useState("");
+  const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
 
   const filtered = services.filter((s) => {
     if (tab === "active" && !s.isActive) return false;
@@ -135,6 +138,12 @@ export function ServicesList({ onAdd, onEdit }: Props) {
               toast[skipped > 0 ? "warning" : "success"](`Services import: ${parts.join(", ")}.`);
             }}
           />
+          {canBulkPrice && (
+            <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
+              <DollarSign className="mr-1.5 h-4 w-4" />
+              Bulk Prices
+            </Button>
+          )}
           {canAdd && (
             <Button size="sm" onClick={onAdd}>
               <Plus className="mr-1.5 h-4 w-4" />
@@ -232,6 +241,16 @@ export function ServicesList({ onAdd, onEdit }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* Seeded with `filtered`, not all services — the dialog's quick-adjust
+          then acts on exactly the set the user can see behind it. */}
+      {canBulkPrice && (
+        <BulkServicePriceDialog
+          open={bulkPriceOpen}
+          onOpenChange={setBulkPriceOpen}
+          services={filtered}
+        />
+      )}
     </div>
   );
 }

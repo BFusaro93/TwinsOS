@@ -126,7 +126,7 @@ export const CRM_NAV: NavSection[] = [
     label: "Administration",
     items: [
       { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3, permission: "view_report_center" },
-      { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list" },
+      { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list" },  // also hosts the Price Adjustments tab
       { label: "Products",  href: "/crm/settings/products",    icon: BookOpen },
       { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock },
       { label: "Packages",  href: "/crm/settings/packages",    icon: Package, permission: "package_list" },
