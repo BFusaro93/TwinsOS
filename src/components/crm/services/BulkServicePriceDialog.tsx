@@ -365,7 +365,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
               <tr className="border-b text-left text-xs text-slate-500">
                 <th className="px-3 py-2 font-medium">Service</th>
                 <th className="px-3 py-2 font-medium">Unit</th>
-                <th className="w-44 px-3 py-2 font-medium">Default Rate ($)</th>
+                <th className="w-60 px-3 py-2 font-medium">Default Rate ($)</th>
               </tr>
             </thead>
             <tbody>
@@ -394,7 +394,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                         {r.rate == null ? (
                           <span className="text-xs text-slate-400">no catalog rate</span>
                         ) : (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2.5">
                             <Input
                               type="number"
                               step="any"
@@ -410,7 +410,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                               className={`h-7 w-28 text-xs ${rateChanged ? "border-brand-400 bg-brand-50" : ""}`}
                             />
                             {rateChanged && r.origRate != null && (
-                              <span className="text-[10px] text-slate-400">
+                              <span className="whitespace-nowrap text-[10px] text-slate-400">
                                 was {formatCurrency(r.origRate)}
                               </span>
                             )}
@@ -431,7 +431,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                             </td>
                             <td className="px-3 py-1.5" />
                             <td className="px-3 py-1.5">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-2.5">
                                 <Input
                                   type="number"
                                   step="any"
@@ -447,7 +447,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                                   className={`h-7 w-28 text-xs ${mChanged ? "border-brand-400 bg-brand-50" : ""}`}
                                 />
                                 {mChanged && (
-                                  <span className="text-[10px] text-slate-400">
+                                  <span className="whitespace-nowrap text-[10px] text-slate-400">
                                     was {formatCurrency(m.origRate)}
                                   </span>
                                 )}
@@ -464,7 +464,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                         </td>
                         <td className="px-3 py-1.5" />
                         <td className="px-3 py-1.5">
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2.5">
                             <Input
                               type="number"
                               step="any"
@@ -480,7 +480,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                               className={`h-7 w-28 text-xs ${tailChanged ? "border-brand-400 bg-brand-50" : ""}`}
                             />
                             {tailChanged && r.origTailRate != null && (
-                              <span className="text-[10px] text-slate-400">
+                              <span className="whitespace-nowrap text-[10px] text-slate-400">
                                 was {formatCurrency(r.origTailRate)}
                               </span>
                             )}
