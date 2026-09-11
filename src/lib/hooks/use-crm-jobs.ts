@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
@@ -1080,8 +1081,16 @@ export function useUpdateVisit() {
           const body = await res.json() as { error?: string };
           throw new Error(body.error ?? 'Failed to complete job');
         }
-        const body = await res.json() as { clientId?: string };
+        const body = await res.json() as { clientId?: string; invoiceSkipReason?: string | null };
         clientId = body.clientId;
+        // The visit completed but auto-invoicing threw and was swallowed so it
+        // couldn't take the rest of the completion down with it. Without this
+        // the only trace is a server log, and the visit sits completed and
+        // unbilled with nobody aware. Marking Complete again re-runs the
+        // invoice step, which is idempotent.
+        if (body.invoiceSkipReason === "error") {
+          toast.warning("Visit completed, but the invoice could not be created. Mark it complete again to retry billing.");
+        }
       }
 
       // Deliberately NOT cascading crew_id to the parent job here: this
