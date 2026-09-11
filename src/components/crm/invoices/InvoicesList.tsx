@@ -147,13 +147,39 @@ function isChargeableBy(i: CRMInvoice, method: "card" | "us_bank_account") {
   );
 }
 
+/** How long a marker is believed before it's treated as stale. A card intent
+ * parks in requires_action for at most a day; an ACH debit settles in a few
+ * business days, with a fortnight of slack for holidays and returns.
+ *
+ * The marker is cleared by a Stripe event (succeeded / payment_failed /
+ * canceled), so if one never arrives — a webhook secret misconfigured, an
+ * event Stripe gave up retrying — the invoice would otherwise be excluded from
+ * the charge queue permanently, with no UI anywhere to clear it. Expiring the
+ * marker fails back to the old behaviour (the invoice is offered again) rather
+ * than to an uncollectable invoice; the server-side duplicate-charge guard
+ * still refuses a genuine second charge. */
+const PENDING_CHARGE_TTL_MS = {
+  us_bank_account: 14 * 24 * 60 * 60 * 1000,
+  card: 24 * 60 * 60 * 1000,
+} as const;
+
+function pendingChargeIsStale(i: CRMInvoice): boolean {
+  if (!i.pendingPaymentAt) return false;
+  const ttl = i.pendingPaymentMethod === "us_bank_account"
+    ? PENDING_CHARGE_TTL_MS.us_bank_account
+    : PENDING_CHARGE_TTL_MS.card;
+  const at = new Date(i.pendingPaymentAt).getTime();
+  if (Number.isNaN(at)) return false;
+  return Date.now() - at > ttl;
+}
+
 /** True when a Stripe charge is already in flight against this invoice. An ACH
  * debit stays in flight for days and writes nothing to crm_payments until it
  * settles, so the invoice keeps its full balance and stays in this queue the
  * whole time — the marker is the only thing distinguishing it from an invoice
  * nobody has charged yet. */
 function hasPaymentInFlight(i: CRMInvoice) {
-  return i.pendingPaymentCents != null;
+  return i.pendingPaymentCents != null && !pendingChargeIsStale(i);
 }
 
 /** Says what's pending and since when, so staff don't have to guess whether a

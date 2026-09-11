@@ -108,10 +108,26 @@ export async function POST(request: Request) {
   });
   if (dedupeErr) {
     if (dedupeErr.code === "23505") {
-      return NextResponse.json({ received: true, duplicate: true });
+      // Seen before — but only a real duplicate if that delivery FINISHED.
+      // The dedupe row commits before the handler runs, so a row with no
+      // processed_at means a previous attempt died part-way and Stripe is
+      // retrying. Short-circuiting those was silently dropping the retry, and
+      // for payment_intent.succeeded on ACH this route is the only thing that
+      // records the payment — the customer was charged and nothing was
+      // written. Fall through and reprocess; the handlers are idempotent.
+      const { data: prior } = await db
+        .from("stripe_webhook_events")
+        .select("processed_at")
+        .eq("event_id", event.id)
+        .maybeSingle();
+      if (prior?.processed_at) {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      log.info("reprocessing a webhook whose previous delivery did not finish", { eventId: event.id, eventType: event.type });
+    } else {
+      log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
+      return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
     }
-    log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
-    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
   switch (event.type) {
@@ -156,6 +172,24 @@ export async function POST(request: Request) {
         // The charge is dead — drop the "payment in flight" marker so the
         // invoice becomes chargeable again instead of looking pending forever.
         await clearPendingCharge(db, failedIntent.id);
+      }
+      break;
+    }
+
+    // The other way an in-flight intent dies. Staff cancelling from the Stripe
+    // dashboard, or a requires_action card intent that expires unconfirmed,
+    // fire ONLY this event — never payment_failed — so without a case here the
+    // in-flight marker was never cleared. InvoicesList drops a marked invoice
+    // out of "chargeable now", disables its Charge button and skips it in
+    // Charge All, so the invoice could never be collected from the queue
+    // again. Unlike payment_failed there's no automation to fire; releasing
+    // the invoice is the whole job, and clearPendingCharge matches on the
+    // intent id so it cannot clobber a newer marker.
+    case "payment_intent.canceled": {
+      const canceledIntent = event.data.object as Stripe.PaymentIntent;
+      const canceledSource = canceledIntent.metadata?.source;
+      if (canceledSource === "crm_invoice" || canceledSource === "crm_invoice_multi") {
+        await clearPendingCharge(db, canceledIntent.id);
       }
       break;
     }
@@ -319,6 +353,14 @@ export async function POST(request: Request) {
     default:
       break;
   }
+
+  // Reached only when the handler above didn't bail with a 500. Stamping the
+  // row here is what makes a later delivery of the same event a genuine
+  // duplicate; leaving it unstamped keeps the event replayable.
+  await db
+    .from("stripe_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("event_id", event.id);
 
   return NextResponse.json({ received: true });
 }
