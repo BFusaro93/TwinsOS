@@ -60,6 +60,18 @@
     {
       "path": "/api/cron/twilio-status-check",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/report-schedules",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/sales-meeting-reminders",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/crm/sales-meetings/automation-date-triggers",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

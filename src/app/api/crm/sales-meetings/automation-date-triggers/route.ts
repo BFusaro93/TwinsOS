@@ -5,8 +5,9 @@ import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet }
 
 /**
  * GET  /api/crm/sales-meetings/automation-date-triggers — called every 15
- * minutes by a GitHub Actions workflow (Vercel Hobby caps cron at once/day,
- * see .github/workflows/sales-meeting-reminders-cron.yml).
+ * minutes by Vercel Cron (see vercel.json). Previously driven by a GitHub
+ * Actions workflow instead (Vercel Hobby caps cron at once/day); moved back
+ * to native Vercel Cron after the 2026-09 upgrade to Pro.
  * POST — manual trigger for testing.
  *
  * Evaluates the 'sales_meeting_reminder' date-gap automation trigger type

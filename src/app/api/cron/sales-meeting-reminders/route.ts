@@ -5,10 +5,11 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { EMAIL_FROM } from "@/lib/email/send";
 
 /**
- * GET /api/cron/sales-meeting-reminders — called every 15 minutes by a
- * GitHub Actions workflow (.github/workflows/sales-meeting-reminders-cron.yml),
- * NOT Vercel Cron — Vercel's Hobby plan caps cron at once/day regardless of
- * schedule string (see report-schedules for the same fix).
+ * GET /api/cron/sales-meeting-reminders — called every 15 minutes by Vercel
+ * Cron (see vercel.json). Previously driven by a GitHub Actions workflow
+ * instead, because Vercel's Hobby plan caps cron at once/day regardless of
+ * schedule string (see report-schedules for the same history); moved back
+ * to native Vercel Cron after the 2026-09 upgrade to Pro.
  *
  * Two independent things happen here, same split as contract-expiry-notify:
  *  1. The meeting's sales rep gets a direct in-app + email reminder — this

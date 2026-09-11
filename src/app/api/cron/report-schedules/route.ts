@@ -53,29 +53,26 @@ function startOfTodayEasternIso(now: Date): string {
 }
 
 /**
- * GET /api/cron/report-schedules — called hourly by a GitHub Actions
- * scheduled workflow (.github/workflows/report-schedules-cron.yml), NOT
- * Vercel Cron — the account is on Vercel's Hobby plan, which caps cron jobs
- * at once/day regardless of schedule string, so an hourly Vercel Cron entry
- * here would get silently throttled and the per-schedule hour picker
- * wouldn't be honored. See TASKS.md "Deferred — Vercel plan upgrade for
- * true hourly cron" for the full writeup; revisit if the plan changes.
+ * GET /api/cron/report-schedules — called hourly by Vercel Cron (see
+ * vercel.json). Previously driven by a GitHub Actions workflow instead,
+ * because the account was on Vercel's Hobby plan, which caps cron jobs at
+ * once/day regardless of schedule string; moved back to native Vercel Cron
+ * after the 2026-09 upgrade to Pro (see TASKS.md "Deferred — Vercel plan
+ * upgrade for true hourly cron").
  *
  * For every enabled `report_schedules` row whose `hour_local` (America/
  * New_York) is at or before the current hour AND that hasn't already run
  * today (Eastern): runs its report (scoped to that schedule's org — see
  * renderScheduledReportPdf), renders a PDF, and emails it to the schedule's
- * recipients. "At or before" rather than "equal to" because GitHub's
- * scheduler routinely fires minutes (occasionally an hour+) late — an exact
- * hour match would then skip that day's send entirely and silently. The
- * "not already run today" check is what keeps this to one send per day.
- * Only schedulable reports (a fixed date window recomputed each run, e.g.
- * "Yesterday", "Month to Date") make sense here — the catalog enforces that
- * at creation time, not this route.
+ * recipients. "At or before" rather than "equal to" because the scheduler
+ * can fire a few minutes late — an exact hour match would then skip that
+ * day's send entirely and silently. The "not already run today" check is
+ * what keeps this to one send per day. Only schedulable reports (a fixed
+ * date window recomputed each run, e.g. "Yesterday", "Month to Date") make
+ * sense here — the catalog enforces that at creation time, not this route.
  *
- * Security: the calling workflow passes Authorization: Bearer {CRON_SECRET}
- * (same secret Vercel's own cron jobs use, also set as a GitHub Actions
- * repo secret). Reject anything else.
+ * Security: Vercel passes Authorization: Bearer {CRON_SECRET}. Reject
+ * anything else.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
