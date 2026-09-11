@@ -42,6 +42,7 @@ import {
   ClipboardCheck,
   CreditCard,
   Handshake,
+  DollarSign,
   MessageSquare,
   type LucideIcon,
 } from "lucide-react";
@@ -114,6 +115,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "Jobs & Packages",
     description: "The six job types, how a job's status differs from a visit's status, and how a Package template turns into a billed job.",
     icon: CalendarDays,
+  },
+  {
+    slug: "services-pricing-guide",
+    kicker: "Landscapt (CRM)",
+    title: "Services & Pricing",
+    description: "The service catalog, bulk catalog price changes, and Price Adjustment runs — which prices seed new work and which ones actually bill.",
+    icon: DollarSign,
   },
   {
     slug: "dispatch-board-guide",

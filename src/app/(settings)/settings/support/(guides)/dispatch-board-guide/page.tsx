@@ -52,6 +52,7 @@ export default function DispatchBoardGuidePage() {
           <TOCLink href="#worked-example">Worked example</TOCLink>
           <TOCLink href="#columns">Board columns</TOCLink>
           <TOCLink href="#filters-search">Filters, search, and routing</TOCLink>
+          <TOCLink href="#route-order">Stop order and Optimize Route</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
         </div>
       </div>
@@ -309,16 +310,98 @@ export default function DispatchBoardGuidePage() {
           </li>
         </ul>
         <p>
-          There&apos;s no live map view on the board — routing is handled by the crew stop order
-          (drag-to-reorder in Manual Route mode), the <strong>Optimize Route</strong> action, and the
-          printed route sheets. Optimize Route needs a Google Maps Platform API key with the Distance
-          Matrix API enabled, entered under <strong>Landscapt Settings → Integrations</strong> on the
-          Google Maps card. Type or paste the key and click <strong>Save Key</strong> — until you do,
-          the card reads &quot;Unsaved — click Save Key to connect&quot; and the board can&apos;t use
-          it. If the save comes back with &quot;you don&apos;t have permission to change organization
-          settings,&quot; your role lacks the settings permission and an admin needs to enter the key
-          instead.
+          There&apos;s no live map view on the board — routing is handled by the crew stop order,
+          the <strong>Optimize Route</strong> action, and the printed route sheets. See the next
+          section for how all three fit together.
         </p>
+      </Section>
+
+      <Section id="route-order" title="Stop order and Optimize Route">
+        <p>
+          Stop order is <strong>per crew</strong>. The <strong>#</strong> column numbers each crew&apos;s
+          own stops from 1, so &quot;#3&quot; means that crew&apos;s third stop of the day, not the third
+          row on the board. Reordering one crew never renumbers another.
+        </p>
+        <p>
+          Drag rows in <strong>Manual Route</strong> mode, or use <strong>Reverse</strong> to flip the
+          current order. Either way the board shows an &quot;Order changed — not yet saved&quot; banner
+          until you click <strong>Save Order</strong>.
+        </p>
+
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+          The order is remembered for next week
+        </h3>
+        <p>
+          Saving an order does two things. It sets today&apos;s stop sequence, and it remembers that
+          sequence for <strong>that crew on that weekday</strong>. The next time the same crew has
+          work on the same weekday — next Monday, the Monday after — the board comes up already in
+          that order instead of an unsorted crew grouping. You only have to route a recurring run once.
+        </p>
+        <Callout>
+          The memory is keyed to the weekday, not just the crew. A crew&apos;s Monday run is usually a
+          different neighbourhood from its Wednesday run, so each weekday keeps its own sequence. A
+          job that moves to a different day has no remembered position on the new day and sorts to
+          the bottom, which is your cue to place it.
+        </Callout>
+        <p>
+          Jobs added to the route later — a new client on an established Monday run — also sort to the
+          bottom until you drag them into place and save again. Saving the day always wins over the
+          remembered order, so a one-off change for a single day never overwrites the usual route.
+        </p>
+
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+          Optimize Route
+        </h3>
+        <p>
+          <strong>Optimize Route</strong> reorders the stops currently in view by real driving time.
+          The dropdown beside the button controls which way round the crew works the route:
+        </p>
+        <Table>
+          <thead>
+            <TableHeadRow>
+              <th className="px-4 py-2 text-left">Direction</th>
+              <th className="px-4 py-2 text-left">What it does</th>
+            </TableHeadRow>
+          </thead>
+          <tbody>
+            <tr className="border-t border-[#e6e6e0]">
+              <td className="px-4 py-2 align-top font-semibold">Nearest first</td>
+              <td className="px-4 py-2 align-top">
+                Leaves the shop and takes the closest remaining stop each time. Usually the shortest
+                total drive, but the crew can finish the day far from the yard.
+              </td>
+            </tr>
+            <tr className="border-t border-[#e6e6e0]">
+              <td className="px-4 py-2 align-top font-semibold">Furthest first</td>
+              <td className="px-4 py-2 align-top">
+                Drives out to the far end of the route first and works back in, so the crew finishes
+                near the yard at the end of the day.
+              </td>
+            </tr>
+          </tbody>
+        </Table>
+        <p>
+          The route is anchored at the crew&apos;s <strong>starting address</strong> (set per crew under
+          Team → Crews), so it begins where the crew actually begins rather than at whichever stop
+          happened to be listed first. Anchoring only applies when every stop in view belongs to the
+          same crew — filter to one crew first if you want it. With a mixed-crew list the stops are
+          still ordered by driving time, just without a shop to start from, and the toast says so.
+        </p>
+        <p>
+          After optimizing, the banner reports the driving time <em>between stops</em> and the shop
+          leg separately (&quot;18 min out from the shop&quot;, or &quot;18 min back to shop&quot; when
+          working furthest-first). An optimized order is a proposal like any manual drag — it isn&apos;t
+          saved, and doesn&apos;t become the crew&apos;s remembered order, until you click
+          <strong> Save Order</strong>.
+        </p>
+        <Callout>
+          Optimize Route needs a Google Maps Platform API key with the Distance Matrix API enabled,
+          entered under <strong>Landscapt Settings → Integrations</strong> on the Google Maps card.
+          Type or paste the key and click <strong>Save Key</strong> — until you do, the card reads
+          &quot;Unsaved — click Save Key to connect&quot; and the board can&apos;t use it. If the save
+          comes back with &quot;you don&apos;t have permission to change organization settings,&quot;
+          your role lacks the settings permission and an admin needs to enter the key instead.
+        </Callout>
       </Section>
 
       <Section id="see-also" title="See also">

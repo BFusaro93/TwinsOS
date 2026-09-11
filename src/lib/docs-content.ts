@@ -35,6 +35,7 @@ import {
   ListChecks,
   Satellite,
   Handshake,
+  DollarSign,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -713,9 +714,19 @@ export const DOC_SECTIONS: DocSection[] = [
               "CRM > Scheduling > Projects tracks one-off landscaping jobs distinct from recurring service — the CRM equivalent of the PO module's Projects/Jobs section, used the same way for cost tracking and reporting.",
           },
           {
+            step: "Stop order is remembered per crew, per weekday",
+            detail:
+              "Reorder a crew's stops (drag in Manual Route mode, or use Reverse) and click Save Order. That sets today's sequence AND remembers it for that crew on that weekday — so next Monday's board comes up already in the order you routed this Monday, instead of an unsorted crew grouping. Jobs with no remembered position sort to the bottom, which is your cue to place them; saving a day always wins over the remembered order, so a one-off change never overwrites the usual route.",
+          },
+          {
+            step: "Optimize Route",
+            detail:
+              "Reorders the stops in view by real driving time, anchored at the crew's starting address (Team > Crews) rather than at whichever stop happens to be listed first. The dropdown beside the button picks the direction: 'Nearest first' takes the closest stop each time (shortest total drive), 'Furthest first' drives out to the far end and works back in so the crew finishes near the yard. Anchoring only applies when every stop in view belongs to one crew — filter to a single crew first. An optimized order isn't saved until you click Save Order. Needs a Google Maps API key with the Distance Matrix API enabled, under Landscapt Settings > Integrations.",
+          },
+          {
             step: "Full guides",
             detail:
-              "Job types and Packages get their own deep dive; the Dispatch Board's status cycling and actual-hours calculation get a dedicated guide.",
+              "Job types and Packages get their own deep dive; the Dispatch Board's status cycling, stop order, and actual-hours calculation get a dedicated guide.",
             href: "/settings/support/jobs-packages-guide",
             linkLabel: "Open the Jobs & Packages guide",
           },
@@ -725,6 +736,56 @@ export const DOC_SECTIONS: DocSection[] = [
               "The day-to-day scheduling screen — status cycling, crew assignment, and exactly how actual hours are calculated when a crew doesn't clock in.",
             href: "/settings/support/dispatch-board-guide",
             linkLabel: "Open the Dispatch Board guide",
+          },
+        ],
+      },
+      {
+        id: "services-pricing",
+        title: "Services & Pricing",
+        summary: "The service catalog, bulk catalog price changes, and Price Adjustment runs that re-price live client work.",
+        icon: DollarSign,
+        steps: [
+          {
+            step: "Where it is",
+            detail:
+              "CRM > Services, titled 'Services & Pricing'. Three tabs: Service Catalog (your services, rate matrices and production rates), Price Adjustments (re-pricing existing client work), and Adjustment History (every run, with an undo).",
+          },
+          {
+            step: "Catalog rates vs. what actually bills",
+            detail:
+              "A service's default rate is a starting value — it fills in a price when that service is added to a NEW estimate, invoice or package. It is not what existing clients are billed. Each job keeps the rate it was sold at on its own Services tab, and that per-client rate is what an invoice is built from when a visit completes. Raising the catalog rate alone moves no money.",
+          },
+          {
+            step: "Bulk Prices (catalog)",
+            detail:
+              "On the Service Catalog tab, 'Bulk Prices' opens an editable grid with a Quick Adjust: percent or flat dollars, with rounding to the exact cent, nearest $0.25, $1 or $5. It acts on whatever matches the search box, so you can raise just mowing. Rate-matrix tiers and the overflow rate are included by default — for a matrix-priced service the tiers ARE the real price, so leave that on for a general increase. A percentage leaves a $0.00 row at $0.00; use a flat adjustment to price something that has none.",
+          },
+          {
+            step: "Price Adjustment runs (live work)",
+            detail:
+              "The Price Adjustments tab changes what clients are billed going forward. Pick percent or flat plus a rounding rule, choose targets (client job service rates, package monthly amounts, package service rates), optionally narrow by service and job type, then Preview changes. The preview is a line-by-line before/after naming each client and job, with the total change broken down per target. Name the run and apply. Signed contracts, already-issued invoices, and per-visit rate overrides are never touched.",
+          },
+          {
+            step: "Safety rails",
+            detail:
+              "Changing the form after previewing clears the preview and the Apply button, so you can never apply numbers you didn't look at. If anything changed in the background between preview and apply, the run stops and asks you to preview again rather than silently hitting a different set of rows.",
+          },
+          {
+            step: "Undoing a run",
+            detail:
+              "Adjustment History lists every run with an undo arrow that restores each line's original price. Undo deliberately skips any line you re-priced by hand since the run and tells you how many it left alone — a later manual decision is never thrown away. A reverted run stays in the history and can't be undone twice.",
+          },
+          {
+            step: "Permissions",
+            detail:
+              "Two separate keys under Scheduling > Service Access in Roles, both off by default for non-admin roles: 'Bulk Update Catalog Prices' shows the Bulk Prices button, 'Run Price Adjustments' shows the Price Adjustments and Adjustment History tabs. The second is enforced server-side, not just hidden in the UI.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "Which price lives where, what each tool touches, and how the undo's skip behaviour works.",
+            href: "/settings/support/services-pricing-guide",
+            linkLabel: "Open the Services & Pricing guide",
           },
         ],
       },
