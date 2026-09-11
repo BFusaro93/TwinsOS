@@ -1726,7 +1726,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             const stage = wonLostDialog;
             setWonLostDialog(null);
             handleStage(stage, reason);
-            if (stage === "accepted") setConvertDialogOpen(true);
+            // Only offer conversion when nothing has been created from this
+            // estimate yet. Re-confirming "Accepted" — to correct a won reason,
+            // say — used to reopen the convert dialog pre-populated even on an
+            // estimate that already had a job, and confirming it built a second
+            // job with a second set of visits and its own auto-invoice stream.
+            // The header button already swaps to "View Job" in this case; this
+            // was the path around it.
+            if (stage === "accepted" && estimateJobs.length === 0) setConvertDialogOpen(true);
           }}
           onCancel={() => setWonLostDialog(null)}
         />

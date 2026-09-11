@@ -291,8 +291,11 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.success("Job created from estimate");
       onConverted(jobId);
       onClose();
-    } catch {
-      toast.error("Failed to create job");
+    } catch (err) {
+      // Show the real reason where there is one — "already converted" in
+      // particular is actionable, and a bare "Failed to create job" invites
+      // the user to keep clicking.
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to create job");
     }
   }
 

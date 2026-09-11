@@ -1795,6 +1795,25 @@ export function useCreateJobsFromEstimate() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
+      // One estimate, one job. The UI hides the convert entry points once a
+      // job exists, but that was the only thing preventing a second
+      // conversion — and it was bypassable by re-confirming the "Accepted"
+      // stage, which reopened the dialog pre-populated. A second job means a
+      // second set of visits, each completing into its own invoice, so the
+      // client is billed the estimate twice. Checked here so every caller is
+      // covered, not just the one dialog.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingJobs } = await (supabase as any)
+        .from("crm_jobs")
+        .select("id")
+        .eq("estimate_id", estimateId)
+        .is("deleted_at", null)
+        .limit(1);
+      if (existingJobs && existingJobs.length > 0) {
+        throw new Error("This estimate has already been converted to a job.");
+      }
+
       const jobManCount = Math.max(1, Math.round(manCount ?? 1));
       const totalBudgetedHours = roundHours(services.reduce((s, sv) => s + (sv.budgetedHours ?? 0), 0));
 
@@ -1892,7 +1911,19 @@ export function useCreateJobsFromEstimate() {
               rate_cents: s.rateCents,
               sort_order: i,
               included: true,
-              budgeted_hours: roundHours(s.budgetedHours ?? 0),
+              // An estimate line's budgeted hours are MAN-hours: the estimate
+              // engine has no crew dimension (total_budgeted_hours is just
+              // hours × visits, and the cost auto-fill is hours × a
+              // per-man-hour breakeven rate), and a production rate is
+              // sq ft per man-hour. crm_job_services.budgeted_hours is
+              // per-person — crm_recompute_job_budgeted_hours rolls the job up
+              // as Σ(budgeted_hours × team_size). Writing man-hours straight in
+              // alongside team_size = crew size multiplied them a second time,
+              // so a 12-man-hour line on a 3-man crew reported 36 everywhere
+              // (job rollup, rpt_job_visits, rpt_job_services), inflating every
+              // budget-vs-actual variance and rev-per-man-hour by the crew size
+              // and leaving the estimate and the job disagreeing.
+              budgeted_hours: roundHours((s.budgetedHours ?? 0) / jobManCount),
               budget_method: s.budgetMethod ?? 'manual',
               team_size: jobManCount,
               days_count: 1,
