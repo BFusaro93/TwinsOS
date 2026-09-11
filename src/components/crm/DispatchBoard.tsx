@@ -1249,6 +1249,7 @@ function JobDetailSheet({
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
+import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey } from "@/lib/hooks/use-route-order";
 
 function PrintDialog({
   open, onOpenChange, visits, crews, selectedDate,
@@ -2733,6 +2734,11 @@ export function DispatchBoard() {
   const [optimizedOrder,     setOptimizedOrder]     = useState<string[] | null>(null);
   const [driveTimeMap,       setDriveTimeMap]       = useState<Map<string, number>>(new Map());
   const [totalDriveMins,     setTotalDriveMins]     = useState<number | null>(null);
+  const [shopLegMins,        setShopLegMins]        = useState<number | null>(null);
+  // Nearest-first leaves the shop and takes the closest stop each time;
+  // furthest-first drives out to the far end and works back in, so the crew
+  // finishes near the yard.
+  const [routeStrategy,      setRouteStrategy]      = useState<"nearest_first" | "furthest_first">("nearest_first");
 
   const effectiveEnd = endDate || undefined;
   const { data: visits, isLoading, refetch } = useVisitsForDate(selectedDate, effectiveEnd);
@@ -2743,6 +2749,10 @@ export function DispatchBoard() {
   // visible row would be its own N+1 problem.
   const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
   const { data: drivingCrewIds = new Set<string>() } = useDrivingCrewIds(selectedDate);
+  // Remembered per-(crew, weekday) stop order, used to seed a day that has
+  // never been saved so a recurring route doesn't have to be re-dragged weekly.
+  const { data: rememberedOrder } = useCrewRouteOrder(selectedDate, effectiveEnd);
+  const saveRouteOrder = useSaveRouteOrder();
   const allVisits = visits ?? [];
   // A "stop" (same client/day/crew/address) clocks in and out as one unit —
   // crm_crew_member_times rows are only ever written against the stop's
@@ -2843,12 +2853,24 @@ export function DispatchBoard() {
       const res = await fetch("/api/crm/route-optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitIds: targets.map((v) => v.id) }),
+        // Only anchor on a shop when every stop belongs to the same crew —
+        // a mixed-crew list has no single starting yard, and guessing one
+        // would skew the tour toward whichever crew happened to come first.
+        body: JSON.stringify({
+          visitIds: targets.map((v) => v.id),
+          strategy: routeStrategy,
+          crewId: (() => {
+            const ids = new Set(targets.map((v) => v.crewId ?? v.job?.crewId ?? null));
+            return ids.size === 1 ? [...ids][0] : null;
+          })(),
+        }),
       });
       const data = await res.json() as {
         orderedVisitIds?: string[];
         driveTimes?: { visitId: string; minutesToNext: number }[];
         totalDriveMinutes?: number;
+        shopLegMinutes?: number | null;
+        anchoredToShop?: boolean;
         error?: string;
       };
       if (!res.ok || data.error) {
@@ -2860,7 +2882,17 @@ export function DispatchBoard() {
       for (const dt of data.driveTimes ?? []) dtMap.set(dt.visitId, dt.minutesToNext);
       setDriveTimeMap(dtMap);
       setTotalDriveMins(data.totalDriveMinutes ?? null);
-      toast.success(`Route optimized — ${data.totalDriveMinutes} min total drive time`);
+      setShopLegMins(data.shopLegMinutes ?? null);
+      const legLabel =
+        data.shopLegMinutes != null
+          ? routeStrategy === "furthest_first"
+            ? `, ${data.shopLegMinutes} min back to the shop`
+            : `, ${data.shopLegMinutes} min out from the shop`
+          : "";
+      toast.success(
+        `Route optimized — ${data.totalDriveMinutes} min between stops${legLabel}` +
+          (data.anchoredToShop ? "" : " (no crew starting address set, so the route isn't anchored to a shop)")
+      );
     } catch {
       toast.error("Failed to reach route optimizer");
     } finally {
@@ -2872,6 +2904,7 @@ export function DispatchBoard() {
     setOptimizedOrder(null);
     setDriveTimeMap(new Map());
     setTotalDriveMins(null);
+    setShopLegMins(null);
   }
 
   function isVisible(col: ColKey) { return visibleKeys.includes(col); }
@@ -2914,13 +2947,54 @@ export function DispatchBoard() {
         if (bi === -1) return -1;
         return ai - bi;
       })
-    : [...filtered].sort((a, b) => {
-        const an = a.crewName ?? "";
-        const bn = b.crewName ?? "";
-        if (!an && bn) return 1;
-        if (an && !bn) return -1;
-        return an.localeCompare(bn);
-      });
+    : (() => {
+        // Crew, then this day's saved priority, then the order this crew was
+        // last routed in on this weekday.
+        //
+        // The remembered order is a TIEBREAKER rather than a fallback because
+        // crm_job_visits.priority is `not null default 1` — every visit has a
+        // priority from birth, so "has this day been saved?" cannot be read off
+        // the value itself. A saved day has distinct priorities 1..N and never
+        // reaches the tiebreak; an unsaved day has every visit sitting on the
+        // default 1, so the remembered position decides and next Monday comes
+        // up in the sequence this Monday was routed in. Jobs with nothing
+        // remembered sort last, which is the right prompt to place them.
+        const crewOf = (v: typeof filtered[number]) => v.crewId ?? v.job?.crewId ?? null;
+        const rememberedPos = (v: typeof filtered[number]) => {
+          const crew = crewOf(v);
+          if (!crew || !v.jobId) return Number.MAX_SAFE_INTEGER;
+          return rememberedOrder?.get(routeOrderKey(crew, v.jobId)) ?? Number.MAX_SAFE_INTEGER;
+        };
+
+        // Group on the EFFECTIVE crew name, not visit.crewName alone. A visit
+        // that inherits its crew from the job leaves crm_job_visits.crew_id
+        // null, so the crm_crews(name) join is null too — and grouping on that
+        // raw value sorted such a visit to the very end as if it were
+        // unassigned, even though every other part of this board (the crew
+        // column, the crew filter, the per-crew stop numbering) resolves it
+        // through the same `?? job` fallback used here.
+        const crewNameOf = (v: typeof filtered[number]) =>
+          v.crewName ?? v.job?.crewName ?? "";
+
+        return [...filtered].sort((a, b) => {
+          const an = crewNameOf(a);
+          const bn = crewNameOf(b);
+          if (!an && bn) return 1;
+          if (an && !bn) return -1;
+          const byCrew = an.localeCompare(bn);
+          if (byCrew !== 0) return byCrew;
+
+          const byPriority = (a.priority ?? 0) - (b.priority ?? 0);
+          if (byPriority !== 0) return byPriority;
+
+          const ap = rememberedPos(a);
+          const bp = rememberedPos(b);
+          if (ap !== bp) return ap - bp;
+          // Equal on every key — keep the query's own start_time/created_at
+          // order, which Array.sort preserves.
+          return 0;
+        });
+      })();
 
   // Order numbers and drag/drop reordering are scoped per crew — each crew
   // runs its own separate route, so "#3" should mean the 3rd stop for THAT
@@ -2989,22 +3063,22 @@ export function DispatchBoard() {
     let ptr = 0;
     const order = fullOrder.map((id) => (changedIds.has(id) ? changedOrder[ptr++] : id));
 
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await Promise.all(order.map((id, i) => (supabase as any).from("crm_job_visits").update({ priority: i + 1 }).eq("id", id)));
-    // Without this, the just-saved priorities only exist in the database —
-    // the visits list in memory still has the OLD priority values, so
-    // clearing manualOrder (which was the only thing keeping the new order
-    // on screen) snapped the table back to how it looked before saving,
-    // until something else happened to trigger a refetch.
-    await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    // One RPC instead of N parallel UPDATEs: those could half apply and leave
+    // a scrambled sequence with no sign anything failed. It also records the
+    // per-(crew, weekday) remembered order in the same transaction, so the
+    // next occurrence of this weekday comes up already in this sequence.
+    try {
+      await saveRouteOrder.mutateAsync(order);
+    } catch {
+      toast.error("Couldn't save the route order. Nothing was changed.");
+      return;
+    }
     setManualOrder(null);
     // An optimized-but-not-dragged order is saved via this same button (see
     // the banner below) — clear it too so the stale "Route optimized"
     // banner/highlight don't linger once the order is actually persisted.
     clearOptimization();
-    toast.success("Route order saved");
+    toast.success("Route order saved — this crew's order is remembered for this weekday.");
   }
 
   function handleDragStart(id: string) {
@@ -3175,14 +3249,31 @@ export function DispatchBoard() {
             <Users className="h-4 w-4" />
             Team Assign
           </Button>
-          <Button size="sm" variant="outline"
-            className={cn("h-9 text-sm gap-1.5 px-3", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
-            onClick={handleOptimizeRoute}
-            disabled={optimizing}
-          >
-            <Route className="h-4 w-4" />
-            {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
-          </Button>
+          <div className="flex items-center shrink-0">
+            <Button size="sm" variant="outline"
+              className={cn("h-9 rounded-r-none border-r-0 text-sm gap-1.5 px-3", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
+              onClick={handleOptimizeRoute}
+              disabled={optimizing}
+            >
+              <Route className="h-4 w-4" />
+              {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
+            </Button>
+            {/* Which way round the crew works the route. Nearest-first is the
+                shortest total drive; furthest-first ends the day near the
+                yard, which is usually what a crew actually wants. */}
+            <Select
+              value={routeStrategy}
+              onValueChange={(v) => { setRouteStrategy(v as "nearest_first" | "furthest_first"); clearOptimization(); }}
+            >
+              <SelectTrigger className={cn("h-9 w-[150px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nearest_first" className="text-xs">Nearest first</SelectItem>
+                <SelectItem value="furthest_first" className="text-xs">Furthest first</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
             onClick={() => { setNearbyOpen(true); findNearby(allVisits); }}
           >
@@ -3708,7 +3799,11 @@ export function DispatchBoard() {
         {optimizedOrder && totalDriveMins !== null && (
           <span className="ml-auto flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-blue-700 font-medium">
             <Route className="h-3 w-3" />
-            Route optimized · {totalDriveMins} min drive total
+            Route optimized · {routeStrategy === "furthest_first" ? "furthest first" : "nearest first"} ·{" "}
+            {totalDriveMins} min between stops
+            {shopLegMins !== null && (
+              <> · {shopLegMins} min {routeStrategy === "furthest_first" ? "back to shop" : "out from shop"}</>
+            )}
           </span>
         )}
       </div>
