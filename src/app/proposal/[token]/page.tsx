@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Loader2, MessageSquarePlus } from "lucide-react";
+import { CheckCircle2, Loader2, MessageSquarePlus, CreditCard } from "lucide-react";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
 import { groupIntoSections, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { unitLabel } from "@/lib/estimates/units";
@@ -14,6 +16,92 @@ import { looksLikeHtml, sanitizeHtml } from "@/lib/utils/sanitize-html";
 
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
+}
+
+interface DepositIntent {
+  clientSecret: string;
+  connectedAccountId: string;
+  livemode: boolean;
+  depositCents: number;
+}
+
+/**
+ * Card form for the deposit. Confirms the PaymentIntent, then hands back to
+ * the page to submit the acceptance.
+ *
+ * The charge is deliberately confirmed BEFORE the proposal is accepted: if
+ * acceptance then fails, the client still has a prepayment sitting as credit
+ * on their account, which staff can see and apply. The other order would take
+ * an acceptance with a deposit that silently never happened.
+ *
+ * Nothing here writes to our ledger. The signed Connect webhook records the
+ * charge as an unapplied prepayment, so closing the tab after paying still
+ * results in the money being recorded exactly once.
+ */
+function DepositCardForm({
+  depositCents,
+  brand,
+  onPaid,
+  onBack,
+  disabled,
+}: {
+  depositCents: number;
+  brand: string;
+  onPaid: () => void;
+  onBack: () => void;
+  disabled: boolean;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePay() {
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    setError(null);
+    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+    });
+    if (confirmError) {
+      setSubmitting(false);
+      setError(confirmError.message ?? "Payment failed");
+      return;
+    }
+    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
+      // Leave `submitting` true — onPaid immediately submits the acceptance,
+      // and re-enabling the Pay button in between invites a second charge.
+      onPaid();
+      return;
+    }
+    setSubmitting(false);
+    setError("Payment was not completed");
+  }
+
+  return (
+    <div className="space-y-4">
+      <PaymentElement />
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <div className="flex gap-3">
+        <Button
+          className="flex-1 h-11 text-base font-semibold"
+          style={{ backgroundColor: brand, borderColor: brand }}
+          disabled={!stripe || submitting || disabled}
+          onClick={handlePay}
+        >
+          {submitting ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing…</>
+          ) : (
+            <>Pay {cents(depositCents)} &amp; Accept</>
+          )}
+        </Button>
+        <Button variant="outline" className="h-11 px-5" disabled={submitting || disabled} onClick={onBack}>
+          Back
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 // Meta line combining visit count / qty (gated by showQuantities) and the
@@ -292,6 +380,8 @@ export default function ProposalPage() {
   const [depositMethod, setDepositMethod] = useState<'cash' | 'check' | 'ach' | 'credit_card' | 'other' | null>(null);
   const [depositReference, setDepositReference] = useState("");
   const [depositNotes, setDepositNotes] = useState("");
+  const [depositIntent, setDepositIntent] = useState<DepositIntent | null>(null);
+  const [startingCardPayment, setStartingCardPayment] = useState(false);
   // Pending accept payload — held while deposit step is shown
   const [pendingAcceptPayload, setPendingAcceptPayload] = useState<{
     acceptedByName: string;
@@ -434,6 +524,31 @@ export default function ProposalPage() {
     await submitAccept();
   }
 
+  /** Fetches a PaymentIntent for the deposit and switches the step into card
+   * mode. The amount comes from the server, never from this page. */
+  async function handleStartCardDeposit() {
+    setStartingCardPayment(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/public/proposals/${token}/deposit-intent`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't start the card payment");
+      setDepositIntent(data as DepositIntent);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't start the card payment");
+    } finally {
+      setStartingCardPayment(false);
+    }
+  }
+
+  /** The card charge succeeded. Accept the proposal WITHOUT any deposit
+   * fields: the Connect webhook records the payment and stamps the estimate's
+   * deposit_collected_* columns, so sending them from here would race it and
+   * could overwrite a real Stripe reference with a guess. */
+  async function handleCardDepositPaid() {
+    await submitAccept();
+  }
+
   // ── Loading / error states ──────────────────────────────────────────────────
   if (loading) {
     return (
@@ -457,6 +572,12 @@ export default function ProposalPage() {
   if (!proposal) return null;
 
   const brand = proposal.orgBrandColor;
+  // The server gate (cardDepositAvailable) checks the SECRET keys and the org's
+  // Connect status. Stripe.js additionally needs a publishable key for the
+  // matching mode — a test-mode Connect account can't be confirmed with the
+  // live publishable key. Without this second check the button would render
+  // and then dead-end on an Elements form that never mounts.
+  const canPayByCard = proposal.cardDepositAvailable && hasPublishableKey(proposal.orgLivemode);
 
   // ── Accepted confirmation screen ────────────────────────────────────────────
   if (accepted) {
@@ -684,6 +805,47 @@ export default function ProposalPage() {
             </p>
           </div>
 
+          {/* Real card payment, when the org has Connect set up. Shown above
+              the self-reported methods because it's the one that actually
+              moves money — but it is never the only option: paying by cheque
+              and Skip both stay available below. */}
+          {canPayByCard && !depositIntent && (
+            <div className="space-y-2">
+              <Button
+                className="h-11 w-full text-base font-semibold"
+                style={{ backgroundColor: brand, borderColor: brand }}
+                disabled={startingCardPayment || submitting}
+                onClick={handleStartCardDeposit}
+              >
+                {startingCardPayment ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
+                ) : (
+                  <><CreditCard className="mr-2 h-4 w-4" />Pay {cents(proposal.depositRequiredCents)} by card</>
+                )}
+              </Button>
+              <p className="text-center text-xs text-slate-400">
+                or tell us how you&apos;re sending it
+              </p>
+            </div>
+          )}
+
+          {canPayByCard && depositIntent && (
+            <Elements
+              stripe={getScopedStripeJs(depositIntent.connectedAccountId, depositIntent.livemode)}
+              options={{ clientSecret: depositIntent.clientSecret }}
+            >
+              <DepositCardForm
+                depositCents={depositIntent.depositCents}
+                brand={brand}
+                disabled={submitting}
+                onPaid={handleCardDepositPaid}
+                onBack={() => setDepositIntent(null)}
+              />
+            </Elements>
+          )}
+
+          {!depositIntent && (
+          <>
           <div className="space-y-2">
             <Label>Payment Method</Label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -714,12 +876,13 @@ export default function ProposalPage() {
                   }[method]}
                 </label>
               ))}
-              {/* Stripe placeholder */}
-              <div className="flex cursor-not-allowed items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-400">
-                Pay with Card
-                <span className="ml-1 rounded bg-slate-200 px-1 py-0.5 text-[10px] text-slate-500">coming soon</span>
-              </div>
             </div>
+            {canPayByCard && (
+              <p className="text-xs text-slate-400">
+                These just tell us to expect it — nothing is charged. Use{" "}
+                <strong>Pay by card</strong> above to pay now.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -766,6 +929,8 @@ export default function ProposalPage() {
               Skip for now
             </Button>
           </div>
+          </>
+          )}
         </div>
       )}
 

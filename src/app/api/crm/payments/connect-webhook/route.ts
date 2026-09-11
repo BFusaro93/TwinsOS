@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { statusForAccount } from "@/lib/stripe/connect";
 import { recordStripeCharge, accountOwnedByOrg } from "@/lib/stripe/record-charge";
+import { recordEstimateDepositCharge } from "@/lib/stripe/record-estimate-deposit";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
@@ -234,9 +235,14 @@ export async function POST(request: Request) {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const source = paymentIntent.metadata?.source;
       const result =
-        source === "crm_invoice_multi"
-          ? await applyCrmInvoiceMultiPayment(db, supabase, event)
-          : await applyCrmInvoicePayment(db, supabase, event);
+        source === "crm_estimate_deposit"
+          // A proposal deposit is taken before any invoice exists, so it is
+          // recorded as unapplied account credit rather than against a
+          // balance. This webhook is its only writer.
+          ? await recordEstimateDepositCharge({ db, paymentIntent, connectedAccountId: event.account })
+          : source === "crm_invoice_multi"
+            ? await applyCrmInvoiceMultiPayment(db, supabase, event)
+            : await applyCrmInvoicePayment(db, supabase, event);
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
       }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 
 // Public route — no auth. Uses service role to read across RLS.
 const serviceClient = () =>
@@ -81,7 +82,7 @@ export async function GET(
   // Fetch org
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, brand_color, address, customizations")
+    .select("name, brand_color, address, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode")
     .eq("id", shareToken.org_id)
     .single();
 
@@ -142,6 +143,15 @@ export async function GET(
 
     depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
     depositCollectedCents: (est.deposit_collected_cents as number) ?? 0,
+    // Whether the deposit step can offer a real card charge, or only the
+    // self-reported "I'll send a check" methods. Gated on the platform having
+    // Stripe keys AND this org having finished Connect onboarding — an org
+    // that hasn't still gets the manual methods and the Skip button.
+    cardDepositAvailable:
+      (isStripeConfigured() || isStripeTestConfigured()) &&
+      !!org?.stripe_connect_account_id &&
+      !!org?.stripe_connect_charges_enabled,
+    orgLivemode: org?.stripe_connect_livemode ?? true,
 
     lineItems,
     photos,

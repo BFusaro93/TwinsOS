@@ -125,6 +125,13 @@ export interface ProposalData {
   displaySettings: DisplaySettings;
   depositRequiredCents: number;
   depositCollectedCents: number;
+  /** True when the deposit step can take a real card payment — the platform
+   * has Stripe keys and this org has finished Connect onboarding. When false
+   * the step falls back to the self-reported methods and Skip. */
+  cardDepositAvailable: boolean;
+  /** The org's Connect mode, so Stripe.js is loaded with a matching
+   * publishable key (see getScopedStripeJs). */
+  orgLivemode: boolean;
   lineItems: ProposalLineItem[];
   photos: ProposalPhoto[];
 }

@@ -80,7 +80,7 @@ async function stripeForOrgConnectedAccount(db: Db, orgId: string): Promise<Stri
   return getStripeForOrg(data?.stripe_connect_livemode ?? null);
 }
 
-async function resolveMethod(
+export async function resolveMethod(
   db: Db,
   orgId: string,
   paymentIntent: Stripe.PaymentIntent,
