@@ -159,6 +159,17 @@ export default function OnlinePaymentsGuidePage() {
             then updates the invoice record once Stripe confirms it went through.
           </li>
           <li>
+            <strong>Proposal deposits are charged here too.</strong> An estimate with a Deposit
+            Required amount can take it by card as part of the client accepting the proposal. It runs
+            through the same connected account as everything else, but because it happens before any
+            invoice exists it&apos;s recorded as unapplied account credit rather than against a
+            balance — see the{" "}
+            <a href="/settings/support/estimating-guide#deposits" className="text-[#60ab45] hover:underline">
+              Estimating guide
+            </a>
+            . The other deposit methods on that page charge nothing.
+          </li>
+          <li>
             <strong>A refund comes out of unapplied credit before it comes off an invoice.</strong>{" "}
             When a payment is larger than what it was applied to — an overpayment, or a prepayment
             only partly used — the leftover sits on the payment as unapplied credit. Refunding now

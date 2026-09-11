@@ -47,6 +47,7 @@ export default function EstimatingGuidePage() {
           <TOCLink href="#reading-the-grid">Reading the line-item grid</TOCLink>
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
           <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
+          <TOCLink href="#deposits">Taking a deposit on acceptance</TOCLink>
           <TOCLink href="#converting">Converting an estimate to a job</TOCLink>
         </div>
       </div>
@@ -302,6 +303,42 @@ export default function EstimatingGuidePage() {
           &ldquo;View Your Proposal&rdquo; button when the estimate already has a live link, so you
           can click straight through from the preview. If no link exists yet, the preview shows a
           labelled placeholder and the link is generated the moment you send.
+        </Callout>
+      </Section>
+
+      <Section id="deposits" title="Taking a deposit on acceptance">
+        <p>
+          Set <strong>Deposit Required</strong> on the estimate header and the client is asked for it
+          as part of accepting the proposal, before the acceptance is recorded.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Pay by card</strong> charges the deposit through Stripe there and then. It appears
+            once your organisation has finished Stripe Connect setup; the amount always comes from
+            the estimate, so the client can&rsquo;t change what they&rsquo;re charged.
+          </li>
+          <li>
+            <strong>The manual methods</strong> (check, cash, ACH, credit card, other) do not charge
+            anything. They only record that the client says they&rsquo;re sending it, so you know to
+            expect it &mdash; and reconcile it as a normal payment when it lands.
+          </li>
+          <li>
+            <strong>Skip for now</strong> accepts the proposal with no deposit at all. A deposit never
+            blocks acceptance.
+          </li>
+        </ul>
+        <Callout>
+          <strong>A card deposit becomes account credit, not an invoice payment.</strong> It&rsquo;s
+          taken at acceptance, before any invoice for the work exists, so it lands on the client as
+          unapplied credit &mdash; visible on their record as a prepayment &mdash; and the first
+          invoice you raise for them settles against it automatically. If you refund it before it&rsquo;s
+          used, the refund comes out of that credit and touches no invoice.
+        </Callout>
+        <Callout>
+          Only the card path is real money. A client who picks &ldquo;Credit Card&rdquo; from the
+          manual list has told you they paid by card <em>somewhere else</em> &mdash; nothing was
+          charged here. The proposal page says so beneath those options whenever card payment is
+          available.
         </Callout>
       </Section>
 
