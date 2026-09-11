@@ -276,26 +276,19 @@ export async function POST(request: Request) {
         });
         if (refundErr) throw refundErr;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: allocations } = await (db as any)
-          .from("crm_payment_allocations")
-          .select("invoice_id, amount_cents")
-          .eq("payment_id", payment.id);
-
-        if (allocations && allocations.length > 0) {
-          const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
-          let remaining = deltaCents;
-          for (let i = 0; i < allocations.length; i++) {
-            const a = allocations[i];
-            const share = i === allocations.length - 1 ? remaining : Math.round((deltaCents * a.amount_cents) / totalAllocated);
-            remaining -= share;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if (share > 0) await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: a.invoice_id, p_delta_cents: -share });
-          }
-        } else if (payment.invoice_id) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: payment.invoice_id, p_delta_cents: -deltaCents });
-        }
+        // refund_payment() reverses the invoice side itself — it walks the
+        // allocation rows, reduces or deletes each one, and calls
+        // apply_payment_to_invoice(-share) per invoice, falling back to
+        // crm_payments.invoice_id when the payment has no allocations
+        // (20260908160000). This route used to repeat that reversal here,
+        // which double-counted every bank-returned ACH and every refund
+        // issued from the Stripe dashboard: on a full refund the RPC deletes
+        // the allocations, so the re-read below found none and the
+        // invoice_id fallback re-applied the WHOLE delta a second time. On an
+        // invoice paid by two cards, refunding one left the invoice showing
+        // the full balance again — the other payment's money vanished and the
+        // invoice went back into the autopay/"To Charge" queue, debiting the
+        // customer for money they had already paid. Do not reintroduce it.
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
