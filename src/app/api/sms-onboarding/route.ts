@@ -2,6 +2,41 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 
+// Maps a Zod issue's dot-path to the label shown on the actual form field
+// (SmsOnboardingSettings.tsx), so a validation failure names the field the
+// admin needs to go fix instead of surfacing Zod's raw message ("String must
+// contain at least 1 character(s)") — which says nothing about *which*
+// field, since every string field fails that same check the same way.
+const FIELD_LABELS: Record<string, string> = {
+  legal_business_name: "Legal business name",
+  ein: "EIN",
+  business_type: "Business type",
+  business_industry: "Industry",
+  business_website: "Website",
+  "business_address.street": "Street address",
+  "business_address.city": "City",
+  "business_address.region": "State",
+  "business_address.postal_code": "Zip",
+  "business_address.iso_country": "Country",
+  business_regions_of_operation: "Regions of operation",
+  contact_first_name: "Authorized representative first name",
+  contact_last_name: "Authorized representative last name",
+  contact_email: "Authorized representative email",
+  contact_phone: "Authorized representative phone",
+  support_email: "Support email",
+  support_phone: "Support phone",
+  opt_in_website_url: "Website opt-in URL",
+  opt_in_checkbox_label: "Website opt-in checkbox label",
+  verbal_opt_in_script: "Verbal opt-in script",
+};
+
+function describeValidationError(error: z.ZodError): string {
+  const fields = Array.from(
+    new Set(error.issues.map((issue) => FIELD_LABELS[issue.path.join(".")] ?? (issue.path.join(".") || "form")))
+  );
+  return `Missing or invalid: ${fields.join(", ")}`;
+}
+
 const businessInfoSchema = z.object({
   legal_business_name: z.string().min(1),
   ein: z.string().min(1),
@@ -72,7 +107,7 @@ export async function POST(request: Request) {
 
   const parsed = businessInfoSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return NextResponse.json({ error: describeValidationError(parsed.error) }, { status: 400 });
   }
 
   const { data: existing } = await supabase
