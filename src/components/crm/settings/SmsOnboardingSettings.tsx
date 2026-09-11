@@ -25,11 +25,17 @@ import {
 } from "@/lib/hooks/use-sms-onboarding";
 import { TWILIO_BUSINESS_INDUSTRIES, industryLabel } from "@/lib/twilio/industries";
 
-const EDITABLE_STATUSES: SmsRegistrationStatus[] = ["not_started", "profile_rejected", "brand_rejected", "campaign_rejected"];
+// Mirrors the API route's LOCKED_STATUSES (a blocklist, not an allowlist) —
+// editing is allowed any time nothing is actually in flight at Twilio right
+// now. An earlier version only allowed editing at not_started plus the
+// three _rejected statuses, which locked the form the moment the subaccount
+// was created — a correctable mistake (e.g. an invalid Industry value)
+// couldn't be fixed at all short of the 409 the save silently hit.
+const LOCKED_STATUSES: SmsRegistrationStatus[] = ["profile_submitted", "brand_submitted", "campaign_submitted", "complete"];
 
 // Statuses advanceRegistration() actually has a next step for (mirrors its
-// switch in provisioning.ts) — deliberately a SEPARATE list from
-// EDITABLE_STATUSES: "not_started" is both editable (the form should be
+// switch in provisioning.ts) — deliberately a SEPARATE list from whether the
+// form is editable: "not_started" is both editable (the form should be
 // fillable) and advanceable (there's a next step once it's saved), so
 // gating the button on "not editable" hid it at exactly the moment it's
 // needed most, right after the first save.
@@ -100,7 +106,7 @@ export function SmsOnboardingSettings() {
   }
 
   const status = registration?.status ?? "not_started";
-  const isEditable = EDITABLE_STATUSES.includes(status);
+  const isEditable = !LOCKED_STATUSES.includes(status);
   const failureReason = registration?.twilio_brand_failure_reason || registration?.twilio_campaign_failure_reason;
 
   async function handleSave() {

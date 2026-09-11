@@ -117,18 +117,25 @@ export async function POST(request: Request) {
     .eq("org_id", ctx.orgId)
     .maybeSingle();
 
+  // Editing is allowed any time nothing is actually in flight at Twilio right
+  // now — that's every status except the three async-review states and
+  // "complete". This is deliberately a blocklist, not an allowlist: an
+  // earlier version only allowed editing at not_started plus the three
+  // _rejected statuses, which meant a perfectly correctable mistake (e.g. an
+  // invalid Industry value) couldn't be fixed at all once the subaccount had
+  // been created — the save silently 409'd instead.
+  const LOCKED_STATUSES = new Set(["profile_submitted", "brand_submitted", "campaign_submitted", "complete"]);
   // A rejection only invalidates the step that failed — resetting further
   // back than that would needlessly re-create a subaccount or re-submit an
-  // already-approved profile. Only fields for the failed step (and anything
-  // after it) actually change on resubmit, so keeping earlier state is safe.
-  const resetTarget: Record<string, string> = {
-    not_started: "not_started",
+  // already-approved profile. Editing at any other status just updates the
+  // fields in place; there's nothing to roll back since nothing failed.
+  const REJECTION_RESET: Record<string, string> = {
     profile_rejected: "subaccount_created",
     brand_rejected: "profile_approved",
     campaign_rejected: "brand_approved",
   };
   const status = existing?.status ?? "not_started";
-  if (!(status in resetTarget)) {
+  if (LOCKED_STATUSES.has(status)) {
     return NextResponse.json(
       { error: `Cannot edit business info while status is "${status}" — already submitted to Twilio` },
       { status: 409 }
@@ -140,7 +147,7 @@ export async function POST(request: Request) {
       org_id: ctx.orgId,
       created_by: ctx.userId,
       ...parsed.data,
-      status: resetTarget[status],
+      status: REJECTION_RESET[status] ?? status,
     },
     { onConflict: "org_id" }
   );
