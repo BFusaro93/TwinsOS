@@ -216,7 +216,11 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     body: {
       Type: "customer_profile_address",
       FriendlyName: "Business Address",
-      Attributes: JSON.stringify({ address_sids: [address.sid] }),
+      // A single string SID, NOT a JSON array — confirmed directly against
+      // the real API: wrapping it in an array makes Twilio reject the whole
+      // request body as unparseable JSON (a lower-level type-schema failure,
+      // not a normal 400 validation error), while a bare string is accepted.
+      Attributes: JSON.stringify({ address_sids: address.sid }),
     },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {
