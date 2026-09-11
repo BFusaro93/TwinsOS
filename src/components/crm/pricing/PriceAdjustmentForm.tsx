@@ -62,6 +62,12 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
   const [serviceSearch, setServiceSearch] = useState("");
   const [result, setResult] = useState<PriceAdjustmentPreview | null>(null);
   const [rowSearch, setRowSearch] = useState("");
+  /**
+   * Lines the user has unticked. Tracked as exclusions rather than inclusions
+   * so a fresh preview starts with everything selected — the common case is
+   * "raise all of these except the two I've promised a rate to".
+   */
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
   const numericAmount = useMemo(() => {
     const raw = Number(amount);
@@ -70,10 +76,32 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
     return method === "percent" ? raw : Math.round(raw * 100);
   }, [amount, method]);
 
+  const rowKey = (c: { entityType: string; entityId: string }) => `${c.entityType}:${c.entityId}`;
+
+  // Only rows whose price actually moves are selectable; the unchanged ones are
+  // shown for context and can't be applied either way.
+  const changedRows = (result?.candidates ?? []).filter(
+    (c) => c.newRateCents !== c.oldRateCents
+  );
+  const selectedRows = changedRows.filter((c) => !excluded.has(rowKey(c)));
+  const selectedDelta = selectedRows.reduce(
+    (sum, c) => sum + (c.newRateCents - c.oldRateCents),
+    0
+  );
+  const selectedByTarget = ADJUST_TARGETS.reduce(
+    (acc, t) => {
+      const rows = selectedRows.filter((c) => c.entityType === t);
+      acc.counts[t] = rows.length;
+      acc.deltas[t] = rows.reduce((s, c) => s + (c.newRateCents - c.oldRateCents), 0);
+      return acc;
+    },
+    { counts: {} as Record<AdjustTarget, number>, deltas: {} as Record<AdjustTarget, number> }
+  );
+
   const canPreview = numericAmount !== null && targets.length > 0;
   // A run is only applied from a preview the user is currently looking at —
   // never straight from the form.
-  const canApply = !!result && result.changedCount > 0 && name.trim().length > 0;
+  const canApply = !!result && selectedRows.length > 0 && name.trim().length > 0;
 
   const filteredServices = services.filter(
     (s) => !serviceSearch || s.name.toLowerCase().includes(serviceSearch.toLowerCase())
@@ -98,34 +126,64 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
   // ends up applying numbers they never actually saw.
   function invalidatePreview() {
     if (result) setResult(null);
+    if (excluded.size > 0) setExcluded(new Set());
   }
 
   function handlePreview() {
     if (!canPreview) return;
     preview.mutate(buildInput(), {
-      onSuccess: (data) => setResult(data),
+      onSuccess: (data) => {
+        setResult(data);
+        setExcluded(new Set());
+      },
       onError: (e) => toast.error(e instanceof Error ? e.message : "Preview failed"),
     });
   }
 
   function handleApply() {
     if (!canApply || !result) return;
-    const count = result.changedCount;
+    const count = selectedRows.length;
+    const skippedNote =
+      excluded.size > 0
+        ? `\n\n${excluded.size} line${excluded.size !== 1 ? "s" : ""} you unticked will be left alone.`
+        : "";
     if (
       !confirm(
-        `Re-price ${count} line${count !== 1 ? "s" : ""} by ${signedCurrency(result.deltaCents)}?\n\n` +
-          `This changes what customers are billed going forward. It can be undone from the run history.`
+        `Re-price ${count} line${count !== 1 ? "s" : ""} by ${signedCurrency(selectedDelta)}?` +
+          skippedNote +
+          `\n\nThis changes what customers are billed going forward. It can be undone from the run history.`
       )
     ) {
       return;
     }
 
     apply.mutate(
-      { ...buildInput(), name: name.trim(), notes: notes.trim() || undefined, expectedLineCount: count },
       {
-        onSuccess: ({ lineCount }) => {
-          toast.success(`Applied — ${lineCount} line${lineCount !== 1 ? "s" : ""} re-priced.`);
+        ...buildInput(),
+        name: name.trim(),
+        notes: notes.trim() || undefined,
+        selected: selectedRows.map((c) => ({
+          entityType: c.entityType,
+          entityId: c.entityId,
+          oldRateCents: c.oldRateCents,
+        })),
+      },
+      {
+        onSuccess: ({ lineCount, skipped }) => {
+          // A skip here means a line's price moved between preview and apply,
+          // so it was deliberately left alone rather than re-priced from a
+          // number the user never saw.
+          if (skipped > 0) {
+            toast.warning(
+              `Applied — ${lineCount} line${lineCount !== 1 ? "s" : ""} re-priced, ` +
+                `${skipped} skipped because ${skipped === 1 ? "its price" : "their prices"} changed since the preview.`,
+              { duration: 10000 }
+            );
+          } else {
+            toast.success(`Applied — ${lineCount} line${lineCount !== 1 ? "s" : ""} re-priced.`);
+          }
           setResult(null);
+          setExcluded(new Set());
           setName("");
           setNotes("");
           setAmount("");
@@ -139,6 +197,31 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
   const visibleRows = (result?.candidates ?? []).filter(
     (c) => !rowSearch || c.label.toLowerCase().includes(rowSearch.toLowerCase())
   );
+  const visibleChangedRows = visibleRows.filter((c) => c.newRateCents !== c.oldRateCents);
+
+  function setSelectionForRows(
+    rows: { entityType: string; entityId: string }[],
+    include: boolean
+  ) {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      for (const r of rows) {
+        if (include) next.delete(rowKey(r));
+        else next.add(rowKey(r));
+      }
+      return next;
+    });
+  }
+
+  function toggleRow(c: { entityType: string; entityId: string }) {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      const k = rowKey(c);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -285,21 +368,34 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
           <div className="border-b p-4">
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
               <div>
-                <p className="text-xs text-slate-500">Lines changing</p>
+                <p className="text-xs text-slate-500">Lines selected</p>
                 <p className="text-xl font-semibold tabular-nums text-slate-900">
-                  {result.changedCount}
+                  {selectedRows.length}
+                  {excluded.size > 0 && (
+                    <span className="ml-1 text-sm font-normal text-slate-400">
+                      of {changedRows.length}
+                    </span>
+                  )}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-slate-500">Total change</p>
                 <p
                   className={`text-xl font-semibold tabular-nums ${
-                    result.deltaCents > 0 ? "text-emerald-600" : result.deltaCents < 0 ? "text-red-600" : "text-slate-900"
+                    selectedDelta > 0 ? "text-emerald-600" : selectedDelta < 0 ? "text-red-600" : "text-slate-900"
                   }`}
                 >
-                  {signedCurrency(result.deltaCents)}
+                  {signedCurrency(selectedDelta)}
                 </p>
               </div>
+              {excluded.size > 0 && (
+                <div>
+                  <p className="text-xs text-slate-500">Excluded by you</p>
+                  <p className="text-xl font-semibold tabular-nums text-amber-600">
+                    {excluded.size}
+                  </p>
+                </div>
+              )}
               {result.unchangedCount > 0 && (
                 <div>
                   <p className="text-xs text-slate-500">Matched but unchanged</p>
@@ -312,15 +408,20 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
             {/* Per-target totals, because a job service rate is per billing
                 period and a package amount is per month — summing them into
                 one figure would be apples and oranges. */}
-            {result.changedCount > 0 && (
+            {selectedRows.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
-                {ADJUST_TARGETS.filter((t) => result.countsByTarget[t] > 0).map((t) => (
+                {ADJUST_TARGETS.filter((t) => selectedByTarget.counts[t] > 0).map((t) => (
                   <span key={t}>
-                    {TARGET_LABELS[t]}: <strong className="text-slate-700">{result.countsByTarget[t]}</strong>{" "}
-                    ({signedCurrency(result.deltaByTarget[t])})
+                    {TARGET_LABELS[t]}: <strong className="text-slate-700">{selectedByTarget.counts[t]}</strong>{" "}
+                    ({signedCurrency(selectedByTarget.deltas[t])})
                   </span>
                 ))}
               </div>
+            )}
+            {result.changedCount > 0 && selectedRows.length === 0 && (
+              <p className="mt-3 text-sm text-amber-600">
+                Every line is unticked — nothing would change. Tick at least one to apply.
+              </p>
             )}
             {result.changedCount === 0 && (
               <p className="mt-3 text-sm text-amber-600">
@@ -332,8 +433,8 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
 
           {result.candidates.length > 0 && (
             <>
-              <div className="border-b p-3">
-                <div className="relative">
+              <div className="flex flex-wrap items-center gap-2 border-b p-3">
+                <div className="relative min-w-[200px] flex-1">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                   <Input
                     placeholder="Search these lines…"
@@ -342,11 +443,45 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                     className="pl-8 text-sm"
                   />
                 </div>
+                {/* Bulk actions act on what the search is showing, so you can
+                    exclude a whole client or service in one go: search their
+                    name, Exclude shown, then clear the search. */}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectionForRows(visibleChangedRows, true)}
+                  disabled={visibleChangedRows.length === 0}
+                >
+                  {rowSearch ? "Include shown" : "Include all"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectionForRows(visibleChangedRows, false)}
+                  disabled={visibleChangedRows.length === 0}
+                >
+                  {rowSearch ? "Exclude shown" : "Exclude all"}
+                </Button>
               </div>
               <div className="max-h-[420px] overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-slate-50">
                     <tr className="border-b text-left text-xs text-slate-500">
+                      <th className="w-10 px-4 py-2 font-medium">
+                        <Checkbox
+                          aria-label="Include or exclude every line shown"
+                          checked={
+                            visibleChangedRows.length > 0 &&
+                            visibleChangedRows.every((c) => !excluded.has(rowKey(c)))
+                          }
+                          onCheckedChange={(checked) =>
+                            setSelectionForRows(visibleChangedRows, checked === true)
+                          }
+                          disabled={visibleChangedRows.length === 0}
+                        />
+                      </th>
                       <th className="px-4 py-2 font-medium">Line</th>
                       <th className="w-28 px-4 py-2 text-right font-medium">Current</th>
                       <th className="w-28 px-4 py-2 text-right font-medium">New</th>
@@ -356,31 +491,60 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                   <tbody>
                     {visibleRows.map((c) => {
                       const delta = c.newRateCents - c.oldRateCents;
+                      const isOut = excluded.has(rowKey(c));
                       return (
                         <tr
                           key={`${c.entityType}-${c.entityId}`}
-                          className={`border-b last:border-0 ${delta === 0 ? "text-slate-400" : ""}`}
+                          className={`border-b last:border-0 ${
+                            delta === 0 ? "text-slate-400" : isOut ? "bg-slate-50 text-slate-400" : ""
+                          }`}
                         >
-                          <td className="px-4 py-2">{c.label}</td>
+                          <td className="px-4 py-2">
+                            {delta !== 0 && (
+                              <Checkbox
+                                aria-label={`Include ${c.label}`}
+                                checked={!isOut}
+                                onCheckedChange={() => toggleRow(c)}
+                              />
+                            )}
+                          </td>
+                          <td className="px-4 py-2">
+                            {c.label}
+                            {isOut && (
+                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                excluded
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-right tabular-nums">
                             {formatCurrency(c.oldRateCents)}
                           </td>
-                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                          <td
+                            className={`px-4 py-2 text-right tabular-nums font-medium ${
+                              isOut ? "line-through" : ""
+                            }`}
+                          >
                             {formatCurrency(c.newRateCents)}
                           </td>
                           <td
                             className={`px-4 py-2 text-right tabular-nums ${
-                              delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-600" : ""
+                              isOut
+                                ? ""
+                                : delta > 0
+                                ? "text-emerald-600"
+                                : delta < 0
+                                ? "text-red-600"
+                                : ""
                             }`}
                           >
-                            {delta === 0 ? "—" : signedCurrency(delta)}
+                            {delta === 0 ? "—" : isOut ? "no change" : signedCurrency(delta)}
                           </td>
                         </tr>
                       );
                     })}
                     {visibleRows.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                           No lines match your search.
                         </td>
                       </tr>
@@ -416,7 +580,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                 {apply.isPending ? (
                   <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Applying…</>
                 ) : (
-                  `Apply to ${result.changedCount} line${result.changedCount !== 1 ? "s" : ""}`
+                  `Apply to ${selectedRows.length} line${selectedRows.length !== 1 ? "s" : ""}`
                 )}
               </Button>
             </div>

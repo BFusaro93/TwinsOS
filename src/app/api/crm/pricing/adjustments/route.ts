@@ -80,46 +80,12 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { name, method, amount, rounding, scope, targets, notes, expectedLineCount } = parsed.data;
+  const { name, method, amount, rounding, scope, targets, notes, selected } = parsed.data;
 
-  // Re-run the candidate query before writing. If the set has moved since the
-  // user previewed it — a job created, a rate edited, a package archived — the
-  // number they approved is no longer the number that would be written, so
-  // stop and make them look again rather than silently re-pricing more (or
-  // fewer) rows than they signed off on.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: candidates, error: previewError } = await (supabase.rpc as any)(
-    "crm_price_adjustment_candidates",
-    { p_method: method, p_amount: amount, p_rounding: rounding, p_scope: scope, p_targets: targets }
-  );
-  if (previewError) {
-    logger.error("[pricing/adjustments] re-preview failed", { error: previewError.message });
-    return NextResponse.json({ error: "Failed to verify the adjustment" }, { status: 500 });
-  }
-
-  const changed = ((candidates ?? []) as { old_rate_cents: number; new_rate_cents: number }[])
-    .filter((c) => c.new_rate_cents !== c.old_rate_cents).length;
-
-  if (changed !== expectedLineCount) {
-    return NextResponse.json(
-      {
-        error:
-          `This would now change ${changed} line${changed !== 1 ? "s" : ""}, not the ` +
-          `${expectedLineCount} shown in your preview. Something changed in the meantime — ` +
-          `re-run the preview and check it before applying.`,
-        actualLineCount: changed,
-      },
-      { status: 409 }
-    );
-  }
-
-  if (changed === 0) {
-    return NextResponse.json(
-      { error: "Nothing to change — this adjustment moves no prices." },
-      { status: 422 }
-    );
-  }
-
+  // The RPC recomputes every price itself and writes only the selected rows
+  // whose live price still equals what the preview showed — so a row edited in
+  // the meantime is skipped rather than re-priced from a number the user never
+  // approved, and rows that appeared after the preview are never swept in.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: runId, error } = await (supabase.rpc as any)("crm_apply_price_adjustment", {
     p_name: name,
@@ -129,12 +95,43 @@ export async function POST(request: Request) {
     p_scope: scope,
     p_targets: targets,
     p_notes: notes ?? null,
+    p_selected: selected.map((l) => ({
+      entity_type: l.entityType,
+      entity_id: l.entityId,
+      old_rate_cents: l.oldRateCents,
+    })),
   });
 
   if (error) {
+    // The RPC raises when nothing selected still matches, which is the user's
+    // problem to see and act on, not a server fault.
+    if (/still match the preview/i.test(error.message)) {
+      return NextResponse.json(
+        {
+          error:
+            "None of the lines you selected still match the preview — their prices " +
+            "changed in the meantime. Preview again and check before applying.",
+        },
+        { status: 409 }
+      );
+    }
     logger.error("[pricing/adjustments] apply failed", { error: error.message });
     return NextResponse.json({ error: "Failed to apply the adjustment" }, { status: 500 });
   }
 
-  return NextResponse.json({ id: runId, lineCount: changed });
+  // Read back what actually landed: fewer than selected means some rows drifted
+  // between preview and apply and were deliberately skipped.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: run } = await (supabase as any)
+    .from("crm_price_adjustments")
+    .select("line_count")
+    .eq("id", runId)
+    .maybeSingle();
+
+  const lineCount = (run?.line_count as number | undefined) ?? selected.length;
+  return NextResponse.json({
+    id: runId,
+    lineCount,
+    skipped: Math.max(0, selected.length - lineCount),
+  });
 }

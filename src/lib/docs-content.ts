@@ -766,9 +766,14 @@ export const DOC_SECTIONS: DocSection[] = [
               "The Price Adjustments tab changes what clients are billed going forward. Pick percent or flat plus a rounding rule, choose targets (client job service rates, package monthly amounts, package service rates), optionally narrow by service and job type, then Preview changes. The preview is a line-by-line before/after naming each client and job, with the total change broken down per target. Name the run and apply. Signed contracts, already-issued invoices, and per-visit rate overrides are never touched.",
           },
           {
+            step: "Leaving a customer out",
+            detail:
+              "Every line in the preview has a checkbox, ticked by default. Untick one and it's struck through, badged 'excluded', and dropped from the selected count and the total — so a price increase that shouldn't cover a promised-rate account doesn't need its own narrower run. To skip a whole client or service at once, search their name in 'Search these lines' and use Exclude shown, which acts only on what the search is displaying; the header checkbox does the same. The confirmation states both numbers before writing: 'Re-price 12 lines by +$201.00? 3 lines you unticked will be left alone.'",
+          },
+          {
             step: "Safety rails",
             detail:
-              "Changing the form after previewing clears the preview and the Apply button, so you can never apply numbers you didn't look at. If anything changed in the background between preview and apply, the run stops and asks you to preview again rather than silently hitting a different set of rows.",
+              "Changing the form after previewing clears the preview, your ticks and the Apply button, so you can't apply numbers you didn't look at. A run only ever touches lines you ticked, so rows created after your preview are never swept in — and if one of those lines was re-priced by someone else in the meantime it's skipped rather than increased from a figure you never saw, with the toast reporting how many.",
           },
           {
             step: "Undoing a run",

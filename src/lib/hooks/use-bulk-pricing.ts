@@ -152,7 +152,7 @@ export function useApplyPriceAdjustment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: ApplyPriceAdjustmentInput) =>
-      postJson<{ id: string; lineCount: number }>("/api/crm/pricing/adjustments", input),
+      postJson<{ id: string; lineCount: number; skipped: number }>("/api/crm/pricing/adjustments", input),
     onSuccess: () => {
       // A run rewrites job service rates, which the rollup trigger cascades
       // into crm_jobs.rate_cents — so job, visit and package caches are all

@@ -46,16 +46,26 @@ const baseAdjustment = {
 
 export const previewPriceAdjustmentSchema = z.object(baseAdjustment);
 
+/**
+ * One line the user ticked in the preview, carrying the price they were shown.
+ * Apply recomputes the NEW price server-side — this says which rows move, not
+ * what they move to — and skips any row whose live price no longer matches
+ * `oldRateCents`, so a run can never apply an increase calculated from a
+ * number that was never on screen.
+ */
+export const priceAdjustmentSelectionSchema = z.object({
+  entityType: z.enum(ADJUST_TARGETS),
+  entityId: z.string().uuid(),
+  oldRateCents: z.number().int(),
+});
+
 export const applyPriceAdjustmentSchema = z.object({
   ...baseAdjustment,
   name: z.string().trim().min(1, "Name is required").max(200),
   notes: z.string().trim().max(2000).optional(),
-  /**
-   * The line count the user actually saw in the preview. Apply recomputes the
-   * candidate set server-side and refuses if it no longer matches, so a run
-   * can't quietly hit rows that appeared after the preview was rendered.
-   */
-  expectedLineCount: z.number().int().nonnegative(),
+  selected: z
+    .array(priceAdjustmentSelectionSchema)
+    .min(1, "Select at least one line to apply"),
 });
 
 export type PreviewPriceAdjustmentInput = z.infer<typeof previewPriceAdjustmentSchema>;

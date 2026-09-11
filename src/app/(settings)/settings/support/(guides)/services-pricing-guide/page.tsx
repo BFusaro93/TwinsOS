@@ -161,10 +161,38 @@ export default function ServicesPricingGuidePage() {
             move, with the total change and a count of rows matched but left alone.
           </li>
           <li>
+            <strong>Tick the lines you actually want</strong> — see below. Everything starts ticked.
+          </li>
+          <li>
             <strong>Name the run and apply.</strong> A name is required, because that&apos;s what you&apos;ll
             look for later if you need to undo it.
           </li>
         </ol>
+
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+          Leaving a customer out
+        </h3>
+        <p>
+          A price increase rarely covers everyone — one account is on a promised rate, another was
+          just re-quoted. Every line in the preview has a checkbox, ticked by default. Untick a line
+          and it&apos;s struck through, badged <strong>excluded</strong>, and dropped from the
+          selected count and the total, which update as you go. You don&apos;t need a separate,
+          narrower run to skip a few accounts.
+        </p>
+        <p>
+          To leave out a whole client or service at once, type their name into{" "}
+          <strong>Search these lines</strong> — the buttons become{" "}
+          <strong>Include shown</strong> and <strong>Exclude shown</strong>, acting only on what the
+          search is currently showing. Exclude them, then clear the search to see the full list again
+          with those lines unticked. The checkbox in the table header does the same for everything
+          currently visible.
+        </p>
+        <Callout>
+          The confirmation spells out both numbers before anything is written — &quot;Re-price 12
+          lines by +$201.00? 3 lines you unticked will be left alone.&quot; The run itself records
+          only the lines you applied, so an undo later restores exactly those and never touches the
+          ones you deliberately skipped.
+        </Callout>
         <p>
           Job service rates are shown per client and job (&quot;Ralph Fusaro · Lawn Mowing (Job
           #14)&quot;), so you can scan exactly who is affected before committing. The summary breaks
@@ -177,11 +205,11 @@ export default function ServicesPricingGuidePage() {
           re-pricing a signed agreement is a conversation, not a bulk operation.
         </Callout>
         <p>
-          If you change the form after previewing, the preview disappears and the Apply button goes
-          with it — so you can never apply numbers you didn&apos;t actually look at. And if anything
-          changed in the background between your preview and your apply (someone added a job, edited
-          a rate), the run stops and asks you to preview again rather than quietly affecting a
-          different set of rows.
+          If you change the form after previewing, the preview disappears — along with your ticks and
+          the Apply button — so you can never apply numbers you didn&apos;t actually look at. Rows
+          created after you previewed are never swept in, because a run only ever touches lines you
+          ticked. And if one of those lines was re-priced by someone else in the meantime, it&apos;s
+          skipped rather than increased from a figure you never saw; the toast tells you how many.
         </p>
       </Section>
 
