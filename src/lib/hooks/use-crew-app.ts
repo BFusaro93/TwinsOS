@@ -18,7 +18,76 @@ async function getAuthContext() {
     .select("org_id")
     .eq("id", user.id)
     .single();
-  return { supabase, userId: user.id, orgId: profile.org_id as string };
+  // crew_hide_pricing decides the SHAPE of the queries below, not just what
+  // the page renders — see crewVisitSelect().
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase as any)
+    .from("organizations")
+    .select("crew_hide_pricing")
+    .eq("id", profile.org_id)
+    .single();
+  return {
+    supabase,
+    userId: user.id,
+    orgId: profile.org_id as string,
+    hidePricing: org?.crew_hide_pricing === true,
+  };
+}
+
+/**
+ * Columns the crew tablet reads. Deliberately enumerated rather than `*`.
+ *
+ * crew_hide_pricing used to be applied only at the last moment, by skipping a
+ * <p> in the stop page — every crew device still received the full
+ * crm_job_visits row (rate_cents, qty), the full crm_jobs row, and every
+ * crm_job_services row with its rate. "Hidden" pricing was one devtools
+ * Network tab away, on a shared tablet. Now the rate simply is not requested
+ * when the org has hidden it.
+ *
+ * The visit- and job-level rate_cents are dropped unconditionally: nothing in
+ * the crew UI reads them (the stop page reads the *service* rate), so there is
+ * no reason to ship them to a field device either way.
+ *
+ * Enumerating also means a newly added column is not automatically exposed to
+ * crew — the right default for this surface. Anything genuinely needed here
+ * has to be added on purpose, and mapVisit()/mapJobRow() are the checklist.
+ */
+function crewVisitSelect(hidePricing: boolean): string {
+  const serviceCols = [
+    "id", "job_id", "service_id", "service_name", "qty",
+    "budgeted_hours", "team_size", "sort_order",
+    ...(hidePricing ? [] : ["rate_cents"]),
+  ].join(", ");
+
+  // NB: no notes_to_client — crm_jobs has no such column. mapJobRow() reads it
+  // and so has always produced null here; under `*` that was invisible, but
+  // naming a non-existent column explicitly makes PostgREST 400 the whole
+  // request. The visit-level notes_to_client (which does exist) is unaffected.
+  const jobCols = [
+    "id", "org_id", "client_id", "property_id", "job_type", "status",
+    "notes_to_crew", "notes",
+    "service_address", "service_city", "service_state", "service_zip",
+    "budgeted_hours",
+  ].join(", ");
+
+  const visitCols = [
+    "id", "org_id", "job_id", "client_id", "job_service_id",
+    "storm_event_id", "snow_depth_inches", "temperature", "asset_type",
+    "crew_id", "scheduled_date", "start_time", "end_time",
+    "status", "sub_status", "completion_notes", "actual_hours", "completed_at",
+    "priority", "notes_to_crew", "notes_to_client", "invoice_description",
+    "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
+    "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes",
+    "acknowledged_notes_at", "skip_reason",
+    "created_at", "updated_at", "deleted_at",
+  ].join(", ");
+
+  return `
+    ${visitCols},
+    clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+    crm_crews(name),
+    crm_jobs(${jobCols}, crm_job_services(${serviceCols}))
+  `;
 }
 
 function mapJobRow(job: Record<string, unknown>): CRMJob {
@@ -117,7 +186,7 @@ export function useMyCrewVisits(date: string) {
   return useQuery<CRMJobVisit[]>({
     queryKey: ["crew-app-visits", date],
     queryFn: async () => {
-      const { supabase, userId } = await getAuthContext();
+      const { supabase, userId, hidePricing } = await getAuthContext();
 
       // Crew accounts log in as the crew itself — find the crew by user_id on crm_crews
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,12 +202,7 @@ export function useMyCrewVisits(date: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_job_visits")
-        .select(`
-          *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
-          crm_crews(name),
-          crm_jobs(*, crm_job_services(*))
-        `)
+        .select(crewVisitSelect(hidePricing))
         .eq("scheduled_date", date)
         .eq("crew_id", membership.crew_id)
         .is("deleted_at", null)
@@ -168,16 +232,11 @@ export function useVisitDetail(visitId: string) {
   return useQuery<CRMJobVisit | null>({
     queryKey: ["crew-app-visit", visitId],
     queryFn: async () => {
-      const { supabase } = await getAuthContext();
+      const { supabase, hidePricing } = await getAuthContext();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_job_visits")
-        .select(`
-          *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
-          crm_crews(name),
-          crm_jobs(*, crm_job_services(*))
-        `)
+        .select(crewVisitSelect(hidePricing))
         .eq("id", visitId)
         .is("deleted_at", null)
         .single();
@@ -198,21 +257,31 @@ export function useStopDetail(anchorVisitId: string) {
   return useQuery<Stop | null>({
     queryKey: ["crew-app-stop", anchorVisitId],
     queryFn: async () => {
-      const { supabase } = await getAuthContext();
-      const select = `
-        *,
-        clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
-        crm_crews(name),
-        crm_jobs(*, crm_job_services(*))
-      `;
+      const { supabase, userId, hidePricing } = await getAuthContext();
+      const select = crewVisitSelect(hidePricing);
+
+      // Scope the anchor to the caller's own crew. This used to fetch any
+      // visit by id, so a crew account could deep-link
+      // /crm/crew/stops/<any visit id> and pull up another crew's stop —
+      // client, address, notes and (before the select was narrowed) pricing.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: crew } = await (supabase as any)
+        .from("crm_crews")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!crew) return null;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: anchorRow, error: anchorErr } = await (supabase as any)
         .from("crm_job_visits")
         .select(select)
         .eq("id", anchorVisitId)
+        .eq("crew_id", crew.id)
         .is("deleted_at", null)
-        .single();
+        .maybeSingle();
       if (anchorErr) throw anchorErr;
+      if (!anchorRow) return null;
       const anchor = mapVisit(anchorRow as Record<string, unknown>);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -221,6 +290,7 @@ export function useStopDetail(anchorVisitId: string) {
         .select(select)
         .eq("client_id", anchor.clientId)
         .eq("scheduled_date", anchor.scheduledDate)
+        .eq("crew_id", crew.id)
         .is("deleted_at", null);
       if (siblingErr) throw siblingErr;
 
