@@ -58,15 +58,14 @@ async function patch(supabase: AnyClient, orgId: string, fields: Record<string, 
   if (error) throw new Error(`Failed to update org_sms_registrations: ${error.message}`);
 }
 
-/** Finds a Trust Hub policy SID by matching its friendly_name, rather than hardcoding a SID that can differ by account/region. */
-async function resolvePolicySid(creds: { apiKeySid: string; apiKeySecret: string }, nameIncludes: string): Promise<string> {
-  const result = await subaccountRequest(TRUSTHUB, "/Policies?PageSize=50", creds, { method: "GET" });
-  const match = (result.results ?? []).find((p: { friendly_name: string }) =>
-    p.friendly_name.toLowerCase().includes(nameIncludes.toLowerCase())
-  );
-  if (!match) throw new Error(`No Trust Hub policy found matching "${nameIncludes}"`);
-  return match.sid;
-}
+// Twilio-wide constant, not per-account — Twilio's own onboarding docs say
+// verbatim "do not change the policy_sid" in every language's code sample.
+// An earlier version of this file tried to discover it dynamically via a
+// GET /v1/Policies friendly_name search, which doesn't work: the policy's
+// friendly_name doesn't actually contain "Customer Profile Information" (or
+// any predictable substring), and there's no need to search at all since
+// this SID never varies by account/region.
+const SECONDARY_CUSTOMER_PROFILE_POLICY_SID = "RNdfbf3fae0e1107f8aded0e7cead80bf5";
 
 // ---------------------------------------------------------------------------
 // Step 1 — Subaccount + subaccount-scoped API Key (stored: SID plaintext,
@@ -122,7 +121,7 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     );
   }
 
-  const policySid = await resolvePolicySid(creds, "Customer Profile Information");
+  const policySid = SECONDARY_CUSTOMER_PROFILE_POLICY_SID;
 
   const profile = await subaccountRequest(TRUSTHUB, "/CustomerProfiles", creds, {
     body: { PolicySid: policySid, FriendlyName: reg.legal_business_name ?? `org:${reg.org_id}`, Email: reg.contact_email ?? "" },
