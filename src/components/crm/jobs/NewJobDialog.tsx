@@ -252,8 +252,11 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               completeByDate: service.endDate ?? "",
               qty,
               rateCents: (service.defaultRateCents || matchingService?.defaultRateCents) ?? 0,
+              // teamSize is 1 here so the division is a no-op today — routed
+              // through the same helper anyway so this can't silently become
+              // wrong if the seeded crew size ever stops being 1.
               budgetedHours: matchingService
-                ? computeJobServiceBudgetedHours(matchingService, qty)
+                ? autoHoursPerPerson(matchingService, qty, 1)
                 : service.defaultBHrs ?? 0,
               budgetMethod: matchingService?.budgetMethod ?? "manual",
               teamSize: 1,
@@ -324,7 +327,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       serviceId: svc.id,
       serviceName: svc.name,
       rateCents: typedRate > 0 ? typedRate : (svc.defaultRateCents ?? 0),
-      budgetedHours: computeJobServiceBudgetedHours(svc, qty),
+      budgetedHours: autoHoursPerPerson(svc, qty, services[i]?.teamSize ?? 1),
       budgetMethod: svc.budgetMethod,
     });
   }
@@ -335,14 +338,54 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     return !!svc && svc.budgetMethod === "production_rate" && !!svc.productionRateSqftPerHr && svc.productionRateSqftPerHr > 0 && svc.unit !== "hr" && svc.unit !== "each";
   }
 
+  /**
+   * The Hrs column is PER PERSON: the job total below is Σ(hrs × men), and
+   * crm_job_services.budgeted_hours rolls up to the job the same way
+   * (crm_recompute_job_budgeted_hours = Σ(budgeted_hours × team_size)).
+   *
+   * computeJobServiceBudgetedHours returns MAN-hours — a production rate is
+   * sq ft per man-hour, so qty ÷ rate is the total labour, not one person's
+   * shift. Writing that straight into the per-person column multiplied it by
+   * the crew again: 12,000 sq ft at 1,000 sq ft/man-hr with 3 men showed 12
+   * hrs × 3 = 36 man-hours for 12 man-hours of work, inflating the job's
+   * budget and every variance report built on it.
+   */
+  function autoHoursPerPerson(
+    svc: Parameters<typeof computeJobServiceBudgetedHours>[0],
+    qty: number,
+    teamSize: number
+  ): number {
+    return computeJobServiceBudgetedHours(svc, qty) / Math.max(1, teamSize || 1);
+  }
+
   // Recompute budgeted hours when qty changes, if this row's service uses production rate
   function updateQty(i: number, qty: number) {
     const serviceId = services[i]?.serviceId;
     const svc = (crmServices ?? []).find((s) => s.id === serviceId);
     if (svc && rowIsAutoHrs(serviceId)) {
-      updateService(i, { qty, budgetedHours: computeJobServiceBudgetedHours(svc, qty) });
+      updateService(i, { qty, budgetedHours: autoHoursPerPerson(svc, qty, services[i]?.teamSize ?? 1) });
     } else {
       updateService(i, { qty });
+    }
+  }
+
+  /**
+   * Crew size feeds the per-person hours, so an auto row has to be recomputed
+   * when it changes — otherwise the figure stays pinned to whatever crew size
+   * was set when the service was picked, and the job's man-hour total moves
+   * with the crew instead of staying fixed at the work involved.
+   *
+   * A manual row keeps the hours the user typed: those are already per-person
+   * by definition, and silently rescaling someone's own number would be worse
+   * than leaving it.
+   */
+  function updateTeamSize(i: number, teamSize: number) {
+    const row = services[i];
+    const svc = (crmServices ?? []).find((s) => s.id === row?.serviceId);
+    if (svc && rowIsAutoHrs(row?.serviceId ?? "")) {
+      updateService(i, { teamSize, budgetedHours: autoHoursPerPerson(svc, row?.qty ?? 1, teamSize) });
+    } else {
+      updateService(i, { teamSize });
     }
   }
 
@@ -836,7 +879,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         onCommit={(hrs) => updateService(i, { budgetedHours: hrs })}
                       />
                     )}
-                    <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateService(i, { teamSize: parseInt(e.target.value) || 1 })} className="h-7 text-xs" />
+                    <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateTeamSize(i, parseInt(e.target.value) || 1)} className="h-7 text-xs" />
                     <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>
                     <button type="button" onClick={() => removeService(i)} disabled={services.length === 1} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 disabled:opacity-30">
                       <X className="h-3.5 w-3.5" />
