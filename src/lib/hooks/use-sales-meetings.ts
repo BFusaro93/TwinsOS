@@ -80,6 +80,32 @@ export function useSalesMeetings(startDate: string, endDate: string) {
   });
 }
 
+/**
+ * A single meeting by id, independent of the calendar's visible date range —
+ * what the `?open=` deep link from a reminder email or the notification bell
+ * resolves, since neither knows which day the calendar is currently showing.
+ */
+export function useSalesMeeting(id: string | null) {
+  return useQuery({
+    queryKey: ["sales-meeting", id],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("crm_sales_meetings")
+        .select("*, clients(display_name)")
+        .eq("id", id as string)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = data as any;
+      return { ...mapMeeting(row), clientName: row.clients?.display_name ?? null } as SalesMeetingWithClient;
+    },
+    enabled: !!id,
+  });
+}
+
 export interface NewSalesMeetingInput {
   salesRepId: string;
   clientId: string | null;

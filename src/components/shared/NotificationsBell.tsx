@@ -329,7 +329,7 @@ export function NotificationsBell() {
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       automation_alert:           { href: () => "/crm/communication/automations", title: "Automation Alert" },
       wo_status_changed:          { href: (id) => id ? `/cmms/work-orders?id=${id}` : "/cmms/work-orders", title: "Status Changed" },
-      sales_meeting_reminder:     { href: () => "/crm/sales-meetings", title: "Meeting Reminder" },
+      sales_meeting_reminder:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Reminder" },
     };
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;

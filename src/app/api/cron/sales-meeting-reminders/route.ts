@@ -99,7 +99,10 @@ export async function GET(request: Request) {
       minute: "2-digit",
       timeZone: "America/New_York",
     });
-    const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/sales-meetings`;
+    // `?open=` makes the calendar jump to the meeting's day and open it —
+    // without it the link only landed on whatever day the calendar defaults
+    // to, which is the wrong one for anything scheduled just after midnight.
+    const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/sales-meetings?open=${meeting.id as string}`;
 
     if (rep) {
       // crm_employees has no notification_prefs of its own — that lives on
