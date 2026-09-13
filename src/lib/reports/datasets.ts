@@ -19,6 +19,50 @@ const VISIT_STATUS_OPTIONS = [
 
 export const REPORT_DATASETS: ReportDataset[] = [
   {
+    key: "rpt_upsells",
+    label: "Field Upsells",
+    description:
+      "Work crews flagged from the field, and whether it turned into a quote and a sale.",
+    defaultDateField: "submitted_at",
+    fields: [
+      { key: "ticket_number", label: "Ticket #", type: "number" },
+      { key: "submitted_at", label: "Submitted", type: "datetime" },
+      { key: "client_name", label: "Client", type: "text" },
+      { key: "service_suggested", label: "Service Suggested", type: "text" },
+      { key: "submitted_by", label: "Submitted By", type: "text" },
+      { key: "crew_name", label: "Crew", type: "text" },
+      {
+        // The ticket's own status — only ever "has the office dealt with it".
+        // Use Outcome for whether it earned anything.
+        key: "ticket_status",
+        label: "Ticket Status",
+        type: "text",
+        options: [
+          { value: "open", label: "Open" },
+          { value: "pending", label: "Pending" },
+          { value: "on_hold", label: "On Hold" },
+          { value: "closed", label: "Closed" },
+        ],
+      },
+      { key: "crew_note", label: "Crew Note", type: "text" },
+      { key: "estimate_number", label: "Estimate #", type: "number" },
+      { key: "estimate_stage", label: "Estimate Stage", type: "text" },
+      { key: "estimate_total_cents", label: "Estimate Total", type: "money" },
+      {
+        key: "outcome",
+        label: "Outcome",
+        type: "text",
+        options: [
+          { value: "Not quoted", label: "Not quoted" },
+          { value: "Quoted", label: "Quoted" },
+          { value: "Won", label: "Won" },
+          { value: "Lost", label: "Lost" },
+        ],
+      },
+      { key: "won_revenue_cents", label: "Won Revenue", type: "money" },
+    ],
+  },
+  {
     key: "rpt_clients",
     label: "Clients",
     description: "Client and lead accounts with balances, source, and sales rep.",

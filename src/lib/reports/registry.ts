@@ -14,6 +14,7 @@ import { RECEIVABLES_REPORTS } from "@/lib/reports/definitions/receivables";
 import { REVENUE_REPORTS } from "@/lib/reports/definitions/revenue";
 import { SCHEDULE_LIST_REPORTS } from "@/lib/reports/definitions/schedule-lists";
 import { SERVICE_REPORTS } from "@/lib/reports/definitions/service-reports";
+import { UPSELL_REPORTS } from "@/lib/reports/definitions/upsells";
 
 export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...AUDIT_REPORTS,
@@ -30,6 +31,7 @@ export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...REVENUE_REPORTS,
   ...SCHEDULE_LIST_REPORTS,
   ...SERVICE_REPORTS,
+  ...UPSELL_REPORTS,
   ...ADDITIONAL_REPORTS,
 ];
 

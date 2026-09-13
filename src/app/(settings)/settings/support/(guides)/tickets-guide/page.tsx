@@ -318,11 +318,24 @@ export default function TicketsGuidePage() {
           and off, so there is no separate permission to manage.
         </Callout>
         <p>
-          To take one forward, quote it as normal and <strong>link the estimate to the ticket</strong>
-          from the detail sheet. That link is what turns the suggestion into a number you can report
-          on: the estimate carries the real sales pipeline (Sent → Accepted → Won/Lost), so a crew&apos;s
-          suggestion reaching Won is measurable, while the ticket&apos;s own open/closed only ever means
-          whether the office has dealt with it.
+          To take one forward, click <strong>Create estimate</strong> on the ticket. That makes a draft
+          estimate for the client, puts the suggested service on it at your catalog rate, links the two
+          together and opens the estimate ready to price — so there&apos;s nothing to retype and nothing
+          to remember to link afterwards. The button disappears once an estimate is linked, so the same
+          work doesn&apos;t get quoted twice. (You can still link an existing estimate by hand from
+          Linked Records if you quoted it before the suggestion came in.)
+        </p>
+        <p>
+          That link is what turns the suggestion into a number you can report on: the estimate carries
+          the real sales pipeline (Sent → Accepted → Won/Lost), so a crew&apos;s suggestion reaching Won
+          is measurable, while the ticket&apos;s own open/closed only ever means whether the office has
+          dealt with it.
+        </p>
+        <p>
+          Two reports in the Report Center read this: <strong>Field Upsells</strong> lists every
+          suggestion with its outcome, and <strong>Upsell Conversion by Crew Member</strong> totals
+          what each person submitted against the revenue it won. Both are under the Service section,
+          and each has its own permission so you can decide who sees them.
         </p>
       </Section>
 

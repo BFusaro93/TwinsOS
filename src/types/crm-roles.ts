@@ -236,6 +236,8 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           sched_rpt_cogs: "Cost of Goods Sold Report",
           sched_rpt_job_costing: "Job Costing",
           sched_rpt_sales_by_date_sold: "Sales by Date Sold",
+          sched_rpt_field_upsells: "Field Upsells",
+          sched_rpt_upsell_conversion: "Upsell Conversion by Crew Member",
         },
       },
       scheduling_reports_cont: {
