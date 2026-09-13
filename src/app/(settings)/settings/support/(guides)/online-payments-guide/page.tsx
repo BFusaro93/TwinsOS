@@ -116,7 +116,8 @@ export default function OnlinePaymentsGuidePage() {
           card-processing rate:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li>Defaults to on, at 3.5%, only applied to invoices above $500 — all three are adjustable.</li>
+          <li>Defaults to on, at 3.5%, only applied above $500 — all three are adjustable.</li>
+          <li>Applies to card payments on invoices <em>and</em> to a deposit paid by card when a client accepts a proposal, on the same threshold.</li>
           <li>Never applied to Bank Transfer/ACH payments — ACH is fee-free by design.</li>
           <li>Staff can waive it or override it to a flat amount on an individual charge; clients paying through the portal or a public pay link cannot.</li>
           <li>Every fee collected is itemized in its own &ldquo;Credit Card Processing Fees&rdquo; report and rolled into the P&amp;L.</li>
