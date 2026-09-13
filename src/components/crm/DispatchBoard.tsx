@@ -1371,6 +1371,14 @@ function TeamAssignDialog({
   const [pending, setPending] = useState(false);
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
   const [dragMemberId, setDragMemberId] = useState<string | null>(null);
+  // Tap-to-place fallback for touch. iOS Safari never fires HTML5 drag events,
+  // so on a tablet every drag path below is dead — tap an item to pick it up,
+  // then tap a crew (or Unassigned) to drop it. Drag still works with a mouse.
+  const [held, setHeld] = useState<{ kind: "visit" | "member"; id: string; label: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) setHeld(null);
+  }, [open]);
 
   // Use crews-with-members data so member names show up; fall back to the prop
   const richCrews = crewsWithMembers ?? [];
@@ -1411,6 +1419,36 @@ function TeamAssignDialog({
     }
   }
 
+  /** Pick an item up, or put it back down if it's the one already held. */
+  function toggleHold(item: NonNullable<typeof held>) {
+    setHeld((h) => (h && h.kind === item.kind && h.id === item.id ? null : item));
+  }
+
+  /** Drop the held item on a crew. Dropping it where it already is is a no-op,
+   *  which is how tapping the held item a second time cancels the move. */
+  async function placeOnCrew(crewId: string) {
+    const item = held;
+    setHeld(null);
+    if (!item) return;
+    if (item.kind === "visit") {
+      const v = visits.find((x) => x.id === item.id);
+      if (v && v.crewId !== crewId) await reassign(item.id, crewId, v.jobId);
+      return;
+    }
+    const current = overrideCrewByMember.get(item.id) ?? defaultCrewByMember.get(item.id);
+    if (current !== crewId) await moveMember(item.id, crewId);
+  }
+
+  /** Drop the held visit back in the pool. Members always belong to a crew, so
+   *  the pool ignores them. */
+  async function placeUnassigned() {
+    const item = held;
+    setHeld(null);
+    if (item?.kind !== "visit") return;
+    const v = visits.find((x) => x.id === item.id);
+    if (v?.crewId) await reassign(item.id, null, v.jobId);
+  }
+
   async function dispatchAll() {
     setPending(true);
     try {
@@ -1434,7 +1472,16 @@ function TeamAssignDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent
+        className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col"
+        // Escape cancels a pick-up first; a second press closes the dialog.
+        onEscapeKeyDown={(e) => {
+          if (held) {
+            e.preventDefault();
+            setHeld(null);
+          }
+        }}
+      >
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">
             Team Assignment —{" "}
@@ -1442,29 +1489,67 @@ function TeamAssignDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {held ? (
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 bg-brand-50 px-5 py-2">
+            <p className="text-xs text-brand-800">
+              Moving <span className="font-semibold">{held.label}</span> —{" "}
+              {held.kind === "visit"
+                ? "tap a crew, or Unassigned, to place it."
+                : `tap the crew they should work with on ${selectedDate}.`}
+            </p>
+            <button
+              onClick={() => setHeld(null)}
+              className="shrink-0 rounded border border-brand-300 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p className="shrink-0 border-b bg-slate-50 px-5 py-1.5 text-[11px] text-slate-400">
+            Drag a visit or crew member, or tap one to pick it up and tap where it should go.
+          </p>
+        )}
+
         <div className="flex flex-1 overflow-hidden">
           {/* Unassigned pool — drop target to un-assign */}
           <div
-            className="w-52 shrink-0 border-r bg-green-50 p-4"
+            className={cn(
+              "w-52 shrink-0 border-r bg-green-50 p-4",
+              held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
+            )}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, null, jId); setDragVisitId(null); } }}
+            onClick={() => void placeUnassigned()}
           >
             <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">
               Unassigned ({unassigned.length})
             </p>
             <div className="space-y-1.5">
               {unassigned.length === 0 ? (
-                <p className="text-xs text-green-600 italic">All visits assigned</p>
+                <p className="text-xs text-green-600 italic">
+                  {held?.kind === "visit" ? "Tap to unassign" : "All visits assigned"}
+                </p>
               ) : (
                 unassigned.map((v) => {
                   const svcName = v.job?.services?.[0]?.serviceName ?? "Visit";
+                  const isHeld = held?.kind === "visit" && held.id === v.id;
                   return (
                     <div
                       key={v.id}
                       draggable
-                      onDragStart={() => setDragVisitId(v.id)}
+                      onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                       onDragEnd={() => setDragVisitId(null)}
-                      className="rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing"
+                      // With something already held, let the click through to the
+                      // pool so it lands there; otherwise pick this card up.
+                      onClick={(e) => {
+                        if (held) return;
+                        e.stopPropagation();
+                        toggleHold({ kind: "visit", id: v.id, label: v.clientName ?? "Visit" });
+                      }}
+                      className={cn(
+                        "rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing",
+                        isHeld && "ring-2 ring-brand-500 border-brand-300"
+                      )}
                     >
                       <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                       <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
@@ -1472,7 +1557,7 @@ function TeamAssignDialog({
                         {crews.map((c) => (
                           <button
                             key={c.id}
-                            onClick={() => reassign(v.id, c.id, v.jobId)}
+                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, c.id, v.jobId); }}
                             className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5 transition-colors"
                           >
                             → {c.name}
@@ -1492,7 +1577,10 @@ function TeamAssignDialog({
               {byCrew.map(({ crew, visits: crewVisits, members }) => (
                 <div
                   key={crew.id}
-                  className="w-52 shrink-0 border-r p-4"
+                  className={cn(
+                    "w-52 shrink-0 border-r p-4",
+                    held && "cursor-pointer ring-2 ring-inset ring-brand-400"
+                  )}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
                     if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); }
@@ -1501,39 +1589,61 @@ function TeamAssignDialog({
                       setDragMemberId(null);
                     }
                   }}
+                  onClick={() => void placeOnCrew(crew.id)}
                 >
                   <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-1">
                     {crew.name} ({crewVisits.length})
                   </p>
-                  {/* Draggable member chips — amber means "on loan" from another
-                      crew for selectedDate only; drag back to their own crew (or
-                      click) to send them back. */}
+                  {/* Member chips — amber means "on loan" from another crew for
+                      selectedDate only. Drag them, or tap to pick up and tap the
+                      destination crew; the ↩ sends a loaned member straight home. */}
                   <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
                     {members.map((m) => {
                       const onLoan = defaultCrewByMember.get(m.id) !== crew.id;
+                      const home = defaultCrewByMember.get(m.id);
+                      const isHeld = held?.kind === "member" && held.id === m.id;
+                      const name = m.employeeName ?? m.employeeId;
                       return (
                         <div
                           key={m.id}
                           draggable
-                          onDragStart={() => setDragMemberId(m.id)}
+                          onDragStart={() => { setHeld(null); setDragMemberId(m.id); }}
                           onDragEnd={() => setDragMemberId(null)}
-                          onClick={() => { const home = defaultCrewByMember.get(m.id); if (onLoan && home) void moveMember(m.id, home); }}
+                          onClick={(e) => {
+                            if (held) return;
+                            e.stopPropagation();
+                            toggleHold({ kind: "member", id: m.id, label: name });
+                          }}
                           className={cn(
                             "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none",
                             onLoan
                               ? "bg-amber-100 border-amber-300 text-amber-700"
-                              : "bg-brand-100 border-brand-200 text-brand-700"
+                              : "bg-brand-100 border-brand-200 text-brand-700",
+                            isHeld && "ring-2 ring-brand-500"
                           )}
                           title={onLoan
-                            ? `On loan from their usual crew for ${selectedDate} only — click to send back`
-                            : "Drag to move to another crew for today only"}
+                            ? `On loan from their usual crew for ${selectedDate} only — ↩ sends them back`
+                            : "Drag, or tap then tap another crew, to move them for today only"}
                         >
-                          {m.employeeName ?? m.employeeId}
+                          {name}
+                          {onLoan && home && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setHeld(null); void moveMember(m.id, home); }}
+                              // Negative margins absorb the padding, so the hit
+                              // area is finger-sized without growing the chip.
+                              className="-my-1.5 -mr-1.5 rounded-full px-1.5 py-1.5 leading-none text-amber-500 hover:text-amber-800"
+                              title="Send back to their usual crew"
+                            >
+                              ↩
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                     {members.length === 0 && (
-                      <p className="text-[10px] text-slate-300 italic">No members — drag here</p>
+                      <p className="text-[10px] text-slate-300 italic">
+                        {held?.kind === "member" ? "Tap to place here" : "No members"}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-1.5 min-h-[40px]">
@@ -1543,16 +1653,27 @@ function TeamAssignDialog({
                         <div
                           key={v.id}
                           draggable
-                          onDragStart={() => setDragVisitId(v.id)}
+                          onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                           onDragEnd={() => setDragVisitId(null)}
-                          className="rounded bg-slate-50 border px-2 py-1.5 group relative cursor-grab active:cursor-grabbing"
+                          onClick={(e) => {
+                            if (held) return;
+                            e.stopPropagation();
+                            toggleHold({ kind: "visit", id: v.id, label: v.clientName ?? "Visit" });
+                          }}
+                          className={cn(
+                            // pr-7 keeps the client name clear of the ✕, which
+                            // sits in the corner permanently on touch screens.
+                            "rounded bg-slate-50 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
+                            held?.kind === "visit" && held.id === v.id && "ring-2 ring-brand-500"
+                          )}
                         >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                           <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
                           <VisitStatusIcon status={v.status} />
                           <button
-                            onClick={() => reassign(v.id, null, v.jobId)}
-                            className="absolute top-1 right-1 flex md:hidden md:group-hover:flex text-[9px] text-slate-400 hover:text-red-500"
+                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
+                            className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
+                            title="Unassign"
                           >
                             ✕
                           </button>
@@ -3305,8 +3426,9 @@ export function DispatchBoard() {
         </div>
       )}
 
-      {/* Select a Filter bar — ABOVE dark bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2 shrink-0">
+      {/* Select a Filter bar — ABOVE dark bar. Scrolls sideways rather than
+          clipping: the full row of actions doesn't fit a tablet's width. */}
+      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2 shrink-0 overflow-x-auto">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
         <div className="flex items-center gap-1 overflow-x-auto">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
@@ -3467,7 +3589,7 @@ export function DispatchBoard() {
       </div>
 
       {/* Dark action bar */}
-      <div className="bg-[#4a4a4a] px-4 py-2 flex items-center gap-3 shrink-0">
+      <div className="bg-[#4a4a4a] px-4 py-2 flex items-center gap-3 shrink-0 overflow-x-auto">
         {/* Refresh — far left */}
         <button
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}

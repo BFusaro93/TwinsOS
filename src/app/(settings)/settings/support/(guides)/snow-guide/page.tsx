@@ -129,12 +129,18 @@ export default function SnowGuidePage() {
         <p>
           Once jobs are added, each one becomes a visit row on the board with a status you cycle
           through by clicking its icon: <strong>scheduled → dispatched → in progress → completed →
-          skipped</strong>. Use <strong>Team Assign</strong> to drag unassigned visits onto crews (or
-          click a crew&apos;s name on each card), then <strong>Dispatch Assigned</strong> to push
+          skipped</strong>. Use <strong>Team Assign</strong> to move unassigned visits onto crews —
+          drag a card, tap a card and then tap the crew column it should go to, or click a crew&apos;s
+          name on the card for a one-tap assign. Then <strong>Dispatch Assigned</strong> pushes
           every crewed, scheduled visit to <code>dispatched</code> at once. <strong>Print</strong>{" "}
           generates a route sheet per crew with checkboxes for weather and site conditions, full
           plow, and salt bags, for a paper copy on the truck.
         </p>
+        <Callout>
+          <strong>Dispatching a storm from a tablet?</strong> Tap-to-place is the one that works
+          there — touch devices don&apos;t support the drag gesture, so tap the visit, then tap the
+          crew. The card you picked up is outlined and every crew you can drop it on is highlighted.
+        </Callout>
         <p>
           <strong>Snowfall depth is not pulled from a weather feed — it&apos;s recorded manually,
           per visit, when the crew&apos;s work is closed out.</strong> Select one or more completed
@@ -164,7 +170,7 @@ export default function SnowGuidePage() {
           </li>
           <li>
             The event moves to <strong>Working</strong>. The dispatcher opens <strong>Team
-            Assign</strong>, drags the High-priority clients onto the first crews out the door, and
+            Assign</strong>, moves the High-priority clients onto the first crews out the door, and
             dispatches them — hospitals, fire lanes, and SLA accounts get plowed first, before the
             Normal- and Low-priority stops.
           </li>

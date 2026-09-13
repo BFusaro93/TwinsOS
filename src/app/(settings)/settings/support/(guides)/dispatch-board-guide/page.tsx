@@ -145,17 +145,46 @@ export default function DispatchBoardGuidePage() {
 
       <Section id="crews-and-assignment" title="Crews and assignment">
         <p>
-          Visits are grouped into a column per crew, plus an Unassigned column for anything not yet
-          assigned. Assignment is drag-and-drop — drag a visit card onto a crew&apos;s column to assign it,
-          or back onto Unassigned to pull it off. The header for each crew column shows how many
-          stops that crew has for the day.
+          The <strong>Team Assignment</strong> dialog groups visits into a column per crew, plus an
+          Unassigned column for anything not yet assigned. The header for each crew column shows how
+          many stops that crew has for the day.
         </p>
         <p>
+          There are two ways to move a visit, and they do the same thing:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Drag</strong> a visit card onto a crew&apos;s column to assign it, or back onto
+            Unassigned to pull it off.
+          </li>
+          <li>
+            <strong>Tap to place</strong> — tap a visit card to pick it up, then tap the crew column
+            (or Unassigned) it should go to. The card you picked up is outlined, every column you can
+            drop it on is highlighted, and a bar across the top of the dialog names what you&apos;re
+            moving. Tap the card again, press Escape, or hit <strong>Cancel</strong> in that bar to
+            put it back down.
+          </li>
+        </ul>
+        <p>
+          Unassigned cards also carry a shortcut button per crew (&quot;→ Maintenance 1&quot;) that
+          assigns in a single tap, and each assigned card has a ✕ in its corner that sends it straight
+          back to Unassigned.
+        </p>
+        <Callout>
+          <strong>On a tablet, use tap-to-place.</strong> iPads and other touch devices don&apos;t
+          support the kind of dragging this dialog uses, so a drag gesture will simply do nothing
+          there. Tapping works everywhere — including with a mouse — so it&apos;s the reliable option
+          if you dispatch from a tablet.
+        </Callout>
+        <p>
           A crew&apos;s headcount for a given day comes from its normal roster (set in crew settings),
-          with same-day-only overrides layered on top from the <strong>Team Assignment</strong>{" "}
-          dialog — useful when someone is on loan to a different crew just for today. A member
-          reassigned this way is flagged as &quot;on loan&quot; for that date only and reverts to their usual
-          crew automatically the next day.
+          with same-day-only overrides layered on top from the same dialog — useful when someone is on
+          loan to a different crew just for today. Move a person the same two ways: drag their name
+          chip onto another crew, or tap the chip and then tap the crew they should work with. A
+          member reassigned this way turns amber and is flagged as &quot;on loan&quot; for that date
+          only, reverting to their usual crew automatically the next day; the ↩ on an amber chip sends
+          them home immediately. People always belong to a crew, so Unassigned isn&apos;t a target for
+          them.
         </p>
         <p>
           Within a crew, turning on <strong>Manual Route mode</strong> makes each visit row
