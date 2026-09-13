@@ -123,7 +123,7 @@ export async function recordEstimateDepositCharge({
   // client_id can't attach someone else's credit to the wrong account.
   const { data: estimate, error: estErr } = await db
     .from("estimates")
-    .select("id, org_id, client_id, estimate_number, deposit_required_cents")
+    .select("id, org_id, client_id, estimate_number, deposit_required_cents, deposit_collected_cents, deposit_reference")
     .eq("id", estimateId)
     .eq("org_id", orgId)
     .is("deleted_at", null)
@@ -142,8 +142,40 @@ export async function recordEstimateDepositCharge({
   // was never the client's money — crediting the gross would hand them a
   // prepayment worth more than they agreed to put down. Same split as the
   // invoice recorder (balance_cents vs the charged amount).
-  const depositCents = Number(paymentIntent.metadata?.deposit_cents) || paymentIntent.amount;
-  const feeCents = Number(paymentIntent.metadata?.fee_cents) || 0;
+  //
+  // Validated rather than `Number(...) || paymentIntent.amount`: that fallback
+  // silently credits the GROSS whenever the metadata is absent, NaN, "" or
+  // "0". Bad metadata means we don't know what to credit, so fail loudly and
+  // let it be reconciled by hand.
+  const depositCents = Number.parseInt(paymentIntent.metadata?.deposit_cents ?? "", 10);
+  const feeCents = Number.parseInt(paymentIntent.metadata?.fee_cents ?? "0", 10);
+  if (!Number.isFinite(depositCents) || depositCents <= 0 || depositCents > paymentIntent.amount) {
+    log.error("estimate deposit intent has unusable deposit_cents metadata", {
+      paymentIntentId: paymentIntent.id,
+      depositCents: paymentIntent.metadata?.deposit_cents,
+      amount: paymentIntent.amount,
+    });
+    return "error";
+  }
+
+  // A deposit already banked for this estimate under a DIFFERENT intent means
+  // two charges got through (see the reuse guard in deposit-intent/route.ts).
+  // Record nothing: crediting the second would double the client's prepayment
+  // against a single agreed deposit. The charge is real, so it is logged for a
+  // human to refund rather than silently absorbed.
+  if (
+    (estimate.deposit_collected_cents ?? 0) > 0 &&
+    estimate.deposit_reference &&
+    estimate.deposit_reference !== paymentIntent.id
+  ) {
+    log.error("a second deposit charge succeeded for an estimate that already has one — needs a refund", {
+      paymentIntentId: paymentIntent.id,
+      estimateId,
+      alreadyCollectedCents: estimate.deposit_collected_cents,
+      existingReference: estimate.deposit_reference,
+    });
+    return "error";
+  }
   const { method } = await resolveMethod(db, orgId, paymentIntent, connectedAccountId);
 
   const { data: inserted, error: insertErr } = await db
@@ -168,8 +200,17 @@ export async function recordEstimateDepositCharge({
     .select("id")
     .single();
 
-  if (insertErr) {
-    if (insertErr.code === "23505") return "already_recorded";
+  // 23505 means the payment row is already there — this delivery is a Stripe
+  // retry or a replay. It is NOT a reason to stop: the insert commits before
+  // the estimate stamp and the balance sync, so a previous attempt that died
+  // in between (resolveMethod calls Stripe, which is a real window on a cold
+  // invocation) would otherwise leave the estimate showing no deposit, the
+  // client's balance missing the credit, and — for ACH — deposit_pending_*
+  // set forever. Worse, deposit_collected_cents staying 0 lets the proposal
+  // take a SECOND deposit. Fall through and re-run the side effects; they are
+  // all idempotent writes of the same values.
+  const alreadyRecorded = insertErr?.code === "23505";
+  if (insertErr && !alreadyRecorded) {
     log.error("failed to insert estimate deposit prepayment", {
       error: insertErr,
       paymentIntentId: paymentIntent.id,

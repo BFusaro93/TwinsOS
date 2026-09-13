@@ -1408,59 +1408,24 @@ export function useApplyCreditToInvoice() {
       invoiceId,
       amountCents,
     }: { paymentId: string; invoiceId: string; amountCents: number }) => {
-      if (amountCents <= 0) throw new Error("Nothing to apply");
       const supabase = createClient();
-
-      // Re-read both sides rather than trusting what the screen was showing:
-      // another tab (or the Stripe webhook landing a charge) may have moved
-      // either number since this page loaded.
+      // One RPC, one transaction. This used to be four separate statements from
+      // the browser (insert allocation, decrement unused_amount_cents, apply to
+      // the invoice, sync the balance), which had two defects: a failure
+      // part-way left the credit consumed with the invoice untouched, and
+      // unused_amount_cents was written as an absolute value from a stale read,
+      // so two tabs applying the same deposit to different invoices each wrote
+      // the same figure and left phantom credit that no allocation could spend.
+      // crm_apply_credit_to_invoice takes FOR UPDATE on the payment and
+      // recomputes least(requested, unapplied, owing) from the locked rows.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: payment, error: payErr } = await (supabase as any)
-        .from("crm_payments")
-        .select("id, client_id, unused_amount_cents")
-        .eq("id", paymentId)
-        .single();
-      if (payErr) throw payErr;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: invoice, error: invErr } = await (supabase as any)
-        .from("crm_invoices")
-        .select("id, client_id, balance_cents, status")
-        .eq("id", invoiceId)
-        .single();
-      if (invErr) throw invErr;
-      if (invoice.client_id !== payment.client_id) {
-        throw new Error("That payment belongs to a different client");
-      }
-      if (invoice.status === "draft" || invoice.status === "void") {
-        throw new Error("Money can only be applied to an issued invoice");
-      }
-
-      const applyCents = Math.min(
-        amountCents,
-        payment.unused_amount_cents ?? 0,
-        invoice.balance_cents ?? 0
-      );
-      if (applyCents <= 0) throw new Error("Nothing left to apply");
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: allocErr } = await (supabase as any)
-        .from("crm_payment_allocations")
-        .insert({ payment_id: paymentId, invoice_id: invoiceId, amount_cents: applyCents });
-      if (allocErr) throw allocErr;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updErr } = await (supabase as any)
-        .from("crm_payments")
-        .update({ unused_amount_cents: (payment.unused_amount_cents ?? 0) - applyCents })
-        .eq("id", paymentId);
-      if (updErr) throw updErr;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await applyPaymentToInvoice(supabase as any, invoiceId, applyCents);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
-
-      return { appliedCents: applyCents };
+      const { data, error } = await (supabase.rpc as any)("crm_apply_credit_to_invoice", {
+        p_payment_id: paymentId,
+        p_invoice_id: invoiceId,
+        p_amount_cents: amountCents,
+      });
+      if (error) throw new Error(error.message ?? "Couldn't apply the credit");
+      return { appliedCents: (data as number) ?? 0 };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });

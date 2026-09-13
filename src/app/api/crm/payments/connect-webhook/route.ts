@@ -330,13 +330,37 @@ export async function POST(request: Request) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: payment } = await (db as any)
         .from("crm_payments")
-        .select("id, org_id, client_id, invoice_id, refunded_amount_cents")
+        .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, processing_fee_cents")
         .eq("stripe_payment_intent_id", paymentIntentId)
         .maybeSingle();
       if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, event.account))) break;
 
       const alreadyRecordedCents = payment.refunded_amount_cents ?? 0;
-      const deltaCents = charge.amount_refunded - alreadyRecordedCents;
+      // Stripe refunds the GROSS it charged; crm_payments.amount_cents is the
+      // net the client was credited, with any card processing fee held
+      // separately in processing_fee_cents. A full refund of a fee-bearing
+      // charge therefore reports more than the payment is worth — $2,058
+      // against a $2,000 payment — and refund_payment() raises
+      // "Refund amount exceeds remaining refundable balance". That threw out
+      // of the try below into a 500, which meant processed_at was never
+      // stamped, so Stripe retried the same event forever while the client sat
+      // on a credit they'd already been refunded.
+      //
+      // Clamp to what the ledger can actually reverse. The fee portion has no
+      // customer-money counterpart to reverse — it was never credited — so
+      // dropping it is correct, not a rounding fudge.
+      const refundableCents = Math.max(0, (payment.amount_cents ?? 0) - alreadyRecordedCents);
+      const rawDeltaCents = charge.amount_refunded - alreadyRecordedCents;
+      const deltaCents = Math.min(rawDeltaCents, refundableCents);
+      if (rawDeltaCents > refundableCents) {
+        log.info("clamped a gross Stripe refund to the payment's refundable amount", {
+          paymentIntentId,
+          chargeRefundedCents: charge.amount_refunded,
+          paymentAmountCents: payment.amount_cents,
+          processingFeeCents: payment.processing_fee_cents,
+          appliedCents: deltaCents,
+        });
+      }
       if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
 
       try {

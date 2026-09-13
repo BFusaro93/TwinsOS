@@ -70,7 +70,7 @@ export async function POST(
 
   const { data: estimate } = await supabase
     .from("estimates")
-    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, total_cents")
+    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, total_cents, deposit_pending_intent_id, deposit_pending_method")
     .eq("id", shareToken.estimate_id)
     .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
@@ -138,6 +138,70 @@ export async function POST(
         )
       : { feeCents: 0, totalChargeCents: depositCents };
 
+  // ── Reuse a deposit intent that is already outstanding ────────────────────
+  //
+  // chargeIdempotencyKey only buckets by a 10-second window, which is fine for
+  // a double-clicked button but useless for a human-paced, unauthenticated
+  // flow. Neither of this route's other guards closes the gap either:
+  // deposit_collected_cents is written by the webhook AFTER the charge
+  // succeeds, and accepted_at AFTER the acceptance POST — so for the whole
+  // time the client is typing their card details, both still say "no deposit".
+  //
+  // Two tabs (or a forwarded link, or a reload after a failed acceptance) would
+  // therefore mint two distinct PaymentIntents, both confirmable. The unique
+  // index on crm_payments.stripe_payment_intent_id can't collapse them — the
+  // ids differ — so the client is charged twice AND credited twice. The invoice
+  // path survives this because recordStripeCharge re-reads the balance and
+  // clamps; a deposit has no balance to clamp against.
+  //
+  // So the outstanding intent is remembered on the estimate and handed back
+  // instead of creating a second one. Stripe charges a given PaymentIntent at
+  // most once, which makes the whole flow genuinely idempotent.
+  if (estimate.deposit_pending_intent_id) {
+    try {
+      const existing = await stripe.paymentIntents.retrieve(
+        estimate.deposit_pending_intent_id,
+        {},
+        { stripeAccount: org.stripe_connect_account_id }
+      );
+      if (existing.status === "succeeded" || existing.status === "processing") {
+        return NextResponse.json(
+          { error: "A deposit for this proposal has already been submitted." },
+          { status: 409 }
+        );
+      }
+      const reusable =
+        existing.status === "requires_payment_method" ||
+        existing.status === "requires_confirmation" ||
+        existing.status === "requires_action";
+      if (reusable && existing.payment_method_types.includes(paymentMethod)) {
+        return NextResponse.json({
+          clientSecret: existing.client_secret,
+          connectedAccountId: org.stripe_connect_account_id,
+          livemode: org.stripe_connect_livemode ?? true,
+          depositCents,
+          feeCents: Number(existing.metadata?.fee_cents) || 0,
+          totalChargeCents: existing.amount,
+          paymentMethod,
+          reused: true,
+        });
+      }
+      // Still open but for the other method — the client switched from card to
+      // bank transfer or back. Cancel it so it can never be confirmed later,
+      // then fall through and create the one they actually want.
+      if (reusable) {
+        await stripe.paymentIntents.cancel(
+          existing.id,
+          {},
+          { stripeAccount: org.stripe_connect_account_id }
+        );
+      }
+    } catch {
+      // The stored intent is unreadable (wrong mode, deleted, wrong account).
+      // Fall through and create a fresh one rather than dead-ending the client.
+    }
+  }
+
   const paymentIntent = await stripe.paymentIntents.create(
     {
       amount: totalChargeCents,
@@ -168,6 +232,21 @@ export async function POST(
       ]),
     }
   );
+
+  // Remember it BEFORE handing back the client secret, so a second request can
+  // find it even if the client confirms immediately. Best-effort: failing to
+  // record it must not deny a client who is trying to pay — it only degrades
+  // to the previous (duplicate-prone) behaviour.
+  await supabase
+    .from("estimates")
+    .update({
+      deposit_pending_intent_id: paymentIntent.id,
+      deposit_pending_cents: depositCents,
+      deposit_pending_method: paymentMethod,
+      deposit_pending_at: new Date().toISOString(),
+    })
+    .eq("id", estimate.id)
+    .eq("org_id", estimate.org_id);
 
   return NextResponse.json({
     clientSecret: paymentIntent.client_secret,
