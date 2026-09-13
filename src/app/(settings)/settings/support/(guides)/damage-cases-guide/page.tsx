@@ -68,14 +68,10 @@ export default function DamageCasesGuidePage() {
       <Section id="where" title="Where cases live">
         <p>
           Damage Cases is a Landscapt tool, not a CMMS feature — it&apos;s listed in the crew-hidden
-          Tools sidebar as &quot;Track property damage &amp; warranty&quot;. The same{" "}
-          <code>DamageCasesPage</code> component is mounted at two separate routes that both render
-          identically:
+          Tools sidebar as &quot;Track property damage &amp; warranty&quot;. It lives at a single
+          route, <code>/tools/damage-cases</code>; the older <code>/dashboard/damage-cases</code>{" "}
+          and <code>/dashboards/damage-cases</code> copies now redirect there.
         </p>
-        <ul className="list-disc space-y-1 pl-5">
-          <li><code>/tools/damage-cases</code></li>
-          <li><code>/dashboards/damage-cases</code></li>
-        </ul>
         <p>
           The page itself has two tabs: <strong>Cases</strong> (a searchable list — by customer,
           case #, description, or property address) and <strong>Reporting</strong> (a chart of
