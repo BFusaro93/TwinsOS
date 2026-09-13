@@ -42,7 +42,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
     items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, hideFromCrew: true, exact: true },
+      { label: "Dashboard", href: "/equipt/home", icon: LayoutDashboard, hideFromCrew: true, exact: true },
     ],
   },
   {

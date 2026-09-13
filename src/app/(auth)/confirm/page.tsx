@@ -68,7 +68,7 @@ function ConfirmContent() {
         <>
           <CheckCircle className="h-10 w-10 text-green-500" />
           <p className="text-sm text-slate-700">{message}</p>
-          <Link href="/dashboard" className="text-sm text-brand-600 hover:underline">
+          <Link href="/equipt/home" className="text-sm text-brand-600 hover:underline">
             Go to dashboard
           </Link>
         </>

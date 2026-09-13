@@ -69,12 +69,11 @@ export default function DamageCasesGuidePage() {
         <p>
           Damage Cases is a Landscapt tool, not a CMMS feature — it&apos;s listed in the crew-hidden
           Tools sidebar as &quot;Track property damage &amp; warranty&quot;. The same{" "}
-          <code>DamageCasesPage</code> component is mounted at three separate routes that all render
+          <code>DamageCasesPage</code> component is mounted at two separate routes that both render
           identically:
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li><code>/tools/damage-cases</code></li>
-          <li><code>/dashboard/damage-cases</code></li>
           <li><code>/dashboards/damage-cases</code></li>
         </ul>
         <p>

@@ -8,7 +8,7 @@ export default function NotFound() {
         The page you&apos;re looking for doesn&apos;t exist.
       </p>
       <Link
-        href="/dashboard"
+        href="/equipt/home"
         className="text-sm text-blue-600 underline underline-offset-4 hover:text-blue-800"
       >
         Go to dashboard

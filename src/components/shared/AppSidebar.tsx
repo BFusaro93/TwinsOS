@@ -71,7 +71,7 @@ export function AppSidebar() {
               .map((item) => {
               const isActive =
                 pathname === item.href ||
-                (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+                (!item.exact && pathname.startsWith(item.href + "/"));
               const Icon = item.icon;
 
               return (
