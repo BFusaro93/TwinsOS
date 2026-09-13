@@ -328,11 +328,30 @@ export default function EstimatingGuidePage() {
           </li>
         </ul>
         <Callout>
-          <strong>A card deposit becomes account credit, not an invoice payment.</strong> It&rsquo;s
-          taken at acceptance, before any invoice for the work exists, so it lands on the client as
-          unapplied credit &mdash; visible on their record as a prepayment &mdash; and the first
-          invoice you raise for them settles against it automatically. If you refund it before it&rsquo;s
-          used, the refund comes out of that credit and touches no invoice.
+          <strong>A card deposit becomes a prepayment, not an invoice payment.</strong> It&rsquo;s
+          taken at acceptance, before any invoice for the work exists, so there is nothing to apply it
+          to yet. It lands as a payment on the client with the full amount unapplied, and shows in the{" "}
+          <strong>Prepayments</strong> figure on their record (not Credits &mdash; that line is for
+          overpayments and goodwill credits). If you refund it before it&rsquo;s used, the refund
+          comes out of the unapplied amount and no invoice is touched.
+        </Callout>
+        <p>
+          <strong>Using it on the first invoice is a manual step</strong>, the same one as any other
+          unapplied money &mdash; nothing is applied for you. Once the job has been invoiced:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>Open the client and find the deposit under their payments (method <em>Credit Card</em>, memo &ldquo;Deposit for estimate #…&rdquo;).</li>
+          <li>Edit it and allocate it to the new invoice.</li>
+          <li>
+            The invoice balance drops by that amount and the payment&rsquo;s unapplied figure drops to
+            match. Allocate less than the full deposit and the remainder stays available for the next
+            invoice.
+          </li>
+        </ol>
+        <Callout>
+          Because the deposit isn&rsquo;t applied automatically, a converted job invoices the{" "}
+          <strong>full</strong> amount &mdash; the deposit isn&rsquo;t deducted from it. Allocate the
+          prepayment before sending, or the client will be asked for money they have already paid.
         </Callout>
         <Callout>
           Only the card path is real money. A client who picks &ldquo;Credit Card&rdquo; from the

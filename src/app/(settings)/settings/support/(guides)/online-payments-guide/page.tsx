@@ -162,8 +162,8 @@ export default function OnlinePaymentsGuidePage() {
             <strong>Proposal deposits are charged here too.</strong> An estimate with a Deposit
             Required amount can take it by card as part of the client accepting the proposal. It runs
             through the same connected account as everything else, but because it happens before any
-            invoice exists it&apos;s recorded as unapplied account credit rather than against a
-            balance — see the{" "}
+            invoice exists it&apos;s recorded as an unapplied prepayment rather than against a
+            balance, and you allocate it to the first invoice yourself — see the{" "}
             <a href="/settings/support/estimating-guide#deposits" className="text-[#60ab45] hover:underline">
               Estimating guide
             </a>
