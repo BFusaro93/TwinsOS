@@ -109,6 +109,10 @@ export async function POST(
       status: "open",
       priority: "normal",
       client_id: visit.client_id,
+      // Kept as an id, not just the name in the subject, so the office's
+      // "Create estimate" can pre-fill a real line item from the service's
+      // rate, unit and production rate.
+      upsell_service_id: service.id,
       subject: `Upsell: ${service.name}`,
       body: contextLines,
     })
