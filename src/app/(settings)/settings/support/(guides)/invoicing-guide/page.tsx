@@ -295,6 +295,13 @@ export default function InvoicingGuidePage() {
           payment as unused credit, listed under the client&apos;s Credits until you apply it to the
           next invoice.
         </p>
+        <p>
+          You don&apos;t have to remember it&apos;s there. Any issued invoice with a balance shows a
+          prompt when that client has unapplied money on them — an overpayment, a prepayment, or a
+          deposit taken when they accepted a proposal — with an{" "}
+          <strong>Apply to this invoice</strong> button. It uses the oldest money first and never
+          applies more than the invoice still owes, leaving any remainder for next time.
+        </p>
       </Section>
 
       <Section id="po-number" title="The “PO Number” field vs. the PO module">

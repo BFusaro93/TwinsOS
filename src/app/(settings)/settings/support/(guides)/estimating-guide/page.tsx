@@ -315,7 +315,15 @@ export default function EstimatingGuidePage() {
           <li>
             <strong>Pay by card</strong> charges the deposit through Stripe there and then. It appears
             once your organisation has finished Stripe Connect setup; the amount always comes from
-            the estimate, so the client can&rsquo;t change what they&rsquo;re charged.
+            the estimate, so the client can&rsquo;t change what they&rsquo;re charged. Your{" "}
+            <strong>card processing fee</strong> applies on the same terms as an invoice payment
+            (only above your threshold), and the client sees the split &mdash; deposit, fee, total
+            &mdash; before confirming. They are credited the <em>deposit</em>; the fee is yours.
+          </li>
+          <li>
+            <strong>Pay by bank transfer (ACH)</strong> appears if you have ACH turned on. No
+            processing fee. A bank debit takes a few business days to clear, and the proposal is
+            accepted straight away rather than waiting on it &mdash; see below.
           </li>
           <li>
             <strong>The manual methods</strong> (check, cash, ACH, credit card, other) do not charge
@@ -336,28 +344,45 @@ export default function EstimatingGuidePage() {
           comes out of the unapplied amount and no invoice is touched.
         </Callout>
         <p>
-          <strong>Using it on the first invoice is a manual step</strong>, the same one as any other
-          unapplied money &mdash; nothing is applied for you. Once the job has been invoiced:
+          <strong>Using it on the first invoice is a manual step</strong> &mdash; nothing is applied
+          for you, because a converted job invoices its <strong>full</strong> amount with the deposit
+          not deducted. The invoice tells you when there&rsquo;s money waiting:
         </p>
         <ol className="list-decimal space-y-2 pl-5">
-          <li>Open the client and find the deposit under their payments (method <em>Credit Card</em>, memo &ldquo;Deposit for estimate #…&rdquo;).</li>
-          <li>Edit it and allocate it to the new invoice.</li>
           <li>
-            The invoice balance drops by that amount and the payment&rsquo;s unapplied figure drops to
-            match. Allocate less than the full deposit and the remainder stays available for the next
-            invoice.
+            Open the invoice. If the client has unapplied money, a blue bar reads{" "}
+            &ldquo;<em>$2,000.00 of unapplied payments on this client (including a deposit) &mdash;
+            $2,000.00 can go to this invoice</em>&rdquo;.
+          </li>
+          <li>
+            Click <strong>Apply to this invoice</strong>. It uses the oldest money first, so a
+            deposit is consumed before a later overpayment, and never applies more than the invoice
+            still owes.
+          </li>
+          <li>
+            The balance drops and the unapplied figure drops to match. Anything left over stays
+            available for the next invoice. You can still do it the long way &mdash; open the payment
+            and edit its allocation &mdash; if you want to split it differently.
           </li>
         </ol>
         <Callout>
-          Because the deposit isn&rsquo;t applied automatically, a converted job invoices the{" "}
-          <strong>full</strong> amount &mdash; the deposit isn&rsquo;t deducted from it. Allocate the
-          prepayment before sending, or the client will be asked for money they have already paid.
+          Apply the deposit <em>before</em> you send the invoice. Nothing stops an invoice going out
+          at its full amount with a deposit sitting unused against the client.
         </Callout>
         <Callout>
-          Only the card path is real money. A client who picks &ldquo;Credit Card&rdquo; from the
-          manual list has told you they paid by card <em>somewhere else</em> &mdash; nothing was
-          charged here. The proposal page says so beneath those options whenever card payment is
-          available.
+          <strong>A bank transfer doesn&rsquo;t hold up acceptance.</strong> ACH takes a few business
+          days to clear, and the proposal is accepted the moment the client submits the debit &mdash;
+          they aren&rsquo;t left waiting and neither is the job. While it&rsquo;s clearing the estimate
+          shows the deposit as <strong>pending</strong>: no payment exists on the client yet, because
+          the money hasn&rsquo;t actually arrived. When it clears it becomes a normal prepayment. If
+          the bank returns it, the pending marker just disappears &mdash; there was never a payment
+          to reverse.
+        </Callout>
+        <Callout>
+          Only the card and bank-transfer paths are real money. A client who picks
+          &ldquo;Credit Card&rdquo; from the manual list has told you they paid by card{" "}
+          <em>somewhere else</em> &mdash; nothing was charged here. The proposal page says so beneath
+          those options whenever online payment is available.
         </Callout>
       </Section>
 
