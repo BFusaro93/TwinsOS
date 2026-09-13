@@ -17,6 +17,16 @@ const TWILIO_BUSINESS_TYPE: Partial<Record<string, string>> = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
+/** Normalizes a US-shaped phone number to E.164 ("508-796-2940" -> "+15087962940") — Twilio rejects anything else outright. */
+function toE164(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (phone.trim().startsWith("+")) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return phone; // Already-unusual shape — pass through rather than guess wrong.
+}
+
 const TRUSTHUB = "https://trusthub.twilio.com/v1";
 const MESSAGING = "https://messaging.twilio.com/v1";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
@@ -192,7 +202,11 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
         first_name: reg.contact_first_name ?? "",
         last_name: reg.contact_last_name ?? "",
         email: reg.contact_email ?? "",
-        phone_number: reg.contact_phone ?? "",
+        // Twilio requires E.164 ("+15085551234") and rejects anything else
+        // outright — confirmed live: "508-796-2940" as typed by an admin
+        // failed evaluation with "Phone number ... is invalid." Normalizing
+        // here means the form never has to force a specific typed format.
+        phone_number: toE164(reg.contact_phone),
       }),
     },
   });
