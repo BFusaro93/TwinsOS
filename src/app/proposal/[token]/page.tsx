@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Loader2, MessageSquarePlus, CreditCard } from "lucide-react";
+import { CheckCircle2, Loader2, MessageSquarePlus, CreditCard, Landmark } from "lucide-react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
@@ -23,6 +23,9 @@ interface DepositIntent {
   connectedAccountId: string;
   livemode: boolean;
   depositCents: number;
+  feeCents: number;
+  totalChargeCents: number;
+  paymentMethod: "card" | "us_bank_account";
 }
 
 /**
@@ -39,18 +42,19 @@ interface DepositIntent {
  * results in the money being recorded exactly once.
  */
 function DepositCardForm({
-  depositCents,
+  intent,
   brand,
   onPaid,
   onBack,
   disabled,
 }: {
-  depositCents: number;
+  intent: DepositIntent;
   brand: string;
   onPaid: () => void;
   onBack: () => void;
   disabled: boolean;
 }) {
+  const isAch = intent.paymentMethod === "us_bank_account";
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +86,34 @@ function DepositCardForm({
   return (
     <div className="space-y-4">
       <PaymentElement />
+
+      {/* Show the split whenever a card fee applies, so the total being
+          charged is never larger than the figure on the proposal without
+          saying why. */}
+      {intent.feeCents > 0 && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+          <div className="flex justify-between text-slate-600">
+            <span>Deposit</span>
+            <span className="tabular-nums">{cents(intent.depositCents)}</span>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>Card processing fee</span>
+            <span className="tabular-nums">{cents(intent.feeCents)}</span>
+          </div>
+          <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-semibold text-slate-800">
+            <span>Total charged</span>
+            <span className="tabular-nums">{cents(intent.totalChargeCents)}</span>
+          </div>
+        </div>
+      )}
+
+      {isAch && (
+        <p className="text-xs text-slate-500">
+          Bank transfers take a few business days to clear. You don&apos;t need to wait —
+          your proposal is accepted as soon as you submit this.
+        </p>
+      )}
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-3">
         <Button
@@ -93,7 +125,7 @@ function DepositCardForm({
           {submitting ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing…</>
           ) : (
-            <>Pay {cents(depositCents)} &amp; Accept</>
+            <>Pay {cents(intent.totalChargeCents)} &amp; Accept</>
           )}
         </Button>
         <Button variant="outline" className="h-11 px-5" disabled={submitting || disabled} onClick={onBack}>
@@ -381,7 +413,7 @@ export default function ProposalPage() {
   const [depositReference, setDepositReference] = useState("");
   const [depositNotes, setDepositNotes] = useState("");
   const [depositIntent, setDepositIntent] = useState<DepositIntent | null>(null);
-  const [startingCardPayment, setStartingCardPayment] = useState(false);
+  const [startingCardPayment, setStartingCardPayment] = useState<"card" | "us_bank_account" | null>(null);
   // Pending accept payload — held while deposit step is shown
   const [pendingAcceptPayload, setPendingAcceptPayload] = useState<{
     acceptedByName: string;
@@ -526,18 +558,22 @@ export default function ProposalPage() {
 
   /** Fetches a PaymentIntent for the deposit and switches the step into card
    * mode. The amount comes from the server, never from this page. */
-  async function handleStartCardDeposit() {
-    setStartingCardPayment(true);
+  async function handleStartCardDeposit(paymentMethod: "card" | "us_bank_account") {
+    setStartingCardPayment(paymentMethod);
     setError(null);
     try {
-      const res = await fetch(`/api/public/proposals/${token}/deposit-intent`, { method: "POST" });
+      const res = await fetch(`/api/public/proposals/${token}/deposit-intent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod }),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Couldn't start the card payment");
+      if (!res.ok) throw new Error(data.error ?? "Couldn't start the payment");
       setDepositIntent(data as DepositIntent);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't start the card payment");
+      setError(err instanceof Error ? err.message : "Couldn't start the payment");
     } finally {
-      setStartingCardPayment(false);
+      setStartingCardPayment(null);
     }
   }
 
@@ -814,15 +850,29 @@ export default function ProposalPage() {
               <Button
                 className="h-11 w-full text-base font-semibold"
                 style={{ backgroundColor: brand, borderColor: brand }}
-                disabled={startingCardPayment || submitting}
-                onClick={handleStartCardDeposit}
+                disabled={!!startingCardPayment || submitting}
+                onClick={() => handleStartCardDeposit("card")}
               >
-                {startingCardPayment ? (
+                {startingCardPayment === "card" ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
                 ) : (
                   <><CreditCard className="mr-2 h-4 w-4" />Pay {cents(proposal.depositRequiredCents)} by card</>
                 )}
               </Button>
+              {proposal.achDepositAvailable && (
+                <Button
+                  variant="outline"
+                  className="h-11 w-full text-base font-semibold"
+                  disabled={!!startingCardPayment || submitting}
+                  onClick={() => handleStartCardDeposit("us_bank_account")}
+                >
+                  {startingCardPayment === "us_bank_account" ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
+                  ) : (
+                    <><Landmark className="mr-2 h-4 w-4" />Pay by bank transfer</>
+                  )}
+                </Button>
+              )}
               <p className="text-center text-xs text-slate-400">
                 or tell us how you&apos;re sending it
               </p>
@@ -835,7 +885,7 @@ export default function ProposalPage() {
               options={{ clientSecret: depositIntent.clientSecret }}
             >
               <DepositCardForm
-                depositCents={depositIntent.depositCents}
+                intent={depositIntent}
                 brand={brand}
                 disabled={submitting}
                 onPaid={handleCardDepositPaid}

@@ -129,6 +129,10 @@ export interface ProposalData {
    * has Stripe keys and this org has finished Connect onboarding. When false
    * the step falls back to the self-reported methods and Skip. */
   cardDepositAvailable: boolean;
+  /** Whether the org offers bank transfer (ACH) for the deposit as well as
+   * card. Org toggle only — the intent route verifies the connected account
+   * really has the capability. */
+  achDepositAvailable: boolean;
   /** The org's Connect mode, so Stripe.js is loaded with a matching
    * publishable key (see getScopedStripeJs). */
   orgLivemode: boolean;

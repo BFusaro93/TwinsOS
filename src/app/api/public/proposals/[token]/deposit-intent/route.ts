@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
+import { computeProcessingFee } from "@/lib/stripe/crm-payments";
+import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+
+const BodySchema = z.object({
+  paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
+});
 
 /**
  * Public, unauthenticated "pay the deposit on this proposal" endpoint.
@@ -16,10 +23,12 @@ import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
  * never read from the request body: this endpoint is reachable by anyone
  * holding the proposal link.
  *
- * Card only, deliberately. An ACH debit settles days later, which defeats the
- * point of a deposit that confirms the project — and the deposit step keeps
- * its manual methods and its Skip button for anyone who would rather send a
- * cheque.
+ * Card or ACH. An ACH debit settles days later, so acceptance is NOT held up
+ * waiting for it — the proposal is accepted as soon as the debit is submitted,
+ * and the estimate carries a "deposit pending" marker until Stripe confirms
+ * settlement (see payment_intent.processing in the Connect webhook). The
+ * deposit step also keeps its manual methods and its Skip button for anyone
+ * who would rather send a cheque.
  */
 const serviceClient = () =>
   createClient(
@@ -36,6 +45,11 @@ export async function POST(
   }
 
   const { token } = await params;
+  const parsed = BodySchema.safeParse(await _req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
+  }
+  const { paymentMethod } = parsed.data;
   const supabase = serviceClient();
 
   const { data: shareToken, error: tokenErr } = await supabase
@@ -79,7 +93,9 @@ export async function POST(
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode")
+    .select(
+      "stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents"
+    )
     .eq("id", estimate.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
@@ -90,27 +106,66 @@ export async function POST(
     );
   }
 
-  // No processing fee on a deposit. The invoice paths add one because the
-  // client is settling a stated balance; a deposit is a round number quoted on
-  // the proposal ("$2,000 due to confirm your project") and charging $2,058
-  // against it would not match the document they just signed.
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
+
+  if (paymentMethod === "us_bank_account") {
+    if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+      return NextResponse.json(
+        { error: "Bank transfer isn't available yet — please pay by card." },
+        { status: 400 }
+      );
+    }
+  }
+
+  // The card processing fee applies here on exactly the same terms as an
+  // invoice payment: only on card, only when the org has it enabled, and only
+  // above the configured threshold (computeProcessingFee). ACH stays fee-free
+  // by design — that's the whole point of offering it.
+  //
+  // The client sees the split before confirming, so "$2,000 deposit + $58.00
+  // card fee = $2,058.00" is stated rather than a surprise against the "$2,000
+  // due to confirm your project" on the proposal.
+  const { feeCents, totalChargeCents } =
+    paymentMethod === "card"
+      ? computeProcessingFee(
+          {
+            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+            ccProcessingFeeBps: org.cc_processing_fee_bps,
+            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+          },
+          depositCents,
+          false
+        )
+      : { feeCents: 0, totalChargeCents: depositCents };
+
   const paymentIntent = await stripe.paymentIntents.create(
     {
-      amount: depositCents,
+      amount: totalChargeCents,
       currency: "usd",
-      payment_method_types: ["card"],
+      payment_method_types: [paymentMethod],
       metadata: {
         source: "crm_estimate_deposit",
         org_id: estimate.org_id,
         estimate_id: estimate.id,
         client_id: estimate.client_id,
+        // The DEPOSIT, excluding any fee — this is what gets credited to the
+        // client. The fee is the org's revenue, not the client's money, and is
+        // recorded separately on the payment (same split as crm_invoice).
         deposit_cents: String(depositCents),
+        fee_cents: String(feeCents),
       },
     },
     {
       stripeAccount: org.stripe_connect_account_id,
-      idempotencyKey: chargeIdempotencyKey(["crm_estimate_deposit", estimate.id, depositCents]),
+      // Keyed on the method too: card and ACH are genuinely different intents
+      // for the same deposit, and a client who starts one and switches must
+      // not be handed back the other.
+      idempotencyKey: chargeIdempotencyKey([
+        "crm_estimate_deposit",
+        estimate.id,
+        totalChargeCents,
+        paymentMethod,
+      ]),
     }
   );
 
@@ -119,5 +174,8 @@ export async function POST(
     connectedAccountId: org.stripe_connect_account_id,
     livemode: org.stripe_connect_livemode ?? true,
     depositCents,
+    feeCents,
+    totalChargeCents,
+    paymentMethod,
   });
 }

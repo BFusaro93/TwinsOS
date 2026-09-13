@@ -16,6 +16,8 @@ import {
   LINE_ITEM_MUTATION_KEY,
   useVoidInvoice,
   voidBlockedMessage,
+  useUnappliedPayments,
+  useApplyCreditToInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -598,6 +600,9 @@ export function InvoiceDetail({
   const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const { mutateAsync: voidInvoice } = useVoidInvoice();
+  const applyCredit = useApplyCreditToInvoice();
+  const { data: unappliedPayments = [] } = useUnappliedPayments(invoice?.clientId);
+  const unappliedCents = unappliedPayments.reduce((s, p) => s + p.unusedAmountCents, 0);
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const { data: employees } = useSelectableEmployees();
@@ -1470,6 +1475,53 @@ export function InvoiceDetail({
               </div>
             </div>
           </div>
+
+          {/* Unapplied money the client already has. A proposal deposit is
+              taken before any invoice exists and is never applied
+              automatically, so without this prompt a converted job gets
+              invoiced its full amount and the client is asked for money they
+              have already paid. */}
+          {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
+            <div className="mx-8 mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-blue-900">
+                  <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
+                  {unappliedPayments.length === 1 ? "payment" : "payments"} on this client
+                  {unappliedPayments.some((p) => p.isPrepayment) && " (including a deposit)"} —{" "}
+                  {formatCurrency(Math.min(unappliedCents, invoice.balanceCents))} can go to this invoice.
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={applyCredit.isPending}
+                  onClick={async () => {
+                    // Oldest money first, so a deposit taken at acceptance is
+                    // consumed before a later overpayment.
+                    let remaining = invoice.balanceCents;
+                    let total = 0;
+                    for (const p of [...unappliedPayments].sort((a, b) => a.paymentDate.localeCompare(b.paymentDate))) {
+                      if (remaining <= 0) break;
+                      const take = Math.min(p.unusedAmountCents, remaining);
+                      if (take <= 0) continue;
+                      try {
+                        const res = await applyCredit.mutateAsync({
+                          paymentId: p.id, invoiceId: invoice.id, amountCents: take,
+                        });
+                        total += res.appliedCents;
+                        remaining -= res.appliedCents;
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Couldn't apply the credit");
+                        break;
+                      }
+                    }
+                    if (total > 0) toast.success(`Applied ${formatCurrency(total)} to this invoice`);
+                  }}
+                >
+                  {applyCredit.isPending ? "Applying…" : "Apply to this invoice"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Payment history */}
           {payments.length > 0 && (

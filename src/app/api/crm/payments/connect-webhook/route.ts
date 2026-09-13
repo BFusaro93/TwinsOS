@@ -4,7 +4,11 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { statusForAccount } from "@/lib/stripe/connect";
 import { recordStripeCharge, accountOwnedByOrg } from "@/lib/stripe/record-charge";
-import { recordEstimateDepositCharge } from "@/lib/stripe/record-estimate-deposit";
+import {
+  recordEstimateDepositCharge,
+  markEstimateDepositPending,
+  clearEstimateDepositPending,
+} from "@/lib/stripe/record-estimate-deposit";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
@@ -158,6 +162,16 @@ export async function POST(request: Request) {
     case "payment_intent.payment_failed": {
       const failedIntent = event.data.object as Stripe.PaymentIntent;
       const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
+
+      // An ACH deposit returned by the bank (NSF, closed account) — drop the
+      // "deposit on its way" marker so the estimate stops claiming one is
+      // coming. Nothing else to reverse: no crm_payments row was ever written
+      // for an unsettled debit.
+      if (failedIntent.metadata?.source === "crm_estimate_deposit") {
+        await clearEstimateDepositPending(db, failedIntent.id);
+        break;
+      }
+
       if (
         (failedIntent.metadata?.source === "crm_invoice" || failedIntent.metadata?.source === "crm_invoice_multi") &&
         failedOrgId &&
@@ -191,6 +205,8 @@ export async function POST(request: Request) {
       const canceledSource = canceledIntent.metadata?.source;
       if (canceledSource === "crm_invoice" || canceledSource === "crm_invoice_multi") {
         await clearPendingCharge(db, canceledIntent.id);
+      } else if (canceledSource === "crm_estimate_deposit") {
+        await clearEstimateDepositPending(db, canceledIntent.id);
       }
       break;
     }
@@ -203,6 +219,21 @@ export async function POST(request: Request) {
       const pendingIntent = event.data.object as Stripe.PaymentIntent;
       const pendingSource = pendingIntent.metadata?.source;
       const pendingOrgId = pendingIntent.metadata?.org_id;
+
+      // A proposal deposit paid by ACH lands here and stays here for days.
+      // The acceptance has already gone through — a signed proposal shouldn't
+      // wait on a bank debit — so mark the estimate as having a deposit in
+      // flight, or it looks exactly like one where the client skipped it.
+      if (
+        pendingSource === "crm_estimate_deposit" &&
+        pendingOrgId &&
+        event.account &&
+        (await eventAccountOwnedByOrg(db, pendingOrgId, event.account))
+      ) {
+        await markEstimateDepositPending(db, pendingIntent);
+        break;
+      }
+
       if (
         !event.account ||
         !pendingOrgId ||

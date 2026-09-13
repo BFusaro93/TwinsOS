@@ -82,7 +82,7 @@ export async function GET(
   // Fetch org
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, brand_color, address, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode")
+    .select("name, brand_color, address, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled")
     .eq("id", shareToken.org_id)
     .single();
 
@@ -152,6 +152,11 @@ export async function GET(
       !!org?.stripe_connect_account_id &&
       !!org?.stripe_connect_charges_enabled,
     orgLivemode: org?.stripe_connect_livemode ?? true,
+    // The org-level toggle only. Whether the connected account actually has
+    // the ACH capability is a Stripe API call, too slow to make on every
+    // proposal view — the deposit-intent route does that check and returns a
+    // clear "pay by card instead" error if it isn't really available.
+    achDepositAvailable: !!org?.ach_payments_enabled,
 
     lineItems,
     photos,

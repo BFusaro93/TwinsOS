@@ -13,6 +13,55 @@ const log = logger.child("stripe estimate deposit");
 type Db = any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+/** Flags an estimate as having a deposit submitted but not yet settled — an
+ * ACH debit sits in `processing` for days and writes nothing to crm_payments
+ * until it clears, so without this the estimate is indistinguishable from one
+ * where the client skipped the deposit entirely. */
+export async function markEstimateDepositPending(
+  db: Db,
+  paymentIntent: Stripe.PaymentIntent
+): Promise<void> {
+  const estimateId = paymentIntent.metadata?.estimate_id;
+  const orgId = paymentIntent.metadata?.org_id;
+  if (!estimateId || !orgId) return;
+  const { error } = await db
+    .from("estimates")
+    .update({
+      deposit_pending_intent_id: paymentIntent.id,
+      deposit_pending_cents: Number(paymentIntent.metadata?.deposit_cents) || paymentIntent.amount,
+      deposit_pending_method: paymentIntent.payment_method_types.includes("us_bank_account")
+        ? "us_bank_account"
+        : "card",
+      deposit_pending_at: new Date().toISOString(),
+    })
+    .eq("id", estimateId)
+    .eq("org_id", orgId);
+  if (error) {
+    log.error("failed to mark the estimate deposit as pending", { error, paymentIntentId: paymentIntent.id });
+  }
+}
+
+/** Clears the pending marker for a deposit intent that died (failed or was
+ * canceled). Matched on the intent id so it is idempotent and can never
+ * clobber a newer marker. */
+export async function clearEstimateDepositPending(
+  db: Db,
+  paymentIntentId: string
+): Promise<void> {
+  const { error } = await db
+    .from("estimates")
+    .update({
+      deposit_pending_intent_id: null,
+      deposit_pending_cents: null,
+      deposit_pending_method: null,
+      deposit_pending_at: null,
+    })
+    .eq("deposit_pending_intent_id", paymentIntentId);
+  if (error) {
+    log.error("failed to clear the pending deposit marker", { error, paymentIntentId });
+  }
+}
+
 export interface RecordEstimateDepositArgs {
   /** Service-role client. Org scoping comes from the connected-account
    * ownership check below, not from a caller session. */
@@ -88,8 +137,13 @@ export async function recordEstimateDepositCharge({
     return "error";
   }
 
-  // The charged amount is authoritative — it is what Stripe actually took.
-  const depositCents = paymentIntent.amount_received || paymentIntent.amount;
+  // Credit the DEPOSIT, not the total charged. When a card processing fee
+  // applies the intent is deposit + fee, but the fee is the org's revenue and
+  // was never the client's money — crediting the gross would hand them a
+  // prepayment worth more than they agreed to put down. Same split as the
+  // invoice recorder (balance_cents vs the charged amount).
+  const depositCents = Number(paymentIntent.metadata?.deposit_cents) || paymentIntent.amount;
+  const feeCents = Number(paymentIntent.metadata?.fee_cents) || 0;
   const { method } = await resolveMethod(db, orgId, paymentIntent, connectedAccountId);
 
   const { data: inserted, error: insertErr } = await db
@@ -108,6 +162,7 @@ export async function recordEstimateDepositCharge({
       method,
       reference: paymentIntent.id,
       memo: `Deposit for estimate #${estimate.estimate_number ?? "—"} paid online`,
+      processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
     })
     .select("id")
@@ -131,8 +186,14 @@ export async function recordEstimateDepositCharge({
     .update({
       deposit_collected_cents: depositCents,
       deposit_collected_at: new Date().toISOString(),
-      deposit_method: "credit_card",
+      deposit_method: paymentIntent.payment_method_types.includes("us_bank_account") ? "ach" : "credit_card",
       deposit_reference: paymentIntent.id,
+      // Settled — the pending marker has done its job (it only ever gets set
+      // for ACH, which sits in `processing` for days).
+      deposit_pending_intent_id: null,
+      deposit_pending_cents: null,
+      deposit_pending_method: null,
+      deposit_pending_at: null,
     })
     .eq("id", estimateId)
     .eq("org_id", orgId);

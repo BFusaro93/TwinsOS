@@ -1348,6 +1348,128 @@ export function useBulkImportPayments() {
   });
 }
 
+/** A client's payments that still have money on them not applied to anything —
+ * proposal deposits, prepayments, overpayments. Narrow and guarded on purpose:
+ * usePayments() with no clientId would pull every payment in the org. */
+export interface UnappliedPayment {
+  id: string;
+  paymentDate: string;
+  method: string;
+  memo: string | null;
+  unusedAmountCents: number;
+  isPrepayment: boolean;
+}
+
+export function useUnappliedPayments(clientId: string | undefined) {
+  return useQuery<UnappliedPayment[]>({
+    queryKey: ["crm-payments", "unapplied", clientId ?? "none"],
+    enabled: !!clientId,
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payments")
+        .select("id, payment_date, method, memo, unused_amount_cents, is_prepayment")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .gt("unused_amount_cents", 0)
+        .order("payment_date", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        paymentDate: r.payment_date as string,
+        method: r.method as string,
+        memo: (r.memo as string) ?? null,
+        unusedAmountCents: (r.unused_amount_cents as number) ?? 0,
+        isPrepayment: (r.is_prepayment as boolean) ?? false,
+      }));
+    },
+  });
+}
+
+/**
+ * Applies money already sitting unapplied on a client's payment (a proposal
+ * deposit, a prepayment, an overpayment) to one invoice.
+ *
+ * Until now the only way to do this was to open the payment and edit its
+ * allocations, which meant staff had to know the money existed at all — a
+ * converted job invoices its full amount with no deposit deducted, so an
+ * unnoticed deposit meant billing a client for money they had already paid.
+ *
+ * Applies the SMALLER of what's unapplied and what the invoice still owes, so
+ * it can never over-allocate; the remainder stays available for the next
+ * invoice. The allocation guard trigger enforces the same rule server-side.
+ */
+export function useApplyCreditToInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      paymentId,
+      invoiceId,
+      amountCents,
+    }: { paymentId: string; invoiceId: string; amountCents: number }) => {
+      if (amountCents <= 0) throw new Error("Nothing to apply");
+      const supabase = createClient();
+
+      // Re-read both sides rather than trusting what the screen was showing:
+      // another tab (or the Stripe webhook landing a charge) may have moved
+      // either number since this page loaded.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: payment, error: payErr } = await (supabase as any)
+        .from("crm_payments")
+        .select("id, client_id, unused_amount_cents")
+        .eq("id", paymentId)
+        .single();
+      if (payErr) throw payErr;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: invoice, error: invErr } = await (supabase as any)
+        .from("crm_invoices")
+        .select("id, client_id, balance_cents, status")
+        .eq("id", invoiceId)
+        .single();
+      if (invErr) throw invErr;
+      if (invoice.client_id !== payment.client_id) {
+        throw new Error("That payment belongs to a different client");
+      }
+      if (invoice.status === "draft" || invoice.status === "void") {
+        throw new Error("Money can only be applied to an issued invoice");
+      }
+
+      const applyCents = Math.min(
+        amountCents,
+        payment.unused_amount_cents ?? 0,
+        invoice.balance_cents ?? 0
+      );
+      if (applyCents <= 0) throw new Error("Nothing left to apply");
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: allocErr } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .insert({ payment_id: paymentId, invoice_id: invoiceId, amount_cents: applyCents });
+      if (allocErr) throw allocErr;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updErr } = await (supabase as any)
+        .from("crm_payments")
+        .update({ unused_amount_cents: (payment.unused_amount_cents ?? 0) - applyCents })
+        .eq("id", paymentId);
+      if (updErr) throw updErr;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await applyPaymentToInvoice(supabase as any, invoiceId, applyCents);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
+
+      return { appliedCents: applyCents };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["crm-clients"] });
+    },
+  });
+}
+
 export function usePayments(clientId?: string) {
   return useQuery({
     queryKey: ["crm-payments", clientId ?? "all"],
