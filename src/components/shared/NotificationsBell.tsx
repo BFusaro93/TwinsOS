@@ -32,22 +32,25 @@ import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
 import { useNotificationPrefs } from "@/lib/hooks/use-notification-prefs";
 import { createClient } from "@/lib/supabase/client";
 import type { AppNotification, NotificationEntityType } from "@/types/notification";
+import { recordPath } from "@/lib/notifications/record-links";
 
 // A comment_mention notification's entity_type is the CommentRecordType the
 // comment was left on (ticket, work_order, po, requisition, ...) — map each
 // to where to send the user and, where an existing store-backed detail panel
 // exists, to the NotificationEntityType handleNotifClick already knows how
 // to open (reusing its switch below instead of duplicating that logic here).
-const MENTION_RECORD_ROUTES: Record<string, { href: (id: string) => string; entityType: NotificationEntityType }> = {
-  ticket:       { href: (id) => `/crm/tickets?open=${id}`, entityType: "ticket" },
-  work_order:   { href: () => "/cmms/work-orders", entityType: "work_order" },
-  po:           { href: () => "/po/orders", entityType: "purchase_order" },
-  requisition:  { href: () => "/po/requisitions", entityType: "requisition" },
-  crm_estimate: { href: (id) => `/crm/estimates/${id}`, entityType: "estimate" },
-  receiving:    { href: () => "/po/receiving", entityType: null },
-  project:      { href: () => "/po/projects", entityType: null },
-  damage_case:  { href: () => "/dashboard/damage-cases", entityType: null },
-  job_photo:    { href: () => "/photos/projects", entityType: null },
+// Only the entityType half lives here now — the paths are shared with the
+// @mention email via recordPath() so both channels open the same record.
+const MENTION_RECORD_ENTITY_TYPES: Record<string, NotificationEntityType> = {
+  ticket:       "ticket",
+  work_order:   "work_order",
+  po:           "purchase_order",
+  requisition:  "requisition",
+  crm_estimate: "estimate",
+  receiving:    null,
+  project:      null,
+  damage_case:  null,
+  job_photo:    null,
 };
 
 function timeAgo(isoString: string): string {
@@ -325,7 +328,7 @@ export function NotificationsBell() {
       ticket_comment:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Comment" },
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       automation_alert:           { href: () => "/crm/communication/automations", title: "Automation Alert" },
-      wo_status_changed:          { href: () => "/cmms/work-orders", title: "Status Changed" },
+      wo_status_changed:          { href: (id) => id ? `/cmms/work-orders?id=${id}` : "/cmms/work-orders", title: "Status Changed" },
       sales_meeting_reminder:     { href: () => "/crm/sales-meetings", title: "Meeting Reminder" },
     };
     dbNotifications.filter((n) => {
@@ -341,15 +344,15 @@ export function NotificationsBell() {
       // points at the same place — so it's resolved separately here instead
       // of fitting the simple entityId-only map below.
       if (n.type === "comment_mention") {
-        const route = n.entity_type ? MENTION_RECORD_ROUTES[n.entity_type] : undefined;
+        const entityType = n.entity_type ? MENTION_RECORD_ENTITY_TYPES[n.entity_type] ?? null : null;
         items.push({
           id,
           type: "comment_mention",
           title: n.title ?? "Mentioned You",
           body: n.message,
-          href: route && n.entity_id ? route.href(n.entity_id) : "/crm/tickets",
+          href: recordPath(n.entity_type, n.entity_id) ?? "/crm/tickets",
           entityId: n.entity_id,
-          entityType: route ? route.entityType : null,
+          entityType,
           createdAt: n.created_at,
           readAt: readIds.has(id) ? new Date().toISOString() : null,
         });
