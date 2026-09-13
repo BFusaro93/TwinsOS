@@ -782,7 +782,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       </div>
 
       {/* ── body ── */}
-      <div className="flex flex-1 flex-col gap-4 overflow-auto p-6 md:flex-row">
+      {/* Main column + info rail — side by side only from xl, so a tablet
+          gets the full width for the tab content instead of a 256px squeeze. */}
+      <div className="flex flex-1 flex-col gap-4 overflow-auto p-4 md:p-6 xl:flex-row">
 
         {/* ── left column ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0">
@@ -1993,7 +1995,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
              with this column — drop it there so the table has room to breathe
              instead of clipping its rightmost action buttons. */}
         {!(onClose && tab === "visits") && (
-          <div className="w-full md:w-64 md:shrink-0 flex flex-col gap-3">
+          <div className="w-full xl:w-64 xl:shrink-0 flex flex-col gap-3">
             <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
               <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
               <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />

@@ -70,14 +70,16 @@ export default function DashboardLayout({
       <SettingsLoader />
       <EquiptQuickAddOverlay />
 
-      {/* Desktop sidebar */}
-      <div className="hidden h-full md:flex">
+      {/* Docked sidebar — lg+ only. Below that (phones and portrait tablets)
+          the 260px rail leaves too little room for the content beside it, so it
+          becomes the drawer below. */}
+      <div className="hidden h-full lg:flex">
         <AppSidebar />
       </div>
 
-      {/* Mobile sidebar drawer */}
+      {/* Drawer sidebar — phones and portrait tablets */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           {/* Backdrop — touch-none prevents scroll bleed to page behind */}
           <div
             className="absolute inset-0 bg-black/50 touch-none"

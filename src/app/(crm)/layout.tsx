@@ -96,16 +96,18 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
       <RealtimeSync />
       <SettingsLoader />
 
-      {/* Desktop sidebar */}
+      {/* Docked sidebar — lg+ only. Below that (phones and portrait tablets)
+          the 260px rail leaves too little room for the content beside it, so it
+          becomes the drawer below. */}
       {!isCrewApp && (
-        <div className="hidden h-full md:flex">
+        <div className="hidden h-full lg:flex">
           <CRMSidebar />
         </div>
       )}
 
-      {/* Mobile sidebar drawer */}
+      {/* Drawer sidebar — phones and portrait tablets */}
       {!isCrewApp && sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div
             className="absolute inset-0 bg-black/50 touch-none"
             onClick={() => setSidebarOpen(false)}

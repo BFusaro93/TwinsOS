@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, PanelLeftClose, Plus, Search, UserCog } from "lucide-react";
-import { useUIStore, useCurrentUserStore, useQuickAddStore } from "@/stores";
+import { useUIStore, useCurrentUserStore, useQuickAddStore, useSidebarRailDefault } from "@/stores";
 import type { QuickAddType } from "@/stores/quick-add-store";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -249,6 +249,8 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
 
   // Sync the currentUser store with the live Supabase session on mount
   useSyncCurrentUser();
+  // Landscape tablets / small laptop windows start on the icon rail
+  useSidebarRailDefault();
 
   return (
     <>
@@ -257,21 +259,22 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
       {sidebarToggle && (
         <>
-          {/* Mobile hamburger — opens sidebar drawer */}
+          {/* Hamburger — opens the drawer sidebar. Shown wherever the sidebar
+              isn't docked (phones and portrait tablets), matching the shells. */}
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setSidebarOpen(true)}
-            className="shrink-0 text-slate-500 md:hidden"
+            className="shrink-0 text-slate-500 lg:hidden"
           >
             <Menu className="h-5 w-5" />
           </Button>
-          {/* Desktop collapse toggle */}
+          {/* Collapse toggle — only meaningful where the sidebar is docked */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
-            className="hidden shrink-0 text-slate-500 md:inline-flex"
+            className="hidden shrink-0 text-slate-500 lg:inline-flex"
           >
             <PanelLeftClose className="h-5 w-5" />
           </Button>

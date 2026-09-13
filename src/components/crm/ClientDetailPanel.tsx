@@ -2611,7 +2611,7 @@ function AllContactsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Contacts</h2>
           <div className="flex items-center gap-3">
@@ -2703,7 +2703,7 @@ function AllPropertiesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Properties</h2>
           <div className="flex items-center gap-3">
@@ -2827,7 +2827,7 @@ function AllAccountingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Accounting</h2>
           <div className="flex items-center gap-3">
@@ -2927,7 +2927,7 @@ function AllEstimatesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Estimates</h2>
           <div className="flex items-center gap-3">
@@ -3051,7 +3051,7 @@ function ClientAllVisitsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">{title}</h2>

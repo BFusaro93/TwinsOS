@@ -25,7 +25,11 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
     const vw = typeof window !== "undefined" ? window.innerWidth : 1100;
     return Math.min(vw, Math.max(MIN_WIDTH, Math.min(1100, vw * 0.75)));
   });
-  const [canResize] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
+  // The drag-to-resize handle is driven by mousemove/mouseup, so it does
+  // nothing on a touch screen. Gate it on a width only a real pointer reaches.
+  const [canResize] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1024 && window.matchMedia("(hover: hover)").matches
+  );
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [draftClientId, setDraftClientId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);

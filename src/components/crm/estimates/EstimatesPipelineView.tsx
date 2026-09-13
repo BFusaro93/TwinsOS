@@ -5,7 +5,8 @@ import {
   DndContext,
   useDraggable,
   useDroppable,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -223,8 +224,12 @@ export function EstimatesPipelineView({
   onEstimateClick,
   onStageChange,
 }: EstimatesPipelineViewProps) {
+  // The whole card is the drag handle, so touch needs a press-and-hold to
+  // start a drag — otherwise dnd-kit would swallow the swipe and the column
+  // couldn't be scrolled on a tablet.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } })
   );
 
   function handleDragEnd(event: DragEndEvent) {

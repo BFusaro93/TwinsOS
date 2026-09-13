@@ -993,7 +993,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       </div>
 
       {/* ── body ────────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row md:items-start gap-4 overflow-auto p-6">
+      {/* Main column + summary rail. Side by side only from xl: a 256px rail
+          plus this column's own internal splits needs more room than a tablet
+          has, and below xl the header card's fields start colliding. */}
+      <div className="flex min-h-0 flex-1 flex-col xl:flex-row xl:items-start gap-4 overflow-auto p-4 md:p-6">
 
         {/* ── left ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0 pb-3">
@@ -1030,12 +1033,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
               {/* Client info card + header form */}
               <div className="rounded-lg border bg-white shadow-sm overflow-hidden shrink-0">
-                <div className={cn("flex flex-col gap-0 sm:flex-row", compact && "flex-col")}>
+                <div className={cn("flex flex-col gap-0 lg:flex-row", compact && "flex-col")}>
 
                   {/* Client info card */}
                   <div className={cn(
                     "shrink-0 bg-slate-50 p-4 flex flex-col gap-2",
-                    compact ? "w-full border-b" : "w-full border-b sm:w-56 sm:border-b-0 sm:border-r"
+                    compact ? "w-full border-b" : "w-full border-b lg:w-56 lg:border-b-0 lg:border-r"
                   )}>
                     <p className="text-xs font-semibold text-slate-800 uppercase tracking-wide">
                       Client
@@ -1079,7 +1082,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
                   {/* Header form */}
                   <div className="flex-1 p-4 min-w-0">
-                    <div className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
 
                       {/* Left column */}
                       <div className="flex flex-col gap-3 min-w-0">
@@ -1691,7 +1694,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         </div>
 
         {/* ── right: summary panel ── */}
-        <div className="w-full md:w-64 md:shrink-0 pb-3">
+        <div className="w-full xl:w-64 xl:shrink-0 pb-3">
           <EstimateSummaryPanel
             estimate={estimate}
             onRecalculate={handleSaveFinancials}

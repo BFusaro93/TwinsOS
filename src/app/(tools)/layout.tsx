@@ -27,12 +27,12 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
       <RealtimeSync />
       <SettingsLoader />
 
-      <div className="hidden h-full md:flex">
+      <div className="hidden h-full lg:flex">
         <ToolsSidebar />
       </div>
 
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-10 h-full w-[260px]">
             <ToolsSidebar />

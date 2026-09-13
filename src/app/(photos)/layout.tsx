@@ -27,14 +27,16 @@ export default function PhotosLayout({ children }: { children: React.ReactNode }
       <RealtimeSync />
       <SettingsLoader />
 
-      {/* Desktop sidebar */}
-      <div className="hidden h-full md:flex">
+      {/* Docked sidebar — lg+ only. Below that (phones and portrait tablets)
+          the 260px rail leaves too little room for the content beside it, so it
+          becomes the drawer below. */}
+      <div className="hidden h-full lg:flex">
         <PhotosSidebar />
       </div>
 
       {/* Mobile drawer */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50 touch-none" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
             <PhotosSidebar />
