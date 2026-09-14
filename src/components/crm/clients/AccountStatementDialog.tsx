@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Printer } from "lucide-react";
+import { Printer, Send } from "lucide-react";
+import { toast } from "sonner";
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -21,6 +22,7 @@ function startOfYearISO(): string {
 interface Props {
   clientId: string;
   clientName: string | null;
+  clientEmail: string | null;
   open: boolean;
   onClose: () => void;
 }
@@ -29,13 +31,15 @@ interface Props {
  *  account statement PDF (mail-in style), modeled after the org's existing
  *  Service Autopilot statement report screen: a date range, a few
  *  show/hide toggles, an optional message, and a live preview. */
-export function AccountStatementDialog({ clientId, clientName, open, onClose }: Props) {
+export function AccountStatementDialog({ clientId, clientName, clientEmail, open, onClose }: Props) {
   const [statementDate, setStatementDate] = useState(todayISO());
   const [periodFrom, setPeriodFrom] = useState(startOfYearISO());
   const [periodTo, setPeriodTo] = useState(todayISO());
   const [showLineItemDetails, setShowLineItemDetails] = useState(true);
   const [minBalance, setMinBalance] = useState("");
   const [message, setMessage] = useState("");
+  const [emailTo, setEmailTo] = useState(clientEmail ?? "");
+  const [sending, setSending] = useState(false);
 
   const pdfUrl = useMemo(() => {
     const params = new URLSearchParams({
@@ -50,6 +54,49 @@ export function AccountStatementDialog({ clientId, clientName, open, onClose }: 
     }
     return `/api/crm/clients/${clientId}/statement/pdf?${params.toString()}`;
   }, [clientId, statementDate, periodFrom, periodTo, message, minBalance, showLineItemDetails]);
+
+  useEffect(() => {
+    if (open) setEmailTo(clientEmail ?? "");
+  }, [open, clientEmail]);
+
+  async function sendEmail() {
+    if (!emailTo.trim()) {
+      toast.error("Enter a recipient email address");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch(`/api/crm/clients/${clientId}/statement/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: [emailTo.trim()],
+          statementDate,
+          periodFrom,
+          periodTo,
+          message: message.trim() || undefined,
+          detail: showLineItemDetails,
+          minBalanceCents: minBalance.trim() && !Number.isNaN(Number(minBalance))
+            ? Math.round(Number(minBalance) * 100)
+            : undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to send statement");
+        return;
+      }
+      if (data.skipped) {
+        toast.info("Not sent — balance is below the minimum threshold");
+        return;
+      }
+      toast.success("Statement emailed");
+    } catch {
+      toast.error("Failed to send statement");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -116,6 +163,26 @@ export function AccountStatementDialog({ clientId, clientName, open, onClose }: 
                 placeholder="e.g. Thank you for your business! Please remit payment by the due date."
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
+            </div>
+
+            <div>
+              <Label className="text-xs">Email To</Label>
+              <Input
+                type="email"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="client@example.com"
+                className="h-8 text-xs"
+              />
+              <Button
+                size="sm"
+                className="mt-2 h-7 w-full text-xs"
+                onClick={() => void sendEmail()}
+                disabled={sending}
+              >
+                <Send className="mr-1.5 h-3.5 w-3.5" />
+                {sending ? "Sending…" : "Email Statement"}
+              </Button>
             </div>
           </div>
 

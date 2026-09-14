@@ -47,6 +47,7 @@ import {
   FileImage,
   ClipboardList,
   CalendarCheck,
+  FileStack,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -98,6 +99,7 @@ export const CRM_NAV: NavSection[] = [
     label: "Accounting",
     items: [
       { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt, permission: "acct_view_invoice_list" },
+      { label: "Statements",      href: "/crm/accounting/statements",      icon: FileStack, permission: "acct_view_invoice_list" },
       { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard, permission: "acct_view_payment_list" },
       { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList, permission: "requisition_list" },
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
