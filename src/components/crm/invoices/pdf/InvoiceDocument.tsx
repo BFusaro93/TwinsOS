@@ -538,7 +538,14 @@ const SS = StyleSheet.create({
   toName: { fontSize: 9.5, fontFamily: "Helvetica-Bold" },
   toLine: { fontSize: 8, color: "#374151" },
 
-  summaryTables: { flexDirection: "column", width: 220 },
+  summaryTables: { flexDirection: "column", width: 240 },
+  /** Header + single value-row table for Invoice #/Date/Payment Due — a more
+   *  clearly boxed "table" look (bordered cells) rather than stacked label rows. */
+  infoTable: { border: "1 solid #cbd5e1" },
+  infoHeaderRow: { flexDirection: "row", borderBottom: "1 solid #cbd5e1" },
+  infoHeaderCell: { flex: 1, backgroundColor: "#f8fafc", padding: 4, fontSize: 7, fontFamily: "Helvetica-Bold", textAlign: "center", borderRight: "1 solid #cbd5e1" },
+  infoValueRow: { flexDirection: "row" },
+  infoValueCell: { flex: 1, padding: 4, fontSize: 7.5, textAlign: "center", borderRight: "1 solid #cbd5e1" },
   miniTable: { borderTop: "1 solid #cbd5e1", borderLeft: "1 solid #cbd5e1", borderRight: "1 solid #cbd5e1" },
   miniRow: { flexDirection: "row", borderBottom: "1 solid #cbd5e1" },
   miniCellLabel: { flex: 1.4, backgroundColor: "#f8fafc", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold" },
@@ -590,9 +597,12 @@ const SS = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   stubLeft: { flexDirection: "column" },
-  stubRow: { flexDirection: "row", marginBottom: 4 },
+  stubRow: { flexDirection: "row", marginBottom: 4, alignItems: "flex-end" },
   stubLabel: { fontSize: 8.5, fontFamily: "Helvetica-Bold", width: 80 },
   stubValue: { fontSize: 8.5 },
+  /** Blank underline for the client to write the check amount on — no value
+   *  is pre-filled, unlike every other stub row. */
+  stubBlankLine: { flex: 1, maxWidth: 120, borderBottom: "1 solid #1e293b", height: 11 },
   stubTitle: { fontSize: 16, fontFamily: "Helvetica-Bold" },
   stubRight: { flexDirection: "column", alignItems: "flex-end" },
 
@@ -678,14 +688,18 @@ function StatementInvoiceLayout({
         </View>
 
         <View style={SS.summaryTables}>
-          <View style={SS.miniTable}>
-            <View style={SS.miniRow}>
-              <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Invoice #</Text></View>
-              <View style={SS.miniCellValue}><Text>{invoiceLabel}</Text></View>
+          <View style={SS.infoTable}>
+            <View style={SS.infoHeaderRow}>
+              <View style={[SS.infoHeaderCell, { color: accentColor }]}><Text>Invoice #</Text></View>
+              <View style={[SS.infoHeaderCell, { color: accentColor }]}><Text>Invoice Date</Text></View>
+              <View style={[SS.infoHeaderCell, { color: accentColor, borderRight: "none" }]}><Text>Payment Due</Text></View>
             </View>
-            <View style={[SS.miniRow, { borderBottom: "none" }]}>
-              <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Invoice Date</Text></View>
-              <View style={SS.miniCellValue}><Text>{formatDate(invoice.invoiceDate)}</Text></View>
+            <View style={SS.infoValueRow}>
+              <View style={SS.infoValueCell}><Text>{invoiceLabel}</Text></View>
+              <View style={SS.infoValueCell}><Text>{formatDate(invoice.invoiceDate)}</Text></View>
+              <View style={[SS.infoValueCell, { borderRight: "none" }]}>
+                <Text>{invoice.dueDate ? formatDate(invoice.dueDate) : "—"}</Text>
+              </View>
             </View>
           </View>
           <View style={SS.spacer} />
@@ -701,6 +715,10 @@ function StatementInvoiceLayout({
                 <View style={SS.miniRow}>
                   <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Previous Balance</Text></View>
                   <View style={SS.miniCellValue}><Text>{cents(st?.previousBalanceCents ?? 0)}</Text></View>
+                </View>
+                <View style={SS.miniRow}>
+                  <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Sales Tax</Text></View>
+                  <View style={SS.miniCellValue}><Text>{cents(invoice.taxCents)}</Text></View>
                 </View>
                 <View style={SS.miniRow}>
                   {/* invoice.totalCents is already tax-inclusive — shown here
@@ -802,6 +820,7 @@ function StatementInvoiceLayout({
             <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
             <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
             <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+            <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Enclosed</Text><View style={SS.stubBlankLine} /></View>
           </View>
           <View style={SS.stubRight}>
             <Text style={[SS.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
