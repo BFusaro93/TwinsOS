@@ -1956,7 +1956,10 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   return (
     <>
-    <div className="grid min-h-[600px] grid-cols-1 bg-white px-3 md:grid-cols-[1fr_10px_1fr_10px_1fr]">
+    {/* minmax(0,1fr), not 1fr: a bare fr track won't shrink below its content's
+        min-content, so Jobs and Open Estimates were stealing width and left
+        Accounting a third narrower than its share. */}
+    <div className="grid min-h-[600px] grid-cols-1 bg-white px-3 md:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
       {/* Left — Jobs */}
       <div className="flex flex-col bg-white">
         <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
@@ -3257,11 +3260,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               )}
             </div>
 
-            {/* Info row: address on left, contact details on right */}
-            <div className="mt-1.5 flex gap-8">
+            {/* Info row: address on left, contact details on right. Wraps, and
+                the address keeps its natural width — squeezed between the icon
+                and the contact block it was breaking mid-line into four. */}
+            <div className="mt-1.5 flex flex-wrap gap-x-8 gap-y-1">
               {/* Left — billing address (two lines) */}
               {(client.billingAddress || client.billingCity) && (
-                <div className="flex items-start gap-1 text-sm text-slate-500 leading-snug">
+                <div className="flex shrink-0 items-start gap-1 text-sm text-slate-500 leading-snug">
                   <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <div>
                     {client.billingAddress && <div>{client.billingAddress}</div>}
@@ -3577,7 +3582,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
                       #{t.ticketNumber}{t.category ? ` · ${t.category}` : ""}
                     </p>
-                    <span className="truncate text-slate-700">
+                    {/* block, not inline: truncate's overflow/ellipsis have no
+                        effect on a non-replaced inline element, so a long
+                        subject ran straight out of the card. */}
+                    <span className="block truncate text-slate-700">
                       {t.subject || "(no subject)"}
                     </span>
                   </div>
@@ -3724,7 +3732,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
-        <TabsList className="sticky top-0 z-10 shrink-0 justify-start rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
+        {/* Scrolls sideways — nine tabs don't fit beside a 340px list panel, and
+            without this Audit Trail was simply cut off the edge. */}
+        <TabsList className="sticky top-0 z-10 shrink-0 justify-start overflow-x-auto rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
           {(
             [
               { value: "home",      label: "Home" },
@@ -3741,7 +3751,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="h-full shrink-0 rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
               {tab.label}
             </TabsTrigger>
