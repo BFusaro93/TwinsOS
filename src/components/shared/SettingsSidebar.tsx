@@ -9,7 +9,7 @@ import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
-import { DOC_GUIDE_SLUGS } from "@/lib/docs-guides";
+import { SHELL_MOUNTED_DOC_SLUGS } from "@/lib/docs-guides";
 import type { LucideIcon } from "lucide-react";
 
 interface SettingsNavItem {
@@ -102,12 +102,12 @@ export function SettingsSidebar() {
           </p>
         )}
         {visibleNav.map((item) => {
-          // In this shell guides render at /settings/support/<slug> (the same
-          // guide bodies are also mounted under /docs and /crm/docs), but they
-          // belong to Docs conceptually — so treat them as a Docs route here
-          // rather than highlighting Support.
+          // In this shell the guides and the API reference render at
+          // /settings/support/<slug> (the same bodies are also mounted under
+          // /docs and /crm/docs), but they belong to Docs conceptually — so
+          // treat them as a Docs route here rather than highlighting Support.
           const guideSlug = pathname.split("/").pop() ?? "";
-          const onGuidePage = DOC_GUIDE_SLUGS.has(guideSlug);
+          const onGuidePage = SHELL_MOUNTED_DOC_SLUGS.has(guideSlug);
           let isActive = item.exact
             ? pathname === item.href
             : pathname === item.href || pathname.startsWith(item.href + "/");

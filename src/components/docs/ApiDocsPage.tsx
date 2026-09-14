@@ -1,4 +1,4 @@
-import { PageHeader } from "@/components/shared/PageHeader";
+import { DocsFontScope, DocsHero } from "@/components/docs/DocsBrand";
 import { buildOpenApiDocument } from "@/lib/api/openapi";
 
 const METHOD_COLORS: Record<string, string> = {
@@ -29,15 +29,17 @@ function mcpToolNames(path: string, method: string, hasIdParam: boolean): string
  * The endpoint-by-endpoint public API + MCP reference. Mounted in all three
  * shells (/docs/api-docs, /crm/docs/api-docs, /settings/support/api-docs) so
  * following the link out of a guide keeps you in the product you were reading
- * it from — same arrangement as the guides themselves.
+ * it from — same arrangement as the guides themselves, and dressed the same way
+ * so it doesn't read as an app screen wedged into the docs.
  */
 export function ApiDocsPage() {
   const doc = buildOpenApiDocument();
   const paths = doc.paths as Record<string, Record<string, Record<string, unknown>>>;
 
   return (
-    <div className="flex flex-col gap-6 pb-4">
-      <PageHeader
+    <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
+      <DocsHero
+        kicker="Integrations"
         title="Public API"
         description="Scoped, API-key-authenticated access to Equipt and Landscapt resources. Create keys under Settings > Integrations."
       />
@@ -129,6 +131,6 @@ export function ApiDocsPage() {
           </div>
         </section>
       ))}
-    </div>
+    </DocsFontScope>
   );
 }

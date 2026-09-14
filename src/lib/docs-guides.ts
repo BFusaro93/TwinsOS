@@ -360,7 +360,7 @@ export function guideBasePath(pathname: string | null | undefined): string {
  * endpoint reference. "library" is deliberately absent — it exists only under
  * Settings, so a link to it must not be rewritten.
  */
-const SHELL_MOUNTED_DOC_SLUGS = new Set([...DOC_GUIDE_SLUGS, "api-docs"]);
+export const SHELL_MOUNTED_DOC_SLUGS = new Set([...DOC_GUIDE_SLUGS, "api-docs"]);
 
 /**
  * Rewrites a hard-coded "/settings/support/<slug>" docs link (docs-content.ts
