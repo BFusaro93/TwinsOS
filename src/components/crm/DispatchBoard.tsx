@@ -3030,6 +3030,20 @@ export function DispatchBoard() {
 
   function isVisible(col: ColKey) { return visibleKeys.includes(col); }
 
+  /**
+   * The crew a visit actually runs with.
+   *
+   * crm_job_visits.crew_id is null whenever the visit inherits its crew from
+   * the job — which is the common case, since assigning a crew on the job is
+   * how most recurring work is set up and nothing writes the value down onto
+   * each generated visit. Every consumer below MUST resolve through this, not
+   * through raw `v.crewId`: the two disagreeing is what let a job-inherited
+   * visit be grouped under its crew visually while being numbered and dragged
+   * as if it were unassigned.
+   */
+  const effectiveCrewIdOf = (v: { crewId: string | null; job?: { crewId?: string | null } | null }) =>
+    v.crewId ?? v.job?.crewId ?? null;
+
   const filtered = allVisits.filter((v) => {
     if (crewFilters.length > 0 && !crewFilters.includes(v.crewId ?? "")) return false;
     if (statusFilter !== "all" && v.status !== statusFilter) return false;
@@ -3080,7 +3094,7 @@ export function DispatchBoard() {
         // default 1, so the remembered position decides and next Monday comes
         // up in the sequence this Monday was routed in. Jobs with nothing
         // remembered sort last, which is the right prompt to place them.
-        const crewOf = (v: typeof filtered[number]) => v.crewId ?? v.job?.crewId ?? null;
+        const crewOf = effectiveCrewIdOf;
         const rememberedPos = (v: typeof filtered[number]) => {
           const crew = crewOf(v);
           if (!crew || !v.jobId) return Number.MAX_SAFE_INTEGER;
@@ -3121,12 +3135,15 @@ export function DispatchBoard() {
   // runs its own separate route, so "#3" should mean the 3rd stop for THAT
   // crew, and reordering one crew's stops must never renumber another's.
   const visitById = new Map(displayVisits.map((v) => [v.id, v]));
-  const crewKeyOf = (id: string) => visitById.get(id)?.crewId ?? "unassigned";
+  const crewKeyOf = (id: string) => {
+    const v = visitById.get(id);
+    return (v ? effectiveCrewIdOf(v) : null) ?? "unassigned";
+  };
   const crewOrderNumById = new Map<string, number>();
   {
     const counters = new Map<string, number>();
     for (const v of displayVisits) {
-      const key = v.crewId ?? "unassigned";
+      const key = effectiveCrewIdOf(v) ?? "unassigned";
       const next = (counters.get(key) ?? 0) + 1;
       counters.set(key, next);
       crewOrderNumById.set(v.id, next);
@@ -3298,7 +3315,7 @@ export function DispatchBoard() {
   const dispatchedCount = filtered.filter((v) => v.status === "dispatched").length;
 
   const crewStatsList = (crews ?? []).map((c) => {
-    const cv = displayVisits.filter((v) => v.crewId === c.id);
+    const cv = displayVisits.filter((v) => effectiveCrewIdOf(v) === c.id);
     const counted = cv.filter(countsTowardTotals);
     return {
       id: c.id,
@@ -3308,7 +3325,7 @@ export function DispatchBoard() {
       amt: counted.reduce((s, v) => s + visitAmountCents(v), 0),
     };
   }).filter((s) => s.count > 0);
-  const unassignedVisits     = displayVisits.filter((v) => !v.crewId);
+  const unassignedVisits     = displayVisits.filter((v) => !effectiveCrewIdOf(v));
   const unassignedStatCount  = unassignedVisits.length;
   const unassignedStatBHrs   = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const unassignedStatAmt    = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + visitAmountCents(v), 0);

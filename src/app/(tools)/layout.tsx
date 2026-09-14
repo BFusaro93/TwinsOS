@@ -7,7 +7,7 @@ import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
-import { useUIStore } from "@/stores";
+import { useUIStore, SidebarDrawerProvider } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 const INTERNAL_ONLY_PATHS = ["/tools/snow-calculator"];
@@ -35,7 +35,9 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-10 h-full w-[260px]">
-            <ToolsSidebar />
+            <SidebarDrawerProvider>
+              <ToolsSidebar />
+            </SidebarDrawerProvider>
           </div>
         </div>
       )}

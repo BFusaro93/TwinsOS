@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, UserCog, Wrench, Sprout, HelpCircle, Library } from "lucide-react";
 import { BrandMark } from "./BrandMark";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
@@ -34,7 +34,7 @@ export const SETTINGS_NAV_TITLES: { label: string; href: string }[] = [
 
 export function SettingsSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const { isAdmin, roleId } = usePermissions();

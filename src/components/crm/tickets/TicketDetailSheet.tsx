@@ -16,6 +16,7 @@ import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useCreateEstimateFromUpsell } from "@/lib/hooks/use-upsell-convert";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useClients } from "@/lib/hooks/use-clients";
 import { NewClientDialog } from "@/components/crm/NewClientDialog";
@@ -335,6 +336,7 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
 
 function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const createEstimate = useCreateEstimateFromUpsell();
   const addLink = useAddTicketLink();
   const removeLink = useRemoveTicketLink();
@@ -366,7 +368,9 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
     try {
       const res = await createEstimate.mutateAsync(ticket);
       toast.success(
-        res.lineAdded
+        res.resumed
+          ? `Estimate #${res.estimateNumber} was already created for this ticket — opening it.`
+          : res.lineAdded
           ? `Estimate #${res.estimateNumber} created and linked, with the suggested service on it.`
           : `Estimate #${res.estimateNumber} created and linked — add the service line to price it.`
       );
@@ -388,12 +392,21 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
   // what makes it show as converted in reporting — so offer it as one action
   // rather than making the office create the estimate and come back to link it.
   // Hidden once an estimate is linked, so nobody quietly quotes it twice.
+  // One click here creates a real priced estimate, which every other entry
+  // point to estimate creation gates on `estimate_add`. Without the same gate a
+  // role with tickets but deliberately no estimating rights (a dispatcher, a
+  // CSR) could mint estimates through this button — and the underlying insert
+  // is permitted, because RLS on `estimates` is org-scoped and knows nothing
+  // about the crm_roles permission catalog. Hidden rather than disabled while
+  // permissions are still loading, so it never flashes for someone who can't
+  // use it.
   const isUpsell = ticket.category === "Upsell";
+  const canCreateEstimate = !permissionsLoading && can("estimate_add");
   const hasEstimateLink = (links ?? []).some((l) => l.linkType === "estimate");
 
   return (
     <div>
-      {isUpsell && !hasEstimateLink && (
+      {isUpsell && !hasEstimateLink && canCreateEstimate && (
         <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
           <p className="text-xs font-medium text-emerald-900">
             Crew suggested this work

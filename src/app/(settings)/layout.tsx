@@ -8,7 +8,7 @@ import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { FeedbackButton } from "@/components/shared/FeedbackButton";
 import { AskAIButton } from "@/components/shared/AskAIButton";
-import { useUIStore } from "@/stores";
+import { useUIStore, SidebarDrawerProvider } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -34,7 +34,9 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-10 h-full w-[260px]">
-            <SettingsSidebar />
+            <SidebarDrawerProvider>
+              <SettingsSidebar />
+            </SidebarDrawerProvider>
           </div>
         </div>
       )}

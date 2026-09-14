@@ -8,7 +8,7 @@ import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { EquiptQuickAddOverlay } from "@/components/shared/EquiptQuickAddOverlay";
-import { useUIStore } from "@/stores";
+import { useUIStore, SidebarDrawerProvider } from "@/stores";
 import { useIsCrewOnly } from "@/lib/hooks/use-permissions";
 import { useTrialStatus } from "@/lib/hooks/use-trial-status";
 import { TrialBanner } from "@/components/shared/TrialBanner";
@@ -87,7 +87,9 @@ export default function DashboardLayout({
           />
           {/* Sidebar — overscroll-contain keeps scroll inside the drawer */}
           <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
-            <AppSidebar />
+            <SidebarDrawerProvider>
+              <AppSidebar />
+            </SidebarDrawerProvider>
           </div>
         </div>
       )}

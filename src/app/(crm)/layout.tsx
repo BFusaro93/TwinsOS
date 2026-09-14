@@ -8,7 +8,7 @@ import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { QuickAddOverlay } from "@/components/crm/QuickAddOverlay";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useUIStore, useCurrentUserStore, SidebarDrawerProvider } from "@/stores";
 import { useCrmAccess } from "@/lib/hooks/use-permissions";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { useTrialStatus } from "@/lib/hooks/use-trial-status";
@@ -113,7 +113,9 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setSidebarOpen(false)}
           />
           <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
-            <CRMSidebar />
+            <SidebarDrawerProvider>
+              <CRMSidebar />
+            </SidebarDrawerProvider>
           </div>
         </div>
       )}

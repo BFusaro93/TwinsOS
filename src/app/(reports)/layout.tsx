@@ -8,7 +8,7 @@ import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { FeatureGuard } from "@/components/shared/FeatureGuard";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useUIStore, useCurrentUserStore, SidebarDrawerProvider } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 
@@ -88,7 +88,9 @@ export default function ReportsLayout({
             onClick={() => setSidebarOpen(false)}
           />
           <div className="relative z-10 h-full w-[260px]">
-            <ReportsSidebar />
+            <SidebarDrawerProvider>
+              <ReportsSidebar />
+            </SidebarDrawerProvider>
           </div>
         </div>
       )}

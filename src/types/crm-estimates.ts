@@ -151,6 +151,13 @@ export interface Estimate {
   depositReference: string | null;
   depositNotes: string | null;
   depositCollectedAt: string | null;
+  /** A deposit the client has submitted that Stripe has not settled yet.
+   *  An ACH debit sits in `processing` for 3–5 business days and writes
+   *  nothing to crm_payments until it clears, so without these the estimate
+   *  looks exactly like one where the client skipped the deposit. */
+  depositPendingCents: number | null;
+  depositPendingMethod: 'card' | 'us_bank_account' | null;
+  depositPendingAt: string | null;
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: DisplaySettings;

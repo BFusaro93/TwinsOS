@@ -1616,6 +1616,30 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           : ""}
                       </span>
                     )}
+                    {/* Submitted but not settled. Only ever shown while no
+                        deposit has actually been recorded — the webhook clears
+                        these columns the moment the charge lands, but showing
+                        both at once would read as two deposits if a clear were
+                        ever missed. A bank debit takes days, so without this
+                        the office chases a client who has already paid. */}
+                    {estimate.depositCollectedCents === 0 && (estimate.depositPendingCents ?? 0) > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                        title={
+                          estimate.depositPendingMethod === "us_bank_account"
+                            ? "The client authorized a bank transfer. ACH debits take 3–5 business days to settle; the deposit is credited to their account automatically when it clears, and you'll be notified if it fails."
+                            : "The client's card payment is still being processed. It will be credited automatically once it completes."
+                        }
+                      >
+                        {formatCurrency(estimate.depositPendingCents ?? 0)}{" "}
+                        {estimate.depositPendingMethod === "us_bank_account"
+                          ? "bank transfer pending"
+                          : "payment pending"}
+                        {estimate.depositPendingAt
+                          ? ` — submitted ${new Date(estimate.depositPendingAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
                   </div>
                 </FieldRow>
               </div>

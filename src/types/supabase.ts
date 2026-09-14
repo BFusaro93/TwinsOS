@@ -8986,6 +8986,7 @@ export type Database = {
           total_budgeted_hours: number
           total_cents: number
           updated_at: string
+          upsell_ticket_id: string | null
           valid_until_date: string | null
           work_order_number: string | null
         }
@@ -9043,6 +9044,7 @@ export type Database = {
           total_budgeted_hours?: number
           total_cents?: number
           updated_at?: string
+          upsell_ticket_id?: string | null
           valid_until_date?: string | null
           work_order_number?: string | null
         }
@@ -9100,6 +9102,7 @@ export type Database = {
           total_budgeted_hours?: number
           total_cents?: number
           updated_at?: string
+          upsell_ticket_id?: string | null
           valid_until_date?: string | null
           work_order_number?: string | null
         }
@@ -9109,6 +9112,13 @@ export type Database = {
             columns: ["applied_discount_id"]
             isOneToOne: false
             referencedRelation: "crm_discounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_upsell_ticket_id_fkey"
+            columns: ["upsell_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "crm_tickets"
             referencedColumns: ["id"]
           },
           {

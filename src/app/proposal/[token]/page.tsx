@@ -628,6 +628,18 @@ export default function ProposalPage() {
             Thank you{proposal.acceptedByName ? `, ${proposal.acceptedByName}` : ""}. We&apos;ve received your confirmation and will
             be in touch shortly to schedule your services.
           </p>
+          {/* A bank debit is authorized here but settles days later, and the
+              office sees the same pending state on the estimate. Saying so
+              closes the loop: the client knows the money hasn't moved yet and
+              doesn't pay a second time when the charge isn't on their
+              statement tomorrow. */}
+          {depositIntent?.paymentMethod === "us_bank_account" && (
+            <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Your bank transfer of {(depositIntent.depositCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} has
+              been submitted. Bank transfers take a few business days to clear — we&apos;ll
+              email you if anything goes wrong. Your acceptance is already recorded either way.
+            </p>
+          )}
           {proposal.orgPhone && (
             <p className="mt-4 text-sm text-slate-400">
               Questions? Call us at <strong className="text-slate-600">{proposal.orgPhone}</strong>

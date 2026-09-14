@@ -58,6 +58,19 @@ export async function POST(
     return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
   }
 
+  // selectedTier is interpolated into a PostgREST `.or()` filter below, whose
+  // grammar is comma-separated terms inside parentheses. An unvalidated value
+  // therefore adds terms to the disjunction rather than supplying one: a tier
+  // of `basic,id.not.is.null` widens "tier is null OR tier = basic" to "…OR
+  // every row", so a client accepting the cheapest tier silently wins the
+  // premium lines too, and the matching `.neq()` below leaves them un-lost.
+  // The column's own CHECK already limits it to these three, so rejecting
+  // anything else costs nothing.
+  const TIERS = ["basic", "standard", "premium"] as const;
+  if (body.selectedTier && !TIERS.includes(body.selectedTier as (typeof TIERS)[number])) {
+    return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
+  }
+
   const supabase = serviceClient();
   const ipAddress = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? null;
 

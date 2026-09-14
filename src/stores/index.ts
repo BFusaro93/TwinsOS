@@ -1,4 +1,4 @@
-export { useUIStore, useSidebarRailDefault } from "./ui-store";
+export { useUIStore, useSidebarRailDefault, useSidebarCollapsed, SidebarDrawerProvider } from "./ui-store";
 export { usePOStore } from "./po-store";
 export { useCMMSStore } from "./cmms-store";
 export { useSettingsStore } from "./settings-store";

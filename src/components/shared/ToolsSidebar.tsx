@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, Calculator, PenLine, DollarSign, ShieldAlert, Snowflake } from "lucide-react";
 import { BrandMark } from "./BrandMark";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
 import type { LucideIcon } from "lucide-react";
@@ -29,7 +29,7 @@ export const TOOLS_NAV: ToolsNavItem[] = [
 
 export function ToolsSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const isCrew = currentUser.role === "crew";
