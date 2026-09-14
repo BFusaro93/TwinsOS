@@ -96,7 +96,7 @@ export default function PortalDashboard({
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">{greeting}</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Here's a summary of your account.</p>
+        <p className="text-sm text-slate-500 mt-0.5">Here&apos;s a summary of your account.</p>
       </div>
 
       {/* Live in-progress banner */}

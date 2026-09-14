@@ -278,7 +278,7 @@ export function FormConfigure({ form }: Props) {
             </div>
 
             <p className="text-[10px] text-slate-400">
-              Merge fields available: [formname], [submittedname], [submittedemail], [submittedphone], [submittedmessage], [companyname], [companyphone], or any field label on this form (e.g. a "How can we help?" field → [howcanwehelp]).
+              Merge fields available: [formname], [submittedname], [submittedemail], [submittedphone], [submittedmessage], [companyname], [companyphone], or any field label on this form (e.g. a &quot;How can we help?&quot; field → [howcanwehelp]).
             </p>
           </div>
         ))}

@@ -173,7 +173,7 @@ export default function FeaturesPage() {
               Office and field
             </div>
             <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
-              Built for whoever's using it.
+              Built for whoever&apos;s using it.
             </h2>
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

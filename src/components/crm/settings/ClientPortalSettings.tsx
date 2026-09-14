@@ -251,7 +251,7 @@ export function ClientPortalTab() {
           ) : (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-slate-500 mb-1">
-                Choose which categories clients can select when submitting a ticket. Internal-only categories (e.g. "Collections", "Internal Note") should stay hidden.
+                Choose which categories clients can select when submitting a ticket. Internal-only categories (e.g. &quot;Collections&quot;, &quot;Internal Note&quot;) should stay hidden.
               </p>
               {allCategories.map((cat) => {
                 const visible = form.portal_ticket_categories.includes(cat);

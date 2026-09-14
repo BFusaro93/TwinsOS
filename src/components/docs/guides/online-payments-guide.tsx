@@ -30,8 +30,8 @@ export function OnlinePaymentsGuide() {
           On this page
         </h2>
         <div className="flex flex-col gap-1">
-          <TOCLink href="#two-integrations">Two Stripe integrations — don't confuse them</TOCLink>
-          <TOCLink href="#connect">Connecting your organization's Stripe account</TOCLink>
+          <TOCLink href="#two-integrations">Two Stripe integrations — don&apos;t confuse them</TOCLink>
+          <TOCLink href="#connect">Connecting your organization&apos;s Stripe account</TOCLink>
           <TOCLink href="#ach">Enabling bank transfer (ACH)</TOCLink>
           <TOCLink href="#how-clients-pay">How a client actually pays</TOCLink>
           <TOCLink href="#fees">Processing fees — you set your own, the platform takes none</TOCLink>

@@ -247,7 +247,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         />
         {perTypeOverheadActive && (
           <p className="mb-1 text-[10px] leading-tight text-slate-400">
-            Per-cost-type overhead is configured in Settings — this flat rate is ignored while that's active.
+            Per-cost-type overhead is configured in Settings — this flat rate is ignored while that&apos;s active.
           </p>
         )}
         <div className="flex items-center gap-1">

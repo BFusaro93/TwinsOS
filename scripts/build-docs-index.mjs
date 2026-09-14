@@ -42,6 +42,13 @@ const ENTITY_MAP = {
   "&nbsp;": " ",
   "&gt;": ">",
   "&lt;": "<",
+  "&apos;": "'",
+  "&quot;": '"',
+  "&hellip;": "\u2026",
+  "&times;": "\u00d7",
+  "&divide;": "\u00f7",
+  "&rarr;": "\u2192",
+  "&minus;": "\u2212",
 };
 
 function decodeEntities(text) {

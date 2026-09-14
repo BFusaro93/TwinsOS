@@ -65,13 +65,13 @@ export function SalesMeetingsGuide() {
         <p>
           The calendar only ever shows employees explicitly flagged as a sales rep. That flag lives
           on the employee record, not on their user role — mark someone as a sales rep (and confirm
-          they're marked active) in <strong>Team → Employees</strong> before they'll appear as a
+          they&apos;re marked active) in <strong>Team → Employees</strong> before they&apos;ll appear as a
           column here. If no employee is flagged yet, the page shows a message pointing you to that
           same setting instead of an empty calendar.
         </p>
         <Callout>
-          A rep's color on the calendar is the same map-icon color assigned to them elsewhere in the
-          app (e.g. the Dispatch Board), so a rep who's already color-coded there will look
+          A rep&apos;s color on the calendar is the same map-icon color assigned to them elsewhere in the
+          app (e.g. the Dispatch Board), so a rep who&apos;s already color-coded there will look
           consistent here too.
         </Callout>
       </Section>
@@ -93,14 +93,14 @@ export function SalesMeetingsGuide() {
           </li>
           <li>
             <strong>Month</strong> — a standard 6-week grid (no rep breakdown). Each day shows up to
-            3 meetings before collapsing into a "+N more" — click a day to jump straight into Day
+            3 meetings before collapsing into a &quot;+N more&quot; — click a day to jump straight into Day
             view for it.
           </li>
         </ul>
         <p>
           Whichever view is active, its date range is exactly what gets fetched — Day view queries a
           single day, Week the visible Sun–Sat span, Month the full 42-cell grid — so switching
-          views doesn't pull the whole calendar's history into memory at once.
+          views doesn&apos;t pull the whole calendar&apos;s history into memory at once.
         </p>
       </Section>
 
@@ -134,7 +134,7 @@ export function SalesMeetingsGuide() {
         <p>
           Right before saving, the dialog checks whether the picked sales rep already has another{" "}
           <em>non-canceled</em> meeting whose time window overlaps the one you just set — same rep,
-          overlapping start/end times, computed from each meeting's start time plus its duration.
+          overlapping start/end times, computed from each meeting&apos;s start time plus its duration.
           The check is scoped to just the picked day, so it stays a light query rather than
           re-fetching the whole calendar on every keystroke.
         </p>
@@ -147,7 +147,7 @@ export function SalesMeetingsGuide() {
         </Callout>
         <p>
           Editing a meeting excludes that same meeting from its own conflict check — moving a
-          meeting 15 minutes later won't falsely warn that it conflicts with itself.
+          meeting 15 minutes later won&apos;t falsely warn that it conflicts with itself.
         </p>
       </Section>
 
@@ -177,7 +177,7 @@ export function SalesMeetingsGuide() {
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
-            <strong>The rep's own reminder — always fires.</strong> The assigned sales rep gets an
+            <strong>The rep&apos;s own reminder — always fires.</strong> The assigned sales rep gets an
             in-app notification and an email (each can be turned off individually in{" "}
             <strong>Settings → Notifications</strong>) regardless of whether the meeting has a
             client, a lead, or any automation configured. A rep should always know their day is
@@ -188,14 +188,14 @@ export function SalesMeetingsGuide() {
             meeting has a linked client, a <strong>Sales Meeting → Meeting is coming up</strong>{" "}
             trigger becomes available in the Automations builder. Build a sequence on that trigger
             to send the client their own reminder email or text. It only fires within that
-            automation's own configured lead time (in minutes), which doesn't have to match the
-            rep's fixed 60-minute window. A meeting with no client — a new-lead meeting — can't be
+            automation&apos;s own configured lead time (in minutes), which doesn&apos;t have to match the
+            rep&apos;s fixed 60-minute window. A meeting with no client — a new-lead meeting — can&apos;t be
             enrolled in this automation at all, since Automations is entirely client-scoped; the rep
             still gets notified directly either way.
           </li>
         </ol>
         <Callout>
-          Both paths dedupe against the same 15-minute cadence so a meeting doesn't get re-notified
+          Both paths dedupe against the same 15-minute cadence so a meeting doesn&apos;t get re-notified
           on every tick within its reminder window — see the reschedule note below for the one case
           that intentionally re-arms it.
         </Callout>
@@ -203,11 +203,11 @@ export function SalesMeetingsGuide() {
 
       <Section id="reschedule" title="Rescheduling and the reminder reset">
         <p>
-          Once a meeting's reminder has fired, it's marked so the background job won't send it
+          Once a meeting&apos;s reminder has fired, it&apos;s marked so the background job won&apos;t send it
           again. If you then <strong>change the date or time</strong>, that mark is cleared so the
           reminder can fire again for the new time. Editing anything else on an already-reminded
           meeting — notes, title, the linked estimate — leaves the mark alone, so a reminder that
-          already went out for the correct time doesn't get needlessly resent just because someone
+          already went out for the correct time doesn&apos;t get needlessly resent just because someone
           added a note.
         </p>
       </Section>

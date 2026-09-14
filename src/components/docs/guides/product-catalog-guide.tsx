@@ -45,7 +45,7 @@ export function ProductCatalogGuide() {
           <TOCLink href="#fields">Adding a product</TOCLink>
           <TOCLink href="#chemicals">Chemical tracking</TOCLink>
           <TOCLink href="#maintenance-part-link">The Maintenance Part ↔ CMMS Parts link</TOCLink>
-          <TOCLink href="#cost-vs-price">Unit Cost vs. Sale Price vs. a PO line's actual cost</TOCLink>
+          <TOCLink href="#cost-vs-price">Unit Cost vs. Sale Price vs. a PO line&apos;s actual cost</TOCLink>
           <TOCLink href="#archiving">Archiving a product</TOCLink>
           <TOCLink href="#import">Bulk import</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
