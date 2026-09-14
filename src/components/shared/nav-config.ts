@@ -4,8 +4,6 @@ import {
   ShoppingCart,
   Package,
   BookOpen,
-  Briefcase,
-  Wrench,
   Bell,
   CalendarClock,
   Truck,
@@ -14,13 +12,11 @@ import {
   Gauge,
   Zap,
   Building2,
-  Users,
   BarChart3,
   Settings,
   HelpCircle,
   Library,
   ClipboardCheck,
-  ShieldAlert,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -76,9 +72,8 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { label: "Users", href: "/settings?tab=users", icon: Users, adminOnly: true, hideFromCrew: true },
-      { label: "Reports", href: "/settings/equipt/reports", icon: BarChart3, hideFromCrew: true },
-      { label: "Settings", href: "/settings/equipt", icon: Settings, hideFromCrew: true },
+      { label: "Reports", href: "/equipt/reports", icon: BarChart3, hideFromCrew: true },
+      { label: "Settings", href: "/equipt/settings", icon: Settings, hideFromCrew: true },
       { label: "Support", href: "/support", icon: HelpCircle, hideFromCrew: true },
       { label: "Docs", href: "/docs", icon: Library, hideFromCrew: true },
     ],

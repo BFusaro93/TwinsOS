@@ -102,10 +102,10 @@ export function SettingsSidebar() {
           </p>
         )}
         {visibleNav.map((item) => {
-          // Guide pages physically live under /settings/support/<slug> (URLs
-          // were kept as-is when Docs got its own sidebar), but they belong
-          // to Docs conceptually — so treat them as a Docs route here rather
-          // than highlighting Support.
+          // In this shell guides render at /settings/support/<slug> (the same
+          // guide bodies are also mounted under /docs and /crm/docs), but they
+          // belong to Docs conceptually — so treat them as a Docs route here
+          // rather than highlighting Support.
           const guideSlug = pathname.split("/").pop() ?? "";
           const onGuidePage = DOC_GUIDE_SLUGS.has(guideSlug);
           let isActive = item.exact

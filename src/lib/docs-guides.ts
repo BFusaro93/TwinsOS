@@ -339,3 +339,29 @@ export function groupedDocGuides(): { kicker: string; guides: DocGuide[] }[] {
     .map((kicker) => ({ kicker, guides: DOC_GUIDES.filter((g) => g.kicker === kicker) }))
     .filter((group) => group.guides.length > 0);
 }
+
+/**
+ * Where guide links should point given the shell the reader is currently in.
+ * The same guide bodies are mounted under all three shells, so a guide opened
+ * from Landscapt stays in Landscapt instead of dumping the reader into the
+ * Settings nav. Defaults to the Settings path, which is where every
+ * hard-coded "Full guide" link in docs-content.ts and every external/MCP
+ * reference points.
+ */
+export function guideBasePath(pathname: string | null | undefined): string {
+  if (!pathname) return "/settings/support";
+  if (pathname === "/crm" || pathname.startsWith("/crm/")) return "/crm/docs";
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return "/settings/support";
+  return "/docs";
+}
+
+/**
+ * Rewrites a hard-coded "/settings/support/<slug>" guide link (docs-content.ts
+ * stores them that way) to the equivalent link in the reader's current shell.
+ * Anything that isn't a known guide slug is returned untouched.
+ */
+export function localizeGuideHref(href: string, pathname: string | null | undefined): string {
+  const match = /^\/settings\/support\/([^/#?]+)(.*)$/.exec(href);
+  if (!match || !DOC_GUIDE_SLUGS.has(match[1])) return href;
+  return `${guideBasePath(pathname)}/${match[1]}${match[2]}`;
+}

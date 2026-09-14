@@ -1,12 +1,11 @@
 /**
  * build-docs-index.mjs
  *
- * The 30+ long-form guides under
- * src/app/(settings)/settings/support/(guides)/*-guide/page.tsx are freeform
- * JSX/TSX prose, not structured data — there's nothing for a search tool
+ * The 30+ long-form guides under src/components/docs/guides/*-guide.tsx are
+ * freeform JSX/TSX prose, not structured data — there's nothing for a search tool
  * (e.g. the MCP search_docs tool, src/app/api/mcp/tools.ts) to query.
  *
- * This script statically parses each guide's page.tsx with the TypeScript
+ * This script statically parses each guide component with the TypeScript
  * compiler's AST (no execution, no next/font — "use client" components in
  * this tree pull in next/font/google, which only works inside Next's own
  * webpack build, so we never import/render the component) and pulls out
@@ -22,14 +21,14 @@
  * automatically.
  */
 
-import { readFileSync, readdirSync, writeFileSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
-const GUIDES_DIR = join(REPO_ROOT, "src/app/(settings)/settings/support/(guides)");
+const GUIDES_DIR = join(REPO_ROOT, "src/components/docs/guides");
 const OUT_FILE = join(REPO_ROOT, "src/lib/docs-guides-content.json");
 
 const ENTITY_MAP = {
@@ -80,19 +79,18 @@ function extractText(sourceFile) {
 }
 
 function main() {
-  const entries = readdirSync(GUIDES_DIR).filter((name) => {
-    const full = join(GUIDES_DIR, name);
-    return statSync(full).isDirectory();
-  });
+  const entries = readdirSync(GUIDES_DIR)
+    .filter((name) => name.endsWith("-guide.tsx"))
+    .map((name) => name.replace(/\.tsx$/, ""));
 
   const index = {};
   for (const slug of entries) {
-    const pagePath = join(GUIDES_DIR, slug, "page.tsx");
+    const pagePath = join(GUIDES_DIR, `${slug}.tsx`);
     let source;
     try {
       source = readFileSync(pagePath, "utf8");
     } catch {
-      continue; // no page.tsx in this dir, skip
+      continue; // guide file vanished mid-run, skip
     }
     const sourceFile = ts.createSourceFile(pagePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     index[slug] = extractText(sourceFile);

@@ -17,7 +17,7 @@ export default function MasterSettingsDocumentationPage() {
         </aside>
         <div className="flex-1 overflow-y-auto px-6 py-8 md:px-8">
           <div className="mx-auto max-w-3xl">
-            <GuideGrid />
+            <GuideGrid basePath="/settings/support" />
           </div>
         </div>
       </div>

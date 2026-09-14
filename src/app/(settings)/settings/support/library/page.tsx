@@ -10,7 +10,7 @@ export default function GuideLibraryPage() {
         description="Every full-length guide in one place. Open any guide and click Download PDF to save your own copy."
         hideDownload
       />
-      <GuideGrid />
+      <GuideGrid basePath="/settings/support" />
     </DocsFontScope>
   );
 }
