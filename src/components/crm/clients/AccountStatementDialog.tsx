@@ -100,7 +100,7 @@ export function AccountStatementDialog({ clientId, clientName, clientEmail, open
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl overflow-x-hidden">
+      <DialogContent className="w-[95vw] max-w-6xl overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Account Statement{clientName ? ` — ${clientName}` : ""}</DialogTitle>
         </DialogHeader>
