@@ -12,6 +12,15 @@ import {
 
 export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
   {
+    key: "statements",
+    section: "receivables",
+    name: "Statements",
+    description:
+      "Generate and email running-balance account statements for clients with an outstanding balance — a date range, an optional message, and a bulk send.",
+    filters: [],
+    href: "/crm/reports/statements",
+  },
+  {
     key: "ar-aging",
     section: "receivables",
     name: "A/R Aging Report",
