@@ -91,7 +91,12 @@ export async function GET(
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
 
-  const statement = (layoutKey === "statement" || layoutKey === "statement_invoice_only")
+  const statement = (
+    layoutKey === "statement" ||
+    layoutKey === "statement_no_stub" ||
+    layoutKey === "statement_invoice_only" ||
+    layoutKey === "statement_invoice_only_no_stub"
+  )
     ? await buildInvoiceStatementData(supabase, {
         id: inv.id as string,
         client_id: (inv.client_id as string | null) ?? null,
