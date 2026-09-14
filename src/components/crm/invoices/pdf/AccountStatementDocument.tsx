@@ -68,10 +68,10 @@ const S = StyleSheet.create({
 
   metaTable: { width: 220, borderTop: "1 solid #cbd5e1", borderLeft: "1 solid #cbd5e1", borderRight: "1 solid #cbd5e1" },
   metaRow: { flexDirection: "row", borderBottom: "1 solid #cbd5e1" },
-  metaCellLabel: { flex: 1.4, backgroundColor: "#f0fdf4", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold", color: "#166534" },
+  metaCellLabel: { flex: 1.4, backgroundColor: "#f8fafc", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold" },
   metaCellValue: { flex: 1, padding: 4, fontSize: 7.5, textAlign: "right" },
 
-  activityHeaderRow: { flexDirection: "row", backgroundColor: "#166534", paddingVertical: 5, paddingHorizontal: 6, marginTop: 6 },
+  activityHeaderRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 6, marginTop: 6 },
   activityHeaderText: { fontSize: 7, fontFamily: "Helvetica-Bold", color: "#ffffff", textTransform: "uppercase" },
   activityRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderBottom: "1 solid #f1f5f9" },
   forwardRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderBottom: "1 solid #f1f5f9", backgroundColor: "#f8fafc" },
@@ -82,16 +82,16 @@ const S = StyleSheet.create({
   activityText: { fontSize: 7.5, color: "#334155" },
   activityTextBold: { fontSize: 7.5, color: "#1e293b", fontFamily: "Helvetica-Bold" },
 
-  endingRow: { flexDirection: "row", paddingVertical: 6, paddingHorizontal: 6, marginTop: 2, backgroundColor: "#166534" },
+  endingRow: { flexDirection: "row", paddingVertical: 6, paddingHorizontal: 6, marginTop: 2 },
   endingLabel: { flex: 4.5, fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#ffffff" },
   endingValue: { flex: 1, fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#ffffff", textAlign: "right" },
 
-  stub: { position: "absolute", bottom: 30, left: 32, right: 32, borderTop: "2 solid #166534", paddingTop: 10, flexDirection: "row", justifyContent: "space-between" },
+  stub: { position: "absolute", bottom: 30, left: 32, right: 32, paddingTop: 10, flexDirection: "row", justifyContent: "space-between" },
   stubLeft: { flexDirection: "column" },
   stubRow: { flexDirection: "row", marginBottom: 2 },
   stubLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", width: 90 },
   stubValue: { fontSize: 7.5 },
-  stubTitle: { fontSize: 12, fontFamily: "Helvetica-Bold", color: "#166534" },
+  stubTitle: { fontSize: 12, fontFamily: "Helvetica-Bold" },
   stubRight: { flexDirection: "column", alignItems: "flex-end" },
 
   footer: { position: "absolute", bottom: 14, left: 32, right: 32, flexDirection: "row", justifyContent: "space-between", fontSize: 6.5, color: "#9ca3af" },
@@ -110,6 +110,7 @@ export function AccountStatementDocument({
   statement: AccountStatementPDFData;
   org: OrgPDFData;
 }) {
+  const accentColor = org.brandColor || "#60ab45";
   const clientAddressLine2 = [statement.clientCity, statement.clientState, statement.clientZip]
     .filter(Boolean)
     .join(", ");
@@ -155,24 +156,24 @@ export function AccountStatementDocument({
           <View style={S.metaTable}>
             {statement.accountNumber ? (
               <View style={S.metaRow}>
-                <View style={S.metaCellLabel}><Text>Account #</Text></View>
+                <View style={[S.metaCellLabel, { color: accentColor }]}><Text>Account #</Text></View>
                 <View style={S.metaCellValue}><Text>{statement.accountNumber}</Text></View>
               </View>
             ) : null}
             {statement.lastPayment ? (
               <View style={S.metaRow}>
-                <View style={S.metaCellLabel}><Text>Last Payment Received</Text></View>
+                <View style={[S.metaCellLabel, { color: accentColor }]}><Text>Last Payment Received</Text></View>
                 <View style={S.metaCellValue}><Text>{cents(statement.lastPayment.amountCents)}</Text></View>
               </View>
             ) : null}
             <View style={[S.metaRow, { borderBottom: "none" }]}>
-              <View style={S.metaCellLabel}><Text>Amount Due</Text></View>
+              <View style={[S.metaCellLabel, { color: accentColor }]}><Text>Amount Due</Text></View>
               <View style={S.metaCellValue}><Text>{cents(statement.endingBalanceCents)}</Text></View>
             </View>
           </View>
         </View>
 
-        <View style={S.activityHeaderRow}>
+        <View style={[S.activityHeaderRow, { backgroundColor: accentColor }]}>
           <View style={S.cellDate}><Text style={S.activityHeaderText}>Date</Text></View>
           <View style={S.cellDesc}><Text style={S.activityHeaderText}>Transaction</Text></View>
           <View style={S.cellAmount}><Text style={S.activityHeaderText}>Amount</Text></View>
@@ -195,12 +196,12 @@ export function AccountStatementDocument({
           </View>
         ))}
 
-        <View style={S.endingRow}>
+        <View style={[S.endingRow, { backgroundColor: accentColor }]}>
           <Text style={S.endingLabel}>Ending Balance</Text>
           <Text style={S.endingValue}>{cents(statement.endingBalanceCents)}</Text>
         </View>
 
-        <View fixed style={S.stub}>
+        <View fixed style={[S.stub, { borderTop: `2 solid ${accentColor}` }]}>
           <View style={S.stubLeft}>
             <View style={S.stubRow}><Text style={S.stubLabel}>Client Name</Text><Text style={S.stubValue}>{statement.clientName ?? "—"}</Text></View>
             {statement.accountNumber ? (
@@ -210,7 +211,7 @@ export function AccountStatementDocument({
             <View style={S.stubRow}><Text style={S.stubLabel}>Amount Due</Text><Text style={[S.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(statement.endingBalanceCents)}</Text></View>
           </View>
           <View style={S.stubRight}>
-            <Text style={S.stubTitle}>PAYMENT STUB</Text>
+            <Text style={[S.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
             <Text style={[S.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
             <Text style={S.companyMeta}>{org.street}</Text>
             {orgAddressLine2 ? <Text style={S.companyMeta}>{orgAddressLine2}</Text> : null}
