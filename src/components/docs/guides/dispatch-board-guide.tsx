@@ -446,6 +446,11 @@ export function DispatchBoardGuide() {
 
       <Section id="see-also" title="See also">
         <p>
+          The other half of this screen is the crew&apos;s phone: what they see, how clocking on and
+          off works, and how the actual hours that land here are produced. See the{" "}
+          <strong>Crew App</strong> guide.
+        </p>
+        <p>
           Jobs without a fixed date — waiting for weather, crew capacity, or a client window — don&apos;t
           live on the Dispatch Board at all until they&apos;re given a day and crew. See the{" "}
           <strong>Waiting List</strong> guide for how those get queued and dispatched.

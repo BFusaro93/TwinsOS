@@ -305,8 +305,9 @@ export function TicketsGuide() {
           separate thing to check.
         </p>
         <p>
-          Each one carries the crew&apos;s note, who spotted it, the date, the property, and the
-          service they suggested. Any photo they took is on the <strong>Files</strong> tab, which is
+          The crew&apos;s side of this — where the Suggest work button lives and what they see — is in
+          the <strong>Crew App</strong> guide. Each one carries the crew&apos;s note, who spotted it,
+          the date, the property, and the service they suggested. Any photo they took is on the <strong>Files</strong> tab, which is
           usually enough to price the work without a trip out to look. The ticket is linked back to
           the job the crew was on.
         </p>

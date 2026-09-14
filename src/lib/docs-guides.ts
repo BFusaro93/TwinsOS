@@ -10,6 +10,7 @@ import {
   Container,
   Gauge,
   Users,
+  HardHat,
   Calculator,
   CalendarDays,
   Map,
@@ -129,6 +130,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "The Dispatch Board",
     description: "The daily scheduling screen crews and dispatchers live in — visits, crews, status, and how actual hours get calculated.",
     icon: Map,
+  },
+  {
+    slug: "crew-app-guide",
+    kicker: "Landscapt (CRM)",
+    title: "The Crew App",
+    description: "What a crew sees on their phone — the day's stops, clocking on and off, breaks, photos, and sending work back to the office.",
+    icon: HardHat,
   },
   {
     slug: "sales-meetings-guide",
