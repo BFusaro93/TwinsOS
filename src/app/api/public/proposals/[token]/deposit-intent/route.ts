@@ -61,25 +61,49 @@ export async function POST(
   if (tokenErr || !shareToken) {
     return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
   }
-  if (shareToken.accepted_at) {
-    return NextResponse.json({ error: "This proposal has already been accepted" }, { status: 409 });
-  }
   if (shareToken.expires_at && new Date(shareToken.expires_at) < new Date()) {
     return NextResponse.json({ error: "Proposal link has expired" }, { status: 410 });
   }
 
   const { data: estimate } = await supabase
     .from("estimates")
-    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, total_cents, deposit_pending_intent_id, deposit_pending_method")
+    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, total_cents, deposit_pending_intent_id, deposit_pending_method, deposit_failed_at")
     .eq("id", shareToken.estimate_id)
     .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
     .single();
   if (!estimate) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
 
-  // Same gate the accept route applies — a proposal staff have moved on
-  // (declined, invoiced, re-tiered) must not still be collectable.
-  if (estimate.stage !== "sent") {
+  // ── Who may still pay a deposit through this link ────────────────────────
+  //
+  // Normally: an unaccepted proposal still in `sent`.
+  //
+  // The exception is a RETRY. An ACH debit is authorized at acceptance and can
+  // be returned by the bank days later, at which point accepted_at is set and
+  // the stage has moved on — so both of the ordinary gates refuse, and the
+  // client who genuinely owes a deposit has no way to pay it. That left the
+  // office chasing a deposit the client could not give them.
+  //
+  // So a link re-opens for exactly one narrow case: the last attempt failed
+  // (deposit_failed_at) and nothing has been collected since. The amount is
+  // still read from the estimate, never the request, so re-opening grants no
+  // new power — only another attempt at the same number. The webhook clears
+  // deposit_failed_at the moment a deposit lands, which closes the link again.
+  const isRetry = !!estimate.deposit_failed_at && (estimate.deposit_collected_cents ?? 0) === 0;
+
+  if (!isRetry) {
+    if (shareToken.accepted_at) {
+      return NextResponse.json({ error: "This proposal has already been accepted" }, { status: 409 });
+    }
+    // Same gate the accept route applies — a proposal staff have moved on
+    // (declined, invoiced, re-tiered) must not still be collectable.
+    if (estimate.stage !== "sent") {
+      return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
+    }
+  } else if (estimate.stage === "lost") {
+    // A retry is not a way back into a proposal the office has since killed.
+    // 'lost' is the only terminal stage — declining a proposal sets it, and
+    // 'invoiced' still legitimately wants its deposit paid.
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
 

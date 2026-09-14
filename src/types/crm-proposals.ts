@@ -125,6 +125,12 @@ export interface ProposalData {
   displaySettings: DisplaySettings;
   depositRequiredCents: number;
   depositCollectedCents: number;
+  /** Set when the last deposit attempt was declined or returned by the bank.
+   *  Non-null with depositCollectedCents 0 re-opens the link for a retry. */
+  depositFailedCents: number | null;
+  depositFailedReason: string | null;
+  depositFailedMethod: "card" | "us_bank_account" | null;
+  depositFailedAt: string | null;
   /** True when the deposit step can take a real card payment — the platform
    * has Stripe keys and this org has finished Connect onboarding. When false
    * the step falls back to the self-reported methods and Skip. */

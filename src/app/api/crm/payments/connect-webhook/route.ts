@@ -8,11 +8,13 @@ import {
   recordEstimateDepositCharge,
   markEstimateDepositPending,
   clearEstimateDepositPending,
+  recordEstimateDepositFailure,
 } from "@/lib/stripe/record-estimate-deposit";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { notifyStaffOfFailedDeposit } from "@/lib/estimate-deposit-notify";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect webhook");
@@ -163,12 +165,34 @@ export async function POST(request: Request) {
       const failedIntent = event.data.object as Stripe.PaymentIntent;
       const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
 
-      // An ACH deposit returned by the bank (NSF, closed account) — drop the
-      // "deposit on its way" marker so the estimate stops claiming one is
-      // coming. Nothing else to reverse: no crm_payments row was ever written
-      // for an unsettled debit.
+      // An ACH deposit returned by the bank (NSF, closed account), or a
+      // declined card. Nothing to reverse — no crm_payments row is ever
+      // written for an unsettled debit — but the failure has to be RECORDED,
+      // not just cleared. Simply dropping the pending marker (the old
+      // behaviour) put the estimate back to looking like one where the client
+      // skipped the deposit: no trace, no notification, and no way to retry.
+      //
+      // recordEstimateDepositFailure replaces the pending marker with a
+      // failure marker in one write, and returns null for anything it
+      // shouldn't act on — including a stale event for a deposit that has
+      // since been collected, which must never un-collect it.
       if (failedIntent.metadata?.source === "crm_estimate_deposit") {
-        await clearEstimateDepositPending(db, failedIntent.id);
+        const failure =
+          failedOrgId &&
+          event.account &&
+          (await eventAccountOwnedByOrg(db, failedOrgId, event.account))
+            ? await recordEstimateDepositFailure(db, failedIntent)
+            : null;
+        if (failure) {
+          await notifyStaffOfFailedDeposit(db, failure);
+        } else {
+          // Not a failure worth recording — an unattributable account, a
+          // deposit already collected, a newer attempt in flight, or a card
+          // declined while the client is still on the deposit step. Clearing
+          // the marker is all that's left to do, and it matches on the intent
+          // id so it can never clobber a newer one.
+          await clearEstimateDepositPending(db, failedIntent.id);
+        }
         break;
       }
 

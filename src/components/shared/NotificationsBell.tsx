@@ -16,6 +16,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
   AtSign,
+  CircleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -91,6 +92,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
     case "estimate_client_rejected":
       return <ThumbsDown className={cn(cls, "text-red-500")} />;
+    case "estimate_deposit_failed":
+      return <CircleAlert className={cn(cls, "text-red-500")} />;
     case "ticket_created":
     case "ticket_assigned":
       return <MessageSquarePlus className={cn(cls, "text-brand-500")} />;
@@ -137,7 +140,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -323,6 +326,7 @@ export function NotificationsBell() {
       estimate_change_request:    { href: (id) => `/crm/estimates/${id}`, title: "Change Requested" },
       estimate_client_accepted:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Accepted" },
       estimate_client_rejected:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Declined" },
+      estimate_deposit_failed:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Failed" },
       ticket_created:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Ticket" },
       ticket_assigned:            { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Ticket Assigned" },
       ticket_comment:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Comment" },

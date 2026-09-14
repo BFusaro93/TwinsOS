@@ -8941,6 +8941,10 @@ export type Database = {
           deleted_at: string | null
           deposit_collected_at: string | null
           deposit_collected_cents: number
+          deposit_failed_at: string | null
+          deposit_failed_cents: number | null
+          deposit_failed_method: string | null
+          deposit_failed_reason: string | null
           deposit_method: string | null
           deposit_notes: string | null
           deposit_reference: string | null
@@ -8999,6 +9003,10 @@ export type Database = {
           deleted_at?: string | null
           deposit_collected_at?: string | null
           deposit_collected_cents?: number
+          deposit_failed_at?: string | null
+          deposit_failed_cents?: number | null
+          deposit_failed_method?: string | null
+          deposit_failed_reason?: string | null
           deposit_method?: string | null
           deposit_notes?: string | null
           deposit_reference?: string | null
@@ -9057,6 +9065,10 @@ export type Database = {
           deleted_at?: string | null
           deposit_collected_at?: string | null
           deposit_collected_cents?: number
+          deposit_failed_at?: string | null
+          deposit_failed_cents?: number | null
+          deposit_failed_method?: string | null
+          deposit_failed_reason?: string | null
           deposit_method?: string | null
           deposit_notes?: string | null
           deposit_reference?: string | null

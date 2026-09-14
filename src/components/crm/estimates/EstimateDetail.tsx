@@ -1622,7 +1622,26 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         both at once would read as two deposits if a clear were
                         ever missed. A bank debit takes days, so without this
                         the office chases a client who has already paid. */}
-                    {estimate.depositCollectedCents === 0 && (estimate.depositPendingCents ?? 0) > 0 && (
+                    {/* Declined or returned by the bank. Staff arrive here
+                        from the "Deposit failed" notification, so this is the
+                        screen that has to explain what happened and what the
+                        client can do — the proposal link re-opens itself for a
+                        retry while this is set, which is not obvious. */}
+                    {estimate.depositCollectedCents === 0 && !!estimate.depositFailedAt && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700"
+                        title={`${estimate.depositFailedReason ?? "The payment was rejected."} The client can pay it again from their original proposal link — it re-opens automatically until a deposit is recorded.`}
+                      >
+                        {formatCurrency(estimate.depositFailedCents ?? 0)}{" "}
+                        {estimate.depositFailedMethod === "us_bank_account" ? "bank transfer" : "payment"} failed
+                        {estimate.depositFailedAt
+                          ? ` on ${new Date(estimate.depositFailedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
+                    {estimate.depositCollectedCents === 0 &&
+                      !estimate.depositFailedAt &&
+                      (estimate.depositPendingCents ?? 0) > 0 && (
                       <span
                         className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
                         title={

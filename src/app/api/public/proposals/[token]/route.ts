@@ -143,6 +143,15 @@ export async function GET(
 
     depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
     depositCollectedCents: (est.deposit_collected_cents as number) ?? 0,
+    // A deposit the bank returned or the card declined. Drives the retry
+    // screen an already-accepted proposal shows instead of the plain thank-you
+    // — the only route back for a client whose ACH bounced days later. The
+    // reason is Stripe's own wording; it says nothing about the payment
+    // instrument beyond what the payer already knows.
+    depositFailedCents: (est.deposit_failed_cents as number | null) ?? null,
+    depositFailedReason: (est.deposit_failed_reason as string | null) ?? null,
+    depositFailedMethod: (est.deposit_failed_method as "card" | "us_bank_account" | null) ?? null,
+    depositFailedAt: (est.deposit_failed_at as string | null) ?? null,
     // Whether the deposit step can offer a real card charge, or only the
     // self-reported "I'll send a check" methods. Gated on the platform having
     // Stripe keys AND this org having finished Connect onboarding — an org

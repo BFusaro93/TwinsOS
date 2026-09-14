@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Loader2, MessageSquarePlus, CreditCard, Landmark } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, MessageSquarePlus, CreditCard, Landmark } from "lucide-react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
@@ -414,6 +414,10 @@ export default function ProposalPage() {
   const [depositNotes, setDepositNotes] = useState("");
   const [depositIntent, setDepositIntent] = useState<DepositIntent | null>(null);
   const [startingCardPayment, setStartingCardPayment] = useState<"card" | "us_bank_account" | null>(null);
+  // Set once a retry charge goes through, so the confirmation stops offering
+  // to collect a deposit that is now in flight. The server state won't agree
+  // until the webhook lands (instantly for a card, days later for ACH).
+  const [retryPaid, setRetryPaid] = useState(false);
   // Pending accept payload — held while deposit step is shown
   const [pendingAcceptPayload, setPendingAcceptPayload] = useState<{
     acceptedByName: string;
@@ -585,6 +589,16 @@ export default function ProposalPage() {
     await submitAccept();
   }
 
+  /** A RETRY succeeded. The proposal was already accepted — re-running the
+   * accept POST would be rejected by the token's accepted_at guard and, if it
+   * weren't, would overwrite the original signature and acceptance date. So
+   * this only switches the screen; the webhook does all the recording, exactly
+   * as it does for a first attempt. */
+  function handleRetryDepositPaid() {
+    setDepositIntent(null);
+    setRetryPaid(true);
+  }
+
   // ── Loading / error states ──────────────────────────────────────────────────
   if (loading) {
     return (
@@ -615,8 +629,103 @@ export default function ProposalPage() {
   // and then dead-end on an Elements form that never mounts.
   const canPayByCard = proposal.cardDepositAvailable && hasPublishableKey(proposal.orgLivemode);
 
+  // A deposit the bank returned or the card declined, with nothing collected
+  // since. The proposal itself stays accepted — only the money failed — so the
+  // confirmation screen turns into a "please try that again" screen rather
+  // than the plain thank-you, which was the client's only view and said
+  // nothing at all about the failure.
+  const depositNeedsRetry =
+    !retryPaid &&
+    !!proposal.depositFailedAt &&
+    proposal.depositCollectedCents === 0 &&
+    proposal.depositRequiredCents > 0;
+  const retryAmountCents = proposal.depositFailedCents ?? proposal.depositRequiredCents;
+
   // ── Accepted confirmation screen ────────────────────────────────────────────
   if (accepted) {
+    if (depositNeedsRetry) {
+      return (
+        <div className="mx-auto max-w-md px-4 py-10">
+          <div className="rounded-lg border border-amber-200 bg-white p-6 shadow-sm space-y-5">
+            <div className="text-center">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100">
+                <AlertCircle className="h-7 w-7 text-amber-600" />
+              </div>
+              <h1 className="text-xl font-bold text-slate-800">Your deposit didn&apos;t go through</h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Your proposal is still accepted — nothing needs signing again. Only the{" "}
+                {cents(retryAmountCents)} deposit
+                {proposal.depositFailedMethod === "us_bank_account" ? " bank transfer" : " payment"}{" "}
+                was returned.
+              </p>
+            </div>
+
+            {proposal.depositFailedReason && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
+                {proposal.depositFailedReason}
+              </p>
+            )}
+
+            {canPayByCard && !depositIntent && (
+              <div className="space-y-2">
+                <Button
+                  className="h-11 w-full text-base font-semibold"
+                  style={{ backgroundColor: brand, borderColor: brand }}
+                  disabled={!!startingCardPayment}
+                  onClick={() => handleStartCardDeposit("card")}
+                >
+                  {startingCardPayment === "card" ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
+                  ) : (
+                    <><CreditCard className="mr-2 h-4 w-4" />Pay {cents(retryAmountCents)} by card</>
+                  )}
+                </Button>
+                {proposal.achDepositAvailable && (
+                  <Button
+                    variant="outline"
+                    className="h-11 w-full text-base font-semibold"
+                    disabled={!!startingCardPayment}
+                    onClick={() => handleStartCardDeposit("us_bank_account")}
+                  >
+                    {startingCardPayment === "us_bank_account" ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
+                    ) : (
+                      <><Landmark className="mr-2 h-4 w-4" />Try a bank transfer</>
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {canPayByCard && depositIntent && (
+              <Elements
+                stripe={getScopedStripeJs(depositIntent.connectedAccountId, depositIntent.livemode)}
+                options={{ clientSecret: depositIntent.clientSecret }}
+              >
+                <DepositCardForm
+                  intent={depositIntent}
+                  brand={brand}
+                  disabled={false}
+                  onPaid={handleRetryDepositPaid}
+                  onBack={() => setDepositIntent(null)}
+                />
+              </Elements>
+            )}
+
+            {error && <p className="text-center text-sm text-red-600">{error}</p>}
+
+            {/* No Skip here. Skipping is a choice made BEFORE accepting; at
+                this point the deposit is owed, and a button implying otherwise
+                would be misleading. Calling remains the way out. */}
+            <p className="text-center text-xs text-slate-400">
+              Prefer to send a cheque, or think this is a mistake?
+              {proposal.orgPhone ? <> Call us at <strong className="text-slate-600">{proposal.orgPhone}</strong>.</> : " Please get in touch."}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
@@ -633,7 +742,12 @@ export default function ProposalPage() {
               closes the loop: the client knows the money hasn't moved yet and
               doesn't pay a second time when the charge isn't on their
               statement tomorrow. */}
-          {depositIntent?.paymentMethod === "us_bank_account" && (
+          {retryPaid && (
+            <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              Thanks — your deposit has been submitted. We&apos;ll be in touch if anything else is needed.
+            </p>
+          )}
+          {!retryPaid && depositIntent?.paymentMethod === "us_bank_account" && (
             <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Your bank transfer of {(depositIntent.depositCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} has
               been submitted. Bank transfers take a few business days to clear — we&apos;ll

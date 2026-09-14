@@ -158,6 +158,13 @@ export interface Estimate {
   depositPendingCents: number | null;
   depositPendingMethod: 'card' | 'us_bank_account' | null;
   depositPendingAt: string | null;
+  /** The last deposit attempt the bank returned or the card network declined.
+   *  Cleared as soon as a deposit is recorded. While set with no deposit
+   *  collected, the client's proposal link is re-opened for a retry. */
+  depositFailedCents: number | null;
+  depositFailedMethod: 'card' | 'us_bank_account' | null;
+  depositFailedReason: string | null;
+  depositFailedAt: string | null;
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: DisplaySettings;
