@@ -750,28 +750,20 @@ function StatementInvoiceLayout({
         </View>
       ) : null}
 
-      <View
-        fixed
-        style={SS.stub}
-        render={({ pageNumber, totalPages }) =>
-          pageNumber === totalPages ? (
-            <>
-              <View style={SS.stubLeft}>
-                <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
-                <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
-                <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
-                <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
-              </View>
-              <View style={SS.stubRight}>
-                <Text style={SS.stubTitle}>PAYMENT STUB</Text>
-                <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
-                <Text style={SS.companyMeta}>{org.street}</Text>
-                {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
-              </View>
-            </>
-          ) : null
-        }
-      />
+      <View fixed style={SS.stub}>
+        <View style={SS.stubLeft}>
+          <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
+          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
+          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
+          <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+        </View>
+        <View style={SS.stubRight}>
+          <Text style={SS.stubTitle}>PAYMENT STUB</Text>
+          <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
+          <Text style={SS.companyMeta}>{org.street}</Text>
+          {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
+        </View>
+      </View>
 
       <View style={SS.footer} fixed>
         <Text>{org.name} · {org.phone}</Text>
