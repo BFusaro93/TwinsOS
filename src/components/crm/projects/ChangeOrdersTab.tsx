@@ -28,6 +28,7 @@ import {
   useUpdateChangeOrder,
   useDeleteChangeOrder,
   useApproveChangeOrder,
+  useReverseChangeOrder,
 } from "@/lib/hooks/use-change-orders";
 import type { Project, ChangeOrderStatus, ChangeOrderTreatment } from "@/types/project";
 
@@ -184,6 +185,7 @@ export function ChangeOrdersTab({ project }: { project: Project }) {
   const { mutateAsync: update } = useUpdateChangeOrder();
   const { mutateAsync: remove } = useDeleteChangeOrder();
   const { mutateAsync: approve, isPending: approving } = useApproveChangeOrder();
+  const { mutateAsync: reverse, isPending: reversing } = useReverseChangeOrder();
   const [newOpen, setNewOpen] = useState(false);
 
   const approvedTotal = orders
@@ -328,18 +330,26 @@ export function ChangeOrdersTab({ project }: { project: Project }) {
                     )}
                     {o.status === "approved" && (
                       <div className="flex items-center justify-end gap-1">
-                        {/* Reversing is a soft delete: the trigger recomputes the
-                            contract price, so the schedule can't be left richer
-                            than the contract that justifies it. */}
+                        {/* Reversing goes through its own RPC, which subtracts
+                            exactly what the approval added to each milestone.
+                            A plain soft delete would only drop the contract
+                            price and leave the schedule billing the raised
+                            amount — the database refuses that now. */}
                         <Button
                           size="sm" variant="ghost"
                           className="h-7 text-xs text-slate-400 hover:text-red-500"
-                          title="Reverse this change order — the contract price drops back"
-                          disabled={!canModify}
-                          onClick={() => remove(
-                            { id: o.id, projectId: project.id },
-                            { onError: () => toast.error("Failed to reverse") },
-                          )}
+                          title="Reverse this change order — the contract price and the billing schedule both drop back"
+                          disabled={!canModify || reversing}
+                          onClick={async () => {
+                            try {
+                              await reverse({ id: o.id, projectId: project.id });
+                              toast.success(`CO #${o.coNumber} reversed`);
+                            } catch (e) {
+                              // The RPC explains itself when a milestone has
+                              // already been invoiced — show that, not "failed".
+                              toast.error(e instanceof Error ? e.message : "Failed to reverse");
+                            }
+                          }}
                         >
                           Reverse
                         </Button>

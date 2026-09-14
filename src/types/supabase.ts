@@ -11786,6 +11786,7 @@ export type Database = {
           amount_cents: number
           approved_at: string | null
           approved_by: string | null
+          billing_allocation: Json | null
           billing_treatment: string
           client_reference: string | null
           co_number: number | null
@@ -11806,6 +11807,7 @@ export type Database = {
           amount_cents?: number
           approved_at?: string | null
           approved_by?: string | null
+          billing_allocation?: Json | null
           billing_treatment?: string
           client_reference?: string | null
           co_number?: number | null
@@ -11826,6 +11828,7 @@ export type Database = {
           amount_cents?: number
           approved_at?: string | null
           approved_by?: string | null
+          billing_allocation?: Json | null
           billing_treatment?: string
           client_reference?: string | null
           co_number?: number | null
@@ -14012,7 +14015,9 @@ export type Database = {
       }
       rpt_projects_wip: {
         Row: {
+          approved_changes_cents: number | null
           billed_cents: number | null
+          change_order_count: number | null
           client_name: string | null
           contract_cents: number | null
           cost_to_date_cents: number | null
@@ -14024,6 +14029,7 @@ export type Database = {
           estimated_gp_pct: number | null
           id: string | null
           name: string | null
+          original_contract_cents: number | null
           over_under_billed_cents: number | null
           pct_complete: number | null
           remaining_to_bill_cents: number | null
@@ -14476,6 +14482,13 @@ export type Database = {
       reorder_snow_route_stops: {
         Args: { p_route_id: string; p_stops: Json }
         Returns: undefined
+      }
+      reverse_change_order: {
+        Args: { p_change_order_id: string; p_delete?: boolean }
+        Returns: {
+          change_order_id: string
+          new_contract_cents: number
+        }[]
       }
       server_insert_audit: {
         Args: {
