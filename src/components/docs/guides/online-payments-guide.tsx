@@ -175,6 +175,14 @@ export function OnlinePaymentsGuide() {
             . The other deposit methods on that page charge nothing.
           </li>
           <li>
+            <strong>A failed deposit doesn&apos;t un-accept the proposal.</strong> A bank transfer can
+            be returned days after the client accepted, and a card can be declined. When that happens
+            the acceptance stands &mdash; only the payment failed &mdash; and the estimate records
+            the reason the bank or card network gave. You get a <strong>Deposit failed</strong>{" "}
+            notification and email, and the client&apos;s original proposal link re-opens itself so
+            they can pay it again from the same link. It closes as soon as a deposit is recorded.
+          </li>
+          <li>
             <strong>A refund comes out of unapplied credit before it comes off an invoice.</strong>{" "}
             When a payment is larger than what it was applied to — an overpayment, or a prepayment
             only partly used — the leftover sits on the payment as unapplied credit. Refunding now

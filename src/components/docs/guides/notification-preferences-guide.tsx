@@ -20,6 +20,7 @@ const PAIRED_EVENTS: [string, string][] = [
   ["Estimate approval required", "You're the next approver in an estimate's internal approval chain."],
   ["Estimate client-accepted", "A client accepts an estimate."],
   ["Estimate client-rejected", "A client declines an estimate."],
+  ["Proposal deposit failed", "A client's deposit is declined or returned by their bank after they accepted the proposal."],
   ["New ticket", "A new support/service ticket comes in."],
   ["Ticket assigned", "You're set as the assignee on a ticket."],
   ["Ticket comment", "Someone comments on a ticket you're involved with."],
@@ -207,7 +208,9 @@ export function NotificationPreferencesGuide() {
           <li>
             <strong>&quot;Who in the org can even be notified?&quot;</strong> — a separate, admin-only
             setting for exactly two broadcast-style CRM events: <em>estimate decisions</em> (client accepts
-            or declines) and <em>new tickets</em>. An admin uses the Recipients picker in Settings →
+            or declines &mdash; which also covers a <em>failed proposal deposit</em>, since the people who
+            wanted to hear a proposal was accepted are the ones who need to hear its deposit bounced)
+            and <em>new tickets</em>. An admin uses the Recipients picker in Settings →
             Notifications to restrict the eligible pool for each, stored as an array of user IDs under{" "}
             <code>organizations.customizations</code> (<code>estimateDecisionRecipientIds</code> /{" "}
             <code>newTicketRecipientIds</code>). Leaving it unset means &quot;no restriction&quot; — anyone
@@ -224,7 +227,7 @@ export function NotificationPreferencesGuide() {
         </p>
         <Callout>
           Two exceptions always ride along regardless of the picker: the estimate&apos;s sales rep is
-          always included for estimate-decision notifications, and the ticket&apos;s assignee (if any) is
+          always included for estimate-decision and failed-deposit notifications, and the ticket&apos;s assignee (if any) is
           always included for new-ticket notifications — on top of whoever is picked in the Recipients
           list.
         </Callout>

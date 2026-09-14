@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const STAGES: [string, string][] = [
   ["Draft", "Default stage for a brand-new estimate. Still being built — line items and pricing are in flux. Drafts were never presented to a client, so Close Ratios and win-rate figures leave them out of both counts and amounts."],
@@ -373,10 +374,44 @@ export function EstimatingGuide() {
           <strong>A bank transfer doesn&rsquo;t hold up acceptance.</strong> ACH takes a few business
           days to clear, and the proposal is accepted the moment the client submits the debit &mdash;
           they aren&rsquo;t left waiting and neither is the job. While it&rsquo;s clearing the estimate
-          shows the deposit as <strong>pending</strong>: no payment exists on the client yet, because
-          the money hasn&rsquo;t actually arrived. When it clears it becomes a normal prepayment. If
-          the bank returns it, the pending marker just disappears &mdash; there was never a payment
-          to reverse.
+          shows an amber <strong>bank transfer pending</strong> badge next to Deposit Required: no
+          payment exists on the client yet, because the money hasn&rsquo;t actually arrived. When it
+          clears it becomes a normal prepayment and the badge turns green.
+        </Callout>
+        <p>
+          <strong>If the deposit fails</strong> &mdash; a returned bank transfer (insufficient funds,
+          closed account, a mistyped routing number) or a declined card &mdash; the proposal{" "}
+          <em>stays accepted</em>. Only the money failed; nothing needs signing again. Three things
+          happen:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            The estimate shows a red <strong>payment failed</strong> badge with the amount, the date,
+            and the bank&rsquo;s own reason on hover. That reason is the useful part &mdash;
+            &ldquo;insufficient funds&rdquo; means ask them to try again, &ldquo;account
+            closed&rdquo; means pick up the phone.
+          </li>
+          <li>
+            You&rsquo;re notified &mdash; a <strong>Deposit failed</strong> bell notification and an
+            email, to whoever already receives proposal-decision notifications, plus the
+            estimate&rsquo;s sales rep. Both can be turned off individually under{" "}
+            <GuideLink href="/settings/support/notification-preferences-guide" className="text-[#60ab45] hover:underline">
+              Notification Preferences
+            </GuideLink>
+            .
+          </li>
+          <li>
+            <strong>The client&rsquo;s original proposal link re-opens itself</strong> so they can pay
+            it again. Re-visiting it shows a &ldquo;your deposit didn&rsquo;t go through&rdquo; screen
+            with the reason and the card / bank-transfer buttons, instead of the usual thank-you.
+            They can&rsquo;t change the amount, and there&rsquo;s no Skip button this time &mdash;
+            skipping is a choice made before accepting, and by now the deposit is owed.
+          </li>
+        </ol>
+        <Callout>
+          The link closes again the moment a deposit is recorded, so it only ever allows one attempt
+          at a time. This is worth knowing before you chase someone: they very likely can just pay it
+          from the same link you already sent, and don&rsquo;t need a new one.
         </Callout>
         <Callout>
           Only the card and bank-transfer paths are real money. A client who picks
