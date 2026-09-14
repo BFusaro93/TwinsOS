@@ -4,6 +4,7 @@ import {
   View,
   Text,
   Image,
+  Link,
   StyleSheet,
 } from "@react-pdf/renderer";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
@@ -326,7 +327,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {invoice.viewOnlineUrl ? (
         <View style={S.notesSection}>
           <Text style={S.notesLabel}>View &amp; Pay Online</Text>
-          <Text style={S.notesText}>{invoice.viewOnlineUrl}</Text>
+          <Link src={invoice.viewOnlineUrl} style={[S.notesText, { color: accentColor }]}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}
 
@@ -498,7 +499,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {invoice.viewOnlineUrl ? (
         <View style={SC.notes}>
           <Text style={SC.notesLabel}>View &amp; Pay Online</Text>
-          <Text>{invoice.viewOnlineUrl}</Text>
+          <Link src={invoice.viewOnlineUrl} style={{ color: accentColor }}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}
 
@@ -627,11 +628,15 @@ function StatementInvoiceLayout({
     <>
       <View style={SS.onlineBox}>
         <Text style={[SS.onlineBoxLabel, { color: accentColor }]}>To View Your Invoice Online</Text>
-        <Text style={[SS.onlineBoxText, { color: accentColor }]}>
-          {invoice.viewOnlineUrl
-            ? `Go to ${invoice.viewOnlineUrl}`
-            : "Log in to your client portal to view this invoice and payment history."}
-        </Text>
+        {invoice.viewOnlineUrl ? (
+          <Link src={invoice.viewOnlineUrl} style={[SS.onlineBoxText, { color: accentColor }]}>
+            Go to {invoice.viewOnlineUrl}
+          </Link>
+        ) : (
+          <Text style={[SS.onlineBoxText, { color: accentColor }]}>
+            Log in to your client portal to view this invoice and payment history.
+          </Text>
+        )}
       </View>
 
       {invoice.advertisementText ? (
