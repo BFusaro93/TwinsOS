@@ -184,6 +184,29 @@ export function useJobsForDate(date: string) {
 
 // ── waiting list ──────────────────────────────────────────────────────────────
 
+/**
+ * The waiting-list select is `*` plus four nested relations; these are the
+ * parts the filtering below actually reads. Everything else on the row is
+ * passed straight through to mapJob, hence the index signature.
+ */
+type WaitingListRow = {
+  job_type: string;
+  service_address: string | null;
+  service_city: string | null;
+  service_state: string | null;
+  service_zip: string | null;
+  clients?: {
+    display_name: string | null;
+    billing_address: string | null;
+    billing_city: string | null;
+    billing_state: string | null;
+    billing_zip: string | null;
+  } | null;
+  crm_job_visits?: { id: string; deleted_at: string | null; job_service_id: string | null; status: string }[] | null;
+  crm_job_services?: { id: string }[] | null;
+  [column: string]: unknown;
+};
+
 export function useWaitingListJobs(startDate?: string, endDate?: string) {
   return useQuery({
     queryKey: ["crm-jobs", "waiting-list", startDate, endDate],
@@ -215,10 +238,9 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       // A one-time waiting-list job that's already been dispatched (has an active
       // visit) is done waiting — drop it. Packages keep multiple visits over their
       // lifetime, so they stay until their date window says otherwise.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = (data as any[]).filter((row) => {
+      const rows = (data as WaitingListRow[]).filter((row) => {
         if (row.job_type !== "waiting_list") return true;
-        const hasActiveVisit = (row.crm_job_visits ?? []).some((v: any) => !v.deleted_at);
+        const hasActiveVisit = (row.crm_job_visits ?? []).some((v) => !v.deleted_at);
         return !hasActiveVisit;
       });
 
@@ -233,12 +255,11 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         if (row.job_type !== "package") continue;
         const dispatchedServiceIds = new Set(
           (row.crm_job_visits ?? [])
-            .filter((v: any) => !v.deleted_at && v.job_service_id && v.status !== "scheduled")
-            .map((v: any) => v.job_service_id)
+            .filter((v) => !v.deleted_at && v.job_service_id && v.status !== "scheduled")
+            .map((v) => v.job_service_id)
         );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         row.crm_job_services = (row.crm_job_services ?? []).filter(
-          (s: any) => !dispatchedServiceIds.has(s.id)
+          (s) => !dispatchedServiceIds.has(s.id)
         );
       }
 
@@ -519,23 +540,33 @@ import type { NewClientJobFormValues, CRMJobService, CRMJobVisit, VisitStatus } 
 
 // ── visit helpers ─────────────────────────────────────────────────────────────
 
+/** The columns applyJobServiceFallback reads off each nested crm_job_services row. */
+type JobServiceFallback = {
+  id: string;
+  service_id: string | null;
+  service_name: string | null;
+  rate_cents: number | null;
+  /** numeric in Postgres, so it can arrive as a string. */
+  budgeted_hours: number | string | null;
+  qty: number | null;
+};
+
 // When a visit has no rate_cents / budgeted_hours of its own, fall back to the
 // sum of the parent job's services (the common case for auto-generated visits).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const services: any[] = row.crm_jobs?.crm_job_services ?? [];
+  const services: JobServiceFallback[] = row.crm_jobs?.crm_job_services ?? [];
   // Package jobs link each visit to a single service (e.g. "Fert 2 of 5") via
   // job_service_id — use that one service's own rate/hours/name instead of
   // summing across every service on the job, which double/quintuple-counts.
   const linkedService = visit.jobServiceId
-    ? services.find((s: any) => s.id === visit.jobServiceId)
+    ? services.find((s) => s.id === visit.jobServiceId)
     : null;
   if (visit.rateCents == null) {
     if (linkedService) {
       visit.rateCents = (linkedService.rate_cents ?? 0) * (linkedService.qty ?? 1);
     } else {
-      const total = services.reduce((sum: number, s: any) => sum + (s.rate_cents ?? 0) * (s.qty ?? 1), 0);
+      const total = services.reduce((sum, s) => sum + (s.rate_cents ?? 0) * (s.qty ?? 1), 0);
       if (total > 0) visit.rateCents = total;
     }
     // Also try direct job rate_cents
@@ -545,7 +576,7 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
     if (linkedService) {
       visit.budgetedHours = Number(linkedService.budgeted_hours ?? 0) * (linkedService.qty ?? 1);
     } else {
-      const total = services.reduce((sum: number, s: any) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
+      const total = services.reduce((sum, s) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
       if (total > 0) visit.budgetedHours = total;
     }
     if (visit.budgetedHours == null && row.crm_jobs?.budgeted_hours != null) visit.budgetedHours = Number(row.crm_jobs.budgeted_hours);
@@ -554,8 +585,8 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
     visit.serviceNames = linkedService.service_name ? [linkedService.service_name as string] : [];
     visit.serviceIds = [(linkedService.service_id as string | null) ?? null];
   } else if (services.length > 0) {
-    visit.serviceNames = services.map((s: any) => s.service_name as string).filter(Boolean);
-    visit.serviceIds = services.map((s: any) => (s.service_id as string | null) ?? null);
+    visit.serviceNames = services.map((s) => s.service_name as string).filter(Boolean);
+    visit.serviceIds = services.map((s) => s.service_id ?? null);
   }
   return visit;
 }
@@ -1972,27 +2003,24 @@ export function useCreateJobsFromEstimate() {
       // crew doesn't lose site-visit photos the estimator already captured.
       // Best-effort: a copy failure here shouldn't block job creation.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: estimatePhotos } = await (supabase as any)
+        const { data: estimatePhotos } = await supabase
           .from("estimate_photos")
           .select("storage_path, file_name, file_size, mime_type")
           .eq("estimate_id", estimateId)
           .is("deleted_at", null);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: estimateAttachments } = await (supabase as any)
+        const { data: estimateAttachments } = await supabase
           .from("attachments")
           .select("storage_path, file_name, file_size, file_type")
           .eq("record_type", "estimate")
           .eq("record_id", estimateId)
           .is("deleted_at", null);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sources: { storage_path: string; file_name: string; file_size: number | null; file_type: string | null }[] = [
-          ...((estimatePhotos ?? []) as any[]).map((p) => ({
+          ...(estimatePhotos ?? []).map((p) => ({
             storage_path: p.storage_path, file_name: p.file_name, file_size: p.file_size, file_type: p.mime_type,
           })),
-          ...((estimateAttachments ?? []) as any[]).map((a) => ({
+          ...(estimateAttachments ?? []).map((a) => ({
             storage_path: a.storage_path, file_name: a.file_name, file_size: a.file_size, file_type: a.file_type,
           })),
         ];
