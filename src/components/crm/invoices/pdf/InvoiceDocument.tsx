@@ -533,16 +533,16 @@ const SS = StyleSheet.create({
   summaryTables: { flexDirection: "column", width: 220 },
   miniTable: { borderTop: "1 solid #cbd5e1", borderLeft: "1 solid #cbd5e1", borderRight: "1 solid #cbd5e1" },
   miniRow: { flexDirection: "row", borderBottom: "1 solid #cbd5e1" },
-  miniCellLabel: { flex: 1.4, backgroundColor: "#f0fdf4", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold", color: "#166534" },
+  miniCellLabel: { flex: 1.4, backgroundColor: "#f8fafc", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold" },
   miniCellValue: { flex: 1, padding: 4, fontSize: 7.5, textAlign: "right" },
-  balanceLabel: { flex: 1.4, backgroundColor: "#f0fdf4", padding: 4, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#166534" },
+  balanceLabel: { flex: 1.4, backgroundColor: "#f8fafc", padding: 4, fontSize: 8, fontFamily: "Helvetica-Bold" },
   balanceValue: { flex: 1, padding: 4, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#b91c1c", textAlign: "right" },
   spacer: { height: 8 },
 
   invoiceForRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4, marginBottom: 8, fontSize: 7.5 },
   invoiceForLabel: { fontFamily: "Helvetica-Bold" },
 
-  activityHeaderRow: { flexDirection: "row", backgroundColor: "#166534", paddingVertical: 4, paddingHorizontal: 6 },
+  activityHeaderRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6 },
   activityHeaderText: { fontSize: 7, fontFamily: "Helvetica-Bold", color: "#ffffff", textTransform: "uppercase" },
   activityRow: { flexDirection: "row", paddingVertical: 3, paddingHorizontal: 6, borderBottom: "1 solid #f1f5f9" },
   activityDividerRow: { flexDirection: "row", paddingVertical: 3, borderTop: "1 solid #cbd5e1", borderBottom: "1 solid #cbd5e1", backgroundColor: "#f8fafc" },
@@ -554,19 +554,19 @@ const SS = StyleSheet.create({
   cellTotal: { flex: 1, textAlign: "right" },
   activityText: { fontSize: 7.5, color: "#334155" },
 
-  onlineBox: { marginTop: 14, backgroundColor: "#f0fdf4", padding: 8, borderRadius: 2 },
-  onlineBoxLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: "#166534", marginBottom: 2 },
-  onlineBoxText: { fontSize: 7, color: "#166534" },
+  onlineBox: { marginTop: 14, backgroundColor: "#f8fafc", padding: 8, borderRadius: 2 },
+  onlineBoxLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", marginBottom: 2 },
+  onlineBoxText: { fontSize: 7 },
 
   termsSection: { marginTop: 14 },
   termsText: { fontSize: 7, color: "#b91c1c", lineHeight: 1.5 },
 
-  stub: { position: "absolute", bottom: 46, left: 32, right: 32, borderTop: "2 solid #166534", paddingTop: 10, flexDirection: "row", justifyContent: "space-between", backgroundColor: "#ffffff" },
+  stub: { position: "absolute", bottom: 46, left: 32, right: 32, paddingTop: 10, flexDirection: "row", justifyContent: "space-between", backgroundColor: "#ffffff" },
   stubLeft: { flexDirection: "column" },
   stubRow: { flexDirection: "row", marginBottom: 2 },
   stubLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", width: 70 },
   stubValue: { fontSize: 7.5 },
-  stubTitle: { fontSize: 13, fontFamily: "Helvetica-Bold", color: "#166534" },
+  stubTitle: { fontSize: 13, fontFamily: "Helvetica-Bold" },
   stubRight: { flexDirection: "column", alignItems: "flex-end" },
 
   footer: { position: "absolute", bottom: 16, left: 32, right: 32, flexDirection: "row", justifyContent: "space-between", fontSize: 6.5, color: "#9ca3af" },
@@ -588,6 +588,7 @@ function StatementInvoiceLayout({
    *  running account balance across all the client's other invoices. */
   showAccountBalance?: boolean;
 }) {
+  const accentColor = org.brandColor || "#60ab45";
   const st = invoice.statement;
   const clientAddressLine2 = [invoice.clientCity, invoice.clientState, invoice.clientZip].filter(Boolean).join(", ");
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
@@ -620,11 +621,11 @@ function StatementInvoiceLayout({
         <View style={SS.summaryTables}>
           <View style={SS.miniTable}>
             <View style={SS.miniRow}>
-              <View style={SS.miniCellLabel}><Text>Invoice #</Text></View>
+              <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Invoice #</Text></View>
               <View style={SS.miniCellValue}><Text>{invoiceLabel}</Text></View>
             </View>
             <View style={[SS.miniRow, { borderBottom: "none" }]}>
-              <View style={SS.miniCellLabel}><Text>Invoice Date</Text></View>
+              <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Invoice Date</Text></View>
               <View style={SS.miniCellValue}><Text>{formatDate(invoice.invoiceDate)}</Text></View>
             </View>
           </View>
@@ -632,21 +633,21 @@ function StatementInvoiceLayout({
           <View style={SS.miniTable}>
             {st?.lastPayment ? (
               <View style={SS.miniRow}>
-                <View style={SS.miniCellLabel}><Text>Last Payment Received</Text></View>
+                <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Last Payment Received</Text></View>
                 <View style={SS.miniCellValue}><Text>{cents(st.lastPayment.amountCents)}</Text></View>
               </View>
             ) : null}
             {showAccountBalance && (
               <>
                 <View style={SS.miniRow}>
-                  <View style={SS.miniCellLabel}><Text>Previous Balance</Text></View>
+                  <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Previous Balance</Text></View>
                   <View style={SS.miniCellValue}><Text>{cents(st?.previousBalanceCents ?? 0)}</Text></View>
                 </View>
                 <View style={SS.miniRow}>
                   {/* invoice.totalCents is already tax-inclusive — shown here
                       (not as a separate Sales Tax line) so this column adds
                       up to Account Balance exactly: Previous + This Invoice. */}
-                  <View style={SS.miniCellLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
+                  <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Invoice {invoiceLabel} Total</Text></View>
                   <View style={SS.miniCellValue}><Text>{cents(invoice.totalCents)}</Text></View>
                 </View>
               </>
@@ -654,12 +655,12 @@ function StatementInvoiceLayout({
             <View style={[SS.miniRow, { borderBottom: "none" }]}>
               {showAccountBalance ? (
                 <>
-                  <View style={SS.balanceLabel}><Text>Account Balance</Text></View>
+                  <View style={[SS.balanceLabel, { color: accentColor }]}><Text>Account Balance</Text></View>
                   <View style={SS.balanceValue}><Text>{cents(st?.accountBalanceCents ?? invoice.totalCents)}</Text></View>
                 </>
               ) : (
                 <>
-                  <View style={SS.balanceLabel}><Text>Balance Due</Text></View>
+                  <View style={[SS.balanceLabel, { color: accentColor }]}><Text>Balance Due</Text></View>
                   <View style={SS.balanceValue}><Text>{cents(invoice.balanceCents)}</Text></View>
                 </>
               )}
@@ -676,7 +677,7 @@ function StatementInvoiceLayout({
         </View>
       </View>
 
-      <View style={SS.activityHeaderRow}>
+      <View style={[SS.activityHeaderRow, { backgroundColor: accentColor }]}>
         <View style={SS.cellDate}><Text style={SS.activityHeaderText}>Date</Text></View>
         <View style={SS.cellDesc}><Text style={SS.activityHeaderText}>Description</Text></View>
         <View style={SS.cellQty}><Text style={SS.activityHeaderText}>Qty</Text></View>
@@ -730,8 +731,8 @@ function StatementInvoiceLayout({
       ))}
 
       <View style={SS.onlineBox}>
-        <Text style={SS.onlineBoxLabel}>To View Your Invoice Online</Text>
-        <Text style={SS.onlineBoxText}>
+        <Text style={[SS.onlineBoxLabel, { color: accentColor }]}>To View Your Invoice Online</Text>
+        <Text style={[SS.onlineBoxText, { color: accentColor }]}>
           {invoice.viewOnlineUrl
             ? `Go to ${invoice.viewOnlineUrl}`
             : "Log in to your client portal to view this invoice and payment history."}
@@ -750,7 +751,7 @@ function StatementInvoiceLayout({
         </View>
       ) : null}
 
-      <View fixed style={SS.stub}>
+      <View fixed style={[SS.stub, { borderTop: `2 solid ${accentColor}` }]}>
         <View style={SS.stubLeft}>
           <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
           <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
@@ -758,7 +759,7 @@ function StatementInvoiceLayout({
           <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
         </View>
         <View style={SS.stubRight}>
-          <Text style={SS.stubTitle}>PAYMENT STUB</Text>
+          <Text style={[SS.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
           <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
           <Text style={SS.companyMeta}>{org.street}</Text>
           {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}

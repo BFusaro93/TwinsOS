@@ -100,12 +100,12 @@ export function AccountStatementDialog({ clientId, clientName, clientEmail, open
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Account Statement{clientName ? ` — ${clientName}` : ""}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">
+        <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-[280px_minmax(0,1fr)]">
           <div className="space-y-4">
             <div>
               <Label className="text-xs">Statement Date</Label>
@@ -186,14 +186,14 @@ export function AccountStatementDialog({ clientId, clientName, clientEmail, open
             </div>
           </div>
 
-          <div className="flex flex-col">
-            <div className="mb-2 flex items-center justify-between">
+          <div className="flex min-w-0 flex-col">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-slate-500">Preview</span>
               <a
                 href={pdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 hover:underline"
+                className="flex shrink-0 items-center gap-1 text-xs text-brand-600 hover:text-brand-700 hover:underline"
               >
                 <Printer className="h-3.5 w-3.5" />
                 Open / Print
