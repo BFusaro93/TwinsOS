@@ -397,9 +397,8 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           {org.logoUrl ? (
             // eslint-disable-next-line jsx-a11y/alt-text
             <Image src={org.logoUrl} style={SC.logo} />
-          ) : (
-            <Text style={SC.companyName}>{org.name}</Text>
-          )}
+          ) : null}
+          <Text style={SC.companyName}>{org.name}</Text>
           <Text style={SC.companyMeta}>{org.street}</Text>
           {orgAddressLine2 ? <Text style={SC.companyMeta}>{orgAddressLine2}</Text> : null}
           {org.phone ? <Text style={SC.companyMeta}>{org.phone}</Text> : null}
@@ -517,7 +516,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
 // format rather than a single-invoice line-item sheet.
 
 const SS = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 8.5, color: "#1e293b", padding: 32, backgroundColor: "#ffffff" },
+  page: { fontFamily: "Helvetica", fontSize: 8.5, color: "#1e293b", padding: 32, paddingBottom: 170, backgroundColor: "#ffffff" },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
   fromBlock: { flexDirection: "column" },
   fromLabel: { fontSize: 7, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 2 },
@@ -562,7 +561,7 @@ const SS = StyleSheet.create({
   termsSection: { marginTop: 14 },
   termsText: { fontSize: 7, color: "#b91c1c", lineHeight: 1.5 },
 
-  stub: { marginTop: 18, borderTop: "2 solid #166534", paddingTop: 10, flexDirection: "row", justifyContent: "space-between" },
+  stub: { position: "absolute", bottom: 46, left: 32, right: 32, borderTop: "2 solid #166534", paddingTop: 10, flexDirection: "row", justifyContent: "space-between", backgroundColor: "#ffffff" },
   stubLeft: { flexDirection: "column" },
   stubRow: { flexDirection: "row", marginBottom: 2 },
   stubLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", width: 70 },
@@ -751,20 +750,28 @@ function StatementInvoiceLayout({
         </View>
       ) : null}
 
-      <View style={SS.stub}>
-        <View style={SS.stubLeft}>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
-        </View>
-        <View style={SS.stubRight}>
-          <Text style={SS.stubTitle}>PAYMENT STUB</Text>
-          <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
-          <Text style={SS.companyMeta}>{org.street}</Text>
-          {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
-        </View>
-      </View>
+      <View
+        fixed
+        style={SS.stub}
+        render={({ pageNumber, totalPages }) =>
+          pageNumber === totalPages ? (
+            <>
+              <View style={SS.stubLeft}>
+                <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
+                <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
+                <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
+                <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+              </View>
+              <View style={SS.stubRight}>
+                <Text style={SS.stubTitle}>PAYMENT STUB</Text>
+                <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
+                <Text style={SS.companyMeta}>{org.street}</Text>
+                {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
+              </View>
+            </>
+          ) : null
+        }
+      />
 
       <View style={SS.footer} fixed>
         <Text>{org.name} · {org.phone}</Text>
