@@ -14416,6 +14416,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      is_client_portal_user: { Args: never; Returns: boolean }
       is_staff: { Args: { uid: string }; Returns: boolean }
       list_organizations_for_staff: {
         Args: never
