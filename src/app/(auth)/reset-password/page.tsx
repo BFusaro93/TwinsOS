@@ -59,7 +59,7 @@ function ResetPasswordForm() {
     setError(null);
 
     const supabase = createClient();
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    const { data: updated, error: updateError } = await supabase.auth.updateUser({ password });
 
     setLoading(false);
 
@@ -68,7 +68,11 @@ function ResetPasswordForm() {
       return;
     }
 
-    router.push("/home");
+    // Client-portal users have no staff app to land in — /home would bounce
+    // them straight back out. Read it off the account rather than the link, so
+    // this holds however they got here.
+    const isPortalUser = !!updated?.user?.user_metadata?.portal;
+    router.push(isPortalUser ? "/portal" : "/home");
     router.refresh();
   }
 
