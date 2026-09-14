@@ -80,6 +80,7 @@ import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
+import { AccountStatementDialog } from "./clients/AccountStatementDialog";
 import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
   useQuickBooksClientLink,
@@ -3177,6 +3178,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [accountStatementOpen, setAccountStatementOpen] = useState(false);
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
   const { mutateAsync: activate } = useActivateClient();
@@ -3442,7 +3444,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => setActiveTab("audit")}>
                       <History className="mr-2 h-3.5 w-3.5" /> View Audit Trail
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setActiveTab("details")}>
+                    <DropdownMenuItem onClick={() => setAccountStatementOpen(true)}>
                       <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -3953,6 +3955,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         property={editProperty}
       />
       <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
+      <AccountStatementDialog
+        clientId={clientId}
+        clientName={client.displayName}
+        clientEmail={client.primaryEmail}
+        open={accountStatementOpen}
+        onClose={() => setAccountStatementOpen(false)}
+      />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog
         clientId={clientId}
