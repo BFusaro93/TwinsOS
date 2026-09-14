@@ -1,10 +1,10 @@
 // Shared "actual hours" fallback used anywhere a visit's real time-on-site
 // needs to be shown or totaled. An explicit actualHours override (dispatcher-
 // entered) always wins; then real clock-in/out punches from the crew tablet;
-// then the dispatcher's scheduled Start/End time as an estimate. Each result
-// is multiplied by crew size. Mirrors crm_recompute_job_actual_hours() in
-// supabase/migrations/20260726000000_crm_jobs_actual_hours_rollup.sql — keep
-// both in sync if this fallback logic ever changes.
+// then the dispatcher's scheduled Start/End time as an estimate. Recorded
+// break time is netted off the derived tiers, and each result is multiplied by
+// crew size. Mirrors crm_recompute_job_actual_hours() and the `calc` lateral
+// in rpt_job_visits — keep all three in sync if this logic ever changes.
 export interface VisitHoursInput {
   actualHours: number | null;
   clockedInAt: string | null;
@@ -12,21 +12,43 @@ export interface VisitHoursInput {
   startTime: string | null;
   endTime: string | null;
   menCount: number;
+  /**
+   * Paid-break/lunch minutes recorded by the crew's Pause button
+   * (crm_job_visits.break_minutes, migration 20260906200000). Absent on
+   * callers that predate the pause feature, which is why it's optional —
+   * treated as 0.
+   */
+  breakMinutes?: number | null;
 }
 
 export function computeActualHours(visit: VisitHoursInput): number | null {
+  // An explicit override is already net of break and already man-multiplied
+  // (allocateStopHours writes it from a duration the clock-out route computed
+  // after subtracting the break) — never adjust it again here.
   if (visit.actualHours != null) return visit.actualHours;
+
+  const breakHours = Math.max(0, visit.breakMinutes ?? 0) / 60;
+
   if (visit.clockedInAt && visit.clockedOutAt) {
-    const diffHours = (new Date(visit.clockedOutAt).getTime() - new Date(visit.clockedInAt).getTime()) / 3_600_000;
-    if (diffHours > 0) return diffHours * (visit.menCount || 1);
+    const elapsed = (new Date(visit.clockedOutAt).getTime() - new Date(visit.clockedInAt).getTime()) / 3_600_000;
+    // Gate on the RAW elapsed time so the fall-through to scheduled times
+    // still only happens for missing/backwards punches — a break that swallows
+    // the whole shift means zero worked hours, not "fall back to the plan".
+    if (elapsed > 0) return Math.max(0, elapsed - breakHours) * (visit.menCount || 1);
   }
   if (!visit.startTime || !visit.endTime) return null;
   const [sh, sm] = visit.startTime.split(":").map(Number);
   const [eh, em] = visit.endTime.split(":").map(Number);
   if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return null;
-  const diffHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
-  if (diffHours <= 0) return null;
-  return diffHours * (visit.menCount || 1);
+  // Snow/storm visits routinely cross midnight (e.g. 23:00 -> 01:00) — an
+  // end time strictly before the start time means it's the next day, not a
+  // negative-duration shift. An end EQUAL to start is still treated as
+  // no duration (likely unset fields), not a full 24 hours.
+  let diffMinutes = eh * 60 + em - (sh * 60 + sm);
+  if (diffMinutes < 0) diffMinutes += 24 * 60;
+  if (diffMinutes <= 0) return null;
+  const diffHours = diffMinutes / 60;
+  return Math.max(0, diffHours - breakHours) * (visit.menCount || 1);
 }
 
 export interface VisitBudgetedHoursInput {

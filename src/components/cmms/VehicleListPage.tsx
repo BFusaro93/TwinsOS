@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { toast } from "sonner";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   ClipboardCheck,
@@ -78,7 +79,7 @@ const VEHICLE_COLUMNS: ColumnDef[] = [
 export function VehicleListPage() {
   const { data: vehicles, isLoading } = useVehicles();
   const { mutateAsync: bulkImportVehicles } = useBulkImportVehicles();
-  const { data: assets } = useAssets();
+  const { data: assets, isLoading: isAssetsLoading } = useAssets();
   const { data: meters } = useMeters();
 
   // Build vehicleId → current miles from all "miles"/"mi" meters
@@ -167,7 +168,12 @@ export function VehicleListPage() {
     null;
 
   function handleBarcodeScan(raw: string) {
-    const q = raw.toLowerCase();
+    if (isLoading || isAssetsLoading) {
+      toast.error("Vehicles are still loading — try scanning again in a moment.");
+      return;
+    }
+
+    const q = raw.trim().toLowerCase();
 
     // Search vehicles first
     const vehicleMatch = all.find(
@@ -190,7 +196,10 @@ export function VehicleListPage() {
     if (assetMatch) {
       setSelectedAssetId(assetMatch.id);
       router.push("/cmms/assets");
+      return;
     }
+
+    toast.error(`No asset or vehicle found for code "${raw}"`);
   }
 
   function handleFilterChange(key: string, value: string | string[]) {

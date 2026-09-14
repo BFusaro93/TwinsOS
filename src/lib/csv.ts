@@ -3,6 +3,35 @@
  * All functions are client-side only (browser File API / Blob).
  */
 
+/** A single row that failed during a bulk CSV import, with enough context to
+ *  act on it (which row, and why). `row` is 1-based within the batch of rows
+ *  handed to the importer (i.e. the preview table's row numbering). */
+export interface BulkImportRowError {
+  row: number;
+  error: string;
+}
+
+/**
+ * Standard return shape for a `useBulkImport*` mutation: rather than
+ * aborting the whole batch on the first bad row, each hook processes every
+ * row and reports which ones succeeded vs. failed (with a reason) here.
+ * `ImportExportMenu` renders this directly when a hook returns it.
+ */
+export interface BulkImportResult {
+  succeeded: number;
+  failed: BulkImportRowError[];
+}
+
+/** Type guard: does an `onImport` return value look like a `BulkImportResult`? */
+export function isBulkImportResult(value: unknown): value is BulkImportResult {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as BulkImportResult).succeeded === "number" &&
+    Array.isArray((value as BulkImportResult).failed)
+  );
+}
+
 /** Escape a single cell value for CSV output */
 function escapeCell(val: unknown): string {
   if (val === null || val === undefined) return "";

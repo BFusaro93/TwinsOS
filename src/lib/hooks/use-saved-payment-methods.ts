@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 export interface CreateSetupIntentResult {
   clientSecret: string;
   connectedAccountId: string;
+  livemode: boolean;
 }
 
 export interface SavedPaymentMethodResult {

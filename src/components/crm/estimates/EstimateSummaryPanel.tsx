@@ -126,9 +126,12 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     discountOverrideStr?: string,
     discountOverride?: { type: DiscountType | null; value: number | null; appliedId: string | null }
   ) {
-    const taxRateBps      = Math.round((parseFloat(taxRateStr) || 0) * 100);
-    const overheadRateBps = Math.round((parseFloat(overheadRateStr) || 0) * 100);
-    const discountCents   = Math.round((parseFloat(discountOverrideStr ?? discountStr) || 0) * 100);
+    // The HTML min="0" on these inputs is only a hint, not an enforced
+    // constraint — a user can still type a negative value directly, so floor
+    // it here before it ever reaches recalcEstimateTotals.
+    const taxRateBps      = Math.max(0, Math.round((parseFloat(taxRateStr) || 0) * 100));
+    const overheadRateBps = Math.max(0, Math.round((parseFloat(overheadRateStr) || 0) * 100));
+    const discountCents   = Math.max(0, Math.round((parseFloat(discountOverrideStr ?? discountStr) || 0) * 100));
     await onRecalculate({
       taxRateBps,
       overheadRateBps,
@@ -142,9 +145,16 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   // A manual edit to the raw $ amount decouples it from whatever saved
   // discount preset produced it — treat it as a plain flat amount.
   function handleDiscountStrChange(v: string) {
-    setDiscountStr(v);
+    // Clamp a manually-typed flat discount to the current subtotal — a
+    // discount larger than the subtotal would otherwise drive
+    // revenue/tax/total negative (recalcEstimateTotals also clamps this
+    // server-side as a backstop, but doing it here gives immediate feedback
+    // instead of a silently-reduced total after the next recalc).
+    const rawCents = Math.round((parseFloat(v) || 0) * 100);
+    const clampedCents = Math.max(0, Math.min(rawCents, estimate.subtotalCents));
+    setDiscountStr(v === "" ? v : (clampedCents / 100).toFixed(2));
     setDiscountType("flat");
-    setDiscountValue(Math.round((parseFloat(v) || 0) * 100));
+    setDiscountValue(clampedCents);
     setAppliedDiscountId(null);
   }
 
@@ -237,7 +247,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         />
         {perTypeOverheadActive && (
           <p className="mb-1 text-[10px] leading-tight text-slate-400">
-            Per-cost-type overhead is configured in Settings — this flat rate is ignored while that's active.
+            Per-cost-type overhead is configured in Settings — this flat rate is ignored while that&apos;s active.
           </p>
         )}
         <div className="flex items-center gap-1">

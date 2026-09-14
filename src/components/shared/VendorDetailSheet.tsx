@@ -15,6 +15,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { PermissionGate } from "@/components/shared/PermissionGate";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -25,11 +36,13 @@ import {
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { EditButton } from "@/components/shared/EditButton";
 import { NewVendorDialog } from "./NewVendorDialog";
-import { getInitials, getAvatarColor, formatDate, formatCurrency } from "@/lib/utils";
+import { getInitials, getAvatarColor, formatDate, formatCurrency, todayLocalISODate } from "@/lib/utils";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
-import { useUpdateVendor } from "@/lib/hooks/use-vendors";
+import { useUpdateVendor, useDeleteVendor } from "@/lib/hooks/use-vendors";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useWOVendorChargesByVendor } from "@/lib/hooks/use-wo-costs";
+import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { ProductDetailSheet } from "@/components/po/ProductDetailSheet";
@@ -75,7 +88,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
   // select (it only offers not_requested/requested/received) and nothing
   // ever flips it automatically either — derive it here instead of trusting
   // the stored status, so a lapsed expiration date actually shows as expired.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISODate();
   const isPastExpiration = !!vendor.w9ExpirationDate && vendor.w9ExpirationDate < today;
   const effectiveW9Status: W9Status = vendor.w9Status === "received" && isPastExpiration ? "expired" : vendor.w9Status;
   const w9Config = W9_STATUS_CONFIG[effectiveW9Status];
@@ -119,28 +132,30 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
         />
       </dl>
 
-      <Separator className="my-4" />
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
-          <span
-            className={cn(
-              "flex items-center gap-1 text-xs font-medium text-green-600 transition-opacity duration-300",
-              notesSaved ? "opacity-100" : "opacity-0"
-            )}
-          >
-            <Check className="h-3 w-3" /> Saved
-          </span>
+      <PermissionGate permission="vendor_view_resource_notes">
+        <Separator className="my-4" />
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+            <span
+              className={cn(
+                "flex items-center gap-1 text-xs font-medium text-green-600 transition-opacity duration-300",
+                notesSaved ? "opacity-100" : "opacity-0"
+              )}
+            >
+              <Check className="h-3 w-3" /> Saved
+            </span>
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={saveNotes}
+            placeholder="Add notes about this vendor…"
+            rows={4}
+            className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          />
         </div>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={saveNotes}
-          placeholder="Add notes about this vendor…"
-          rows={4}
-          className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-        />
-      </div>
+      </PermissionGate>
 
       {/* W9 */}
       <Separator className="my-4" />
@@ -488,15 +503,31 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
   );
 }
 
-function POHistoryTab({ vendor }: { vendor: Vendor }) {
-  const { data: purchaseOrders, isLoading } = usePurchaseOrders();
+function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
+  const { data: purchaseOrders, isLoading: poLoading } = usePurchaseOrders();
+  const { data: vendorCharges, isLoading: chargesLoading } = useWOVendorChargesByVendor(vendor.id);
+  const { data: workOrders, isLoading: woLoading } = useWorkOrders();
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+
+  const isLoading = poLoading || chargesLoading || woLoading;
 
   const vendorPOs = (purchaseOrders ?? [])
     .filter((po) => po.vendorId === vendor.id)
     .sort((a, b) => new Date(b.poDate ?? b.createdAt).getTime() - new Date(a.poDate ?? a.createdAt).getTime());
 
-  const totalSpend = vendorPOs.reduce((sum, po) => sum + po.grandTotal, 0);
+  const woNumberById = new Map((workOrders ?? []).map((wo) => [wo.id, wo.workOrderNumber]));
+
+  const cmmsCharges = (vendorCharges ?? [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Honest total spend across BOTH the PO flow and CMMS direct vendor
+  // charges (wo_vendor_charges) — a Work Order can log a charge against a
+  // vendor without ever going through a Purchase Order, and that spend was
+  // previously silently excluded here.
+  const poSpend = vendorPOs.reduce((sum, po) => sum + po.grandTotal, 0);
+  const cmmsSpend = cmmsCharges.reduce((sum, c) => sum + c.cost, 0);
+  const totalSpend = poSpend + cmmsSpend;
 
   if (isLoading) {
     return (
@@ -506,10 +537,10 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
     );
   }
 
-  if (vendorPOs.length === 0) {
+  if (vendorPOs.length === 0 && cmmsCharges.length === 0) {
     return (
       <div className="flex h-48 items-center justify-center p-6">
-        <p className="text-sm text-slate-400">No purchase orders found for this vendor.</p>
+        <p className="text-sm text-slate-400">No purchase orders or work order charges found for this vendor.</p>
       </div>
     );
   }
@@ -518,10 +549,14 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
     <>
       <div className="p-6">
         {/* Summary */}
-        <div className="mb-6 grid grid-cols-2 gap-3">
+        <div className="mb-6 grid grid-cols-3 gap-3">
           <div className="rounded-md border bg-slate-50 p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total Orders</p>
             <p className="mt-1 text-xl font-bold text-slate-900">{vendorPOs.length}</p>
+          </div>
+          <div className="rounded-md border bg-slate-50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">WO Charges</p>
+            <p className="mt-1 text-xl font-bold text-slate-900">{cmmsCharges.length}</p>
           </div>
           <div className="rounded-md border bg-slate-50 p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total Spend</p>
@@ -530,39 +565,84 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
         </div>
 
         {/* PO list */}
-        <div className="overflow-hidden rounded-md border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendorPOs.map((po) => (
-                <tr key={po.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2">
-                    <button
-                      onClick={() => setSelectedPO(po)}
-                      className="font-mono text-xs font-medium text-brand-600 hover:underline"
-                    >
-                      {po.poNumber}
-                    </button>
-                  </td>
-                  <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
-                  <td className="px-3 py-2">
-                    <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium text-slate-900">
-                    {formatCurrency(po.grandTotal)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {vendorPOs.length > 0 && (
+          <div className="mb-6">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Purchase Orders
+              <span className="ml-1.5 font-normal normal-case text-slate-300">({formatCurrency(poSpend)})</span>
+            </p>
+            <div className="overflow-hidden rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vendorPOs.map((po) => (
+                    <tr key={po.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => setSelectedPO(po)}
+                          className="font-mono text-xs font-medium text-brand-600 hover:underline"
+                        >
+                          {po.poNumber}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        {formatCurrency(po.grandTotal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* CMMS direct vendor charges — logged on a Work Order's Costs tab,
+            bypasses the PO flow entirely. */}
+        {cmmsCharges.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Work Order Charges (CMMS)
+              <span className="ml-1.5 font-normal normal-case text-slate-300">({formatCurrency(cmmsSpend)})</span>
+            </p>
+            <div className="overflow-hidden rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Work Order</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Description</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cmmsCharges.map((charge) => (
+                    <tr key={charge.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2 font-mono text-xs font-medium text-slate-700">
+                        {woNumberById.get(charge.workOrderId) ?? charge.workOrderId}
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{charge.description || "—"}</td>
+                      <td className="px-3 py-2 text-slate-500">{formatDate(charge.createdAt)}</td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        {formatCurrency(charge.cost)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* PO detail overlay */}
@@ -580,9 +660,24 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
 
 export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSheetProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { mutate: updateVendor } = useUpdateVendor();
+  const { mutate: deleteVendor, isPending: deleting } = useDeleteVendor();
 
   if (!vendor) return null;
+
+  function handleDelete() {
+    if (!vendor) return;
+    deleteVendor(vendor.id, {
+      onSuccess: () => {
+        toast.success(`${vendor.name} deleted`);
+        setDeleteConfirmOpen(false);
+        onOpenChange(false);
+      },
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : "Failed to delete vendor"),
+    });
+  }
 
   const initials = getInitials(vendor.name);
   const avatarColor = getAvatarColor(vendor.name);
@@ -590,7 +685,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
   const TABS = [
     { value: "details", label: "Details" },
     { value: "parts-products", label: "Parts & Products" },
-    { value: "po-history", label: "PO History" },
+    { value: "po-history", label: "Spend History" },
   ];
 
   return (
@@ -618,7 +713,17 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
                 {vendor.isActive ? "Active" : "Inactive"}
               </Badge>
             </div>
-            <EditButton onClick={() => setEditOpen(true)} />
+            <div className="flex items-center gap-1">
+              <EditButton onClick={() => setEditOpen(true)} />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </SheetHeader>
 
@@ -643,11 +748,34 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
             <PartsProductsTab vendor={vendor} />
           </TabsContent>
           <TabsContent value="po-history" className="mt-0 flex-1 overflow-y-auto">
-            <POHistoryTab vendor={vendor} />
+            <SpendHistoryTab vendor={vendor} />
           </TabsContent>
         </Tabs>
       </SheetContent>
       <NewVendorDialog open={editOpen} onOpenChange={setEditOpen} initialData={vendor} />
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Vendor</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{vendor.name}</strong>? Parts, products, and
+              purchase orders that reference this vendor will keep their existing assignment, but
+              it will no longer appear in vendor pickers. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }

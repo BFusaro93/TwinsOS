@@ -24,6 +24,18 @@ import {
   Receipt,
   Zap,
   CreditCard,
+  Plug,
+  KeyRound,
+  AlertTriangle,
+  Ticket,
+  Globe,
+  Camera,
+  BarChart3,
+  Upload,
+  ListChecks,
+  Satellite,
+  Handshake,
+  DollarSign,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -32,6 +44,9 @@ import type { ElementType } from "react";
 export interface DocStep {
   step: string;
   detail: string;
+  /** Optional in-app link rendered under the detail text (e.g. to a full reference page). */
+  href?: string;
+  linkLabel?: string;
 }
 
 export interface DocArticle {
@@ -79,7 +94,7 @@ export const DOC_SECTIONS: DocSection[] = [
               "Handles the full procurement lifecycle: Purchase Requisitions → Approval → Purchase Orders → Vendor management → Receiving → Parts inventory update. Every line item references a catalog entry from the Products section.",
           },
           {
-            step: "Maintenance (CMMS) Module",
+            step: "Equipt (CMMS) Module",
             detail:
               "Handles asset and maintenance lifecycle: Asset registry → Preventive Maintenance schedules → Work Orders → Parts inventory → Labor tracking → Maintenance history. Vehicles are a specialized asset type with service-interval reminders.",
           },
@@ -135,6 +150,13 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Viewer",
             detail:
               "Read-only access across both modules. Cannot create, edit, or approve anything. Useful for executives or auditors who need visibility.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — the full role-permission matrix, why CRM access runs on a completely separate 100+-toggle permission system rather than these roles, and how Crew and Client Portal access fit in.",
+            href: "/settings/support/users-roles-guide",
+            linkLabel: "Open the Users, Roles & Permissions guide",
           },
         ],
       },
@@ -288,13 +310,20 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "Open a project to see its Materials tab — all assigned line items, quantities, and costs are rolled up here. Total committed and received spend updates in real time.",
           },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — why 'Projects' means the same underlying record in both Purchasing and CRM, the extra CRM-only tabs, and how the Job Costing Dashboard's breakeven rate feeds into a project's default labor rate.",
+            href: "/settings/support/projects-guide",
+            linkLabel: "Open the Projects & Job Costing guide",
+          },
         ],
       },
     ],
   },
   {
     id: "maintenance",
-    label: "Maintenance (CMMS)",
+    label: "Equipt (CMMS)",
     icon: Wrench,
     articles: [
       {
@@ -394,6 +423,13 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "When a PM is completed (usually via the linked work order), mark the schedule complete. The next due date advances by one recurrence period.",
           },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — fleet-wide seasonal PMs, exactly how due dates advance, and how this relates to usage-based meter automations.",
+            href: "/settings/support/pm-schedules-guide",
+            linkLabel: "Open the Preventive Maintenance guide",
+          },
         ],
       },
       {
@@ -475,6 +511,13 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "When quantity on hand drops to or below the minimum stock level, a Low Stock badge appears on the part and a notification fires in the bell. Use the Low Stock Alert automation template to auto-create a requisition.",
           },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough of the full part lifecycle, the asset link model, and exactly when to split interchangeable parts vs. add an alternate vendor.",
+            href: "/settings/support/parts-inventory-guide",
+            linkLabel: "Open the Parts Inventory guide",
+          },
         ],
       },
       {
@@ -523,13 +566,20 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "On the Automations page, click any template card to add it instantly. Available templates: Low Stock Alert, PM Due Reminder, WO Completed — Notify Team, PO Approved.",
           },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — a full meter + threshold + service-interval worked example, the 'Pending Reset' state machine, and every trigger/action type in one table.",
+            href: "/settings/support/meters-guide",
+            linkLabel: "Open the Meters & Automations guide",
+          },
         ],
       },
     ],
   },
   {
     id: "crm",
-    label: "CRM / Field Service",
+    label: "Landscapt (CRM)",
     icon: Building2,
     articles: [
       {
@@ -556,7 +606,17 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a property",
             detail:
-              "On a client's detail page, click 'Add Property' under Related Properties. Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
+              "On a client's detail page, open the More menu and click 'Add Property'. Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Properties are address-only — a second billed-together location on the same account, not a separate jobs/invoicing record. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
+          },
+          {
+            step: "A location that needs its own jobs/invoices",
+            detail:
+              "If a location genuinely needs independent scheduling and billing — not just a second address on the same account — use the Commercial parent/child hierarchy above instead of a property.",
+          },
+          {
+            step: "Open Tickets card",
+            detail:
+              "The client detail page shows a compact Open Tickets card (count plus the most recent few) alongside Contacts and Office Notes, with a link to the full Tickets tab and an Add Ticket shortcut.",
           },
           {
             step: "Contacts",
@@ -567,6 +627,13 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Activity timeline",
             detail:
               "Every note, call, email, invoice, payment, job visit, estimate, contract, automation, and ticket for a client lands in one chronological Activity Timeline, filterable by All History, Notes, Visits, Transactions, or Estimates. Rows deep-link straight to the invoice, estimate, or job they reference.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — the parent/child hierarchy worked in full, how a Lead becomes a Client, and a status table of what's blocked in each state.",
+            href: "/settings/support/clients-guide",
+            linkLabel: "Open the Clients, Properties & Leads guide",
           },
         ],
       },
@@ -606,6 +673,13 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the scheduled date and assign a crew before confirming.",
           },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — a full worked numeric example of the production-rate calculation, the Stage state machine, and why budget method is snapshotted per line.",
+            href: "/settings/support/estimating-guide",
+            linkLabel: "Open the Estimates & Budget Engine guide",
+          },
         ],
       },
       {
@@ -638,6 +712,135 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Projects",
             detail:
               "CRM > Scheduling > Projects tracks one-off landscaping jobs distinct from recurring service — the CRM equivalent of the PO module's Projects/Jobs section, used the same way for cost tracking and reporting.",
+          },
+          {
+            step: "Stop order is remembered per crew, per weekday",
+            detail:
+              "Reorder a crew's stops (drag in Manual Route mode, or use Reverse) and click Save Order. That sets today's sequence AND remembers it for that crew on that weekday — so next Monday's board comes up already in the order you routed this Monday, instead of an unsorted crew grouping. Jobs with no remembered position sort to the bottom, which is your cue to place them; saving a day always wins over the remembered order, so a one-off change never overwrites the usual route.",
+          },
+          {
+            step: "Optimize Route",
+            detail:
+              "Reorders the stops in view by real driving time, anchored at the crew's starting address (Team > Crews) rather than at whichever stop happens to be listed first. The dropdown beside the button picks the direction: 'Nearest first' takes the closest stop each time (shortest total drive), 'Furthest first' drives out to the far end and works back in so the crew finishes near the yard. Anchoring only applies when every stop in view belongs to one crew — filter to a single crew first. An optimized order isn't saved until you click Save Order. Needs a Google Maps API key with the Distance Matrix API enabled, under Landscapt Settings > Integrations.",
+          },
+          {
+            step: "Full guides",
+            detail:
+              "Job types and Packages get their own deep dive; the Dispatch Board's status cycling, stop order, and actual-hours calculation get a dedicated guide.",
+            href: "/settings/support/jobs-packages-guide",
+            linkLabel: "Open the Jobs & Packages guide",
+          },
+          {
+            step: "Dispatch Board guide",
+            detail:
+              "The day-to-day scheduling screen — status cycling, crew assignment, and exactly how actual hours are calculated when a crew doesn't clock in.",
+            href: "/settings/support/dispatch-board-guide",
+            linkLabel: "Open the Dispatch Board guide",
+          },
+        ],
+      },
+      {
+        id: "services-pricing",
+        title: "Services & Pricing",
+        summary: "The service catalog, bulk catalog price changes, and Price Adjustment runs that re-price live client work.",
+        icon: DollarSign,
+        steps: [
+          {
+            step: "Where it is",
+            detail:
+              "CRM > Services, titled 'Services & Pricing'. Three tabs: Service Catalog (your services, rate matrices and production rates), Price Adjustments (re-pricing existing client work), and Adjustment History (every run, with an undo).",
+          },
+          {
+            step: "Catalog rates vs. what actually bills",
+            detail:
+              "A service's default rate is a starting value — it fills in a price when that service is added to a NEW estimate, invoice or package. It is not what existing clients are billed. Each job keeps the rate it was sold at on its own Services tab, and that per-client rate is what an invoice is built from when a visit completes. Raising the catalog rate alone moves no money.",
+          },
+          {
+            step: "Bulk Prices (catalog)",
+            detail:
+              "On the Service Catalog tab, 'Bulk Prices' opens an editable grid with a Quick Adjust: percent or flat dollars, with rounding to the exact cent, nearest $0.25, $1 or $5. It acts on whatever matches the search box, so you can raise just mowing. Rate-matrix tiers and the overflow rate are included by default — for a matrix-priced service the tiers ARE the real price, so leave that on for a general increase. A percentage leaves a $0.00 row at $0.00; use a flat adjustment to price something that has none.",
+          },
+          {
+            step: "Price Adjustment runs (live work)",
+            detail:
+              "The Price Adjustments tab changes what clients are billed going forward. Pick percent or flat plus a rounding rule, choose targets (client job service rates, package monthly amounts, package service rates), optionally narrow by service and job type, then Preview changes. The preview is a line-by-line before/after naming each client and job, with the total change broken down per target. Name the run and apply. Signed contracts, already-issued invoices, and per-visit rate overrides are never touched.",
+          },
+          {
+            step: "Leaving a customer out",
+            detail:
+              "Every line in the preview has a checkbox, ticked by default. Untick one and it's struck through, badged 'excluded', and dropped from the selected count and the total — so a price increase that shouldn't cover a promised-rate account doesn't need its own narrower run. To skip a whole client or service at once, search their name in 'Search these lines' and use Exclude shown, which acts only on what the search is displaying; the header checkbox does the same. The confirmation states both numbers before writing: 'Re-price 12 lines by +$201.00? 3 lines you unticked will be left alone.'",
+          },
+          {
+            step: "Safety rails",
+            detail:
+              "Changing the form after previewing clears the preview, your ticks and the Apply button, so you can't apply numbers you didn't look at. A run only ever touches lines you ticked, so rows created after your preview are never swept in — and if one of those lines was re-priced by someone else in the meantime it's skipped rather than increased from a figure you never saw, with the toast reporting how many.",
+          },
+          {
+            step: "Undoing a run",
+            detail:
+              "Adjustment History lists every run with an undo arrow that restores each line's original price. Undo deliberately skips any line you re-priced by hand since the run and tells you how many it left alone — a later manual decision is never thrown away. A reverted run stays in the history and can't be undone twice.",
+          },
+          {
+            step: "Permissions",
+            detail:
+              "Two separate keys under Scheduling > Service Access in Roles, both off by default for non-admin roles: 'Bulk Update Catalog Prices' shows the Bulk Prices button, 'Run Price Adjustments' shows the Price Adjustments and Adjustment History tabs. The second is enforced server-side, not just hidden in the UI.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "Which price lives where, what each tool touches, and how the undo's skip behaviour works.",
+            href: "/settings/support/services-pricing-guide",
+            linkLabel: "Open the Services & Pricing guide",
+          },
+        ],
+      },
+      {
+        id: "sales-meetings",
+        title: "Sales Meetings",
+        summary: "Book sales appointments per rep, catch double-bookings, and remind reps and clients automatically.",
+        icon: Handshake,
+        steps: [
+          {
+            step: "Setting up sales reps",
+            detail:
+              "Only employees flagged as a sales rep show up on the calendar. Mark someone as a sales rep (and make sure they're active) in Team > Employees before booking meetings for them.",
+          },
+          {
+            step: "Where it is",
+            detail:
+              "CRM > Sales Meetings shows a per-rep Day, Week, or Month calendar. Click any open slot to book a new meeting for that rep and time, or click an existing meeting to edit it.",
+          },
+          {
+            step: "Booking a meeting",
+            detail:
+              "Pick a sales rep, an existing client (or a free-text lead name for a new prospect), a title, meeting type (in person, phone, video), date/time, and duration. Location accepts either an address or a meeting link.",
+          },
+          {
+            step: "Double-booking warning",
+            detail:
+              "If the picked rep already has another meeting overlapping the chosen time, the dialog warns you when you save — it does not block the save. This matches the same-class overlap warning used on the Dispatch Board.",
+          },
+          {
+            step: "Linking to estimates and tickets",
+            detail:
+              "Once a client is selected, the dialog lets you link the meeting to one of that client's existing estimates or tickets — useful for tying an in-person walkthrough back to the estimate it's discussing.",
+          },
+          {
+            step: "Reminders",
+            detail:
+              "60 minutes before a scheduled meeting, the assigned rep gets an in-app and email reminder automatically (toggle either off in Settings > Notifications). If the meeting has a client, a separate 'Sales Meeting Reminder' automation trigger is also available in the Automations builder for a client-facing reminder.",
+          },
+          {
+            step: "Rescheduling",
+            detail:
+              "Changing a meeting's date or time re-arms its reminder so it fires again for the new time. Editing anything else (notes, title, link to an estimate) leaves an already-sent reminder alone.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "Sales-rep visibility rules, exactly how the double-booking check compares meetings, and the split between the rep's direct reminder and the client-facing automation trigger.",
+            href: "/settings/support/sales-meetings-guide",
+            linkLabel: "Open the Sales Meetings guide",
           },
         ],
       },
@@ -672,6 +875,20 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged.",
           },
+          {
+            step: "Full guides",
+            detail:
+              "The Waiting List's filtering and dispatch flow gets its own deep dive; storm-event dispatch and snow invoice types get a dedicated guide.",
+            href: "/settings/support/waiting-list-guide",
+            linkLabel: "Open the Waiting List guide",
+          },
+          {
+            step: "Snow Jobs guide",
+            detail:
+              "Storm events, priority-based visit dispatch, and a worked example of all three snow invoice types with dollar amounts.",
+            href: "/settings/support/snow-guide",
+            linkLabel: "Open the Snow Jobs & Storm Dispatch guide",
+          },
         ],
       },
       {
@@ -686,6 +903,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Invoices move Draft → Sent → Viewed → Partial → Paid, with Overdue and Void as side states. Payments can be recorded against an invoice with a specific method — Cash, Check, ACH/E-Check, AutoPay, Credit Card by network, AR Write-off, or Other.",
           },
           {
+            step: "Paying across sub-accounts",
+            detail:
+              "Recording a payment against a commercial parent with sub-accounts shows open invoices from the parent AND every sub-account, grouped by account — covers a property manager sending one check for several HOAs' invoices at once. A sub-account's own invoice list tags that payment 'via [Parent Name]'.",
+          },
+          {
             step: "Contracts",
             detail:
               "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time), auto-renew, billing day of month, and whether the contract bills a month in advance. Month-by-month amount overrides are supported for seasonal pricing.",
@@ -693,7 +915,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Sub-properties on one contract",
             detail:
-              "A commercial contract can be set to include sub-properties — billing every property under a parent client's hierarchy from a single contract rather than issuing one contract per site.",
+              "A commercial contract can be set to include sub-properties — billing every property on the SAME client's account from a single contract rather than issuing one contract per address. This is for one client billed together across multiple sites, not the parent/child (sub-account) hierarchy — that's for locations that need their own independent jobs/invoicing.",
           },
           {
             step: "The 'PO Number' field is not the internal PO module",
@@ -704,6 +926,20 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Linking job costs to vendor POs",
             detail:
               "To reconcile what a job actually cost against vendor purchase orders, assign the PO line item to a CRM Project (via the line item's Project field) rather than to a specific job — cost tracking rolls up at the project level.",
+          },
+          {
+            step: "Full guides",
+            detail:
+              "Invoice status state machine, partial payments, and the PO-Number gotcha get a dedicated guide; contract billing frequency and sub-property billing get their own.",
+            href: "/settings/support/invoicing-guide",
+            linkLabel: "Open the Invoicing & Payments guide",
+          },
+          {
+            step: "Contracts guide",
+            detail:
+              "Billing frequency, month-by-month seasonal overrides, and billing every property under a commercial hierarchy from one contract.",
+            href: "/settings/support/contracts-guide",
+            linkLabel: "Open the Contracts guide",
           },
         ],
       },
@@ -716,7 +952,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "One-time setup: connect your Stripe account",
             detail:
-              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of TwinsOS's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; TwinsOS only initiates charges and listens for the result.",
+              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of Landscapt's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; Landscapt only initiates charges and listens for the result.",
           },
           {
             step: "Managing your Stripe account",
@@ -726,7 +962,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Turning on ACH / bank transfer payments",
             detail:
-              "Stripe's own ACH toggle in their dashboard does not control whether TwinsOS can accept bank transfers — it only affects Stripe's automatic payment-method detection. Enabling ACH here requires two things: ACH Direct Debit activated on your Stripe account, and the separate 'Enable ACH / bank transfer payments' checkbox in CRM > Settings > Card Payments (Stripe). Until both are on, only card payments are offered.",
+              "Stripe's own ACH toggle in their dashboard does not control whether Landscapt can accept bank transfers — it only affects Stripe's automatic payment-method detection. Enabling ACH here requires two things: ACH Direct Debit activated on your Stripe account, and the separate 'Enable ACH / bank transfer payments' checkbox in CRM > Settings > Card Payments (Stripe). Until both are on, only card payments are offered.",
           },
           {
             step: "Processing fees",
@@ -791,6 +1027,192 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "Forms (Draft / Published) capture leads and route submissions into automations via the 'form submitted' trigger. Sales Campaigns (Draft, Scheduled, Sending, Active, Paused, Completed, Cancelled) send email, SMS, or postcard blasts to a segment — All Clients, Active Clients, Leads, Past Clients, or a custom list — and track delivered/opened/clicked/unsubscribed counts.",
           },
+          {
+            step: "Full guides",
+            detail:
+              "A deeper walkthrough of sequences/triggers/events with a worked example, plus Automations vs. Sales Campaigns compared side by side.",
+            href: "/settings/support/automations-guide",
+            linkLabel: "Open the Communication Automations guide",
+          },
+          {
+            step: "Forms guide",
+            detail:
+              "Field types, embedding a public form, what happens on submission, and the two things to know before sharing a link publicly.",
+            href: "/settings/support/forms-guide",
+            linkLabel: "Open the Forms & Lead Capture guide",
+          },
+        ],
+      },
+      {
+        id: "tickets",
+        title: "Tickets",
+        summary: "Track customer-service issues from open through closed.",
+        icon: Ticket,
+        steps: [
+          {
+            step: "What a ticket is",
+            detail:
+              "A CRM customer-service record — distinct from a CMMS Maintenance Request, which is for asset/equipment issue triage. Every published form submission automatically creates an open ticket, in addition to manual creation and automation-driven creation.",
+          },
+          {
+            step: "Status and priority",
+            detail:
+              "Status is one of Open, On Hold, Pending, or Closed. Priority is Low, Normal, High, or Urgent. A ticket can also be typed as a Note, Call, or Event — the same underlying list view covers all three.",
+          },
+          {
+            step: "Assignment",
+            detail:
+              "Assign a ticket to a specific user. Notification preferences let that person (and anyone watching) get alerted on assignment and new comments, both by email and in-app.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — the full lifecycle from form submission to close, the real status/priority/type values, and a clear line between Tickets and CMMS Maintenance Requests.",
+            href: "/settings/support/tickets-guide",
+            linkLabel: "Open the Tickets guide",
+          },
+          {
+            step: "Field upsells from crews",
+            detail:
+              "Work a crew spots at a property arrives as a normal ticket with category 'Upsell', carrying their note, who spotted it, the date, the property, the suggested service, and any photo they took (on the Files tab — usually enough to price it without a trip out). The ticket is linked back to the job. Crews never see or set a price; they pick from a list you control by ticking 'Show in field upsells' on a service under Services & Pricing. With no services ticked the Suggest work button doesn't appear in the crew app, which is how the feature is switched on and off. To take one forward, click Create estimate on the ticket (needs the Add Estimate permission): it makes a draft estimate for the client with the suggested service already on it at your catalog rate, links the two, and opens it ready to price. A ticket can only be converted once — the estimate claims it, so two people clicking at the same time, or an interrupted conversion, reopens the estimate that already exists instead of building a second one; deleting that estimate makes the ticket convertible again. You can still link extra estimates by hand from Linked Records when work is re-quoted, and the reports read the most recent one. That link is what makes a suggestion measurable, since the estimate carries the Won/Lost stage while ticket open/closed only means whether the office has dealt with it. Two Report Center reports read it: Field Upsells (every suggestion and its outcome) and Upsell Conversion by Crew Member (submissions against revenue won).",
+          },
+        ],
+      },
+      {
+        id: "damage-cases",
+        title: "Damage Cases",
+        summary: "Track property damage during a job and warranty claims.",
+        icon: AlertTriangle,
+        steps: [
+          {
+            step: "Two kinds of case, one record shape",
+            detail:
+              "CRM > Tools > Damage Cases covers both property damage during a job (e.g. a mower hitting a sprinkler head) and warranty claims (e.g. a plant dying in its warranty window), distinguished by a Case Type field.",
+          },
+          {
+            step: "Cost tracking",
+            detail:
+              "A case's cost is the sum of its linked expense entries, not a single manual total. A case can optionally link to one existing Purchase Order.",
+          },
+          {
+            step: "Status",
+            detail:
+              "Open, In Progress, Resolved, or Closed. Creating a case can fire both an internal automation and a Zapier trigger. Once Resolved or Closed, adding an expense or editing the description/resolution notes is blocked until the case is reopened.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — a worked example, and a real current limitation worth knowing about client-linking before you rely on filtering cases by client.",
+            href: "/settings/support/damage-cases-guide",
+            linkLabel: "Open the Damage Cases guide",
+          },
+        ],
+      },
+      {
+        id: "client-portal",
+        title: "The Client Portal",
+        summary: "A separate, invite-only login where clients pay invoices and act on estimates.",
+        icon: Globe,
+        steps: [
+          {
+            step: "Inviting a client",
+            detail:
+              "From a client's '…' menu, send a portal invite. It emails a 7-day registration link. The portal is a fully separate login from staff accounts — a client cannot use it to access the main app.",
+          },
+          {
+            step: "What a client can do",
+            detail:
+              "Not read-only: a client can pay invoices via Stripe (card or ACH), and can accept (with e-signature), decline, or request changes on estimates. Up to seven tabs are available — Home, Billing, Services, Estimates, Tickets, Documents, Account — and an org can hide three of them.",
+          },
+          {
+            step: "Configuring what's visible",
+            detail:
+              "Landscapt Settings > Client Portal controls which optional tabs are shown.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — the full invite/registration flow, e-signature estimate approval, multi-org clients, and a known dead-code gotcha worth being aware of.",
+            href: "/settings/support/client-portal-guide",
+            linkLabel: "Open the Client Portal guide",
+          },
+        ],
+      },
+      {
+        id: "job-photos",
+        title: "Job Photos",
+        summary: "A paid add-on for field photo documentation, annotation, and before/after comparisons.",
+        icon: Camera,
+        steps: [
+          {
+            step: "What it's for",
+            detail:
+              "A photo-documentation system organized around lightweight Photo Jobs, optionally linked to an Equipt Project or a Landscapt Client. Access is role-based, not crew-exclusive — Admins and Crew get it automatically, others need it enabled.",
+          },
+          {
+            step: "Uploading",
+            detail:
+              "Camera, photo library, video, or generic file uploads are client-side compressed and GPS-tagged from live device location.",
+          },
+          {
+            step: "Annotation and before/after",
+            detail:
+              "Admins/Managers can mark up a photo with arrows, circles, text, and freehand drawing, and pair photos into labeled Before/After comparisons with a slider view.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — real access rules, the annotation tool, before/after pairing, and current limitations (manual client linking, no visit/work order link).",
+            href: "/settings/support/job-photos-guide",
+            linkLabel: "Open the Job Photos guide",
+          },
+        ],
+      },
+      {
+        id: "report-center",
+        title: "Report Center & Dashboards",
+        summary: "75 reports across 12 categories, curated and custom dashboards, and a customizable KPI Scorecard.",
+        icon: BarChart3,
+        steps: [
+          {
+            step: "Where it lives",
+            detail:
+              "CRM > Reports. A 4-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), and My Reports (saved analyses).",
+          },
+          {
+            step: "Categories",
+            detail:
+              "Service, Client, Revenue, Schedule Lists, Job Costing, Financial, Audits, Lead, Estimates, Job Hours, Receivables, and Forms.",
+          },
+          {
+            step: "Exporting",
+            detail:
+              "CSV, Excel, PDF, and print are all available on demand. There is no scheduled or emailed report delivery today.",
+          },
+          {
+            step: "KPI Scorecard",
+            detail:
+              "Dashboards > KPI Scorecard scores annual targets by category. Metrics tagged auto are computed live from Landscapt data (invoices, payments, visits, estimates, clients, employees); the rest are typed in. Click Customize to add metrics from the catalog, add your own manual metrics, set weights, or remove any row. Viewing needs the View Report Center permission; editing targets, manual actuals, or the layout needs Manage Report Center.",
+          },
+          {
+            step: "Company Report",
+            detail:
+              "Dashboards > Company Report is a live sales/operations/A-R snapshot, always \"as of now\" (YTD from Jan 1, trailing 3 months for the monthly tables). Progress bars on the KPI row read Targets from that org's KPI Scorecard. The flags section is rule-based (fixed dollar/percent thresholds), not AI-generated commentary.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — a worked example running the Production Rate Accuracy report end to end, and the distinction between curated and custom dashboards.",
+            href: "/settings/support/report-center-guide",
+            linkLabel: "Open the Report Center guide",
+          },
+          {
+            step: "Reports reference",
+            detail:
+              "A description, available filters, and known gotchas for every one of the ~75 reports, organized by section — for researching a specific report rather than the Report Center itself.",
+            href: "/settings/support/reports-reference-guide",
+            linkLabel: "Open the Reports Reference guide",
+          },
         ],
       },
     ],
@@ -831,6 +1253,13 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "If a step is assigned to a role (e.g., any Manager), every user with that role — including the requester, if they hold the role — is listed as an eligible approver for that step. Whoever decides first resolves the step; the other eligible approvers' entries are marked 'Superseded' and no longer actionable.",
           },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — a worked 2-step example with dollar-threshold routing, the full state-machine table, and the 'Superseded' self-approval gotcha explained.",
+            href: "/settings/support/approval-flows-guide",
+            linkLabel: "Open the Approval Flows guide",
+          },
         ],
       },
       {
@@ -859,6 +1288,13 @@ export const DOC_SECTIONS: DocSection[] = [
             detail:
               "The 'Send Notification' automation action pushes an alert to users by role (e.g., all Managers). Use this for custom trigger-based alerts beyond the built-in ones.",
           },
+          {
+            step: "Full guide",
+            detail:
+              "A complete table of every notification event, which ones are email-only or in-app-only, and how personal preferences differ from the admin-controlled recipient pool.",
+            href: "/settings/support/notification-preferences-guide",
+            linkLabel: "Open the Notification Preferences guide",
+          },
         ],
       },
       {
@@ -880,7 +1316,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Vendor history",
             detail:
-              "Open a vendor to see all POs issued to them, total spend, and contact history. Use this for vendor performance reviews and negotiations.",
+              "Open a vendor to see its Spend History — POs issued to them AND direct CMMS work-order vendor charges, both counted in Total Spend — plus contact history. Use this for vendor performance reviews and negotiations.",
           },
         ],
       },
@@ -919,6 +1355,168 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Parts and Products always agree",
             detail:
               "A CMMS Part and its linked Products catalog entry share one cost — updating either one (through a receipt or a manual edit) propagates to the other automatically, so the price you see is consistent whether you're looking at CMMS > Parts or Purchasing > Products.",
+          },
+        ],
+      },
+      {
+        id: "import-export",
+        title: "Import & Export",
+        summary: "Bring in existing data from a spreadsheet, or pull your data back out.",
+        icon: Upload,
+        steps: [
+          {
+            step: "Where it lives",
+            detail:
+              "Both Equipt Settings and Landscapt Settings have their own Import/Export tab, each covering the entities relevant to that module. Export produces a real CSV of your actual data; import maps spreadsheet columns to fields and shows a preview before committing.",
+          },
+          {
+            step: "Duplicate handling",
+            detail:
+              "Depends on the entity — some merge into the existing record by a matching field (name, part number), others skip a row outright if it already exists (e.g. by PO number).",
+          },
+          {
+            step: "The bulk PO importer's name-conflict handling",
+            detail:
+              "A separate, denormalized purchase-history importer keeps the first name it ever saw for a part number. If a later import uses a different name for the same part number, it doesn't silently overwrite the catalog — it logs a 'name conflict' entry on that part's audit trail for review.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — a worked import example, exactly what gets validated, and the bulk PO name-conflict mechanic in full.",
+            href: "/settings/support/import-export-guide",
+            linkLabel: "Open the Import & Export guide",
+          },
+        ],
+      },
+      {
+        id: "required-fields",
+        title: "Required Fields",
+        summary: "Make specific fields mandatory before a record can be saved.",
+        icon: ListChecks,
+        steps: [
+          {
+            step: "Where it's configured",
+            detail:
+              "Equipt Settings covers Purchase Orders, Requisitions, Work Orders, Assets, and Vehicles. Landscapt Settings > CRM covers Clients and Tickets. Each field can be set to Required, Optional, or Hidden. This is a single org-wide setting — there's no per-role variant.",
+          },
+          {
+            step: "Enforcement",
+            detail:
+              "Checked client-side by the relevant creation forms — there's no API or database-level enforcement of these toggles. A few fields are hard-required outside this system entirely and can't be loosened (e.g. every Requisition/PO line item must reference a Products catalog entry).",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — every entity's configurable fields, a worked example, and the client-side-only enforcement gotcha.",
+            href: "/settings/support/required-fields-guide",
+            linkLabel: "Open the Required Fields guide",
+          },
+        ],
+      },
+      {
+        id: "samsara-integration",
+        title: "Samsara Integration",
+        summary: "Sync vehicle odometer readings automatically from Samsara.",
+        icon: Satellite,
+        steps: [
+          {
+            step: "Connecting",
+            detail:
+              "Settings > Integrations. Enter your Samsara API key. Vehicles match to Samsara by a stored vehicle ID first, falling back to an exact name match — an unmatched vehicle is skipped, not errored.",
+          },
+          {
+            step: "What syncs",
+            detail:
+              "Odometer and GPS-distance readings, converted to miles. A reading only updates if the new mileage is greater than or equal to the meter's current value. Nothing else from Samsara's API — no engine hours, fuel, or fault codes.",
+          },
+          {
+            step: "When it runs",
+            detail:
+              "A daily scheduled sync, plus a manual 'Sync Now' button for admins. There's no webhook — Samsara doesn't push data to Landscapt in real time.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A deeper walkthrough — the full setup flow, exactly how vehicle matching and mileage validation work, and what to check if readings aren't updating.",
+            href: "/settings/support/samsara-guide",
+            linkLabel: "Open the Samsara Integration guide",
+          },
+        ],
+      },
+      {
+        id: "api-keys-mcp",
+        title: "API Keys & MCP",
+        summary: "Scoped REST API access, and the same keys work as an MCP server for AI agents.",
+        icon: KeyRound,
+        steps: [
+          {
+            step: "Create a scoped key",
+            detail:
+              "Go to Master Account Settings > Integrations > Public API Keys and click 'Create Key'. Pick only the scopes it needs from the checklist (Clients, Jobs, Work Orders, Invoices, and 11 more resources, each with Read / Write / Write-sensitive tiers). The plaintext key is shown once, immediately after creation — copy it before closing the dialog.",
+          },
+          {
+            step: "Same key works as MCP",
+            detail:
+              "There's no separate MCP credential. Point Claude Desktop, Claude Code, or any MCP client at /api/mcp with the same 'Authorization: Bearer <key>' header, and it sees exactly the tools its scopes allow — a key with zero scopes still gets a 'whoami' tool so an agent can see what org/scopes it's connected as.",
+          },
+          {
+            step: "Full reference",
+            detail:
+              "Every endpoint and its MCP tool name is generated live from the API's own OpenAPI spec.",
+            href: "/settings/support/api-docs",
+            linkLabel: "Open the endpoint reference",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "A narrative walkthrough — a worked example scoping a read-only reporting key, a table of all 14 resources, and why REST and MCP share one credential system.",
+            href: "/settings/support/api-mcp-guide",
+            linkLabel: "Open the API Keys & MCP guide",
+          },
+        ],
+      },
+      {
+        id: "zapier-integration",
+        title: "Connecting Zapier",
+        summary: "Trigger Zaps on Equipt and Landscapt events, or create records from a Zap.",
+        icon: Plug,
+        steps: [
+          {
+            step: "Generate your key",
+            detail:
+              "Go to Master Account Settings > Integrations (not Equipt Settings or Landscapt Settings — this connection is account-wide and works regardless of your plan). Click Generate Key and copy it — it's shown once, in full. Paste it into the API Key field when connecting the Equipt/Landscapt app in Zapier. A link to the full, detailed guide below sits right under the key on that page.",
+          },
+          {
+            step: "Landscapt triggers",
+            detail:
+              "New Client, New Lead, Lead Converted to Client, Client Cancelled, New Estimate, Estimate Won/Lost, New Job, New Ticket, Ticket Closed, New Invoice, Invoice Paid, Contract Signed, New Damage Case, and Visit Dispatched all fire instantly — the moment the event happens, not on a delay.",
+          },
+          {
+            step: "Equipt triggers",
+            detail:
+              "New Asset, New Work Order, New Requisition, New Purchase Order, PM Schedule Due, Part Low Stock, and New Vendor check every few minutes rather than firing instantly. Work Order Completed and PO Approved are instant. A delayed poll rarely matters for these — low stock and PM-due don't need a same-second alert.",
+          },
+          {
+            step: "Meter Threshold",
+            detail:
+              "This trigger is configured per-Zap rather than always meaning one fixed thing: pick a meter (or leave it blank to watch every meter), a threshold value, and a direction (at least / at most). Example: watch Truck #4's odometer and fire once it reaches 50,000 miles. This is separate from any meter-threshold automations already configured inside Equipt itself.",
+          },
+          {
+            step: "Actions",
+            detail:
+              "A Zap can create a Client, Job, or Ticket (or add a note to a client's activity timeline) in Landscapt, and a Work Order or Requisition in Equipt. Every vendor/client/asset/work-order ID a Zap passes in is checked against your org before anything is created.",
+          },
+          {
+            step: "Rotating the key",
+            detail:
+              "Clicking Regenerate immediately invalidates the old key — any Zaps still using it will need to be reconnected with the new one before they'll work again.",
+          },
+          {
+            step: "Full reference guide",
+            detail:
+              "Every trigger and action, with sample payloads and field-by-field explanations, lives on one dedicated page.",
+            href: "/settings/support/zapier-guide",
+            linkLabel: "Open the full Zapier guide",
           },
         ],
       },
@@ -1004,7 +1602,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     ],
   },
   {
-    label: "CRM / Field Service",
+    label: "Landscapt (CRM)",
     items: [
       {
         q: "What's the difference between an estimate's stage and its approval status?",
@@ -1062,6 +1660,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I connect the Samsara integration for vehicle odometers?",
         a: "Go to Settings > Integrations and enter your Samsara API key. Once connected, vehicle odometer readings sync automatically and update the corresponding vehicle meter, which can trigger mileage-based automations.",
+      },
+      {
+        q: "How do I connect Zapier?",
+        a: "Go to Master Account Settings > Integrations and click Generate Key — this is account-wide, not tied to Equipt or Landscapt specifically. Paste the key into Zapier's API Key field when connecting the app. Most Landscapt triggers fire instantly; most Equipt triggers check every few minutes instead. There's a full, detailed guide to every trigger and action linked right on that Integrations tab, under the API key.",
       },
     ],
   },

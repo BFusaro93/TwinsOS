@@ -5,6 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { DollarSign, Receipt, AlertCircle, TrendingUp } from "lucide-react";
+import {
+  AR_WRITE_OFF_METHOD,
+  ISSUED_INVOICE_STATUSES,
+  MONTH_LABELS,
+  netPaymentCents,
+} from "@/lib/reports/helpers";
+import { isClientStatus } from "@/lib/reports/client-status";
+import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -36,50 +45,91 @@ export interface ReportData {
   jobsScheduled: number;
   jobsCompleted: number;
   jobsThisMonth: number;
-  // Estimates
+  // Estimates (YTD by estimate_date)
+  /** Decided estimates YTD: accepted + invoiced + lost (close-rate denominator). */
   estimatesTotal: number;
+  /** Accepted + invoiced estimates YTD. */
   estimatesWon: number;
   estimatesValueWon: number;   // cents
-  // Recent revenue by month (last 6)
+  // Cash collected by payment month (last 6, America/New_York calendar)
   monthlyRevenue: Array<{ month: string; revenue: number }>;
 }
 
-export function useReportData() {
+/** Permission keys any one of which unlocks the revenue snapshot. */
+export const REVENUE_SNAPSHOT_PERMISSIONS = [
+  "view_report_center",
+  "acct_view_invoice_list",
+  "acct_view_payment_list",
+] as const;
+
+export function canViewRevenueSnapshot(can: (key: string) => boolean): boolean {
+  return REVENUE_SNAPSHOT_PERMISSIONS.some((key) => can(key));
+}
+
+/** "YYYY-MM" for a "YYYY-MM-DD" date string. */
+function monthKeyOf(ymdStr: string): string {
+  return ymdStr.slice(0, 7);
+}
+
+export function useReportData(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ["crm-reports"],
+    enabled: options.enabled ?? true,
     queryFn: async (): Promise<ReportData> => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
 
+      // Every boundary is a calendar date as it reads in America/New_York (the
+      // org's operating timezone), not the browser's or UTC.
       const now = new Date();
-      const ytdStart = new Date(now.getFullYear(), 0, 1).toISOString();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const today = now.toISOString();
+      const todayDate = isoNy(now);
+      const { year: nyYear, month: nyMonth } = nyDateParts(now);
+      const ytdStartDate = ymd(nyYear, 0, 1);
+      const monthStartDate = ymd(nyYear, nyMonth, 1);
+      const sixMonthsStartDate = ymd(nyYear, nyMonth - 5, 1);
 
       const [
         clientsRes,
         invoicesRes,
         jobsRes,
         estimatesRes,
+        paymentsRes,
       ] = await Promise.all([
         sb.from("clients").select("id, status").is("deleted_at", null),
-        sb.from("crm_invoices").select("id, total_cents, paid_cents:amount_paid_cents, due_date, created_at, status").is("deleted_at", null),
+        sb.from("crm_invoices").select("id, total_cents, balance_cents, invoice_date, due_date, status").is("deleted_at", null),
         sb.from("crm_jobs").select("id, status, created_at").is("deleted_at", null),
-        sb.from("estimates").select("id, stage, total_price_cents:total_cents").is("deleted_at", null),
+        sb
+          .from("estimates")
+          .select("id, stage, total_price_cents:total_cents, estimate_date")
+          .is("deleted_at", null)
+          .gte("estimate_date", ytdStartDate)
+          .lte("estimate_date", todayDate),
+        // Rule B (cash): real money only — no credits, no AR write-offs, net of refunds.
+        sb
+          .from("crm_payments")
+          .select("payment_date, amount_cents, refunded_amount_cents")
+          .is("deleted_at", null)
+          .eq("is_credit", false)
+          .neq("method", AR_WRITE_OFF_METHOD)
+          .gte("payment_date", sixMonthsStartDate)
+          .lte("payment_date", todayDate),
       ]);
 
-      // Clients
+      // Clients — 'lost' is a closed lead, not a client (see client-status.ts).
       const clients = clientsRes.data ?? [];
-      const totalClients = clients.filter((c: { status: string }) => c.status !== "lead").length;
+      const totalClients = clients.filter((c: { status: string }) => isClientStatus(c.status)).length;
       const activeClients = clients.filter((c: { status: string }) => c.status === "active").length;
       const totalLeads = clients.filter((c: { status: string }) => c.status === "lead").length;
 
-      // Invoices
+      // Invoices — Rule A: only issued invoices (not draft/void) are revenue or AR.
       const invoices = invoicesRes.data ?? [];
-      const ytdInvoices = invoices.filter(
-        (i: { created_at: string; status: string }) =>
-          i.created_at >= ytdStart && i.created_at <= today && i.status !== "void"
+      const isIssued = (i: { status: string }) =>
+        (ISSUED_INVOICE_STATUSES as readonly string[]).includes(i.status);
+      const issuedInvoices = invoices.filter(isIssued);
+      const ytdInvoices = issuedInvoices.filter(
+        (i: { invoice_date: string | null }) =>
+          !!i.invoice_date && i.invoice_date >= ytdStartDate && i.invoice_date <= todayDate
       );
       // Revenue = invoiced total (recognized revenue), not just cash collected —
       // outstanding/overdue AR are subsets of this, so it should never be smaller
@@ -88,69 +138,70 @@ export function useReportData() {
         (sum: number, i: { total_cents: number }) => sum + (i.total_cents ?? 0),
         0
       );
-      const outstanding = invoices.filter(
-        (i: { status: string }) => i.status !== "paid" && i.status !== "void"
+      const outstanding = issuedInvoices.filter(
+        (i: { balance_cents: number | null }) => (i.balance_cents ?? 0) > 0
       );
       const outstandingAR = outstanding.reduce(
-        (sum: number, i: { total_cents: number; paid_cents: number }) =>
-          sum + ((i.total_cents ?? 0) - (i.paid_cents ?? 0)),
+        (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
         0
       );
       const overdueAR = outstanding
         .filter(
-          (i: { due_date: string | null }) =>
-            i.due_date && i.due_date < today.slice(0, 10)
+          (i: { due_date: string | null }) => i.due_date && i.due_date < todayDate
         )
         .reduce(
-          (sum: number, i: { total_cents: number; paid_cents: number }) =>
-            sum + ((i.total_cents ?? 0) - (i.paid_cents ?? 0)),
+          (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
           0
         );
 
-      // Jobs
+      // Jobs — crm_jobs.status CHECK: scheduled | in_progress | completed |
+      // cancelled | skipped | hold. "Scheduled" here = on the board or underway.
       const jobs = jobsRes.data ?? [];
       const jobsScheduled = jobs.filter(
-        (j: { status: string }) => j.status === "scheduled" || j.status === "active"
+        (j: { status: string }) => j.status === "scheduled" || j.status === "in_progress"
       ).length;
       const jobsCompleted = jobs.filter(
         (j: { status: string }) => j.status === "completed"
       ).length;
+      // created_at is a timestamptz — reduce it to its NY calendar date first.
       const jobsThisMonth = jobs.filter(
-        (j: { created_at: string }) => j.created_at >= monthStart
+        (j: { created_at: string }) => isoNy(new Date(j.created_at)) >= monthStartDate
       ).length;
 
-      // Estimates
+      // Estimates — YTD by estimate_date. Close rate is won ÷ decided, where
+      // decided = accepted + invoiced + lost; open/draft estimates aren't a
+      // loss yet and would otherwise drag the rate down.
       const estimates = estimatesRes.data ?? [];
       const estimatesWonList = estimates.filter(
         (e: { stage: string }) => e.stage === "accepted" || e.stage === "invoiced"
       );
+      const estimatesLost = estimates.filter((e: { stage: string }) => e.stage === "lost").length;
       const estimatesValueWon = estimatesWonList.reduce(
         (sum: number, e: { total_price_cents: number }) => sum + (e.total_price_cents ?? 0),
         0
       );
 
-      // Monthly revenue — last 6 months from paid invoices
+      // Cash collected — last 6 months bucketed by payment_date (a plain date),
+      // month keys built the same way as the payment dates (NY calendar).
       const monthlyMap = new Map<string, number>();
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        monthlyMap.set(key, 0);
+        monthlyMap.set(monthKeyOf(ymd(nyYear, nyMonth - i, 1)), 0);
       }
-      invoices
-        .filter((inv: { paid_cents: number; created_at: string }) => inv.paid_cents > 0)
-        .forEach((inv: { paid_cents: number; created_at: string }) => {
-          const key = inv.created_at.slice(0, 7);
-          if (monthlyMap.has(key)) {
-            monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + inv.paid_cents);
-          }
-        });
+      for (const p of (paymentsRes.data ?? []) as Array<{
+        payment_date: string | null;
+        amount_cents: number | null;
+        refunded_amount_cents: number | null;
+      }>) {
+        if (!p.payment_date) continue;
+        const key = monthKeyOf(p.payment_date);
+        if (monthlyMap.has(key)) {
+          monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + netPaymentCents(p));
+        }
+      }
 
       const monthlyRevenue = Array.from(monthlyMap.entries()).map(([month, revenue]) => {
         const [y, m] = month.split("-");
-        const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-US", {
-          month: "short",
-          year: "2-digit",
-        });
+        const label = `${MONTH_LABELS[Number(m) - 1]} ${y.slice(2)}`;
         return { month: label, revenue };
       });
 
@@ -165,7 +216,7 @@ export function useReportData() {
         jobsScheduled,
         jobsCompleted,
         jobsThisMonth,
-        estimatesTotal: estimates.length,
+        estimatesTotal: estimatesWonList.length + estimatesLost,
         estimatesWon: estimatesWonList.length,
         estimatesValueWon,
         monthlyRevenue,
@@ -216,7 +267,14 @@ export function KPICard({
 // Shared between the Reports dashboard and the My Day page.
 
 export function RevenueSnapshot() {
-  const { data, isLoading } = useReportData();
+  // Revenue/AR figures are gated the same way the Report Center and the
+  // accounting lists are — a login with neither sees nothing here.
+  const { can, isLoading: permsLoading } = usePermissions();
+  const allowed = !permsLoading && canViewRevenueSnapshot(can);
+  const { data, isLoading } = useReportData({ enabled: allowed });
+
+  if (permsLoading) return null;
+  if (!allowed) return null;
 
   if (isLoading) {
     return (
@@ -259,9 +317,9 @@ export function RevenueSnapshot() {
         />
         <KPICard
           icon={TrendingUp}
-          label="Won Estimates"
+          label="Won Estimates YTD"
           value={formatCurrency(data.estimatesValueWon)}
-          sub={formatPct(data.estimatesWon, data.estimatesTotal) + " close rate"}
+          sub={formatPct(data.estimatesWon, data.estimatesTotal) + " close rate YTD"}
           accent="blue"
         />
       </div>

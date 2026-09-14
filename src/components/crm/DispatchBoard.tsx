@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useVisitsForDate,
@@ -12,6 +12,7 @@ import {
   useCRMCrews,
   useCRMJobProducts,
   useReturnVisitToWaitingList,
+  useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { WeekStrip } from "./WeekStrip";
@@ -34,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime, formatDateShort } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort, todayLocalISODate, formatHours } from "@/lib/utils";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { toast } from "sonner";
 import {
@@ -63,6 +64,7 @@ import {
   MessageSquareText,
   Clock,
   Undo2,
+  Car,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import {
@@ -80,13 +82,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
+import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
 import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
-const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
 // Stable empty-array reference for visits with no per-member time rows — avoids
 // handing VisitRow a fresh [] every render, which would otherwise defeat any
 // memoization keyed on this array's identity.
@@ -139,29 +143,154 @@ function effectiveCrewMemberIds(
     .map((m) => m.id);
 }
 
-function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
-  const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
+// Value shown in an hours <input> — 2 decimals, blank for null — so raw
+// float noise from qty ÷ production-rate math (0.00006666666666666667)
+// never reaches the board or the sheet.
+function hoursInputValue(h: number | null | undefined): string {
+  return h == null ? "" : formatHours(h);
+}
 
-  async function cycle(e: React.MouseEvent) {
-    e.stopPropagation();
-    const i = STATUS_CYCLE.indexOf(visit.status);
-    const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
+// ── skip / cancel reason ───────────────────────────────────────────────────────
+
+type OutcomeStatus = Extract<VisitStatus, "skipped" | "cancelled">;
+
+const OUTCOME_REASON_PRESETS = ["Weather", "Client requested delay", "Crew unavailable", "Other"] as const;
+
+/** Combine a preset + free-text detail into the single stored reason string. */
+function composeOutcomeReason(preset: string, detail: string): string | null {
+  const d = detail.trim();
+  if (preset === "Other" || !preset) return d || (preset === "Other" ? "Other" : null);
+  return d ? `${preset} — ${d}` : preset;
+}
+
+/**
+ * Small prompt shown when a visit is marked Skipped or Cancelled from the ST
+ * status menu / bulk Change Status — the reason lands on
+ * crm_job_visits.skip_reason (same column the crew app writes) and on the
+ * client's Activity timeline ("Visit skipped 9/9 — Client requested delay").
+ * The reason is optional; confirming with nothing selected still applies the
+ * status.
+ */
+function VisitOutcomeReasonDialog({
+  status,
+  count = 1,
+  pending = false,
+  onConfirm,
+  onCancel,
+}: {
+  status: OutcomeStatus | null;
+  count?: number;
+  pending?: boolean;
+  onConfirm: (reason: string | null) => void;
+  onCancel: () => void;
+}) {
+  const [preset, setPreset] = useState("");
+  const [detail, setDetail] = useState("");
+  useEffect(() => { if (status) { setPreset(""); setDetail(""); } }, [status]);
+  const label = status === "cancelled" ? "Cancel" : "Skip";
+  return (
+    <Dialog open={!!status} onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>{label} {count > 1 ? `${count} visits` : "visit"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Reason (optional)</label>
+            <div className="flex flex-wrap gap-1.5">
+              {OUTCOME_REASON_PRESETS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setPreset(preset === r ? "" : r)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                    preset === r ? "border-brand-500 bg-brand-50 text-brand-700 font-medium" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Textarea
+            rows={2}
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            className="text-sm resize-none"
+            placeholder={preset === "Other" || !preset ? "Add a note for the client timeline…" : "Details (optional)"}
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={pending}>Back</Button>
+          <Button size="sm" disabled={pending} className={status === "cancelled" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}
+            onClick={() => onConfirm(composeOutcomeReason(preset, detail))}>
+            {pending ? "Saving…" : `Mark ${status === "cancelled" ? "Cancelled" : "Skipped"}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving?: boolean }) {
+  const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
+  // Skipped / Cancelled go through the reason prompt first (D-10).
+  const [pendingOutcome, setPendingOutcome] = useState<OutcomeStatus | null>(null);
+
+  // Explicit status menu instead of a one-click cycle: a stray click on the
+  // icon used to flip a visit straight to Dispatched (firing the
+  // visit_dispatched automations) with no confirmation and no feedback.
+  async function setStatus(next: VisitStatus, reason?: string | null) {
+    if (next === visit.status) return;
+    if ((next === "skipped" || next === "cancelled") && reason === undefined) {
+      setPendingOutcome(next);
+      return;
+    }
     try {
-      await updateStatus({ id: visit.id, status: next, jobId: visit.jobId, jobType: visit.job?.jobType });
-    } catch {
-      toast.error("Failed to update status");
+      await updateStatus({ id: visit.id, status: next, jobId: visit.jobId, jobType: visit.job?.jobType, reason });
+      setPendingOutcome(null);
+      toast.success(`Visit marked ${STATUS_OPTIONS.find((o) => o.value === next)?.label ?? next}`);
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update status");
     }
   }
 
   return (
-    <button
-      onClick={cycle}
-      disabled={isPending}
-      title={visit.status}
-      className={cn("flex items-center justify-center rounded transition-opacity", isPending && "opacity-50")}
-    >
-      <VisitStatusIcon status={visit.status} />
-    </button>
+    <>
+    <VisitOutcomeReasonDialog
+      status={pendingOutcome}
+      pending={isPending}
+      onConfirm={(reason) => { if (pendingOutcome) void setStatus(pendingOutcome, reason); }}
+      onCancel={() => setPendingOutcome(null)}
+    />
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          onClick={(e) => e.stopPropagation()}
+          disabled={isPending}
+          title={isDriving ? "Crew is driving to this stop — click to change status" : `Status: ${visit.status.replace(/_/g, " ")} — click to change`}
+          className={cn("flex items-center justify-center rounded transition-opacity", isPending && "opacity-50")}
+        >
+          {isDriving ? <Car className="h-4 w-4 text-blue-500" /> : <VisitStatusIcon status={visit.status} />}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-40" onClick={(e) => e.stopPropagation()}>
+        {STATUS_OPTIONS.map((opt) => (
+          <DropdownMenuItem
+            key={opt.value}
+            className={cn("text-xs gap-2", opt.value === visit.status && "font-semibold")}
+            disabled={opt.value === visit.status}
+            onSelect={() => void setStatus(opt.value)}
+          >
+            <VisitStatusIcon status={opt.value} />
+            {opt.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+    </>
   );
 }
 
@@ -191,7 +320,7 @@ const COL_DEFS: { key: ColKey; label: string }[] = [
 // ── job detail sheet ──────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS: { value: VisitStatus; label: string }[] = [
-  { value: "scheduled",   label: "Pending" },
+  { value: "scheduled",   label: "Scheduled" },
   { value: "dispatched",  label: "Dispatched" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed",   label: "Completed" },
@@ -227,9 +356,10 @@ function JobDetailSheet({
    * Start/End edit overlaps another stop already assigned to this crew. */
   allVisits: CRMJobVisit[];
 }) {
-  const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
+  const { mutateAsync: updateVisit } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
+  const { currentUser } = useCurrentUserStore();
 
   const job  = visit.job;
   const services = job?.services ?? [];
@@ -261,12 +391,22 @@ function JobDetailSheet({
   // ONE specific service (a multi-service job split across visits), it must
   // use that service's own rate instead, or every visit on the job would
   // show the same job-level amount regardless of which service it's for.
+  // Σ services wins over job.rateCents whenever the job HAS priced services:
+  // job.rate_cents is a snapshot taken at creation (estimate conversion) and
+  // drifts the moment a service line is re-priced, which is exactly how the
+  // Services table and the costing panel disagreed ($1,908 vs $2,120). A DB
+  // trigger now keeps rate_cents in sync too (see
+  // 20260906150200_crm_jobs_rate_cents_sync_from_services.sql).
   const rateFallbackCents = linkedService
     ? (serviceTotal || null)
-    : (job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null));
+    : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null));
 
   // Form state — reset when visit changes
   const [status,      setStatus]      = useState<VisitStatus>(visit.status);
+  // Skip/cancel reason (crm_job_visits.skip_reason) — editable whenever the
+  // sheet's status is Skipped/Cancelled; prefilled from the stored value.
+  const [skipReason,  setSkipReason]  = useState(visit.skipReason ?? "");
+  useEffect(() => { setSkipReason(visit.skipReason ?? ""); }, [visit.id, visit.skipReason]);
   const [subStatus,   setSubStatus]   = useState(visit.subStatus ?? "");
   const [crewId,      setCrewId]      = useState(visit.crewId ?? job?.crewId ?? "");
   const [startTime,   setStartTime]   = useState(visit.startTime ?? "");
@@ -276,15 +416,21 @@ function JobDetailSheet({
   // clock-in/out or Start/End × men. Reading visit.actualHours directly here
   // showed 0/blank whenever there was no explicit override, even when the
   // row was correctly showing a computed value from real times.
-  const [actualHours, setActualHours] = useState(String(computeActualHours(visit) ?? ""));
+  const [actualHours, setActualHours] = useState(hoursInputValue(computeActualHours(visit)));
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
-  const [budgetedHoursInput, setBudgetedHoursInput] = useState(String(computeBudgetedHours(visit) ?? ""));
+  const [budgetedHoursInput, setBudgetedHoursInput] = useState(hoursInputValue(computeBudgetedHours(visit)));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
          : rateFallbackCents != null ? rateFallbackCents / 100
          : "")
   );
+  // Save's own in-flight flag. useUpdateVisit's shared `isPending` covers
+  // every updateVisit call in this sheet (Start/End blur autosave, Save Notes,
+  // comments) — gating the Save button on it meant clicking Save right after
+  // editing a time field fired the blur autosave first, disabled the button,
+  // and swallowed the click: sheet stayed open, no toast, nothing written.
+  const [saving, setSaving] = useState(false);
 
   // Sync crewId when the visit prop updates (e.g. after drag-assign or propagate)
   useEffect(() => { setCrewId(visit.crewId ?? job?.crewId ?? ""); }, [visit.id, visit.crewId, job?.crewId]);
@@ -305,10 +451,10 @@ function JobDetailSheet({
   const [appointmentEndTouched,   setAppointmentEndTouched]   = useState(false);
   const appointmentEndButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    setBudgetedHoursInput(String(computeBudgetedHours(visit) ?? ""));
+    setBudgetedHoursInput(hoursInputValue(computeBudgetedHours(visit)));
   }, [visit.id, visit.budgetedHours, job?.budgetedHours]);
   useEffect(() => {
-    setActualHours(String(computeActualHours(visit) ?? ""));
+    setActualHours(hoursInputValue(computeActualHours(visit)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visit.id, visit.actualHours, visit.startTime, visit.endTime, visit.clockedInAt, visit.clockedOutAt, visit.menCount]);
 
@@ -424,6 +570,15 @@ function JobDetailSheet({
   const amt = visit.rateCents ?? rateFallbackCents ?? 0;
 
   async function handleSave() {
+    // A blank/invalid men-count parses to NaN, and `NaN || 0` would silently
+    // coerce that to 0 — which then corrupts effectiveCrewSize-based labor
+    // cost/hours math downstream. Block the save instead, same as the
+    // Start/End time validation above.
+    const parsedMenCount = parseInt(menCount, 10);
+    if (!Number.isInteger(parsedMenCount) || parsedMenCount <= 0) {
+      toast.error("Men count must be a valid positive number");
+      return;
+    }
     const updates: Parameters<typeof updateVisit>[0]["updates"] = {
       status,
       sub_status: subStatus || null,
@@ -432,7 +587,7 @@ function JobDetailSheet({
       end_time: endTime || null,
       actual_hours: actualHours ? parseFloat(actualHours) : null,
       budgeted_hours: budgetedHoursInput ? parseFloat(budgetedHoursInput) : null,
-      men_count: parseInt(menCount) || 0,
+      men_count: parsedMenCount,
       qty: qty ? parseFloat(qty) : null,
       rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null,
       notes_to_client: notesToClient || null,
@@ -444,12 +599,18 @@ function JobDetailSheet({
     if (status === "dispatched" && visit.status !== "dispatched") {
       updates.dispatched_at = new Date().toISOString();
     }
+    if (status === "skipped" || status === "cancelled") {
+      updates.skip_reason = skipReason.trim() || null;
+    }
+    setSaving(true);
     try {
       await updateVisit({ id: visit.id, updates, jobId: visit.jobId, jobType: visit.job?.jobType });
       toast.success("Saved");
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -457,8 +618,8 @@ function JobDetailSheet({
     if (!newComment.trim()) return;
     const comment: JobComment = {
       id: crypto.randomUUID(),
-      authorName: "Me",
-      authorId: "current",
+      authorName: currentUser.name,
+      authorId: currentUser.id,
       text: newComment.trim(),
       createdAt: new Date().toISOString(),
     };
@@ -476,7 +637,7 @@ function JobDetailSheet({
 
   async function handleInvoice() {
     try {
-      const serviceDate = visit.scheduledDate ?? new Date().toISOString().slice(0, 10);
+      const serviceDate = visit.scheduledDate ?? todayLocalISODate();
       // invoiceDescription is authored via a rich-text editor on the Service
       // (and carried down onto the job/visit) — stripHtml() it before it
       // reaches an actual generated invoice, or a client-facing invoice
@@ -495,7 +656,7 @@ function JobDetailSheet({
         jobId: visit.jobId,
         clientId: visit.clientId,
         description: masterDescription ?? serviceName,
-        invoiceDate: visit.scheduledDate ?? new Date().toISOString().slice(0, 10),
+        invoiceDate: visit.scheduledDate ?? todayLocalISODate(),
         lineItems,
         subtotalCents,
         taxRateBps: 0,
@@ -514,7 +675,7 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[680px] sm:max-w-[680px] p-0 flex flex-col gap-0"
+        className="w-full sm:max-w-[680px] md:w-[680px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 px-5 py-4 pr-14">
@@ -593,6 +754,36 @@ function JobDetailSheet({
                       ))}
                     </SelectContent>
                   </Select>
+                  {(status === "skipped" || status === "cancelled") && (
+                    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                        {status === "cancelled" ? "Cancel" : "Skip"} reason
+                        {visit.skipReason && status === visit.status ? "" : " (optional)"}
+                      </label>
+                      <div className="flex flex-wrap gap-1 mb-1.5">
+                        {OUTCOME_REASON_PRESETS.filter((r) => r !== "Other").map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setSkipReason(r)}
+                            className={cn(
+                              "rounded-full border px-2 py-0.5 text-[10px] transition-colors",
+                              skipReason === r ? "border-amber-500 bg-white text-amber-800 font-medium" : "border-amber-200 bg-white/60 text-slate-600 hover:bg-white",
+                            )}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                      <Textarea
+                        rows={2}
+                        value={skipReason}
+                        onChange={(e) => setSkipReason(e.target.value)}
+                        className="text-xs resize-none bg-white"
+                        placeholder="Weather, client request, crew availability…"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Assigned To */}
@@ -1036,9 +1227,9 @@ function JobDetailSheet({
             <Button
               className="bg-brand-500 hover:bg-brand-600 text-white h-8 text-xs px-6"
               onClick={handleSave}
-              disabled={isPending}
+              disabled={saving}
             >
-              {isPending ? "Saving…" : "Save"}
+              {saving ? "Saving…" : "Save"}
             </Button>
             <button
               className="text-xs text-slate-500 hover:text-slate-700"
@@ -1058,6 +1249,7 @@ function JobDetailSheet({
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
+import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey } from "@/lib/hooks/use-route-order";
 
 function PrintDialog({
   open, onOpenChange, visits, crews, selectedDate,
@@ -1101,7 +1293,7 @@ function PrintDialog({
                 <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
                 <td className="border border-slate-200 px-2 py-1 text-center">{computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{(v as any).notesToCrew ?? ""}</td>
+                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{v.notesToCrew ?? ""}</td>
               </tr>
             );
           })}
@@ -1179,6 +1371,14 @@ function TeamAssignDialog({
   const [pending, setPending] = useState(false);
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
   const [dragMemberId, setDragMemberId] = useState<string | null>(null);
+  // Tap-to-place fallback for touch. iOS Safari never fires HTML5 drag events,
+  // so on a tablet every drag path below is dead — tap an item to pick it up,
+  // then tap a crew (or Unassigned) to drop it. Drag still works with a mouse.
+  const [held, setHeld] = useState<{ kind: "visit" | "member"; id: string; label: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) setHeld(null);
+  }, [open]);
 
   // Use crews-with-members data so member names show up; fall back to the prop
   const richCrews = crewsWithMembers ?? [];
@@ -1219,6 +1419,36 @@ function TeamAssignDialog({
     }
   }
 
+  /** Pick an item up, or put it back down if it's the one already held. */
+  function toggleHold(item: NonNullable<typeof held>) {
+    setHeld((h) => (h && h.kind === item.kind && h.id === item.id ? null : item));
+  }
+
+  /** Drop the held item on a crew. Dropping it where it already is is a no-op,
+   *  which is how tapping the held item a second time cancels the move. */
+  async function placeOnCrew(crewId: string) {
+    const item = held;
+    setHeld(null);
+    if (!item) return;
+    if (item.kind === "visit") {
+      const v = visits.find((x) => x.id === item.id);
+      if (v && v.crewId !== crewId) await reassign(item.id, crewId, v.jobId);
+      return;
+    }
+    const current = overrideCrewByMember.get(item.id) ?? defaultCrewByMember.get(item.id);
+    if (current !== crewId) await moveMember(item.id, crewId);
+  }
+
+  /** Drop the held visit back in the pool. Members always belong to a crew, so
+   *  the pool ignores them. */
+  async function placeUnassigned() {
+    const item = held;
+    setHeld(null);
+    if (item?.kind !== "visit") return;
+    const v = visits.find((x) => x.id === item.id);
+    if (v?.crewId) await reassign(item.id, null, v.jobId);
+  }
+
   async function dispatchAll() {
     setPending(true);
     try {
@@ -1242,7 +1472,16 @@ function TeamAssignDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent
+        className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col"
+        // Escape cancels a pick-up first; a second press closes the dialog.
+        onEscapeKeyDown={(e) => {
+          if (held) {
+            e.preventDefault();
+            setHeld(null);
+          }
+        }}
+      >
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">
             Team Assignment —{" "}
@@ -1250,29 +1489,67 @@ function TeamAssignDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {held ? (
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 bg-brand-50 px-5 py-2">
+            <p className="text-xs text-brand-800">
+              Moving <span className="font-semibold">{held.label}</span> —{" "}
+              {held.kind === "visit"
+                ? "tap a crew, or Unassigned, to place it."
+                : `tap the crew they should work with on ${selectedDate}.`}
+            </p>
+            <button
+              onClick={() => setHeld(null)}
+              className="shrink-0 rounded border border-brand-300 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p className="shrink-0 border-b bg-slate-50 px-5 py-1.5 text-[11px] text-slate-400">
+            Drag a visit or crew member, or tap one to pick it up and tap where it should go.
+          </p>
+        )}
+
         <div className="flex flex-1 overflow-hidden">
           {/* Unassigned pool — drop target to un-assign */}
           <div
-            className="w-52 shrink-0 border-r bg-green-50 p-4"
+            className={cn(
+              "w-52 shrink-0 border-r bg-green-50 p-4",
+              held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
+            )}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, null, jId); setDragVisitId(null); } }}
+            onClick={() => void placeUnassigned()}
           >
             <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">
               Unassigned ({unassigned.length})
             </p>
             <div className="space-y-1.5">
               {unassigned.length === 0 ? (
-                <p className="text-xs text-green-600 italic">All visits assigned</p>
+                <p className="text-xs text-green-600 italic">
+                  {held?.kind === "visit" ? "Tap to unassign" : "All visits assigned"}
+                </p>
               ) : (
                 unassigned.map((v) => {
                   const svcName = v.job?.services?.[0]?.serviceName ?? "Visit";
+                  const isHeld = held?.kind === "visit" && held.id === v.id;
                   return (
                     <div
                       key={v.id}
                       draggable
-                      onDragStart={() => setDragVisitId(v.id)}
+                      onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                       onDragEnd={() => setDragVisitId(null)}
-                      className="rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing"
+                      // With something already held, let the click through to the
+                      // pool so it lands there; otherwise pick this card up.
+                      onClick={(e) => {
+                        if (held) return;
+                        e.stopPropagation();
+                        toggleHold({ kind: "visit", id: v.id, label: v.clientName ?? "Visit" });
+                      }}
+                      className={cn(
+                        "rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing",
+                        isHeld && "ring-2 ring-brand-500 border-brand-300"
+                      )}
                     >
                       <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                       <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
@@ -1280,7 +1557,7 @@ function TeamAssignDialog({
                         {crews.map((c) => (
                           <button
                             key={c.id}
-                            onClick={() => reassign(v.id, c.id, v.jobId)}
+                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, c.id, v.jobId); }}
                             className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5 transition-colors"
                           >
                             → {c.name}
@@ -1300,7 +1577,10 @@ function TeamAssignDialog({
               {byCrew.map(({ crew, visits: crewVisits, members }) => (
                 <div
                   key={crew.id}
-                  className="w-52 shrink-0 border-r p-4"
+                  className={cn(
+                    "w-52 shrink-0 border-r p-4",
+                    held && "cursor-pointer ring-2 ring-inset ring-brand-400"
+                  )}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
                     if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); }
@@ -1309,39 +1589,61 @@ function TeamAssignDialog({
                       setDragMemberId(null);
                     }
                   }}
+                  onClick={() => void placeOnCrew(crew.id)}
                 >
                   <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-1">
                     {crew.name} ({crewVisits.length})
                   </p>
-                  {/* Draggable member chips — amber means "on loan" from another
-                      crew for selectedDate only; drag back to their own crew (or
-                      click) to send them back. */}
+                  {/* Member chips — amber means "on loan" from another crew for
+                      selectedDate only. Drag them, or tap to pick up and tap the
+                      destination crew; the ↩ sends a loaned member straight home. */}
                   <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
                     {members.map((m) => {
                       const onLoan = defaultCrewByMember.get(m.id) !== crew.id;
+                      const home = defaultCrewByMember.get(m.id);
+                      const isHeld = held?.kind === "member" && held.id === m.id;
+                      const name = m.employeeName ?? m.employeeId;
                       return (
                         <div
                           key={m.id}
                           draggable
-                          onDragStart={() => setDragMemberId(m.id)}
+                          onDragStart={() => { setHeld(null); setDragMemberId(m.id); }}
                           onDragEnd={() => setDragMemberId(null)}
-                          onClick={() => { const home = defaultCrewByMember.get(m.id); if (onLoan && home) void moveMember(m.id, home); }}
+                          onClick={(e) => {
+                            if (held) return;
+                            e.stopPropagation();
+                            toggleHold({ kind: "member", id: m.id, label: name });
+                          }}
                           className={cn(
                             "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none",
                             onLoan
                               ? "bg-amber-100 border-amber-300 text-amber-700"
-                              : "bg-brand-100 border-brand-200 text-brand-700"
+                              : "bg-brand-100 border-brand-200 text-brand-700",
+                            isHeld && "ring-2 ring-brand-500"
                           )}
                           title={onLoan
-                            ? `On loan from their usual crew for ${selectedDate} only — click to send back`
-                            : "Drag to move to another crew for today only"}
+                            ? `On loan from their usual crew for ${selectedDate} only — ↩ sends them back`
+                            : "Drag, or tap then tap another crew, to move them for today only"}
                         >
-                          {m.employeeName ?? m.employeeId}
+                          {name}
+                          {onLoan && home && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setHeld(null); void moveMember(m.id, home); }}
+                              // Negative margins absorb the padding, so the hit
+                              // area is finger-sized without growing the chip.
+                              className="-my-1.5 -mr-1.5 rounded-full px-1.5 py-1.5 leading-none text-amber-500 hover:text-amber-800"
+                              title="Send back to their usual crew"
+                            >
+                              ↩
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                     {members.length === 0 && (
-                      <p className="text-[10px] text-slate-300 italic">No members — drag here</p>
+                      <p className="text-[10px] text-slate-300 italic">
+                        {held?.kind === "member" ? "Tap to place here" : "No members"}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-1.5 min-h-[40px]">
@@ -1351,16 +1653,27 @@ function TeamAssignDialog({
                         <div
                           key={v.id}
                           draggable
-                          onDragStart={() => setDragVisitId(v.id)}
+                          onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                           onDragEnd={() => setDragVisitId(null)}
-                          className="rounded bg-slate-50 border px-2 py-1.5 group relative cursor-grab active:cursor-grabbing"
+                          onClick={(e) => {
+                            if (held) return;
+                            e.stopPropagation();
+                            toggleHold({ kind: "visit", id: v.id, label: v.clientName ?? "Visit" });
+                          }}
+                          className={cn(
+                            // pr-7 keeps the client name clear of the ✕, which
+                            // sits in the corner permanently on touch screens.
+                            "rounded bg-slate-50 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
+                            held?.kind === "visit" && held.id === v.id && "ring-2 ring-brand-500"
+                          )}
                         >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                           <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
                           <VisitStatusIcon status={v.status} />
                           <button
-                            onClick={() => reassign(v.id, null, v.jobId)}
-                            className="absolute top-1 right-1 hidden group-hover:flex text-[9px] text-slate-400 hover:text-red-500"
+                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
+                            className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
+                            title="Unassign"
                           >
                             ✕
                           </button>
@@ -1570,12 +1883,13 @@ function EditJobTimesDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes.length, allMembers.length]);
 
-  // Keep the dispatch board's Men column in sync with how many crew members
-  // actually have a time entry here — only once there IS at least one entry,
-  // so opening the dialog on a visit with a manually-set Men count (and no
-  // per-member times yet) doesn't zero it out.
+  // Seed the dispatch board's Men column from how many crew members have a
+  // time entry here — but ONLY when the visit has no men count yet (0/null).
+  // An explicit Men value set on the sheet is the dispatcher's number for
+  // this stop; overwriting it with the time-entry roster size (this used to
+  // run on any mismatch) silently turned "Men 3" back into 2.
   useEffect(() => {
-    if (memberTimes.length > 0 && memberTimes.length !== visit.menCount) {
+    if (memberTimes.length > 0 && !visit.menCount) {
       updateVisit.mutate({ id: visitId, updates: { men_count: memberTimes.length } });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1767,6 +2081,7 @@ function VisitRow({
   memberTimes,
   anchorVisitId,
   allVisits,
+  drivingCrewIds,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1797,6 +2112,10 @@ function VisitRow({
   /** Every visit on the board for the selected date — used to warn when a
    * Start/End edit overlaps another stop already assigned to this crew. */
   allVisits: CRMJobVisit[];
+  /** crew_ids with an open crm_crew_drive_segments row right now (today
+   * only — see useDrivingCrewIds). Used to swap this row's status icon for
+   * a driving icon when this is that crew's next not-yet-started stop. */
+  drivingCrewIds: Set<string>;
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -1816,10 +2135,22 @@ function VisitRow({
   // ONE specific service (a multi-service job split across visits), where it
   // would show the same job-level amount on every one of that job's visits
   // instead of each service's own rate.
-  const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null)));
+  // Σ services before job.rateCents — same reasoning as the sheet (C-03).
+  const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null)));
   const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
   const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
+  // Swap this row's status icon for a driving icon when the crew is
+  // currently driving AND this is the next stop they haven't started yet —
+  // ordered by `priority` (what manual drag/route-optimize saves, see
+  // handleSaveOrder), not allVisits' own array order.
+  const isDrivingToThis = !!effectiveCrewId && drivingCrewIds.has(effectiveCrewId) && (() => {
+    const nextForCrew = allVisits
+      .filter((v) => (v.crewId ?? v.job?.crewId ?? null) === effectiveCrewId)
+      .filter((v) => v.status === "scheduled" || v.status === "dispatched")
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))[0];
+    return nextForCrew?.id === visit.id;
+  })();
   const budgetedHours = computeBudgetedHours(visit);
   const actualHours = computeActualHours(visit);
 
@@ -1849,7 +2180,11 @@ function VisitRow({
   const endButtonRef = useRef<HTMLButtonElement>(null);
 
   const { data: richCrewsForSize } = useCrews(false);
-  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(selectedDate);
+  // Must key off this visit's own date, not the board's global selectedDate —
+  // on a multi-day (From/To range) view, a visit from day 2+ of the range
+  // would otherwise resolve its headcount override against day 1's roster.
+  // JobDetailSheet does this correctly (useCrewDailyMembers(visit.scheduledDate)).
+  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(visit.scheduledDate);
   const upsertMemberTime = useUpsertCrewMemberTime();
 
   // Does the crew actually on this visit have different punch times from each
@@ -1914,10 +2249,12 @@ function VisitRow({
     // without editing it doesn't silently wipe a real measured value.
     const existingValue = field === "start_time" ? visit.startTime : visit.endTime;
     if ((value || null) !== (existingValue || null)) updates.actual_hours = null;
-    // Typing a time is what actually sends a crew out for the day — pull the
-    // headcount from who's really on that crew today (Team Assignment),
-    // instead of leaving whatever men_count the visit happened to start with.
-    if (visit.crewId) {
+    // Typing a time is what actually sends a crew out for the day — fill an
+    // EMPTY headcount from who's really on that crew today (Team Assignment).
+    // Only when men_count is still 0/null: an explicit Men value entered on
+    // the sheet or the row is the dispatcher's call and must not be
+    // overwritten by a roster count (see C-11).
+    if (visit.crewId && !visit.menCount) {
       const crewSize = effectiveCrewSize(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize);
       if (crewSize > 0) updates.men_count = crewSize;
     }
@@ -1959,8 +2296,8 @@ function VisitRow({
     );
   }
 
-  const [bHrsVal, setBHrsVal] = useState(String(budgetedHours ?? ""));
-  useEffect(() => { setBHrsVal(String(budgetedHours ?? "")); }, [budgetedHours]);
+  const [bHrsVal, setBHrsVal] = useState(hoursInputValue(budgetedHours));
+  useEffect(() => { setBHrsVal(hoursInputValue(budgetedHours)); }, [budgetedHours]);
 
   function saveBudgetedHours(value: string) {
     const n = parseFloat(value);
@@ -2043,7 +2380,7 @@ function VisitRow({
 
       {/* St */}
       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-        <StatusCycleButton visit={visit} />
+        <StatusCycleButton visit={visit} isDriving={isDrivingToThis} />
       </td>
 
       {/* Client (+ address below, like the Jobs screen — City/Zip stay in
@@ -2370,15 +2707,25 @@ function visitAmountCents(visit: CRMJobVisit): number {
   const serviceTotal = linkedService
     ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
     : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
-  return visit.rateCents ?? (linkedService ? serviceTotal : (job?.rateCents ?? serviceTotal));
+  // Σ services before job.rateCents (a creation-time snapshot) — see C-03.
+  return visit.rateCents ?? (linkedService ? serviceTotal : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? 0)));
+}
+
+// Skipped and cancelled visits stay on the board (so the dispatcher can see
+// and undo them) but are not work or revenue for the day — every aggregate
+// (Totals row AMT / B Hrs, crew stat cards, unassigned card) leaves them out.
+// Actual hours are real time punched and are summed regardless of status.
+function countsTowardTotals(visit: CRMJobVisit): boolean {
+  return visit.status !== "skipped" && visit.status !== "cancelled";
 }
 
 // ── totals row ─────────────────────────────────────────────────────────────────
 
 function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
-  const totalBHrs = visits.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
+  const counted   = visits.filter(countsTowardTotals);
+  const totalBHrs = counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
-  const totalAmt  = visits.reduce((s, v) => s + visitAmountCents(v), 0);
+  const totalAmt  = counted.reduce((s, v) => s + visitAmountCents(v), 0);
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
   // Toggleable cols that appear before B Hrs:
@@ -2436,8 +2783,33 @@ function formatDisplayDate(dateStr: string): string {
 
 // ── main board ─────────────────────────────────────────────────────────────────
 
+/** "YYYY-MM-DD" that round-trips through a local Date, else null (malformed / impossible dates). */
+function parseISODateParam(raw: string | null): string | null {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const d = new Date(`${raw}T00:00:00`);
+  return !isNaN(d.getTime()) && toLocalDateString(d) === raw ? raw : null;
+}
+
 export function DispatchBoard() {
-  const [selectedDate,    setSelectedDate]    = useState(() => toLocalDateString(new Date()));
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  // Selected day lives in the URL (?date=YYYY-MM-DD) so browser Back from a
+  // client link, refresh, and shared links all land on the same day. Today is
+  // the default when the param is absent or malformed.
+  const urlRouter    = useRouter();
+  const pathname     = usePathname();
+  const searchParams = useSearchParams();
+  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayLocalISODate());
+  useEffect(() => {
+    const current = searchParams.get("date");
+    const isToday = selectedDate === todayLocalISODate();
+    // Keep the URL clean on the default day; otherwise mirror the selection.
+    if ((isToday && current === null) || current === selectedDate) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (isToday) params.delete("date"); else params.set("date", selectedDate);
+    const qs = params.toString();
+    // replace (not push) so paging through days doesn't spam history.
+    urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [selectedDate, searchParams, pathname, urlRouter]);
   const [endDate,         setEndDate]         = useState("");
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
   const [statusFilter,    setStatusFilter]    = useState<FilterTab>("all");
@@ -2452,6 +2824,9 @@ export function DispatchBoard() {
   const [editTimesVisitId, setEditTimesVisitId] = useState<string | null>(null);
   const [teamAssignOpen,  setTeamAssignOpen]  = useState(false);
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
+  // Bulk "Change Status" → Skipped/Cancelled waits on the reason dialog.
+  const [bulkOutcome,     setBulkOutcome]     = useState<OutcomeStatus | null>(null);
+  const [bulkOutcomePending, setBulkOutcomePending] = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
   const [dragId,          setDragId]          = useState<string | null>(null);
@@ -2480,6 +2855,11 @@ export function DispatchBoard() {
   const [optimizedOrder,     setOptimizedOrder]     = useState<string[] | null>(null);
   const [driveTimeMap,       setDriveTimeMap]       = useState<Map<string, number>>(new Map());
   const [totalDriveMins,     setTotalDriveMins]     = useState<number | null>(null);
+  const [shopLegMins,        setShopLegMins]        = useState<number | null>(null);
+  // Nearest-first leaves the shop and takes the closest stop each time;
+  // furthest-first drives out to the far end and works back in, so the crew
+  // finishes near the yard.
+  const [routeStrategy,      setRouteStrategy]      = useState<"nearest_first" | "furthest_first">("nearest_first");
 
   const effectiveEnd = endDate || undefined;
   const { data: visits, isLoading, refetch } = useVisitsForDate(selectedDate, effectiveEnd);
@@ -2489,6 +2869,11 @@ export function DispatchBoard() {
   // times to detect per-member time divergence, and firing one query per
   // visible row would be its own N+1 problem.
   const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
+  const { data: drivingCrewIds = new Set<string>() } = useDrivingCrewIds(selectedDate);
+  // Remembered per-(crew, weekday) stop order, used to seed a day that has
+  // never been saved so a recurring route doesn't have to be re-dragged weekly.
+  const { data: rememberedOrder } = useCrewRouteOrder(selectedDate, effectiveEnd);
+  const saveRouteOrder = useSaveRouteOrder();
   const allVisits = visits ?? [];
   // A "stop" (same client/day/crew/address) clocks in and out as one unit —
   // crm_crew_member_times rows are only ever written against the stop's
@@ -2523,9 +2908,43 @@ export function DispatchBoard() {
     return m;
   }, [allVisits, anchorVisitIdByVisitId, memberTimesByAnchorId]);
   const qc = useQueryClient();
+
+  async function applyBulkStatus(status: VisitStatus, reason?: string | null) {
+    const ids = [...selectedIds];
+    const label = STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
+    try {
+      let results: Response[];
+      if (status === "completed") {
+        // Use the complete route so the parent job status is also updated
+        results = await Promise.all(
+          ids.map((id) => fetch(`/api/crm/visits/${id}/complete`, { method: "POST" }))
+        );
+      } else {
+        const body: Record<string, unknown> = { status };
+        if (status === "skipped" || status === "cancelled") body.skip_reason = reason?.trim() || null;
+        results = await Promise.all(
+          ids.map((id) =>
+            fetch(`/api/crm/visits/${id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            })
+          )
+        );
+      }
+      if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      setSelectedIds(new Set());
+      toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${label}`);
+    } catch {
+      toast.error("Failed to update one or more visits");
+    }
+  }
   const createVisit = useCreateVisit();
   const { mutateAsync: returnToWaitingList } = useReturnVisitToWaitingList();
-  const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3);
+  const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3, selectedDate);
 
   // Derived fresh from the live query every render (not stored as its own
   // state) so the sheet/dialog can never go stale relative to the table.
@@ -2555,12 +2974,24 @@ export function DispatchBoard() {
       const res = await fetch("/api/crm/route-optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitIds: targets.map((v) => v.id) }),
+        // Only anchor on a shop when every stop belongs to the same crew —
+        // a mixed-crew list has no single starting yard, and guessing one
+        // would skew the tour toward whichever crew happened to come first.
+        body: JSON.stringify({
+          visitIds: targets.map((v) => v.id),
+          strategy: routeStrategy,
+          crewId: (() => {
+            const ids = new Set(targets.map((v) => v.crewId ?? v.job?.crewId ?? null));
+            return ids.size === 1 ? [...ids][0] : null;
+          })(),
+        }),
       });
       const data = await res.json() as {
         orderedVisitIds?: string[];
         driveTimes?: { visitId: string; minutesToNext: number }[];
         totalDriveMinutes?: number;
+        shopLegMinutes?: number | null;
+        anchoredToShop?: boolean;
         error?: string;
       };
       if (!res.ok || data.error) {
@@ -2572,7 +3003,17 @@ export function DispatchBoard() {
       for (const dt of data.driveTimes ?? []) dtMap.set(dt.visitId, dt.minutesToNext);
       setDriveTimeMap(dtMap);
       setTotalDriveMins(data.totalDriveMinutes ?? null);
-      toast.success(`Route optimized — ${data.totalDriveMinutes} min total drive time`);
+      setShopLegMins(data.shopLegMinutes ?? null);
+      const legLabel =
+        data.shopLegMinutes != null
+          ? routeStrategy === "furthest_first"
+            ? `, ${data.shopLegMinutes} min back to the shop`
+            : `, ${data.shopLegMinutes} min out from the shop`
+          : "";
+      toast.success(
+        `Route optimized — ${data.totalDriveMinutes} min between stops${legLabel}` +
+          (data.anchoredToShop ? "" : " (no crew starting address set, so the route isn't anchored to a shop)")
+      );
     } catch {
       toast.error("Failed to reach route optimizer");
     } finally {
@@ -2584,9 +3025,24 @@ export function DispatchBoard() {
     setOptimizedOrder(null);
     setDriveTimeMap(new Map());
     setTotalDriveMins(null);
+    setShopLegMins(null);
   }
 
   function isVisible(col: ColKey) { return visibleKeys.includes(col); }
+
+  /**
+   * The crew a visit actually runs with.
+   *
+   * crm_job_visits.crew_id is null whenever the visit inherits its crew from
+   * the job — which is the common case, since assigning a crew on the job is
+   * how most recurring work is set up and nothing writes the value down onto
+   * each generated visit. Every consumer below MUST resolve through this, not
+   * through raw `v.crewId`: the two disagreeing is what let a job-inherited
+   * visit be grouped under its crew visually while being numbered and dragged
+   * as if it were unassigned.
+   */
+  const effectiveCrewIdOf = (v: { crewId: string | null; job?: { crewId?: string | null } | null }) =>
+    v.crewId ?? v.job?.crewId ?? null;
 
   const filtered = allVisits.filter((v) => {
     if (crewFilters.length > 0 && !crewFilters.includes(v.crewId ?? "")) return false;
@@ -2626,24 +3082,68 @@ export function DispatchBoard() {
         if (bi === -1) return -1;
         return ai - bi;
       })
-    : [...filtered].sort((a, b) => {
-        const an = a.crewName ?? "";
-        const bn = b.crewName ?? "";
-        if (!an && bn) return 1;
-        if (an && !bn) return -1;
-        return an.localeCompare(bn);
-      });
+    : (() => {
+        // Crew, then this day's saved priority, then the order this crew was
+        // last routed in on this weekday.
+        //
+        // The remembered order is a TIEBREAKER rather than a fallback because
+        // crm_job_visits.priority is `not null default 1` — every visit has a
+        // priority from birth, so "has this day been saved?" cannot be read off
+        // the value itself. A saved day has distinct priorities 1..N and never
+        // reaches the tiebreak; an unsaved day has every visit sitting on the
+        // default 1, so the remembered position decides and next Monday comes
+        // up in the sequence this Monday was routed in. Jobs with nothing
+        // remembered sort last, which is the right prompt to place them.
+        const crewOf = effectiveCrewIdOf;
+        const rememberedPos = (v: typeof filtered[number]) => {
+          const crew = crewOf(v);
+          if (!crew || !v.jobId) return Number.MAX_SAFE_INTEGER;
+          return rememberedOrder?.get(routeOrderKey(crew, v.jobId)) ?? Number.MAX_SAFE_INTEGER;
+        };
+
+        // Group on the EFFECTIVE crew name, not visit.crewName alone. A visit
+        // that inherits its crew from the job leaves crm_job_visits.crew_id
+        // null, so the crm_crews(name) join is null too — and grouping on that
+        // raw value sorted such a visit to the very end as if it were
+        // unassigned, even though every other part of this board (the crew
+        // column, the crew filter, the per-crew stop numbering) resolves it
+        // through the same `?? job` fallback used here.
+        const crewNameOf = (v: typeof filtered[number]) =>
+          v.crewName ?? v.job?.crewName ?? "";
+
+        return [...filtered].sort((a, b) => {
+          const an = crewNameOf(a);
+          const bn = crewNameOf(b);
+          if (!an && bn) return 1;
+          if (an && !bn) return -1;
+          const byCrew = an.localeCompare(bn);
+          if (byCrew !== 0) return byCrew;
+
+          const byPriority = (a.priority ?? 0) - (b.priority ?? 0);
+          if (byPriority !== 0) return byPriority;
+
+          const ap = rememberedPos(a);
+          const bp = rememberedPos(b);
+          if (ap !== bp) return ap - bp;
+          // Equal on every key — keep the query's own start_time/created_at
+          // order, which Array.sort preserves.
+          return 0;
+        });
+      })();
 
   // Order numbers and drag/drop reordering are scoped per crew — each crew
   // runs its own separate route, so "#3" should mean the 3rd stop for THAT
   // crew, and reordering one crew's stops must never renumber another's.
   const visitById = new Map(displayVisits.map((v) => [v.id, v]));
-  const crewKeyOf = (id: string) => visitById.get(id)?.crewId ?? "unassigned";
+  const crewKeyOf = (id: string) => {
+    const v = visitById.get(id);
+    return (v ? effectiveCrewIdOf(v) : null) ?? "unassigned";
+  };
   const crewOrderNumById = new Map<string, number>();
   {
     const counters = new Map<string, number>();
     for (const v of displayVisits) {
-      const key = v.crewId ?? "unassigned";
+      const key = effectiveCrewIdOf(v) ?? "unassigned";
       const next = (counters.get(key) ?? 0) + 1;
       counters.set(key, next);
       crewOrderNumById.set(v.id, next);
@@ -2701,18 +3201,22 @@ export function DispatchBoard() {
     let ptr = 0;
     const order = fullOrder.map((id) => (changedIds.has(id) ? changedOrder[ptr++] : id));
 
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await Promise.all(order.map((id, i) => (supabase as any).from("crm_job_visits").update({ priority: i + 1 }).eq("id", id)));
-    // Without this, the just-saved priorities only exist in the database —
-    // the visits list in memory still has the OLD priority values, so
-    // clearing manualOrder (which was the only thing keeping the new order
-    // on screen) snapped the table back to how it looked before saving,
-    // until something else happened to trigger a refetch.
-    await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    // One RPC instead of N parallel UPDATEs: those could half apply and leave
+    // a scrambled sequence with no sign anything failed. It also records the
+    // per-(crew, weekday) remembered order in the same transaction, so the
+    // next occurrence of this weekday comes up already in this sequence.
+    try {
+      await saveRouteOrder.mutateAsync(order);
+    } catch {
+      toast.error("Couldn't save the route order. Nothing was changed.");
+      return;
+    }
     setManualOrder(null);
-    toast.success("Route order saved");
+    // An optimized-but-not-dragged order is saved via this same button (see
+    // the banner below) — clear it too so the stale "Route optimized"
+    // banner/highlight don't linger once the order is actually persisted.
+    clearOptimization();
+    toast.success("Route order saved — this crew's order is remembered for this weekday.");
   }
 
   function handleDragStart(id: string) {
@@ -2771,7 +3275,11 @@ export function DispatchBoard() {
     const rows = displayVisits.map((v, i) => {
       const job = v.job;
       const svc = (job?.services ?? []).map((s) => s.serviceName).join("; ");
-      const rateCents = (v as any).rateCents ?? job?.rateCents ?? 0;
+      // Must use the same linked-service fallback every other aggregate on
+      // this board uses (see the comment above visitAmountCents) — a plain
+      // rateCents/job.rateCents read exports $0 for any recurring/multi-
+      // service job priced via its crm_job_services row instead.
+      const rateCents = visitAmountCents(v);
       return [
         i + 1,
         v.clientName ?? "",
@@ -2785,7 +3293,7 @@ export function DispatchBoard() {
         v.endTime ?? "",
         computeBudgetedHours(v)?.toFixed(2) ?? "",
         computeActualHours(v)?.toFixed(2) ?? "",
-        (v as any).menCount ?? "",
+        v.menCount ?? "",
         (rateCents / 100).toFixed(2),
         (rateCents / 100).toFixed(2),
       ];
@@ -2807,20 +3315,32 @@ export function DispatchBoard() {
   const dispatchedCount = filtered.filter((v) => v.status === "dispatched").length;
 
   const crewStatsList = (crews ?? []).map((c) => {
-    const cv = displayVisits.filter((v) => v.crewId === c.id);
+    const cv = displayVisits.filter((v) => effectiveCrewIdOf(v) === c.id);
+    const counted = cv.filter(countsTowardTotals);
     return {
       id: c.id,
       name: c.name,
       count: cv.length,
-      bHrs: cv.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0),
-      amt: cv.reduce((s, v) => s + visitAmountCents(v), 0),
+      bHrs: counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0),
+      amt: counted.reduce((s, v) => s + visitAmountCents(v), 0),
     };
   }).filter((s) => s.count > 0);
-  const unassignedStatCount  = displayVisits.filter((v) => !v.crewId).length;
-  const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
-  const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + visitAmountCents(v), 0);
+  const unassignedVisits     = displayVisits.filter((v) => !effectiveCrewIdOf(v));
+  const unassignedStatCount  = unassignedVisits.length;
+  const unassignedStatBHrs   = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
+  const unassignedStatAmt    = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + visitAmountCents(v), 0);
 
   const callAheadVisits = displayVisits.filter((v) => v.job?.callAhead && v.clientPhone);
+
+  if (!permissionsLoading && !can("sched_dispatch_board")) {
+    return (
+      <EmptyState
+        icon={Calendar}
+        title="No access"
+        description="You don't have permission to view the Dispatch Board."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -2830,11 +3350,13 @@ export function DispatchBoard() {
         description="Schedule and dispatch daily job visits"
       />
 
-      {/* Week strip + date range + actions */}
-      <div className="flex items-center gap-3 px-4 shrink-0">
+      {/* Week strip + date range + actions. Wraps rather than scrolling: this
+          row is ~1600px wide, so on a tablet the right-hand controls were half
+          a screen off to the side with no hint they were there. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
-        <div className="flex items-center gap-2 text-xs text-slate-500 ml-2">
+        <div className="flex items-center gap-2 text-xs text-slate-500 ml-2 shrink-0">
           <span className="font-medium">From</span>
           <Input
             type="date"
@@ -2860,21 +3382,38 @@ export function DispatchBoard() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 shrink-0">
           <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
             onClick={() => setTeamAssignOpen(true)}
           >
             <Users className="h-4 w-4" />
             Team Assign
           </Button>
-          <Button size="sm" variant="outline"
-            className={cn("h-9 text-sm gap-1.5 px-3", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
-            onClick={handleOptimizeRoute}
-            disabled={optimizing}
-          >
-            <Route className="h-4 w-4" />
-            {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
-          </Button>
+          <div className="flex items-center shrink-0">
+            <Button size="sm" variant="outline"
+              className={cn("h-9 rounded-r-none border-r-0 text-sm gap-1.5 px-3", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
+              onClick={handleOptimizeRoute}
+              disabled={optimizing}
+            >
+              <Route className="h-4 w-4" />
+              {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
+            </Button>
+            {/* Which way round the crew works the route. Nearest-first is the
+                shortest total drive; furthest-first ends the day near the
+                yard, which is usually what a crew actually wants. */}
+            <Select
+              value={routeStrategy}
+              onValueChange={(v) => { setRouteStrategy(v as "nearest_first" | "furthest_first"); clearOptimization(); }}
+            >
+              <SelectTrigger className={cn("h-9 w-[150px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nearest_first" className="text-xs">Nearest first</SelectItem>
+                <SelectItem value="furthest_first" className="text-xs">Furthest first</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
             onClick={() => { setNearbyOpen(true); findNearby(allVisits); }}
           >
@@ -2885,18 +3424,16 @@ export function DispatchBoard() {
       </div>
 
       {/* Save/Clear Order — its own full-width row so it's never pushed off
-          screen by the toolbar above (which can overflow horizontally). */}
+          screen by the toolbar above. */}
       {(optimizedOrder || manualOrder) && (
         <div className="flex items-center justify-between gap-3 border-y border-brand-200 bg-brand-50 px-4 py-2 shrink-0">
           <p className="text-xs font-medium text-brand-700">
-            {manualOrder ? "Order changed — not yet saved." : "Route optimized."}
+            {manualOrder ? "Order changed — not yet saved." : "Route optimized — not yet saved."}
           </p>
           <div className="flex items-center gap-2">
-            {manualOrder && (
-              <Button size="sm" className="h-7 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
-                Save Order
-              </Button>
-            )}
+            <Button size="sm" className="h-7 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
+              Save Order
+            </Button>
             <Button size="sm" variant="outline"
               className="h-7 gap-1.5 px-3 text-xs text-red-500 border-red-200"
               onClick={() => { clearOptimization(); setManualOrder(null); }}
@@ -2908,10 +3445,11 @@ export function DispatchBoard() {
         </div>
       )}
 
-      {/* Select a Filter bar — ABOVE dark bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2 shrink-0">
+      {/* Select a Filter bar — ABOVE dark bar. Wraps on a narrow screen so the
+          action buttons drop to their own line instead of running off it. */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-white px-4 py-2 shrink-0">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-1">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
             const label = key === "client" ? "Client" : key === "service" ? "Service" : key === "date" ? "Date" : key === "city" ? "City" : key === "zip" ? "Zip" : "Crew";
             return (
@@ -3070,7 +3608,10 @@ export function DispatchBoard() {
       </div>
 
       {/* Dark action bar */}
-      <div className="bg-[#4a4a4a] px-4 py-2 flex items-center gap-3 shrink-0">
+      {/* Wraps below xl. At desktop widths this bar already fits by letting the
+          search box shrink, so keep it on one line there rather than wrapping
+          Columns onto a second row. */}
+      <div className="bg-[#4a4a4a] px-4 py-2 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 shrink-0">
         {/* Refresh — far left */}
         <button
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
@@ -3145,7 +3686,7 @@ export function DispatchBoard() {
         </Popover>
 
         {/* Chemical Tracking — day close-out wizard, only shown when relevant */}
-        {hasChemicalVisits && (
+        {hasChemicalVisits && can("chem_add_edit_usage") && (
           <button
             onClick={() => setChemicalWizardOpen(true)}
             title="Chemical Tracking"
@@ -3178,30 +3719,13 @@ export function DispatchBoard() {
                     <DropdownMenuItem
                       key={opt.value}
                       className="text-xs"
-                      onSelect={async () => {
-                        const ids = [...selectedIds];
-                        if (opt.value === "completed") {
-                          // Use the complete route so the parent job status is also updated
-                          await Promise.all(
-                            ids.map((id) =>
-                              fetch(`/api/crm/visits/${id}/complete`, { method: "POST" })
-                            )
-                          );
-                        } else {
-                          await Promise.all(
-                            ids.map((id) =>
-                              fetch(`/api/crm/visits/${id}`, {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ status: opt.value }),
-                              })
-                            )
-                          );
+                      onSelect={() => {
+                        if (opt.value === "skipped" || opt.value === "cancelled") {
+                          // Reason prompt first (D-10) — applyBulkStatus runs on confirm.
+                          setBulkOutcome(opt.value);
+                          return;
                         }
-                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
-                        await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
-                        setSelectedIds(new Set());
-                        toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${opt.label}`);
+                        void applyBulkStatus(opt.value);
                       }}
                     >
                       {opt.label}
@@ -3221,18 +3745,23 @@ export function DispatchBoard() {
                     className="text-xs"
                     onSelect={async () => {
                       const ids = [...selectedIds];
-                      await Promise.all(
-                        ids.map((id) =>
-                          fetch(`/api/crm/visits/${id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ crew_id: null }),
-                          })
-                        )
-                      );
-                      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
-                      setSelectedIds(new Set());
-                      toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
+                      try {
+                        const results = await Promise.all(
+                          ids.map((id) =>
+                            fetch(`/api/crm/visits/${id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ crew_id: null }),
+                            })
+                          )
+                        );
+                        if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                        setSelectedIds(new Set());
+                        toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
+                      } catch {
+                        toast.error("Failed to unassign one or more visits");
+                      }
                     }}
                   >
                     Unassigned
@@ -3243,18 +3772,23 @@ export function DispatchBoard() {
                       className="text-xs"
                       onSelect={async () => {
                         const ids = [...selectedIds];
-                        await Promise.all(
-                          ids.map((id) =>
-                            fetch(`/api/crm/visits/${id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ crew_id: c.id }),
-                            })
-                          )
-                        );
-                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
-                        setSelectedIds(new Set());
-                        toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
+                        try {
+                          const results = await Promise.all(
+                            ids.map((id) =>
+                              fetch(`/api/crm/visits/${id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ crew_id: c.id }),
+                              })
+                            )
+                          );
+                          if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                          await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                          setSelectedIds(new Set());
+                          toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
+                        } catch {
+                          toast.error("Failed to reassign one or more visits");
+                        }
                       }}
                     >
                       {c.name}
@@ -3409,7 +3943,11 @@ export function DispatchBoard() {
         {optimizedOrder && totalDriveMins !== null && (
           <span className="ml-auto flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-blue-700 font-medium">
             <Route className="h-3 w-3" />
-            Route optimized · {totalDriveMins} min drive total
+            Route optimized · {routeStrategy === "furthest_first" ? "furthest first" : "nearest first"} ·{" "}
+            {totalDriveMins} min between stops
+            {shopLegMins !== null && (
+              <> · {shopLegMins} min {routeStrategy === "furthest_first" ? "back to shop" : "out from shop"}</>
+            )}
           </span>
         )}
       </div>
@@ -3494,6 +4032,7 @@ export function DispatchBoard() {
                   memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                   allVisits={allVisits}
+                  drivingCrewIds={drivingCrewIds}
                 />
               ))
             )}
@@ -3505,6 +4044,17 @@ export function DispatchBoard() {
           object captured at click time, so a save made on the row (or any
           other refetch while the sheet is open) is reflected immediately
           instead of only after closing and reopening it. */}
+      <VisitOutcomeReasonDialog
+        status={bulkOutcome}
+        count={selectedIds.size}
+        pending={bulkOutcomePending}
+        onConfirm={async (reason) => {
+          if (!bulkOutcome) return;
+          setBulkOutcomePending(true);
+          try { await applyBulkStatus(bulkOutcome, reason); } finally { setBulkOutcomePending(false); setBulkOutcome(null); }
+        }}
+        onCancel={() => setBulkOutcome(null)}
+      />
       {detailVisit && (
         <JobDetailSheet
           visit={detailVisit}
@@ -3562,14 +4112,18 @@ export function DispatchBoard() {
                     });
                     if (!r.ok) {
                       const body = await r.json().catch(() => ({}));
-                      throw new Error((body as { error?: string }).error ?? `HTTP ${r.status}`);
+                      const msg = (body as { error?: string }).error ?? `HTTP ${r.status}`;
+                      // 409 = package min-days rule ("Step 2 must be at least
+                      // N days after Step 1 (earliest MM/DD)") — show it as-is.
+                      throw new Error(r.status === 409 ? msg : `Failed to move visits: ${msg}`);
                     }
                     await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                    await qc.invalidateQueries({ queryKey: ["clients"] });
                     setSelectedIds(new Set());
                     setMoveDayOpen(false);
                     toast.success(`Moved ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${moveDayDate}`);
                   } catch (err) {
-                    toast.error(`Failed to move visits: ${err instanceof Error ? err.message : "unknown error"}`);
+                    toast.error(err instanceof Error ? err.message : "Failed to move visits");
                   }
                 }}
               >

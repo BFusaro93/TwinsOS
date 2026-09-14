@@ -389,7 +389,6 @@ export function LineItemsTable({
                 <div className="flex flex-1 flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
                   <DecimalInput
-                    min={0}
                     value={editForm.unitCost}
                     onCommit={(n) => setEditForm((f) => ({ ...f, unitCost: n }))}
                     selectOnFocus
@@ -513,7 +512,6 @@ export function LineItemsTable({
                 <div className="flex flex-1 flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
                   <DecimalInput
-                    min={0}
                     value={addForm.unitCost}
                     onCommit={(n) => setAddForm((f) => ({ ...f, unitCost: n }))}
                     selectOnFocus

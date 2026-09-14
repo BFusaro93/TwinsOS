@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { CreditCard, Check, Loader2 } from "lucide-react";
@@ -16,6 +17,10 @@ import {
   useSmsUsage,
 } from "@/lib/hooks/use-billing";
 import type { BillablePlan } from "@/lib/stripe/plans";
+import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
+import { isBillablePlan } from "@/lib/stripe/plans";
+import { addonAppliesToModules, type AddonKey } from "@/lib/stripe/addons";
+import { PlanComparisonTable } from "./PlanComparisonTable";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
 
@@ -37,6 +42,7 @@ function formatPrice(amountCents: number | null, currency: string | null, interv
 }
 
 export function SubscriptionTab() {
+  const searchParams = useSearchParams();
   const { data: billing, isLoading: billingLoading } = useBillingInfo();
   const { data: plansData, isLoading: plansLoading } = usePlans();
   const createCheckoutSession = useCreateCheckoutSession();
@@ -45,9 +51,10 @@ export function SubscriptionTab() {
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [addonError, setAddonError] = useState<string | null>(null);
+  const [showComparison, setShowComparison] = useState(false);
+  const autoSubscribeTriggered = useRef(false);
 
   const isActiveSubscriber = ACTIVE_STATUSES.has(billing?.stripeSubscriptionStatus ?? "");
-  const moduleLabels: Record<string, string> = { landscapt: "Landscapt", equipt: "Equipt" };
   const smsEnabled = billing?.enabledAddons.includes("sms") ?? false;
   const { data: smsUsage } = useSmsUsage(smsEnabled);
 
@@ -82,6 +89,23 @@ export function SubscriptionTab() {
     }
   }
 
+  // Landed here via the signup plan picker (organizations.pending_plan) —
+  // open checkout for the chosen plan automatically, once, as soon as the
+  // live plan catalog is loaded.
+  useEffect(() => {
+    const autoSubscribe = searchParams.get("autoSubscribe");
+    if (
+      !autoSubscribeTriggered.current &&
+      autoSubscribe &&
+      isBillablePlan(autoSubscribe) &&
+      plansData?.stripeEnabled
+    ) {
+      autoSubscribeTriggered.current = true;
+      handleSubscribe(autoSubscribe);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, plansData?.stripeEnabled]);
+
   async function handleManageBilling() {
     try {
       const { url } = await createPortalSession.mutateAsync();
@@ -115,6 +139,9 @@ export function SubscriptionTab() {
       </div>
     );
   }
+
+  const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
+  const currentPlanModules = currentPlan?.modules ?? ["landscapt", "equipt"];
 
   return (
     <div className="flex flex-col gap-4">
@@ -174,17 +201,17 @@ export function SubscriptionTab() {
             <div key={p.plan} className="flex flex-col rounded-lg border bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.label}</p>
               <p className="mt-1 text-xl font-bold text-slate-900">{priceLabel}</p>
-              <p className="mt-2 text-xs text-slate-500">
-                {p.modules.map((m) => moduleLabels[m] ?? m).join(" + ")}
+              <ul className="mt-3 flex flex-col gap-1.5">
+                {getHighlightsForPlan(p.plan as BillablePlan).map((h) => (
+                  <li key={h} className="flex items-start gap-1.5 text-xs text-slate-600">
+                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-brand-600" />
+                    {h}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-slate-400">
+                +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after included seats
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {p.seatsIncluded} seats included · +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after
-              </p>
-              {p.bundledAddons.length > 0 && (
-                <p className="mt-1 text-xs text-slate-500">
-                  Includes: {p.bundledAddons.map((a) => a.replace(/_/g, " ")).join(", ")}
-                </p>
-              )}
               <div className="mt-4 flex-1" />
               <Button
                 className="mt-2 bg-brand-500 hover:bg-brand-600"
@@ -209,12 +236,28 @@ export function SubscriptionTab() {
 
       {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
 
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowComparison((v) => !v)}
+          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          {showComparison ? "Hide full plan comparison" : "Compare all plans in detail →"}
+        </button>
+        {showComparison && (
+          <div className="mt-4">
+            <PlanComparisonTable />
+          </div>
+        )}
+      </div>
+
       {/* Add-ons */}
       <div className="rounded-lg border bg-white p-5 shadow-sm">
         <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Add-ons</p>
         <div className="flex flex-col divide-y divide-slate-100">
-          {plansData.addons.map((a) => {
-            const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
+          {plansData.addons
+            .filter((a) => addonAppliesToModules(a.key as AddonKey, currentPlanModules))
+            .map((a) => {
             const bundled = currentPlan?.bundledAddons.includes(a.key) ?? false;
             const enabled = bundled || (billing?.enabledAddons.includes(a.key) ?? false);
             const priceLabel = a.configured ? formatPrice(a.amountCents, a.currency, a.interval) ?? "Contact us" : "Not configured";

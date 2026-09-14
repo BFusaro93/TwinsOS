@@ -10,8 +10,11 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
+import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
+import { orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { logger } from "@/lib/logger";
 
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+const log = logger.child("email-invoice");
 
 const DEFAULT_SUBJECT = "Invoice #[invoicenumber] from [companyname] — [invoicetotal] due [duedate]";
 const DEFAULT_BODY = `<p>Hi [clientfirstname],</p>
@@ -275,7 +278,7 @@ export async function POST(req: NextRequest) {
 
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
   const { data: sendData, error: sendErr } = await resend.emails.send({
-    from: FROM,
+    from: orgEmailFrom(org?.name),
     to: toEmails,
     subject: resolvedSubject,
     html,
@@ -284,8 +287,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (sendErr) {
-    console.error("[email-invoice] Resend error:", sendErr);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    // Same mapping as the estimate send route: an undeliverable/rejected
+    // address is a 422 carrying the provider's reason (so the toast can say
+    // WHY), quota is 429, anything else is a 502 — never a bare 500.
+    log.error("Resend error", { invoiceId, to: toEmails.join(", "), code: sendErr.name, message: sendErr.message });
+    const mapped = mapSendError(sendErr, "the invoice");
+    return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 
   const toEmailsJoined = toEmails.join(", ");
@@ -296,6 +303,12 @@ export async function POST(req: NextRequest) {
   if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
+  }
+
+  // Push to QuickBooks now that the invoice has gone out — never throws, so
+  // a QuickBooks outage can't fail an invoice send.
+  if (profile?.org_id) {
+    await pushInvoiceToQuickBooks(supabase, profile.org_id, invoiceId);
   }
 
   if (inv.client_id && profile?.org_id) {

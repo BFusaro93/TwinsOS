@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,6 +16,8 @@ import {
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +46,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency, cn } from "@/lib/utils";
 import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
+import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
+import { computeGroupAmountCents, splitGroupAmountByVisit } from "@/lib/snow-billing";
 import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
@@ -86,9 +90,12 @@ function StatusIcon({ status }: { status: VisitStatus }) {
 }
 
 function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
+  const { can } = usePermissions();
+  const canManage = can("snow_dispatch_manage");
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
   async function cycle(e: React.MouseEvent) {
     e.stopPropagation();
+    if (!canManage) return;
     const i = STATUS_CYCLE.indexOf(visit.status);
     const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
     try {
@@ -98,7 +105,7 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
     }
   }
   return (
-    <button onClick={cycle} disabled={isPending} title={visit.status} className={cn("flex items-center justify-center", isPending && "opacity-50")}>
+    <button onClick={cycle} disabled={isPending || !canManage} title={visit.status} className={cn("flex items-center justify-center", isPending && "opacity-50")}>
       <StatusIcon status={visit.status} />
     </button>
   );
@@ -370,7 +377,16 @@ function SnowCrewAssignDialog({
   const { mutateAsync: updateVisit } = useUpdateVisit();
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  // Tap-to-place fallback for touch — iOS Safari never fires HTML5 drag events,
+  // so the drag paths below are dead on a tablet. Mirrors the main Dispatch
+  // Board's TeamAssignDialog; there are no crew-member chips on snow, only visits.
+  const [heldVisitId, setHeldVisitId] = useState<string | null>(null);
   const unassigned = visits.filter((v) => !v.crewId);
+  const heldVisit = heldVisitId ? visits.find((v) => v.id === heldVisitId) ?? null : null;
+
+  useEffect(() => {
+    if (!open) setHeldVisitId(null);
+  }, [open]);
 
   async function reassign(visitId: string, crewId: string | null, jobId?: string) {
     try {
@@ -378,6 +394,15 @@ function SnowCrewAssignDialog({
     } catch {
       toast.error("Failed to reassign");
     }
+  }
+
+  /** Drop the held visit on a crew, or on null to send it back to the pool.
+   *  Dropping it where it already is just cancels, which is also how tapping
+   *  the held card a second time clears it. */
+  async function place(crewId: string | null) {
+    const v = heldVisit;
+    setHeldVisitId(null);
+    if (v && v.crewId !== crewId) await reassign(v.id, crewId, v.jobId);
   }
 
   // Mirrors the main Dispatch Board's TeamAssignDialog "Dispatch Assigned"
@@ -408,32 +433,75 @@ function SnowCrewAssignDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[85vh] flex flex-col">
+      <DialogContent
+        className="max-w-3xl p-0 gap-0 max-h-[85vh] flex flex-col"
+        // Escape cancels a pick-up first; a second press closes the dialog.
+        onEscapeKeyDown={(e) => {
+          if (heldVisit) {
+            e.preventDefault();
+            setHeldVisitId(null);
+          }
+        }}
+      >
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">Team Assignment</DialogTitle>
         </DialogHeader>
+        {heldVisit ? (
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 bg-brand-50 px-5 py-2">
+            <p className="text-xs text-brand-800">
+              Moving <span className="font-semibold">{heldVisit.clientName ?? "Visit"}</span> — tap a
+              crew, or Unassigned, to place it.
+            </p>
+            <button
+              onClick={() => setHeldVisitId(null)}
+              className="shrink-0 rounded border border-brand-300 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p className="shrink-0 border-b bg-slate-50 px-5 py-1.5 text-[11px] text-slate-400">
+            Drag a visit, or tap one to pick it up and tap where it should go.
+          </p>
+        )}
         <div className="flex flex-1 overflow-hidden">
           <div
-            className="w-52 shrink-0 border-r bg-green-50 p-4"
+            className={cn(
+              "w-52 shrink-0 border-r bg-green-50 p-4",
+              heldVisit && "cursor-pointer ring-2 ring-inset ring-brand-400"
+            )}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (dragVisitId) { const jId = visits.find((v) => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, null, jId); setDragVisitId(null); } }}
+            onClick={() => void place(null)}
           >
             <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">Unassigned ({unassigned.length})</p>
             <div className="space-y-1.5">
               {unassigned.length === 0 ? (
-                <p className="text-xs text-green-600 italic">All visits assigned</p>
+                <p className="text-xs text-green-600 italic">
+                  {heldVisit ? "Tap to unassign" : "All visits assigned"}
+                </p>
               ) : unassigned.map((v) => (
                 <div
                   key={v.id}
                   draggable
-                  onDragStart={() => setDragVisitId(v.id)}
+                  onDragStart={() => { setHeldVisitId(null); setDragVisitId(v.id); }}
                   onDragEnd={() => setDragVisitId(null)}
-                  className="rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing"
+                  // With a visit already held, let the click through to the pool
+                  // so it lands there; otherwise pick this card up.
+                  onClick={(e) => {
+                    if (heldVisit) return;
+                    e.stopPropagation();
+                    setHeldVisitId(v.id);
+                  }}
+                  className={cn(
+                    "rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing",
+                    heldVisitId === v.id && "ring-2 ring-brand-500 border-brand-300"
+                  )}
                 >
                   <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {crews.map((c) => (
-                      <button key={c.id} onClick={() => reassign(v.id, c.id, v.jobId)} className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5">
+                      <button key={c.id} onClick={(e) => { e.stopPropagation(); setHeldVisitId(null); void reassign(v.id, c.id, v.jobId); }} className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5">
                         → {c.name}
                       </button>
                     ))}
@@ -449,9 +517,13 @@ function SnowCrewAssignDialog({
                 return (
                   <div
                     key={crew.id}
-                    className="w-52 shrink-0 border-r p-4"
+                    className={cn(
+                      "w-52 shrink-0 border-r p-4",
+                      heldVisit && "cursor-pointer ring-2 ring-inset ring-brand-400"
+                    )}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => { if (dragVisitId) { const jId = visits.find((v) => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); } }}
+                    onClick={() => void place(crew.id)}
                   >
                     <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-2">{crew.name} ({crewVisits.length})</p>
                     <div className="space-y-1.5 min-h-[40px]">
@@ -459,14 +531,27 @@ function SnowCrewAssignDialog({
                         <div
                           key={v.id}
                           draggable
-                          onDragStart={() => setDragVisitId(v.id)}
+                          onDragStart={() => { setHeldVisitId(null); setDragVisitId(v.id); }}
                           onDragEnd={() => setDragVisitId(null)}
-                          className="rounded bg-slate-50 border px-2 py-1.5 group relative cursor-grab active:cursor-grabbing"
+                          onClick={(e) => {
+                            if (heldVisit) return;
+                            e.stopPropagation();
+                            setHeldVisitId(v.id);
+                          }}
+                          className={cn(
+                            // pr-7 keeps the client name clear of the ✕, which
+                            // sits in the corner permanently on touch screens.
+                            "rounded bg-slate-50 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
+                            heldVisitId === v.id && "ring-2 ring-brand-500"
+                          )}
                         >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
-                          <button onClick={() => reassign(v.id, null, v.jobId)} className="absolute top-1 right-1 hidden group-hover:flex text-[9px] text-slate-400 hover:text-red-500">✕</button>
+                          <button onClick={(e) => { e.stopPropagation(); setHeldVisitId(null); void reassign(v.id, null, v.jobId); }} className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500" title="Unassign">✕</button>
                         </div>
                       ))}
+                      {crewVisits.length === 0 && heldVisit && (
+                        <p className="text-[10px] text-slate-300 italic">Tap to place here</p>
+                      )}
                     </div>
                   </div>
                 );
@@ -609,8 +694,17 @@ function CloseOutDialog({
 
   async function handleCloseOut() {
     try {
-      const qty = materialQty ? parseFloat(materialQty) : 1;
+      const totalQty = materialQty ? parseFloat(materialQty) : 1;
       const unitCostCents = materialUnitCost ? Math.round(parseFloat(materialUnitCost) * 100) : 0;
+      const totalHours = actualHours ? parseFloat(actualHours) : null;
+      // The qty/hours fields are entered once for the whole batch (e.g. "10
+      // bags of salt" / "2.5 hrs" for this close-out), not per stop — split
+      // evenly across the selected visits so a multi-stop close-out doesn't
+      // multiply material cost and actual hours by the visit count in Job
+      // Costing/COGS and hourly-billed invoicing (both key off per-visit
+      // values). A single-visit close-out is unaffected (divide by 1).
+      const qty = totalQty / visits.length;
+      const hoursPerVisit = totalHours !== null ? totalHours / visits.length : null;
       await Promise.all(visits.map((v) => updateVisit({
         id: v.id,
         jobId: v.jobId,
@@ -624,7 +718,7 @@ function CloseOutDialog({
           materials_used: materialName
             ? [{ name: materialName, qty, rate_cents: unitCostCents }]
             : [],
-          ...(actualHours ? { actual_hours: parseFloat(actualHours) } : {}),
+          ...(hoursPerVisit !== null ? { actual_hours: hoursPerVisit } : {}),
         },
       })));
       // materials_used on crm_job_visits is display-only — it never feeds
@@ -717,6 +811,8 @@ const STATUS_PILL: Record<StormEventStatus, string> = {
 };
 
 export function SnowDispatchBoard() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canManage = can("snow_dispatch_manage");
   const { data: events = [], isLoading: eventsLoading, refetch: refetchEvents } = useStormEvents();
   const { data: crews = [] } = useCRMCrews();
   const { mutateAsync: updateStormEvent } = useUpdateStormEvent();
@@ -746,35 +842,82 @@ export function SnowDispatchBoard() {
 
   async function advanceStatus(next: StormEventStatus) {
     if (!activeEvent) return;
+    // Client-side check first (fast feedback, matches the count of stops
+    // already loaded for this storm event) — the DB trigger
+    // (enforce_storm_event_completion_gate, see
+    // 20260902160000_snow_storm_completion_gate.sql) is the authoritative
+    // backstop in case this check is ever bypassed (stale visits list,
+    // direct write, future code path).
+    if (next === "complete") {
+      const openVisits = visits.filter(
+        (v) => v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled"
+      );
+      if (openVisits.length > 0) {
+        toast.error(
+          `${openVisits.length} stop${openVisits.length > 1 ? "s" : ""} still need to be completed or skipped before closing this storm event.`
+        );
+        return;
+      }
+    }
     try {
       await updateStormEvent({ id: activeEvent.id, patch: { dispatch_status: next } });
       toast.success(`Storm event marked ${next}`);
-    } catch {
-      toast.error("Failed to update status");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
     }
   }
 
-  // per_event/per_event_per_inch jobs bill once per storm, not per visit —
-  // summing every visit row here double-counted a job with a morning +
-  // afternoon push in the same storm. Collapse to one representative visit
-  // per billingGroupKey (matching what use-snow-invoicing.ts will actually
-  // invoice) before summing.
-  const billableVisits = useMemo(() => {
-    const seen = new Map<string, CRMJobVisit>();
+  // Preview amounts use the same per-invoice-type math (per_event,
+  // per_event_per_inch w/ rate tiers, per_push_per_inch, hourly) as the real
+  // invoice generation in use-snow-invoicing.ts/SnowInvoicing.tsx — a naive
+  // per-visit rateCents undercounted/overcounted every non-flat-rate job.
+  const perEventPerInchJobIds = useMemo(
+    () => visits.filter((v) => v.job?.invoiceType === "per_event_per_inch" && v.job?.id).map((v) => v.job!.id),
+    [visits]
+  );
+  const { data: tiersByJobId } = useSnowRateTiersForJobs(perEventPerInchJobIds);
+
+  const amountByVisitId = useMemo(() => {
+    const byGroup = new Map<string, CRMJobVisit[]>();
     for (const v of visits) {
       const key = billingGroupKey(v);
-      if (!seen.has(key)) seen.set(key, v);
+      if (!byGroup.has(key)) byGroup.set(key, []);
+      byGroup.get(key)!.push(v);
     }
-    return Array.from(seen.values());
-  }, [visits]);
-  const totalAmt = billableVisits.reduce((s, v) => s + (v.rateCents ?? v.job?.rateCents ?? 0), 0);
+    const result = new Map<string, number>();
+    for (const groupVisits of byGroup.values()) {
+      const total = computeGroupAmountCents(groupVisits, tiersByJobId);
+      for (const [visitId, amount] of splitGroupAmountByVisit(groupVisits, total)) {
+        result.set(visitId, amount);
+      }
+    }
+    return result;
+  }, [visits, tiersByJobId]);
+  // amountByVisitId's per-group split always sums back to the exact group
+  // total, so summing it here is equivalent to (and cheaper than) re-deriving
+  // one representative visit's group amount per billingGroupKey.
+  const totalAmt = useMemo(
+    () => Array.from(amountByVisitId.values()).reduce((s, a) => s + a, 0),
+    [amountByVisitId]
+  );
+
+  if (!permissionsLoading && !can("snow_dispatch_view")) {
+    return (
+      <EmptyState
+        icon={Snowflake}
+        title="No access"
+        description="You don't have permission to view Snow Dispatch."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader title="Snow Jobs" description="Storm-based scheduling and service entry" />
 
-      {/* Storm event bar */}
-      <div className="flex items-center gap-3 px-4 shrink-0">
+      {/* Storm event bar — wraps so the action group drops to its own line
+          rather than running off the edge on a tablet. */}
+      <div className="flex flex-wrap items-center gap-3 px-4 shrink-0">
         <Snowflake className="h-4 w-4 text-brand-500" />
         <Select value={effectiveEventId} onValueChange={setSelectedEventId}>
           <SelectTrigger className="h-9 w-64 text-sm"><SelectValue placeholder="Select a storm event…" /></SelectTrigger>
@@ -784,32 +927,40 @@ export function SnowDispatchBoard() {
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setNewEventOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />New Storm Event
-        </Button>
+        {canManage && (
+          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setNewEventOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />New Storm Event
+          </Button>
+        )}
 
         {activeEvent && (
           <>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
-                  {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
-                  <ChevronDown className="h-3 w-3" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onSelect={() => advanceStatus("pending")}>Pending</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => advanceStatus("working")}>Working (Dispatch)</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => advanceStatus("complete")}>Complete</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {canManage ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
+                    {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onSelect={() => advanceStatus("pending")}>Pending</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => advanceStatus("working")}>Working (Dispatch)</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => advanceStatus("complete")}>Complete</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <span className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
+                {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
+              </span>
+            )}
             {activeEvent.forecastDepthInches != null && (
               <Badge variant="secondary" className="text-xs">{activeEvent.forecastDepthInches}&quot; forecast</Badge>
             )}
           </>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             onClick={() => { void refetchEvents(); void refetchVisits(); }}
             className="h-9 w-9 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:text-slate-800"
@@ -817,15 +968,19 @@ export function SnowDispatchBoard() {
           >
             <RefreshCw className="h-4 w-4" />
           </button>
-          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setCrewAssignOpen(true)} disabled={!activeEvent}>
-            <Users className="h-3.5 w-3.5" />Team Assign
-          </Button>
+          {canManage && (
+            <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setCrewAssignOpen(true)} disabled={!activeEvent}>
+              <Users className="h-3.5 w-3.5" />Team Assign
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setPrintOpen(true)} disabled={!activeEvent}>
             <Printer className="h-3.5 w-3.5" />Print
           </Button>
-          <Button size="sm" className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
-            <Plus className="h-3.5 w-3.5" />Add Jobs
-          </Button>
+          {canManage && (
+            <Button size="sm" className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
+              <Plus className="h-3.5 w-3.5" />Add Jobs
+            </Button>
+          )}
         </div>
       </div>
 
@@ -834,9 +989,11 @@ export function SnowDispatchBoard() {
         <div className="mx-4 flex items-center gap-2 rounded border bg-brand-50 px-3 py-2 shrink-0">
           <ListChecks className="h-4 w-4 text-brand-600" />
           <span className="text-xs font-medium text-brand-700">{selectedVisitIds.size} selected</span>
-          <Button size="sm" className="h-7 text-xs ml-2" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
-            Close Out…
-          </Button>
+          {canManage && (
+            <Button size="sm" className="h-7 text-xs ml-2" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
+              Close Out…
+            </Button>
+          )}
           <button className="ml-auto text-xs text-slate-400 hover:text-slate-600" onClick={() => setSelectedVisitIds(new Set())}>Clear</button>
         </div>
       )}
@@ -898,7 +1055,7 @@ export function SnowDispatchBoard() {
                       <td className="px-2 py-2 text-right text-slate-500">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>
                       <td className="px-2 py-2 text-right text-slate-500">{v.temperature != null ? `${v.temperature}°` : "—"}</td>
                       <td className="px-2 py-2 text-right font-medium text-slate-700">
-                        {(v.rateCents ?? v.job?.rateCents) != null ? formatCurrency(v.rateCents ?? v.job?.rateCents ?? 0) : "—"}
+                        {amountByVisitId.has(v.id) ? formatCurrency(amountByVisitId.get(v.id) ?? 0) : "—"}
                       </td>
                     </tr>
                   ))}

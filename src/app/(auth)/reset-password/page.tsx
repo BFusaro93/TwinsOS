@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Leaf } from "lucide-react";
+import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,7 +68,7 @@ function ResetPasswordForm() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push("/home");
     router.refresh();
   }
 
@@ -142,10 +142,9 @@ export default function ResetPasswordPage() {
     <div className="w-full max-w-sm">
       {/* Logo */}
       <div className="mb-8 flex flex-col items-center gap-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
-          <Leaf className="h-6 w-6 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900">Set Your Password</h1>
+        <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
+        <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">landscapt</h1>
+        <p className="text-sm font-medium text-slate-700">Set Your Password</p>
         <p className="text-sm text-slate-500">Choose a password to activate your account</p>
       </div>
 

@@ -55,6 +55,7 @@ export function usePackages(includeInactive = false) {
         .from("crm_packages")
         .select("*, crm_package_services(*)")
         .is("deleted_at", null)
+        .is("crm_package_services.deleted_at", null)
         .order("name")
         .order("sort_order", { foreignTable: "crm_package_services" });
       if (!includeInactive) q = q.eq("is_active", true);
@@ -147,7 +148,10 @@ export function useDeletePackageService() {
     mutationFn: async (id: string) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from("crm_package_services").delete().eq("id", id);
+      const { error } = await (supabase as any)
+        .from("crm_package_services")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-packages"] }),

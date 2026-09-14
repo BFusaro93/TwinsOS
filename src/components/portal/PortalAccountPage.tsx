@@ -297,10 +297,12 @@ export default function PortalAccountPage({
   client,
   email,
   contacts: initialContacts,
+  hasMultipleCompanies = false,
 }: {
   client: Client | null;
   email: string;
   contacts: Contact[];
+  hasMultipleCompanies?: boolean;
 }) {
   const [contacts, setContacts] = useState(initialContacts);
 
@@ -334,6 +336,14 @@ export default function PortalAccountPage({
           <p className="text-xs text-slate-400 mt-3">
             To update your name or email, contact your service provider.
           </p>
+          {hasMultipleCompanies && (
+            <a
+              href="/portal/select-org"
+              className="mt-3 inline-block text-xs font-medium text-brand-600 hover:underline"
+            >
+              Switch company →
+            </a>
+          )}
         </div>
 
         {/* Billing address */}

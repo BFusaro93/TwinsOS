@@ -36,6 +36,7 @@ export interface PortalSettingsRow {
   support_phone: string | null;
   allow_tickets: boolean;
   allow_estimates: boolean;
+  allow_documents: boolean;
   welcome_message: string | null;
   portal_ticket_categories: string[];
 }

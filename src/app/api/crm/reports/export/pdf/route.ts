@@ -5,6 +5,17 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { ReportExportDocument } from "@/components/crm/reports/pdf/ReportExportDocument";
 
+const groupedSchema = z.object({
+  grandTotal: z.array(z.string()),
+  groups: z.array(
+    z.object({
+      label: z.string(),
+      subtotal: z.array(z.string()),
+      rows: z.array(z.array(z.string())),
+    })
+  ),
+});
+
 const exportRequestSchema = z.object({
   title: z.string().min(1),
   sections: z
@@ -13,9 +24,26 @@ const exportRequestSchema = z.object({
         heading: z.string(),
         columns: z.array(z.string()),
         rows: z.array(z.array(z.string())),
+        /** Flat sections only — a pre-formatted totals row rendered bold after the data rows. */
+        totals: z.array(z.string()).optional(),
+        grouped: groupedSchema.optional(),
       })
     )
     .min(1),
+  charts: z
+    .array(
+      z.object({
+        title: z.string(),
+        bars: z.array(
+          z.object({
+            label: z.string(),
+            value: z.number(),
+            valueLabel: z.string(),
+          })
+        ),
+      })
+    )
+    .optional(),
 });
 
 // Renders whatever ReportResult data the authenticated client already fetched
@@ -55,6 +83,7 @@ export async function POST(request: Request) {
       title: parsed.data.title,
       generatedAt,
       sections: parsed.data.sections,
+      charts: parsed.data.charts,
     })
   );
 

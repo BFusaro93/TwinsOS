@@ -82,7 +82,10 @@ export interface EstimateDirectCost {
 export interface EstimateMilestone {
   id: string;
   orgId: string;
-  estimateId: string;
+  /** Null for a milestone added straight onto a project that had no estimate. */
+  estimateId: string | null;
+  /** Set once the estimate is converted, or immediately for a project-authored milestone. */
+  projectId: string | null;
   name: string;
   milestoneType: 'flat' | 'percent';
   /** Cents if milestoneType is 'flat', basis points (0-10000) if 'percent'. */
@@ -90,6 +93,8 @@ export interface EstimateMilestone {
   /** Snapshotted dollar amount actually billed — the source of truth for invoicing. */
   amountCents: number;
   sortOrder: number;
+  /** Optional planned billing date — milestones are triggered by progress, not dates. */
+  targetDate: string | null;
   status: 'pending' | 'invoiced';
   invoiceId: string | null;
   createdAt: string;
@@ -112,6 +117,9 @@ export interface Estimate {
   approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected';
   /** Set once, on first successful send. Anchor for "no response in N days" automation triggers. */
   sentAt: string | null;
+  /** Stamped when the client accepted through the client portal. Together with
+   *  estimate_share_tokens.accepted_at this is the estimate's "date sold". */
+  portalAcceptedAt: string | null;
   showDiscounts: boolean;
   estimateDate: string;
   validUntilDate: string | null;
@@ -148,6 +156,20 @@ export interface Estimate {
   depositReference: string | null;
   depositNotes: string | null;
   depositCollectedAt: string | null;
+  /** A deposit the client has submitted that Stripe has not settled yet.
+   *  An ACH debit sits in `processing` for 3–5 business days and writes
+   *  nothing to crm_payments until it clears, so without these the estimate
+   *  looks exactly like one where the client skipped the deposit. */
+  depositPendingCents: number | null;
+  depositPendingMethod: 'card' | 'us_bank_account' | null;
+  depositPendingAt: string | null;
+  /** The last deposit attempt the bank returned or the card network declined.
+   *  Cleared as soon as a deposit is recorded. While set with no deposit
+   *  collected, the client's proposal link is re-opened for a retry. */
+  depositFailedCents: number | null;
+  depositFailedMethod: 'card' | 'us_bank_account' | null;
+  depositFailedReason: string | null;
+  depositFailedAt: string | null;
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: DisplaySettings;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
       client_id: clientId,
       amount_cents: balanceCents,
       unused_amount_cents: overpaidCents,
-      payment_date: new Date().toISOString().slice(0, 10),
+      payment_date: isoNy(new Date()),
       method: methodForCardBrand(cardBrand),
       memo: overpaidCents > 0
         ? "Paid online via card (exceeds invoice balance — excess credited to account)"
@@ -131,17 +132,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const newPaid = invoiceBefore.amount_paid_cents + appliedCents;
-    const newBalance = Math.max(0, invoiceBefore.total_cents - newPaid);
-    const openStatus = invoiceBefore.status === "printed" ? "printed" : "sent";
-    const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
-    const wasNewlyPaid = newStatus === "paid" && invoiceBefore.status !== "paid";
-
-    const { error: updateErr } = await supabase
-      .from("crm_invoices")
-      .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
-      .eq("id", invoiceId);
-    if (updateErr) throw updateErr;
+    // Row-locked (SELECT ... FOR UPDATE inside the RPC) so a concurrent
+    // recording/edit/refund against this same invoice can't read the same
+    // stale amount_paid_cents and clobber this write — see
+    // apply_payment_to_invoice()'s own migration comment. A plain
+    // read-then-write here would reintroduce exactly the race that RPC was
+    // built to close.
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc("apply_payment_to_invoice", {
+      p_invoice_id: invoiceId,
+      p_delta_cents: appliedCents,
+    });
+    if (rpcErr) throw rpcErr;
+    const wasNewlyPaid = !!(rpcResult as { was_newly_paid?: boolean }[] | null)?.[0]?.was_newly_paid;
 
     if (wasNewlyPaid) {
       await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });

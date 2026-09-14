@@ -33,6 +33,7 @@ import { useSort } from "@/lib/hooks/use-sort";
 import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { PO_STATUS_LABELS } from "@/lib/constants";
 import { cn, formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { POStatus, PurchaseOrder } from "@/types";
 
 const STATUS_OPTIONS = (Object.keys(PO_STATUS_LABELS) as POStatus[]).map((k) => ({
@@ -52,6 +53,10 @@ const PO_COLUMNS: ColumnDef[] = [
 ];
 
 export function POListPage() {
+  // Shared with Equipt (/po/orders) — an Equipt-only user has no crm_role at
+  // all, so this only restricts users who actually have a Landscapt CRM role.
+  const { can, isAdmin, roleId } = usePermissions();
+  const canModifyPOs = isAdmin || !roleId || can("acct_add_modify_purchase_orders");
   const { data: orders, isLoading } = usePurchaseOrders();
   const { mutateAsync: bulkImportPOs } = useBulkImportPurchaseOrders();
   const { selectedPOId, setSelectedPOId } = usePOStore();
@@ -343,10 +348,12 @@ export function POListPage() {
               }
               onImport={(rows) => bulkImportPOs(rows)}
             />
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New PO
-            </Button>
+            {canModifyPOs && (
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New PO
+              </Button>
+            )}
           </div>
         }
       />

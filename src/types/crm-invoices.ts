@@ -81,6 +81,8 @@ export interface CRMInvoice {
   clientId: string;
   estimateId: string | null;
   crmJobId: string | null;
+  /** Project this invoice bills against — derived from crmJobId by a DB trigger when unset. */
+  projectId: string | null;
   salesRepId: string | null;
   description: string;
   status: InvoiceStatus;
@@ -118,6 +120,13 @@ export interface CRMInvoice {
   clientSavedPaymentMethodType?: "card" | "us_bank_account" | null;
   clientSavedPaymentMethodSummary?: string | null;
   clientAutopayEnabled?: boolean;
+  /** A Stripe charge is in flight against this invoice but hasn't settled — an
+   * ACH debit takes days. Nothing is written to crm_payments until it settles
+   * (that table only holds settled money), so without this the invoice looks
+   * untouched: same balance, same place in the "To Charge" queue. */
+  pendingPaymentCents?: number | null;
+  pendingPaymentMethod?: "card" | "us_bank_account" | null;
+  pendingPaymentAt?: string | null;
   salesRepName?: string | null;
   clientInvoiceDelivery?: 'email' | 'print' | 'both';
   lineItems?: InvoiceLineItem[];
@@ -149,6 +158,14 @@ export interface CRMPayment {
   clientName?: string;
   clientAddress?: string;
   invoiceNumber?: number;
+  // Present only for a split (multi-invoice) payment's entry in a single
+  // invoice's Payment History — see useInvoice() in use-invoices.ts.
+  // crm_payments.invoice_id is null for a split payment, so the payment's
+  // own amountCents is the FULL payment (across all invoices it was applied
+  // to); displayAmountCents is this invoice's actual allocated share and is
+  // what should be shown in that invoice's history.
+  displayAmountCents?: number;
+  isSplitAllocation?: boolean;
 }
 
 // ── contract ──────────────────────────────────────────────────────────────────

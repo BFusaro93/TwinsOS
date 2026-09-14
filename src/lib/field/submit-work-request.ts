@@ -1,3 +1,5 @@
+import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
+
 const VALID_PRIORITIES = new Set(["low", "medium", "high", "critical"]);
 
 function normalisePriority(raw: unknown): string {
@@ -103,14 +105,14 @@ export async function submitWorkRequest(
 
       if (eligible.length > 0) {
         const resend = new Resend(resendKey);
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
         const subject = `New maintenance request: ${input.title}`;
         const link = `${siteUrl}/cmms/requests?id=${mr.id}`;
 
         await Promise.allSettled(
           eligible.map((p: { email: string; name: string | null }) =>
             resend.emails.send({
-              from: "Equipt <noreply@twinslawnservice.com>",
+              from: EMAIL_FROM_EQUIPT,
               to: p.email,
               subject,
               html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">

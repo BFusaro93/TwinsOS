@@ -47,7 +47,7 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
   const { data: clients } = useClients();
   const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: create, isPending } = useCreateInvoice();
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -119,7 +119,7 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
               <SelectContent>
                 <SelectItem value="none">Unassigned</SelectItem>
                 {salesReps.map((e) => (
-                  <SelectItem key={e.userId as string} value={e.userId as string}>
+                  <SelectItem key={e.id} value={e.id}>
                     {e.firstName} {e.lastName}
                   </SelectItem>
                 ))}

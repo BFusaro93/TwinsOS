@@ -27,6 +27,17 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Same gate the Report Center applies to the "Client Referral" report
+  // (REPORT_PERMISSION_KEYS["client-referral"]) — this page shows the same
+  // balances/referral data, so it must not be reachable with a bare login.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "crm_rpt_client_referral",
+  });
+  if (allowed !== true) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("clients")
@@ -38,7 +49,7 @@ export async function GET() {
       created_at,
       balance_outstanding_cents,
       referred_by_client_id,
-      referrer:referred_by_client_id ( id, display_name )
+      referrer:referred_by_client_id ( id, display_name, deleted_at )
     `)
     .is("deleted_at", null)
     .not("referred_by_client_id", "is", null)
@@ -51,9 +62,12 @@ export async function GET() {
   for (const row of (data ?? []) as any[]) {
     const referrerId = row.referred_by_client_id as string;
     if (!byReferrer.has(referrerId)) {
+      // A soft-deleted referrer still exists as the FK target — attribute
+      // the referred clients to it, but don't surface its (deleted) name.
+      const referrerDeleted = Boolean(row.referrer?.deleted_at);
       byReferrer.set(referrerId, {
         referrerId,
-        referrerName: row.referrer?.display_name ?? "Unknown client",
+        referrerName: !referrerDeleted && row.referrer?.display_name ? row.referrer.display_name : "Unknown client",
         referredClients: [],
       });
     }

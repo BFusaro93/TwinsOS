@@ -12,10 +12,18 @@ export async function DELETE(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id")
     .eq("id", user.id)
     .single();
-  if (!profile || !["admin", "manager"].includes(profile.role ?? "")) {
+  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Granular per-role permission (shared with portal-invite) — admins
+  // always pass, otherwise gated by crm_roles.permissions.client_reset_portal_password.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "client_reset_portal_password",
+  });
+  if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -28,6 +36,7 @@ export async function DELETE(
     .select("id, user_id")
     .eq("client_id", clientId)
     .eq("org_id", profile.org_id)
+    .is("deleted_at", null)
     .single() as { data: { id: string; user_id: string } | null };
 
   if (!portalUser) {
@@ -51,13 +60,28 @@ export async function DELETE(
     .eq("client_id", clientId)
     .is("accepted_at", null);
 
-  // Delete the auth user via service role so the email can be reused
+  // Delete the auth user via service role so the email can be reused — but
+  // ONLY if this user has no other still-active portal link. Since
+  // client_portal_users supports one auth user holding a row per org (a
+  // client who is a portal user of two different orgs), deleting the auth
+  // user unconditionally here would destroy that OTHER org's login too and
+  // orphan its client_portal_users row (user_id pointing at a deleted auth
+  // user, blocking any future re-link by email).
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const adminClient = createServiceClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
-    await adminClient.auth.admin.deleteUser(portalUser.user_id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: otherActiveLinks } = await (adminClient as any)
+      .from("client_portal_users")
+      .select("id")
+      .eq("user_id", portalUser.user_id)
+      .is("deleted_at", null)
+      .limit(1);
+    if (!otherActiveLinks?.length) {
+      await adminClient.auth.admin.deleteUser(portalUser.user_id);
+    }
   }
 
   return NextResponse.json({ success: true });

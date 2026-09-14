@@ -1,5 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { CostMethod } from "@/lib/cost-methods";
 import type { CompanyAddress } from "@/stores/settings-store";
 
@@ -24,6 +25,7 @@ export interface OrgSettingsData {
   ccProcessingFeePercent: number;
   ccProcessingFeeThresholdDollars: number;
   achPaymentsEnabled: boolean;
+  crewHidePricing: boolean;
 }
 
 export interface UpdateOrgSettingsInput {
@@ -45,6 +47,7 @@ export interface UpdateOrgSettingsInput {
   ccProcessingFeePercent?: number;
   ccProcessingFeeThresholdDollars?: number;
   achPaymentsEnabled?: boolean;
+  crewHidePricing?: boolean;
 }
 
 function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
@@ -77,31 +80,29 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     ccProcessingFeeThresholdDollars:
       typeof row.cc_processing_fee_threshold_cents === "number" ? row.cc_processing_fee_threshold_cents / 100 : 500,
     achPaymentsEnabled: typeof row.ach_payments_enabled === "boolean" ? row.ach_payments_enabled : false,
+    crewHidePricing: typeof row.crew_hide_pricing === "boolean" ? row.crew_hide_pricing : false,
   };
 }
 
+async function fetchOrgSettings(queryClient: QueryClient): Promise<OrgSettingsData> {
+  const profile = await fetchCurrentProfile(queryClient);
+  if (!profile) throw new Error("Not authenticated");
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled, crew_hide_pricing")
+    .eq("id", profile.orgId)
+    .single();
+  if (error) throw error;
+  return mapOrgSettings(data as unknown as Record<string, unknown>);
+}
+
 export function useOrgSettings() {
+  const queryClient = useQueryClient();
   return useQuery<OrgSettingsData>({
     queryKey: ["org-settings"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", user.id)
-        .single();
-      if (profileErr) throw profileErr;
-
-      const { data, error } = await supabase
-        .from("organizations")
-        .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled")
-        .eq("id", profile.org_id)
-        .single();
-      if (error) throw error;
-      return mapOrgSettings(data as unknown as Record<string, unknown>);
-    },
+    queryFn: () => fetchOrgSettings(queryClient),
   });
 }
 
@@ -110,15 +111,9 @@ export function useUpdateOrgSettings() {
   return useMutation({
     mutationFn: async (rawInput: UpdateOrgSettingsInput) => {
       let input = rawInput;
+      const profile = await fetchCurrentProfile(queryClient);
+      if (!profile) throw new Error("Not authenticated");
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", user.id)
-        .single();
-      if (profileErr) throw profileErr;
 
       const patch: Record<string, unknown> = {};
       if (input.name !== undefined)          patch.name             = input.name;
@@ -138,6 +133,7 @@ export function useUpdateOrgSettings() {
       if (input.ccProcessingFeeThresholdDollars !== undefined)
         patch.cc_processing_fee_threshold_cents = Math.round(input.ccProcessingFeeThresholdDollars * 100);
       if (input.achPaymentsEnabled !== undefined) patch.ach_payments_enabled = input.achPaymentsEnabled;
+      if (input.crewHidePricing !== undefined) patch.crew_hide_pricing = input.crewHidePricing;
 
       // Merge customizations with existing values instead of replacing them
       if (input.googleMapsApiKey !== undefined) {
@@ -155,17 +151,26 @@ export function useUpdateOrgSettings() {
         const { data: existing } = await supabase
           .from("organizations")
           .select("customizations")
-          .eq("id", profile.org_id)
+          .eq("id", profile.orgId)
           .single();
         const prev = (existing?.customizations as Record<string, unknown>) ?? {};
         patch.customizations = { ...prev, ...input.customizations };
       }
 
-      const { error } = await supabase
+      // RLS (settings_permission_update_org) silently filters the row out for
+      // a user without company_settings/crm_settings — PostgREST then reports
+      // success with zero rows and the UI used to toast "saved" while nothing
+      // changed (D-20: Google Maps key "saved" but badge stayed Not Connected).
+      // Select the updated row back so a blocked write is a real error.
+      const { data: updated, error } = await supabase
         .from("organizations")
         .update(patch)
-        .eq("id", profile.org_id);
+        .eq("id", profile.orgId)
+        .select("id");
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        throw new Error("Save was blocked — you don't have permission to change organization settings.");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org-settings"] });

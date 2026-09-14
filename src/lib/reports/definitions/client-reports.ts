@@ -10,10 +10,21 @@ import {
   MONTH_LABELS,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { runAnalysis } from "@/lib/reports/engine";
+import { CLIENT_STATUSES, isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
+import { nyDateParts, ymd } from "@/lib/reports/ny-date";
+import type { AnalysisFilter } from "@/types/crm-reports";
 
 // ============================================================
 // Client section — pre-built reports.
 // ============================================================
+
+/** Analysis filter: only accounts that are/were clients (excludes lead + lost). */
+const CLIENT_STATUS_FILTER: AnalysisFilter = {
+  column: "status",
+  op: "in",
+  value: [...CLIENT_STATUSES],
+};
 
 export const CLIENT_REPORTS: PrebuiltReportDef[] = [
   {
@@ -122,7 +133,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...dateRangeFilters("client_since", params, { preset: "all_time" }),
         ...eqFilter("sales_rep", params.sales_rep),
-        { column: "status", op: "neq", value: "lead" },
+        CLIENT_STATUS_FILTER,
       ],
       groupBy: [],
       aggregates: [],
@@ -140,11 +151,10 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         key: "status",
         label: "Client Type",
         type: "select",
-        options: [
-          { value: "active", label: "Active" },
-          { value: "inactive", label: "Inactive" },
-          { value: "cancelled", label: "Cancelled" },
-        ],
+        options: CLIENT_STATUSES.map((s) => ({
+          value: s,
+          label: s.charAt(0).toUpperCase() + s.slice(1),
+        })),
       },
       {
         key: "payment_method",
@@ -166,7 +176,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...eqFilter("status", params.status),
         ...eqFilter("payment_method", params.payment_method),
-        { column: "status", op: "neq", value: "lead" },
+        CLIENT_STATUS_FILTER,
       ],
       groupBy: [],
       aggregates: [],
@@ -224,7 +234,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...dateRangeFilters("client_since", params),
         ...eqFilter("sales_rep", params.sales_rep),
-        { column: "status", op: "neq", value: "lead" },
+        CLIENT_STATUS_FILTER,
       ],
       groupBy: [],
       aggregates: [],
@@ -273,7 +283,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       const { from, to } = resolveDateRange(params, "this_year");
       let query = supabase
         .from("clients")
-        .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, profiles:sales_rep_id(name)")
+        .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .eq("status", "cancelled")
         .is("deleted_at", null);
       if (from) query = query.gte("closed_at", from);
@@ -285,7 +295,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         cancellation_reason: string | null;
         source: string | null;
         billing_zip: string | null;
-        profiles: { name: string | null } | null;
+        sales_rep: { first_name: string | null; last_name: string | null } | null;
       };
       const rows = (data ?? []) as unknown as Row[];
       const total = rows.length;
@@ -313,7 +323,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         { group_type: "Total", group_value: "All Cancellations", count: total, percent: 100 },
         ...breakdown("By Reason", (r) => r.cancellation_reason ?? ""),
         ...breakdown("By Source", (r) => r.source ?? ""),
-        ...breakdown("By Sales Rep", (r) => r.profiles?.name ?? ""),
+        ...breakdown("By Sales Rep", (r) => `${r.sales_rep?.first_name ?? ""} ${r.sales_rep?.last_name ?? ""}`.trim()),
         ...breakdown("By Postal Code", (r) => r.billing_zip ?? ""),
       ];
 
@@ -340,8 +350,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       const { from, to } = resolveDateRange(params, "this_year");
       let query = supabase
         .from("clients")
-        .select("source, billing_zip, client_since, profiles:sales_rep_id(name)")
-        .neq("status", "lead")
+        .select("source, billing_zip, client_since, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
+        .in("status", [...CLIENT_STATUSES])
         .is("deleted_at", null);
       if (from) query = query.gte("client_since", from);
       if (to) query = query.lte("client_since", to);
@@ -351,7 +361,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       type Row = {
         source: string | null;
         billing_zip: string | null;
-        profiles: { name: string | null } | null;
+        sales_rep: { first_name: string | null; last_name: string | null } | null;
       };
       const rows = (data ?? []) as unknown as Row[];
       const total = rows.length;
@@ -376,7 +386,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         { group_type: "Total", group_value: "All New Clients", count: total, percent: 100 },
         ...breakdown("By Postal Code", (r) => r.billing_zip ?? ""),
         ...breakdown("By Source", (r) => r.source ?? ""),
-        ...breakdown("By Sales Rep", (r) => r.profiles?.name ?? ""),
+        ...breakdown("By Sales Rep", (r) => `${r.sales_rep?.first_name ?? ""} ${r.sales_rep?.last_name ?? ""}`.trim()),
       ];
 
       return buildResult(
@@ -395,25 +405,38 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
   {
     key: "clients-by-completed-jobs",
     section: "client",
-    name: "Clients Report by Completed Jobs",
-    description: "Shows which clients were served in any defined time frame.",
+    name: "Clients Report by Completed Visits",
+    description:
+      "Shows which clients were served in any defined time frame — completed visits, revenue, and man-hours per client.",
     filters: [dateRangeFilterDef("Completed Between", "this_month")],
-    analysis: (params) => ({
-      dataset: "rpt_job_visits",
-      columns: [],
-      filters: [
-        { column: "status", op: "eq", value: "completed" },
-        ...dateRangeFilters("completed_at", params, { datetime: true }),
-      ],
-      groupBy: ["client_name"],
-      aggregates: [
-        { column: "*", fn: "count" },
-        { column: "revenue_cents", fn: "sum" },
-        { column: "man_hours", fn: "sum" },
-      ],
-      sortColumn: "count_all",
-      sortDir: "desc",
-    }),
+    notes: ["Counts completed visits (a recurring job contributes one row per completed visit), not distinct jobs."],
+    // Declarative aggregates always label count(*) as "Count"; this runs the
+    // same analysis and relabels that one column so the header says what the
+    // number actually is.
+    run: async ({ supabase, params }) => {
+      const result = await runAnalysis(supabase, {
+        dataset: "rpt_job_visits",
+        columns: [],
+        filters: [
+          { column: "status", op: "eq", value: "completed" },
+          ...dateRangeFilters("completed_at", params, { datetime: true }),
+        ],
+        groupBy: ["client_name"],
+        aggregates: [
+          { column: "*", fn: "count" },
+          { column: "revenue_cents", fn: "sum" },
+          { column: "man_hours", fn: "sum" },
+        ],
+        sortColumn: "count_all",
+        sortDir: "desc",
+      });
+      return {
+        ...result,
+        columns: result.columns.map((c) =>
+          c.key === "count_all" ? { ...c, label: "Completed Visits" } : c
+        ),
+      };
+    },
   },
   {
     key: "client-contracts",
@@ -482,6 +505,183 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         ["Monthly columns use the contract's per-month schedule when set, otherwise the flat monthly amount."]
+      );
+    },
+  },
+  {
+    key: "clients-leads-monthly-matrix",
+    section: "client",
+    name: "Clients/Leads Monthly Matrix",
+    description: "New clients, new leads, conversion rate, and terminations for the last 3 months.",
+    filters: [],
+    notes: [
+      "New Leads = accounts created in the month (any current status). Converted = accounts whose Client Since date falls in the month and that are/were clients. Conversion % = Converted ÷ New Leads.",
+    ],
+    run: async ({ supabase }) => {
+      // Month boundaries as they read in America/New_York (the org's operating
+      // timezone) — a UTC-derived month would roll over hours early.
+      const { year: nyYear, month: nyMonth } = nyDateParts(new Date());
+      const months = [2, 1, 0].map((back) => {
+        const d = new Date(Date.UTC(nyYear, nyMonth - back, 1));
+        const y = d.getUTCFullYear();
+        const m = d.getUTCMonth();
+        return {
+          key: `${y}-${String(m + 1).padStart(2, "0")}`,
+          label: `${MONTH_LABELS[m]} ${y}`,
+          start: ymd(y, m, 1),
+          end: ymd(y, m + 1, 0),
+        };
+      });
+      const earliestStart = months[0].start;
+
+      const { data, error } = await supabase
+        .from("clients")
+        .select("status, client_since, created_at, closed_at")
+        .is("deleted_at", null)
+        .or(
+          `client_since.gte.${earliestStart},created_at.gte.${earliestStart},closed_at.gte.${earliestStart}`
+        )
+        .limit(10000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        status: string | null;
+        client_since: string | null;
+        created_at: string | null;
+        closed_at: string | null;
+      };
+      const rows = (data ?? []) as unknown as Row[];
+
+      // `client_since` is a date; `created_at`/`closed_at` are timestamptz, so
+      // take the NY calendar date of those instants before comparing.
+      function toNyDay(dateStr: string | null): string | null {
+        if (!dateStr) return null;
+        if (dateStr.length === 10) return dateStr;
+        const { year, month, day } = nyDateParts(new Date(dateStr));
+        return ymd(year, month, day);
+      }
+      function inMonth(dateStr: string | null, m: (typeof months)[number]): boolean {
+        const d = toNyDay(dateStr);
+        return !!d && d >= m.start && d <= m.end;
+      }
+
+      const newClients: Record<string, number> = {};
+      const newLeads: Record<string, number> = {};
+      const terminated: Record<string, number> = {};
+      for (const m of months) {
+        // Converted in month: became a client (client_since) that month and is
+        // still a client-status account. 'lost' leads never have client_since.
+        newClients[m.key] = rows.filter((r) => isClientStatus(r.status) && inMonth(r.client_since, m)).length;
+        // New leads: every account created that month, whatever it is now —
+        // a lead that converted or was lost still started as a lead.
+        newLeads[m.key] = rows.filter((r) => inMonth(r.created_at, m)).length;
+        terminated[m.key] = rows.filter((r) => r.status === "cancelled" && inMonth(r.closed_at, m)).length;
+      }
+
+      const metricRow = (
+        label: string,
+        values: Record<string, number>,
+        format: (n: number) => string | number
+      ) => {
+        const out: Record<string, string | number> = { metric: label };
+        for (const m of months) out[m.key] = format(values[m.key]);
+        return out;
+      };
+
+      const resultRows = [
+        metricRow("New Clients (Converted)", newClients, (n) => n),
+        metricRow("New Leads", newLeads, (n) => n),
+        {
+          metric: "Conversion %",
+          ...Object.fromEntries(
+            months.map((m) => [
+              m.key,
+              newLeads[m.key] > 0 ? Math.round((newClients[m.key] / newLeads[m.key]) * 1000) / 10 : 0,
+            ])
+          ),
+        },
+        metricRow("Terminated", terminated, (n) => n),
+      ];
+
+      return buildResult(
+        [
+          col("metric", "Metric"),
+          ...months.map((m) => col(m.key, m.label, "number", false)),
+        ],
+        resultRows
+      );
+    },
+  },
+  {
+    key: "clients-leads-stats",
+    section: "client",
+    name: "Clients and Leads",
+    description: "New leads, converted leads, average days to convert, and cancellations for a date range, plus current totals.",
+    filters: [dateRangeFilterDef("Date Range", "this_year")],
+    notes: [
+      "New Leads = accounts created in range that are still leads (open or lost). Converted Leads = accounts whose Client Since date falls in range. Avg Days to Convert = created → Client Since, over converted accounts whose Client Since is after their created date (accounts created directly as clients are excluded). Total Clients = active + inactive + cancelled; Total Leads = open leads only.",
+    ],
+    run: async ({ supabase, params }) => {
+      const { from, to } = resolveDateRange(params, "this_year");
+
+      const { data, error } = await supabase
+        .from("clients")
+        .select("status, client_since, created_at, closed_at")
+        .is("deleted_at", null)
+        .limit(20000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        status: string | null;
+        client_since: string | null;
+        created_at: string | null;
+        closed_at: string | null;
+      };
+      const rows = (data ?? []) as unknown as Row[];
+
+      // `client_since` is a date; `created_at`/`closed_at` are timestamptz —
+      // compare on the NY calendar date so the range edges are inclusive.
+      function toNyDay(dateStr: string | null): string | null {
+        if (!dateStr) return null;
+        if (dateStr.length === 10) return dateStr;
+        const { year, month, day } = nyDateParts(new Date(dateStr));
+        return ymd(year, month, day);
+      }
+      function inRange(dateStr: string | null): boolean {
+        const d = toNyDay(dateStr);
+        return !!d && (!from || d >= from) && (!to || d <= to);
+      }
+
+      const newLeads = rows.filter((r) => isLeadStatus(r.status) && inRange(r.created_at));
+      const convertedLeads = rows.filter((r) => isClientStatus(r.status) && inRange(r.client_since));
+      const cancelledClients = rows.filter((r) => r.status === "cancelled" && inRange(r.closed_at));
+      const totalClients = rows.filter((r) => isClientStatus(r.status)).length;
+      const totalLeads = rows.filter((r) => r.status === "lead").length;
+
+      // Days from account creation to conversion. Only accounts that actually
+      // spent time as a lead count — client_since strictly after the created
+      // date; same-day/backfilled rows would drag the average toward 0.
+      const convertDays = convertedLeads
+        .map((r) => ({ since: toNyDay(r.client_since), created: toNyDay(r.created_at) }))
+        .filter((r): r is { since: string; created: string } => !!r.since && !!r.created && r.since > r.created)
+        .map((r) => (Date.parse(`${r.since}T00:00:00Z`) - Date.parse(`${r.created}T00:00:00Z`)) / 86400000);
+      const avgDaysToConvert =
+        convertDays.length > 0
+          ? Math.round((convertDays.reduce((a, b) => a + b, 0) / convertDays.length) * 100) / 100
+          : 0;
+
+      const resultRows = [
+        { metric: "New Leads", value: newLeads.length },
+        { metric: "Converted Leads", value: convertedLeads.length },
+        { metric: "Avg Days to Convert", value: avgDaysToConvert },
+        { metric: "Cancelled Clients", value: cancelledClients.length },
+        { metric: "Total Clients", value: totalClients },
+        { metric: "Total Leads", value: totalLeads },
+      ];
+
+      return buildResult(
+        [col("metric", "Metric"), col("value", "Value", "number", false)],
+        resultRows
       );
     },
   },

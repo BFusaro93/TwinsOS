@@ -44,10 +44,27 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, UserCheck, Search, XCircle, Building2, Home, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import { ACCOUNT_TYPE_COLOR } from "@/lib/account-type-colors";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
+
+/** "Date added" for the leads table: the lead-specific client_since date when
+ *  set, else the row's created_at. Both are rendered in the browser's local
+ *  timezone — a date-only string is pinned to noon so it can't roll back a day
+ *  in negative-offset zones, and a timestamp is formatted as-is (never via
+ *  toISOString().slice(0,10), which is UTC and reads as tomorrow after ~8 PM ET). */
+function formatDateAdded(lead: Client): string {
+  const fmt: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
+  if (lead.clientSince) return new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", fmt);
+  if (lead.createdAt) {
+    const d = new Date(lead.createdAt);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString("en-US", fmt);
+  }
+  return "—";
+}
 
 // ── Column visibility ─────────────────────────────────────────────────────────
 
@@ -68,26 +85,27 @@ const LEAD_DEFAULT_VISIBLE: Record<string, boolean> = {
   zip: false,
 };
 
-function LeadRevenuePotential({ leadId }: { leadId: string }) {
+/** Sum of open (not accepted/lost) estimate totals for a lead. Shared by the table and list views. */
+export function LeadRevenuePotential({ leadId, className, hideEmpty }: { leadId: string; className?: string; hideEmpty?: boolean }) {
   const { data: estimates } = useEstimates(leadId);
   const open = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
   const total = open.reduce((sum, e) => sum + e.totalCents, 0);
-  if (total <= 0) return <span className="text-slate-300">—</span>;
-  return <span className="font-medium text-green-700">{formatCurrency(total)}</span>;
+  if (total <= 0) return hideEmpty ? null : <span className="text-slate-300">—</span>;
+  return <span className={cn("font-medium text-green-700", className)}>{formatCurrency(total)}</span>;
 }
-
-const SOURCE_OPTIONS = [
-  "Referral", "Google", "Facebook", "Door Hanger", "Yard Sign",
-  "Direct Mail", "Website", "Phone Call", "Other",
-];
 
 const CLOSE_REASONS = ["Price", "No response", "Went with competitor", "Not ready", "Out of service area", "Other"];
 
 // ── New lead dialog ───────────────────────────────────────────────────────────
 
-function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+/** Exported so the Leads page can mount it once at page level — it has to open
+ *  from the header button in BOTH the List and Table views, not just when
+ *  LeadsList (the table) happens to be rendered. */
+export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { mutateAsync: createLead, isPending } = useCreateLead();
   const router = useRouter();
+  // Same org-level source list the Edit Client dialog uses (A-06).
+  const { options: sourceOptions } = useClientSourceOptions();
 
   const [form, setForm] = useState({
     displayName: "", accountType: "residential", primaryPhone: "", primaryEmail: "", source: "",
@@ -138,7 +156,7 @@ function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
               <Label>Source</Label>
               <Select value={form.source} onValueChange={(v) => patch("source", v)}>
                 <SelectTrigger><SelectValue placeholder="How found?" /></SelectTrigger>
-                <SelectContent>{SOURCE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                <SelectContent>{sourceOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -315,6 +333,13 @@ interface LeadsListProps {
 export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: LeadsListProps = {}) {
   const { data: leads, isLoading } = useLeads();
   const { mutateAsync: bulkClose } = useBulkCloseLeadsAsLost();
+  const { can } = usePermissions();
+  // lead_allow_delete doubles as the gate for this app's closest equivalent
+  // to deleting a lead — closing it as lost — since there's no actual
+  // delete action anywhere for leads (same reasoning as client_allow_delete
+  // on ClientsTable.tsx).
+  const canCloseLead = can("lead_allow_delete");
+  const canConvertLead = can("lead_convert_close");
   const { fields: FILTER_FIELDS } = useLeadFilterFields();
   const [search, setSearch] = useState("");
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
@@ -390,13 +415,15 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuLabel className="text-xs text-slate-400 font-normal">{selectedCount} selected</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <button
-                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600"
-                onClick={() => setBulkCloseOpen(true)}
-              >
-                <XCircle className="h-3.5 w-3.5" />
-                Close as Lost
-              </button>
+              {canCloseLead && (
+                <button
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600"
+                  onClick={() => setBulkCloseOpen(true)}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Close as Lost
+                </button>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
@@ -530,19 +557,21 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                     )}
                     {cols.dateAdded && (
                       <td className="px-4 py-2.5 text-xs text-slate-400">
-                        {lead.clientSince
-                          ? new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                          : "—"}
+                        {formatDateAdded(lead)}
                       </td>
                     )}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                        <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); setConvertLead(lead); }}>
-                          <UserCheck className="h-3 w-3" /> Convert
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px] text-red-500 hover:text-red-700" onClick={(e) => { e.stopPropagation(); setCloseLead(lead); }}>
-                          <XCircle className="h-3 w-3" /> Close
-                        </Button>
+                        {canConvertLead && (
+                          <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); setConvertLead(lead); }}>
+                            <UserCheck className="h-3 w-3" /> Convert
+                          </Button>
+                        )}
+                        {canCloseLead && (
+                          <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px] text-red-500 hover:text-red-700" onClick={(e) => { e.stopPropagation(); setCloseLead(lead); }}>
+                            <XCircle className="h-3 w-3" /> Close
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { mapVisit } from "./use-crm-jobs";
 import type { CRMJobVisit } from "@/types/crm-jobs";
@@ -127,6 +128,7 @@ export function useGenerateSnowInvoices() {
       const invoiceIds: string[] = [];
       let skippedZeroAmountGroups = 0;
       let excludedZeroAmountVisits = 0;
+      let skippedRaceConditionGroups = 0;
 
       for (const group of groups) {
         const subtotal = group.visits.reduce((s, v) => s + v.amountCents, 0);
@@ -148,7 +150,7 @@ export function useGenerateSnowInvoices() {
 
         const distinctJobIds = new Set(billableVisits.map((v) => v.jobId));
         const singleJobId = distinctJobIds.size === 1 ? [...distinctJobIds][0] : null;
-        const invoiceDate = billableVisits[0]?.serviceDate ?? new Date().toISOString().slice(0, 10);
+        const invoiceDate = billableVisits[0]?.serviceDate ?? isoNy(new Date());
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: newInvoice, error: invErr } = await (supabase as any)
@@ -184,7 +186,23 @@ export function useGenerateSnowInvoices() {
             sort_order: i,
           }))
         );
-        if (liErr) throw liErr;
+        if (liErr) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("crm_invoices").delete().eq("id", (newInvoice as { id: string }).id);
+          if ((liErr as { code?: string }).code === "23505") {
+            // crm_invoice_line_items_visit_id_unique — one of this group's
+            // visits was already invoiced by a concurrent generate call (the
+            // uninvoiced-visits query this mutation's caller reads from is a
+            // separate read with no lock, so two overlapping "Generate
+            // Invoices" clicks can both see the same visit as billable).
+            // Skip this group rather than leaving a $0-lines invoice on
+            // record or crashing the whole batch — the visit is genuinely
+            // now invoiced, just not by this call.
+            skippedRaceConditionGroups += 1;
+            continue;
+          }
+          throw liErr;
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: invoiceNumber } = await (supabase.rpc as any)(
@@ -209,7 +227,7 @@ export function useGenerateSnowInvoices() {
         invoiceIds.push((newInvoice as { id: string }).id);
       }
 
-      return { invoicesCreated, invoiceIds, skippedZeroAmountGroups, excludedZeroAmountVisits };
+      return { invoicesCreated, invoiceIds, skippedZeroAmountGroups, excludedZeroAmountVisits, skippedRaceConditionGroups };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["snow-invoicing"] });

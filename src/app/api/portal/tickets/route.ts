@@ -3,23 +3,15 @@ import { Resend } from "resend";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
-import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
+import { notifyStaffOfNewTicket, ticketLink } from "@/lib/ticket-notify";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
-
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+import { orgEmailFrom } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 // subject/body/category/clientName below all originate from the anonymous
 // portal user's own POST body — interpolating them unescaped into the
 // notification email HTML let a crafted ticket subject or body execute
 // script/markup in the recipient staff member's email client.
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export async function GET() {
   const ctx = await getPortalContext();
@@ -39,6 +31,7 @@ export async function GET() {
     .select("id, ticket_number, subject, category, status, priority, created_at, body")
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
+    .eq("visible_to_client", true)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -104,6 +97,7 @@ export async function POST(req: Request) {
       type: "note",
       status: "open",
       priority: "normal",
+      visible_to_client: true,
     })
     .select("id, ticket_number")
     .single();
@@ -143,14 +137,15 @@ export async function POST(req: Request) {
   let notifyName: string | null = null;
 
   if (client?.sales_rep_id) {
+    // clients.sales_rep_id references crm_employees, not profiles.
     const { data: rep } = await supabase
-      .from("profiles")
-      .select("email, name")
+      .from("crm_employees")
+      .select("email, first_name, last_name")
       .eq("id", client.sales_rep_id)
       .single();
     if (rep?.email) {
       notifyEmail = rep.email;
-      notifyName = rep.name;
+      notifyName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim() || null;
     }
   }
 
@@ -162,12 +157,18 @@ export async function POST(req: Request) {
   if (notifyEmail) {
     const clientName = client?.display_name ?? "A client";
     const orgName = settings?.company_name ?? "Your company";
-    const ticketUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/crm/tickets`;
+    // Was `/crm/tickets` with no `?open=` param (and a different env var than
+    // the rest of the app's ticket links use) — always landed on the plain
+    // list instead of the ticket. Reuse the shared builder so this link
+    // opens the ticket, not just the list.
+    const ticketUrl = ticketLink(ticket.id);
     const resend = new Resend(process.env.RESEND_API_KEY!);
 
     // Best-effort — don't fail the ticket if email errors
     resend.emails.send({
-      from: FROM,
+      // Tenant-branded sender on the shared verified domain — never a
+      // hard-coded tenant name.
+      from: orgEmailFrom(settings?.company_name),
       to: notifyEmail,
       subject: `[Ticket #${ticket.ticket_number}] ${subject.trim()} — ${clientName}`,
       html: buildTicketNotificationEmail({

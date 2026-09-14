@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { toast } from "sonner";
 import type { CRMTicket, NewTicketFormValues, TicketStatus } from "@/types/crm-tickets";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,6 +19,7 @@ function mapTicket(row: any): CRMTicket {
     body: row.body,
     category: row.category,
     clientId: row.client_id,
+    upsellServiceId: row.upsell_service_id ?? null,
     clientName: row.clients?.display_name ?? null,
     assignedTo: row.assigned_to,
     assignedToId: row.assigned_to_id ?? null,
@@ -26,6 +28,7 @@ function mapTicket(row: any): CRMTicket {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
+    smsConsentPendingPhone: row.sms_consent_pending_phone ?? false,
   };
 }
 
@@ -192,9 +195,18 @@ export function useUpdateTicket() {
       let wasReopened = false;
       let clientId: string | null = null;
       let effectiveCategory: string | null = null;
-      if (updates.status !== undefined && updates.status !== "closed") {
+      // Guard against a TOCTOU race: another user could change the status
+      // between this SELECT and the UPDATE below, making wasReopened reflect
+      // stale state. beforeStatus is carried into the update itself as an
+      // .eq("status", beforeStatus) guard (see below) so the update only
+      // applies if nothing changed it in the meantime; a 0-row result means
+      // a race happened and we refetch + retry once.
+      let beforeStatus: string | null = null;
+      const checkReopen = updates.status !== undefined && updates.status !== "closed";
+      if (checkReopen) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: before } = await (supabase as any).from("crm_tickets").select("status, client_id, category").eq("id", id).single();
+        beforeStatus = before?.status ?? null;
         wasReopened = before?.status === "closed";
         clientId = before?.client_id ?? null;
         effectiveCategory = updates.category !== undefined ? updates.category : before?.category ?? null;
@@ -221,9 +233,44 @@ export function useUpdateTicket() {
       if (updates.dueDate !== undefined) payload.due_date = updates.dueDate || null;
       if (updates.priority !== undefined) payload.priority = updates.priority;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
-      if (error) throw error;
+      if (checkReopen) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("crm_tickets")
+          .update(payload)
+          .eq("id", id)
+          .eq("status", beforeStatus)
+          .select("id");
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          // Status changed underneath us between the SELECT and this UPDATE —
+          // refetch fresh state and retry the reopen-detection + update once.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: fresh } = await (supabase as any).from("crm_tickets").select("status, client_id, category").eq("id", id).single();
+          beforeStatus = fresh?.status ?? null;
+          wasReopened = fresh?.status === "closed";
+          clientId = fresh?.client_id ?? clientId;
+          effectiveCategory = updates.category !== undefined ? updates.category : fresh?.category ?? effectiveCategory;
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const retry = await (supabase as any)
+            .from("crm_tickets")
+            .update(payload)
+            .eq("id", id)
+            .eq("status", beforeStatus)
+            .select("id");
+          if (retry.error) throw retry.error;
+          if (!retry.data || retry.data.length === 0) {
+            throw new Error(
+              "This ticket was just changed by someone else. Please try again."
+            );
+          }
+        }
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
+        if (error) throw error;
+      }
       return { wasReopened, clientId, effectiveCategory };
     },
     onSuccess: (result, { id, updates }) => {
@@ -244,13 +291,16 @@ export function useUpdateTicket() {
         });
       }
     },
+    onError: () => {
+      toast.error("Failed to update ticket");
+    },
   });
 }
 
 export interface TicketLink {
   id: string;
   ticketId: string;
-  linkType: "estimate" | "invoice" | "job";
+  linkType: "estimate" | "invoice" | "job" | "project";
   linkedId: string;
   linkedLabel: string;
   createdAt: string;
@@ -283,12 +333,40 @@ export function useTicketLinks(ticketId: string) {
   });
 }
 
+/** Tickets linked to a given record (e.g. a Project) via crm_ticket_links. */
+export function useTicketsLinkedTo(linkType: TicketLink["linkType"], linkedId: string) {
+  return useQuery({
+    queryKey: ["crm-ticket-links-for", linkType, linkedId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: links, error: linksError } = await (supabase as any)
+        .from("crm_ticket_links")
+        .select("ticket_id")
+        .eq("link_type", linkType)
+        .eq("linked_id", linkedId);
+      if (linksError) throw linksError;
+      const ticketIds = (links as { ticket_id: string }[]).map((l) => l.ticket_id);
+      if (ticketIds.length === 0) return [] as CRMTicket[];
+      const { data, error } = await supabase
+        .from("crm_tickets")
+        .select("*, clients(display_name)")
+        .in("id", ticketIds)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data.map(mapTicket)) as CRMTicket[];
+    },
+    enabled: !!linkedId,
+  });
+}
+
 export function useAddTicketLink() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
       ticketId: string;
-      linkType: "estimate" | "invoice" | "job";
+      linkType: "estimate" | "invoice" | "job" | "project";
       linkedId: string;
       linkedLabel: string;
     }) => {
@@ -303,8 +381,12 @@ export function useAddTicketLink() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, { ticketId }) => {
+    onSuccess: (_data, { ticketId, linkType, linkedId }) => {
       qc.invalidateQueries({ queryKey: ["crm-ticket-links", ticketId] });
+      qc.invalidateQueries({ queryKey: ["crm-ticket-links-for", linkType, linkedId] });
+    },
+    onError: () => {
+      toast.error("Failed to add link");
     },
   });
 }
@@ -322,6 +404,10 @@ export function useRemoveTicketLink() {
     },
     onSuccess: (_data, { ticketId }) => {
       qc.invalidateQueries({ queryKey: ["crm-ticket-links", ticketId] });
+      qc.invalidateQueries({ queryKey: ["crm-ticket-links-for"] });
+    },
+    onError: () => {
+      toast.error("Failed to remove link");
     },
   });
 }
@@ -340,6 +426,30 @@ export function useDeleteTicket() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+    onError: () => {
+      toast.error("Failed to delete ticket");
+    },
+  });
+}
+
+export function useClearSmsConsentPendingPhone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_tickets")
+        .update({ sms_consent_pending_phone: false })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+    onError: () => {
+      toast.error("Failed to dismiss warning");
     },
   });
 }
@@ -369,6 +479,9 @@ export function useCloseTicket() {
           matchValues: data.category ? [data.category] : undefined,
         });
       }
+    },
+    onError: () => {
+      toast.error("Failed to close ticket");
     },
   });
 }

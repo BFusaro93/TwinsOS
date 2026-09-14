@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import type { PortalInviteRow, PortalUserRow } from "@/lib/portal/portal-db";
-
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+import { orgEmailFrom } from "@/lib/email/send";
 
 export async function POST(
   req: Request,
@@ -19,6 +18,16 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Granular per-role permission (shared with portal-reset) — admins
+  // always pass, otherwise gated by crm_roles.permissions.client_reset_portal_password.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "client_reset_portal_password",
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { clientId } = await params;
   const { email } = await req.json();
@@ -67,7 +76,7 @@ export async function POST(
     return NextResponse.json({ error: "Failed to create invite" }, { status: 500 });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.twinslawnservice.com";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
   const portalUrl = `${appUrl}/portal/register/${invite.token}`;
 
   // Fetch org branding for email
@@ -84,7 +93,7 @@ export async function POST(
   // Send invite email via Resend
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { error: sendErr } = await resend.emails.send({
-    from: FROM,
+    from: orgEmailFrom(org?.name),
     to: email,
     subject: `You're invited to the ${orgName} Client Portal`,
     html: buildInviteEmail({ orgName, clientFirstName, portalUrl }),
@@ -99,6 +108,20 @@ export async function POST(
       emailError: sendErr.message,
     });
   }
+
+  // Log to the client's activity timeline, matching every other client-facing
+  // send-email route (estimates, invoices, chemical applications).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("client_activity").insert({
+    org_id: profile.org_id,
+    client_id: clientId,
+    activity_type: "email",
+    subject: `Client portal invite sent`,
+    body: `Sent to ${email}`,
+    sent_to: email,
+    created_by: user.id,
+    occurred_at: new Date().toISOString(),
+  });
 
   return NextResponse.json({ success: true, inviteUrl: portalUrl, emailSent: true });
 }

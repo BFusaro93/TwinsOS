@@ -16,6 +16,7 @@ export interface SnowPricingPdfData {
   orgName: string;
   propertyName: string;
   propertyAddress: string;
+  propertySqFt: number;
   generatedOn: string;
   sections: SnowPricingPdfSection[];
   subtotal: number;
@@ -110,6 +111,9 @@ export function SnowPricingPdfDocument({ data }: { data: SnowPricingPdfData }) {
             <Text style={S.propertyLabel}>Property</Text>
             {data.propertyName ? <Text style={S.propertyName}>{data.propertyName}</Text> : null}
             {data.propertyAddress ? <Text style={S.propertyAddress}>{data.propertyAddress}</Text> : null}
+            {data.propertySqFt ? (
+              <Text style={S.propertyAddress}>{data.propertySqFt.toLocaleString("en-US")} sq. ft.</Text>
+            ) : null}
           </View>
         )}
 

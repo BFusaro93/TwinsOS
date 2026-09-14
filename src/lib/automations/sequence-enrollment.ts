@@ -1,7 +1,34 @@
 import type { ConditionField, ConditionOperator, TriggerConfig, TriggerType } from "@/types/crm-automations";
+import { isZapierTriggerType, notifyZapierSubscribers } from "@/lib/integrations/zapier";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
+
+/**
+ * Converts a `wait` event's config (`{days, hours, minutes}`, any subset
+ * present) into an absolute fire-at Date offset from `from` (defaults to
+ * now). This is the single source of truth for wait-delay math — every call
+ * site that consumes a wait step's own delay (initial enrollment landing on
+ * a leading wait, `advanceEnrollmentPastStep` chaining into a following
+ * wait, and the cron sweep's `processDueEnrollment` consuming a wait that is
+ * itself the due step) must go through this function so a stack of
+ * consecutive `wait` steps advances one delay at a time, correctly, instead
+ * of any one of them reimplementing (and risking drifting from) the
+ * config-to-delay conversion.
+ */
+export function computeWaitFireAt(
+  config: Record<string, number> | null | undefined,
+  from: Date = new Date()
+): Date {
+  const days = config?.days ?? 0;
+  const hours = config?.hours ?? 0;
+  const minutes = config?.minutes ?? 0;
+  const d = new Date(from);
+  d.setDate(d.getDate() + days);
+  d.setHours(d.getHours() + hours);
+  d.setMinutes(d.getMinutes() + minutes);
+  return d;
+}
 
 /**
  * Whether a client/estimate pair may be (re-)enrolled into a sequence, given
@@ -24,6 +51,7 @@ export async function isEligibleForEnrollment(
     estimateId: string | null;
     ticketId?: string | null;
     invoiceId?: string | null;
+    meetingId?: string | null;
     allowReentry: boolean;
     reentryAfterMinutes: number;
   }
@@ -37,17 +65,19 @@ export async function isEligibleForEnrollment(
     .limit(1);
 
   // Dedup against the most specific record this trigger is scoped to — an
-  // estimate/ticket/invoice-scoped trigger re-checks against that same
-  // record's own enrollment history, not the client's enrollments in general
-  // (mirrors the pre-existing estimate_id behavior).
+  // estimate/ticket/invoice/meeting-scoped trigger re-checks against that
+  // same record's own enrollment history, not the client's enrollments in
+  // general (mirrors the pre-existing estimate_id behavior).
   if (params.estimateId) {
     query = query.eq("estimate_id", params.estimateId);
   } else if (params.ticketId) {
     query = query.eq("ticket_id", params.ticketId);
   } else if (params.invoiceId) {
     query = query.eq("invoice_id", params.invoiceId);
+  } else if (params.meetingId) {
+    query = query.eq("meeting_id", params.meetingId);
   } else {
-    query = query.eq("client_id", params.clientId).is("estimate_id", null).is("ticket_id", null).is("invoice_id", null);
+    query = query.eq("client_id", params.clientId).is("estimate_id", null).is("ticket_id", null).is("invoice_id", null).is("meeting_id", null);
   }
 
   const { data: existing } = await query.maybeSingle();
@@ -108,6 +138,7 @@ export async function enrollClientInSequence(
     estimateId?: string | null;
     ticketId?: string | null;
     invoiceId?: string | null;
+    meetingId?: string | null;
   }
 ): Promise<string | null> {
   const { data: firstEvent } = await supabase
@@ -123,12 +154,7 @@ export async function enrollClientInSequence(
   let nextFireAt = new Date().toISOString();
   if (firstEvent?.event_type === "wait") {
     const cfg = firstEvent.config as Record<string, number> | null;
-    const days = cfg?.days ?? 0;
-    const hours = cfg?.hours ?? 0;
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    d.setHours(d.getHours() + hours);
-    nextFireAt = d.toISOString();
+    nextFireAt = computeWaitFireAt(cfg).toISOString();
   }
 
   const { data: inserted, error } = await supabase
@@ -140,6 +166,7 @@ export async function enrollClientInSequence(
       estimate_id: params.estimateId ?? null,
       ticket_id: params.ticketId ?? null,
       invoice_id: params.invoiceId ?? null,
+      meeting_id: params.meetingId ?? null,
       enrolled_at: new Date().toISOString(),
       next_event_position: firstEvent?.event_type === "wait" ? 1 : 0,
       next_fire_at: nextFireAt,
@@ -188,6 +215,7 @@ const SPECIAL_CLIENT_CONDITION_FIELDS = new Set<ConditionField>([
   "has_credit_card",
   "does_not_have_credit_card",
   "is_opted_in_emails",
+  "opt_in_texts",
   "client_lead_status",
   "client_source",
   "billing_term",
@@ -379,7 +407,7 @@ export async function evaluateConditionSet(
   ] = await Promise.all([
     needsClient && clientId
       ? supabase.from("clients")
-          .select("status, source, account_type, billing_terms, map_code, cancellation_reason, service_zip, client_since, balance_outstanding_cents, ok_to_email, payment_method, sales_rep_id")
+          .select("status, source, account_type, billing_terms, map_code, cancellation_reason, service_zip, client_since, balance_outstanding_cents, ok_to_email, sms_opt_in, payment_method, sales_rep_id")
           .eq("id", clientId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsEstimate && estimateId
@@ -455,6 +483,7 @@ export async function evaluateConditionSet(
       return vs.length > 0 && !!salesRepId && vs.includes(salesRepId);
     }
     if (c.field === "is_opted_in_emails") return client?.ok_to_email === true;
+    if (c.field === "opt_in_texts") return client?.sms_opt_in === true;
     if (c.field === "client_lead_status") {
       const vs = csvValues(c.value);
       const status = client?.status ? String(client.status).toLowerCase() : null;
@@ -676,6 +705,7 @@ export async function fireSimpleTrigger(
     /** The ticket/invoice this event pertains to — threaded through so ticket_category/ticket_past_due_days/invoice_* conditions can check the right record, and so the enrollment (and its later stop-condition checks) stay scoped to it. */
     ticketId?: string | null;
     invoiceId?: string | null;
+    meetingId?: string | null;
     triggerType: TriggerType;
     /**
      * The value(s) this specific event pertains to (a visit's service ids, a
@@ -725,6 +755,7 @@ export async function fireSimpleTrigger(
       estimateId: params.estimateId ?? null,
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
+      meetingId: params.meetingId ?? null,
       allowReentry: seq.allow_reentry ?? false,
       reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
     });
@@ -737,8 +768,24 @@ export async function fireSimpleTrigger(
       estimateId: params.estimateId ?? null,
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
+      meetingId: params.meetingId ?? null,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
+  }
+
+  // Fan out to any Zapier REST Hook subscriptions for this trigger type —
+  // independent of whether any internal sequence matched above, since a Zap
+  // may be the only thing configured for this event.
+  if (isZapierTriggerType(params.triggerType)) {
+    await notifyZapierSubscribers(supabase, params.orgId, params.triggerType, {
+      triggerType: params.triggerType,
+      clientId: params.clientId,
+      estimateId: params.estimateId ?? null,
+      ticketId: params.ticketId ?? null,
+      invoiceId: params.invoiceId ?? null,
+      matchValues: params.matchValues ?? null,
+      firedAt: new Date().toISOString(),
+    });
   }
 
   return enrolledIds;

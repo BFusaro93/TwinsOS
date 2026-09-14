@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Mail, X, Search, ChevronDown, RotateCcw, Send } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -131,6 +131,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function EmailActivityList() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: emails = [] as EmailActivity[], isLoading, refetch } = useEmailActivity();
   const [search, setSearch] = useState("");
   const [activeColumnFilter, setActiveColumnFilter] = useState<ColumnFilterKey | null>(null);
@@ -242,25 +243,26 @@ export function EmailActivityList() {
     setSelectedIds(new Set());
   }
 
+  if (!permissionsLoading && !can("email_activity_view")) {
+    return (
+      <EmptyState
+        icon={Mail}
+        title="No access"
+        description="You don't have permission to view Email Activity."
+      />
+    );
+  }
+
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col gap-4">
-        <PageHeader title="Email Activity" description="All email communications sent to clients" />
-        <div className="flex flex-col gap-2">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
-        </div>
+      <div className="flex flex-col gap-2 pt-4">
+        {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col gap-4">
-      {/* Page header */}
-      <PageHeader
-        title="Email Activity"
-        description="All email communications sent to clients"
-      />
-
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {[
@@ -286,7 +288,7 @@ export function EmailActivityList() {
       {/* White column filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {COLUMN_FILTERS.map(({ key, label }) => (
             <button
               key={key}
@@ -325,8 +327,8 @@ export function EmailActivityList() {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           {/* Actions dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -343,13 +345,15 @@ export function EmailActivityList() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={resendSelected}
-              >
-                <Send className="mr-2 h-3.5 w-3.5" />
-                Resend Email
-              </DropdownMenuItem>
+              {can("email_activity_send") && (
+                <DropdownMenuItem
+                  disabled={!someSelected}
+                  onSelect={resendSelected}
+                >
+                  <Send className="mr-2 h-3.5 w-3.5" />
+                  Resend Email
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -363,7 +367,7 @@ export function EmailActivityList() {
           </button>
 
           {/* Quick-filter tabs */}
-          <div className="ml-2 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {QUICK_FILTERS.map(({ key, label }) => (
               <button
                 key={key}

@@ -49,6 +49,8 @@ export interface Stop {
   derivedStatus: VisitStatus;
   clockedInAt: string | null;
   clockedOutAt: string | null;
+  /** Set while the stop is on a break — see crm_job_visits.paused_at. */
+  pausedAt: string | null;
   notesToCrew: string | null;
 }
 
@@ -140,8 +142,15 @@ export function groupVisitsIntoStops(visits: CRMJobVisit[]): Stop[] {
       propertyId: anchor.job?.propertyId ?? null,
       visits: stopVisits,
       derivedStatus: derivedStopStatus(stopVisits),
-      clockedInAt: stopVisits.find((v) => v.clockedInAt)?.clockedInAt ?? null,
+      // Prefer a visit that is still running: when a completed sibling shares
+      // the stop with a not-yet-started one, taking the completed visit's
+      // clock-in (with clockedOutAt null because not every visit is out)
+      // made the card read "Not Started" and "Running" at the same time.
+      clockedInAt: stopVisits.find((v) => v.clockedInAt && !v.clockedOutAt)?.clockedInAt
+        ?? stopVisits.find((v) => v.clockedInAt)?.clockedInAt
+        ?? null,
       clockedOutAt: stopVisits.every((v) => v.clockedOutAt) ? (anchor.clockedOutAt ?? null) : null,
+      pausedAt: stopVisits.find((v) => v.clockedInAt && !v.clockedOutAt && v.pausedAt)?.pausedAt ?? null,
       notesToCrew: [...new Set(stopVisits.map((v) => v.notesToCrew || v.job?.notesToCrew).filter(Boolean))].join("\n") || null,
     };
   });

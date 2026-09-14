@@ -45,6 +45,7 @@ import { printPO } from "@/lib/print";
 import { useComments } from "@/lib/hooks/use-comments";
 import { Download } from "lucide-react";
 import type { PurchaseOrder, LineItem, POStatus } from "@/types";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 interface PODetailPanelProps {
   po: PurchaseOrder;
@@ -106,13 +107,17 @@ function DetailsTab({
 
   /** Compute updated PO totals from a new items array. All values are rounded to
    *  whole cents so they satisfy the integer columns in purchase_orders.
-   *  Sales tax is applied only to taxable line items, after subtracting the
-   *  manual discount from the taxable base. */
+   *  Sales tax is applied only to taxable line items; whether the discount
+   *  comes off the taxable base first is the PO's own discountReducesTax. */
   function totals(newItems: LineItem[]) {
     const subtotal = Math.round(newItems.reduce((s, li) => s + li.quantity * li.unitCost, 0));
     const taxableSubtotal = Math.round(newItems.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
-    const taxableAfterDiscount = Math.max(0, taxableSubtotal - po.discountCost);
-    const salesTax = Math.round(taxableAfterDiscount * po.taxRatePercent / 100);
+    const salesTax = computeSalesTax({
+      taxableSubtotal,
+      taxRatePercent: po.taxRatePercent,
+      discountCost: po.discountCost,
+      discountReducesTax: po.discountReducesTax,
+    });
     const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
     return { subtotal, salesTax, grandTotal };
   }
@@ -125,9 +130,13 @@ function DetailsTab({
 
   const subtotalForSubmit = Math.round(lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
   const taxableSubtotalForSubmit = Math.round(lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
-  const taxableAfterDiscountForSubmit = Math.max(0, taxableSubtotalForSubmit - po.discountCost);
   const grandTotalForSubmit =
-    subtotalForSubmit - po.discountCost + Math.round((taxableAfterDiscountForSubmit * po.taxRatePercent) / 100) + po.shippingCost;
+    subtotalForSubmit - po.discountCost + computeSalesTax({
+      taxableSubtotal: taxableSubtotalForSubmit,
+      taxRatePercent: po.taxRatePercent,
+      discountCost: po.discountCost,
+      discountReducesTax: po.discountReducesTax,
+    }) + po.shippingCost;
 
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
@@ -149,6 +158,19 @@ function DetailsTab({
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [vendorSheetOpen, setVendorSheetOpen] = useState(false);
   const [overlayPOId, setOverlayPOId] = useState<string | null>(null);
+  const [incompleteReceiptWarningOpen, setIncompleteReceiptWarningOpen] = useState(false);
+
+  const allLineItemsReceived = lineItems.every(
+    (li) => (receivedQtyByLineItemId?.get(li.id) ?? 0) >= li.quantity
+  );
+
+  function handleMarkComplete() {
+    if (allLineItemsReceived) {
+      handleStatusChange("completed");
+    } else {
+      setIncompleteReceiptWarningOpen(true);
+    }
+  }
   const selectedVendor = vendors.find((v) => v.id === po.vendorId) ?? null;
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
   const selectedPart = parts.find((p) => p.id === selectedPartId) ?? null;
@@ -156,8 +178,12 @@ function DetailsTab({
 
   const subtotal = Math.round(lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
   const taxableSubtotal = Math.round(lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
-  const taxableAfterDiscount = Math.max(0, taxableSubtotal - po.discountCost);
-  const salesTax = Math.round(taxableAfterDiscount * po.taxRatePercent / 100);
+  const salesTax = computeSalesTax({
+    taxableSubtotal,
+    taxRatePercent: po.taxRatePercent,
+    discountCost: po.discountCost,
+    discountReducesTax: po.discountReducesTax,
+  });
   const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
   const taxLabel = po.taxRatePercent > 0 ? `Sales Tax (${po.taxRatePercent}%)` : "Sales Tax";
   const isError = status === "rejected" || status === "canceled";
@@ -211,7 +237,7 @@ function DetailsTab({
           </>)}
           {(status === "ordered" || status === "partially_fulfilled") && (<>
             <Button size="sm" onClick={onSendToReceiving}>Send to Receiving</Button>
-            <Button size="sm" variant="outline" onClick={() => handleStatusChange("completed")}>Mark Complete</Button>
+            <Button size="sm" variant="outline" onClick={handleMarkComplete}>Mark Complete</Button>
           </>)}
           {(status === "rejected" || status === "canceled" || status === "pending") && (
             <Button size="sm" variant="outline" onClick={() => handleStatusChange("requested")}>Reset to Requested</Button>
@@ -345,6 +371,30 @@ function DetailsTab({
         open={vendorSheetOpen && !!selectedVendor}
         onOpenChange={setVendorSheetOpen}
       />
+
+      <AlertDialog open={incompleteReceiptWarningOpen} onOpenChange={setIncompleteReceiptWarningOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Not all line items have been received</AlertDialogTitle>
+            <AlertDialogDescription>
+              At least one line item on <strong>{po.poNumber}</strong> has not been fully received
+              through Send to Receiving. Marking this PO complete without receiving it will not
+              update parts/inventory. Are you sure you want to mark it complete anyway?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                handleStatusChange("completed");
+                setIncompleteReceiptWarningOpen(false);
+              }}
+            >
+              Mark Complete Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

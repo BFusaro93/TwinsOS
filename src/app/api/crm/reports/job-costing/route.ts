@@ -1,152 +1,131 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
+import {
+  loadVisitCosting,
+  weightedTargetRate,
+  pct,
+  ratio,
+  type CostedVisit,
+  type LaborCostSource,
+  type ServiceTarget,
+} from "@/lib/visit-costing";
 
+const log = logger.child("reports/job-costing");
+
+/** One row per completed visit in the window. All hours are MAN-hours. */
 export interface JobCostingReportRow {
-  jobId: string;
-  jobTitle: string;
+  visitId: string;
+  jobId: string | null;
   clientName: string;
-  serviceName: string;
+  serviceNames: string;
+  crewName: string | null;
   completedAt: string;
+  /** "YYYY-MM-DD" — completed_at in Eastern time, else scheduled_date (same basis as Job Cost Summary). */
+  workedDate: string;
   menCount: number;
   budgetedHours: number;
-  actualHours: number;
-  actualStaffHrs: number;
+  actualManHours: number;
+  /** actual − budgeted; positive means over budget. */
   hoursVariance: number;
+  /** revenue ÷ budgeted man-hours. */
   budgetedRateCents: number;
+  /** revenue ÷ actual man-hours. */
   revPerManHrCents: number;
+  /** Man-hour-weighted crm_services.target_rate_cents_per_hr; 0 if none. */
   targetRateCents: number;
+  /** revPerManHr − target. */
   overUnderCents: number;
-  actualLaborCostCents: number;
-  estimatedRevenueCents: number;
-  actualMaterialCostCents: number;
+  laborCostCents: number;
+  /** Labor was estimated (man-hours × crew/org labor rate) — no crew clock-out. */
+  laborEstimated: boolean;
+  /** 'none' = no labor rate configured anywhere, so laborCostCents is a placeholder 0. */
+  laborSource: LaborCostSource;
+  revenueCents: number;
+  materialsCostCents: number;
   grossProfitCents: number;
+  /** 0–100, one decimal. */
   marginPct: number;
 }
 
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+const QuerySchema = z.object({
+  from: ymd.nullable(),
+  to: ymd.nullable(),
+  service_id: z.string().uuid().nullable(),
+});
+
+function toRow(visit: CostedVisit, services: Map<string, ServiceTarget>): JobCostingReportRow {
+  const revPerManHrCents = ratio(visit.revenueCents, visit.manHours);
+  const targetRateCents = weightedTargetRate(visit.services, services);
+  const grossProfitCents = visit.revenueCents - visit.laborCostCents - visit.materialsCostCents;
+  return {
+    visitId: visit.visitId,
+    jobId: visit.jobId,
+    clientName: visit.clientName,
+    serviceNames: visit.serviceNames,
+    crewName: visit.crewName,
+    completedAt: visit.completedAt,
+    workedDate: visit.workedDate,
+    menCount: visit.menCount,
+    budgetedHours: visit.budgetedHours,
+    actualManHours: visit.manHours,
+    hoursVariance: Math.round((visit.manHours - visit.budgetedHours) * 100) / 100,
+    budgetedRateCents: ratio(visit.revenueCents, visit.budgetedHours),
+    revPerManHrCents,
+    targetRateCents,
+    overUnderCents: targetRateCents > 0 && revPerManHrCents > 0 ? revPerManHrCents - targetRateCents : 0,
+    laborCostCents: visit.laborCostCents,
+    laborEstimated: visit.laborEstimated,
+    laborSource: visit.laborSource,
+    revenueCents: visit.revenueCents,
+    materialsCostCents: visit.materialsCostCents,
+    grossProfitCents,
+    marginPct: pct(grossProfitCents, visit.revenueCents),
+  };
+}
+
 export async function GET(request: Request) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
+  const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(request.url);
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
-  const serviceId = searchParams.get("service_id");
-
-  // crm_jobs has no clocked_out_at column of its own — filtering the jobs
-  // query directly on it (as this route previously did) errored on every
-  // request. A job's completion date here is whichever of its visits was
-  // actually clocked out, matching the men_count/rate_cents lookup below
-  // which already keys off crm_job_visits.clocked_out_at.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let vq = (supabase as any)
-    .from("crm_job_visits")
-    .select("job_id")
-    .not("clocked_out_at", "is", null);
-  if (from) vq = vq.gte("clocked_out_at", from);
-  if (to) vq = vq.lte("clocked_out_at", to);
-  const { data: qualifyingVisits, error: vErr } = await vq;
-  if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
-  const qualifyingJobIds = Array.from(
-    new Set((qualifyingVisits ?? []).map((v: { job_id: string }) => v.job_id))
-  );
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q = (supabase as any)
-    .from("crm_jobs")
-    .select(`
-      id,
-      title,
-      actual_hours,
-      actual_labor_cost_cents,
-      actual_material_cost_cents,
-      service_id,
-      clients:client_id ( display_name ),
-      crm_services:service_id ( name, target_rate_cents_per_hr ),
-      estimates:estimate_id ( total_cents, total_budgeted_hours )
-    `)
-    .is("deleted_at", null)
-    .in("id", qualifyingJobIds.length > 0 ? qualifyingJobIds : ["00000000-0000-0000-0000-000000000000"]);
-
-  if (serviceId) q = q.eq("service_id", serviceId);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: jobs, error } = await (q as any);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // For each job, get the most recent completed visit men_count + rate_cents + clocked_out_at
-  const jobIds: string[] = (jobs ?? []).map((j: { id: string }) => j.id);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: visits } = await (supabase as any)
-    .from("crm_job_visits")
-    .select("job_id, men_count, rate_cents, clocked_out_at")
-    .in("job_id", jobIds.length > 0 ? jobIds : ["00000000-0000-0000-0000-000000000000"])
-    .not("clocked_out_at", "is", null)
-    .order("clocked_out_at", { ascending: false });
-
-  // Build a map: jobId → most recent visit
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const visitMap = new Map<string, { men_count: number; rate_cents: number; clocked_out_at: string }>();
-  for (const v of (visits ?? [])) {
-    if (!visitMap.has(v.job_id)) visitMap.set(v.job_id, v);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows: JobCostingReportRow[] = (jobs ?? []).map((job: any): JobCostingReportRow => {
-    const visit = visitMap.get(job.id);
-    // crm_jobs.actual_hours is already man-hours — crm_recompute_job_actual_hours
-    // sums each visit's (duration × its own men_count), so multiplying by this
-    // job's most-recent-visit men_count again here double-counted crew size,
-    // halving revPerManHr and doubling the reported hours variance for any
-    // job with more than one crew member.
-    const actualHours = Number(job.actual_hours ?? 0);
-    const menCount = Number(visit?.men_count ?? 1);
-    const actualStaffHrs = actualHours;
-    const rateCents: number = visit?.rate_cents ?? 0;
-    const revPerManHrCents = actualStaffHrs > 0 ? Math.round(rateCents / actualStaffHrs) : 0;
-    const targetRateCents: number = job.crm_services?.target_rate_cents_per_hr ?? 0;
-    const overUnderCents = revPerManHrCents - targetRateCents;
-    const estimatedRevenueCents: number = job.estimates?.total_cents ?? 0;
-    const budgetedHours = Number(job.estimates?.total_budgeted_hours ?? 0);
-    const actualLaborCostCents: number = job.actual_labor_cost_cents ?? 0;
-    const actualMaterialCostCents: number = job.actual_material_cost_cents ?? 0;
-    const grossProfitCents = estimatedRevenueCents - actualLaborCostCents - actualMaterialCostCents;
-    const marginPct = estimatedRevenueCents > 0
-      ? Math.round((grossProfitCents / estimatedRevenueCents) * 1000) / 10
-      : 0;
-
-    return {
-      jobId: job.id,
-      jobTitle: job.title ?? "Untitled",
-      clientName: job.clients?.display_name ?? "—",
-      serviceName: job.crm_services?.name ?? "—",
-      completedAt: visit?.clocked_out_at ?? "",
-      menCount,
-      budgetedHours,
-      actualHours,
-      actualStaffHrs,
-      hoursVariance: actualStaffHrs - budgetedHours,
-      budgetedRateCents: estimatedRevenueCents > 0 && budgetedHours > 0
-        ? Math.round(estimatedRevenueCents / budgetedHours)
-        : 0,
-      revPerManHrCents,
-      targetRateCents,
-      overUnderCents,
-      actualLaborCostCents,
-      estimatedRevenueCents,
-      actualMaterialCostCents,
-      grossProfitCents,
-      marginPct,
-    };
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "sched_rpt_job_costing",
   });
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  return NextResponse.json({ rows });
+  const { searchParams } = new URL(request.url);
+  const parsed = QuerySchema.safeParse({
+    from: searchParams.get("from"),
+    to: searchParams.get("to"),
+    service_id: searchParams.get("service_id"),
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid query" }, { status: 400 });
+  }
+  const { from, to, service_id: serviceId } = parsed.data;
+
+  try {
+    const { visits, services } = await loadVisitCosting(supabase, { from, to });
+
+    // The service filter selects whole visits that include the service; the
+    // row still shows the full visit's numbers (this is a per-visit report).
+    const selected = serviceId
+      ? visits.filter((v) => v.services.some((s) => s.serviceId === serviceId))
+      : visits;
+
+    const rows = selected
+      .map((v) => toRow(v, services))
+      .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+
+    return NextResponse.json({ rows });
+  } catch (err) {
+    log.error("failed to build job costing report", { err, from, to, serviceId });
+    const message = err instanceof Error ? err.message : "Failed to load report";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -31,6 +32,18 @@ async function deductPartsInventory(
       })
     )
   );
+}
+
+// The DB-level backstop for the duplicate-batch guard (see the "── 2."
+// check below): work_orders_pm_schedule_open_batch_unique
+// (20260901140000_pm_generate_wo_race_guard.sql) rejects a second
+// concurrent insert with unique_violation (23505) when two requests race
+// past the check-then-insert above. Recognize that specific violation so it
+// surfaces as the same friendly 409 rather than a raw 500.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isDuplicateBatchError(error: any): boolean {
+  return error?.code === "23505" && typeof error?.message === "string"
+    && error.message.includes("work_orders_pm_schedule_open_batch_unique");
 }
 
 /**
@@ -116,16 +129,37 @@ export async function POST(
   }
 
   // ── 3. Fetch linked assets ────────────────────────────────────────────────
-  const { data: scheduleAssets } = await adminClient
+  const { data: allScheduleAssets } = await adminClient
     .from("pm_schedule_assets")
     .select("*")
     .eq("pm_schedule_id", scheduleId)
     .is("deleted_at", null)
     .order("asset_name");
 
-  if (!scheduleAssets || scheduleAssets.length === 0) {
+  if (!allScheduleAssets || allScheduleAssets.length === 0) {
     return NextResponse.json(
       { error: "No assets linked to this PM schedule. Add assets first." },
+      { status: 422 }
+    );
+  }
+
+  // A schedule's pm_schedule_assets rows cache asset_id/asset_name at link time
+  // and are never cleaned up when the underlying asset is later soft-deleted or
+  // marked disposed — without this check, generating work orders would keep
+  // creating WOs against equipment that no longer exists / is retired.
+  const assetIds = allScheduleAssets.map((sa) => sa.asset_id).filter(Boolean);
+  const { data: liveAssets } = await adminClient
+    .from("assets")
+    .select("id, status")
+    .in("id", assetIds)
+    .is("deleted_at", null)
+    .not("status", "eq", "disposed");
+  const liveAssetIds = new Set((liveAssets ?? []).map((a) => a.id));
+  const scheduleAssets = allScheduleAssets.filter((sa) => liveAssetIds.has(sa.asset_id));
+
+  if (scheduleAssets.length === 0) {
+    return NextResponse.json(
+      { error: "All assets linked to this PM schedule have been deleted or disposed. Update the schedule's assets before generating work orders." },
       { status: 422 }
     );
   }
@@ -167,6 +201,12 @@ export async function POST(
       .select()
       .single();
 
+    if (singleErr && isDuplicateBatchError(singleErr)) {
+      return NextResponse.json(
+        { error: "There are already open work orders for this schedule. Complete or close the existing batch before generating a new one." },
+        { status: 409 }
+      );
+    }
     if (singleErr || !singleWO) {
       return NextResponse.json({ error: singleErr?.message ?? "Failed to create WO" }, { status: 500 });
     }
@@ -221,6 +261,12 @@ export async function POST(
       .select()
       .single();
 
+    if (parentErr && isDuplicateBatchError(parentErr)) {
+      return NextResponse.json(
+        { error: "There are already open work orders for this schedule. Complete or close the existing batch before generating a new one." },
+        { status: 409 }
+      );
+    }
     if (parentErr || !parentWO) {
       return NextResponse.json({ error: parentErr?.message ?? "Failed to create parent WO" }, { status: 500 });
     }
@@ -283,7 +329,7 @@ export async function POST(
   // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
   // Advance from today (actual generation date) so that generating early
   // doesn't push the next due date further out than one interval from now.
-  const today = clientToday ?? new Date().toISOString().slice(0, 10);
+  const today = clientToday ?? isoNy(new Date());
   const nextDue = advanceDate(today, schedule.frequency);
   await adminClient
     .from("pm_schedules")
@@ -329,21 +375,27 @@ function advanceDate(from: string, frequency: string): string {
     frequency === "annual" ? 12 :
     0;
 
+  // `from` is a "YYYY-MM-DD" string, which `new Date(from)` parses as UTC
+  // midnight. All component reads/writes below use the UTC-suffixed
+  // getters/setters (and Date.UTC for construction) to match — mixing those
+  // with local getters (getMonth/getDate/getFullYear) while serializing back
+  // via toISOString() (UTC) would shift the effective day by ±1 on any
+  // non-UTC server/runtime.
   if (monthsToAdd > 0) {
     // Building the target date from (year, targetMonthIndex, clampedDay)
     // rather than mutating via .setMonth()/.setFullYear() avoids JS Date's
     // month-overflow rollover: a schedule due Jan 31 advanced with
     // .setMonth(+1) landed on Mar 3 (Feb has only 28/29 days), silently
     // skipping February's occurrence entirely.
-    const targetMonthIndex = d.getMonth() + monthsToAdd;
-    const daysInTargetMonth = new Date(d.getFullYear(), targetMonthIndex + 1, 0).getDate();
-    const next = new Date(d.getFullYear(), targetMonthIndex, Math.min(d.getDate(), daysInTargetMonth));
+    const targetMonthIndex = d.getUTCMonth() + monthsToAdd;
+    const daysInTargetMonth = new Date(Date.UTC(d.getUTCFullYear(), targetMonthIndex + 1, 0)).getUTCDate();
+    const next = new Date(Date.UTC(d.getUTCFullYear(), targetMonthIndex, Math.min(d.getUTCDate(), daysInTargetMonth)));
     return next.toISOString().slice(0, 10);
   }
 
   switch (frequency) {
-    case "daily":  d.setDate(d.getDate() + 1); break;
-    case "weekly": d.setDate(d.getDate() + 7); break;
+    case "daily":  d.setUTCDate(d.getUTCDate() + 1); break;
+    case "weekly": d.setUTCDate(d.getUTCDate() + 7); break;
   }
   return d.toISOString().slice(0, 10);
 }

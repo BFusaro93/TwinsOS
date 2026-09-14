@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
+import { orgEmailFrom } from "@/lib/email/send";
+import { computeWaitFireAt } from "./sequence-enrollment";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -20,7 +22,6 @@ interface ResolvedEmailContent {
   bodyHtml: string;
 }
 
-const DEFAULT_FROM_ADDRESS = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
 /** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
 export async function resolveEmailStepContent(
@@ -29,6 +30,7 @@ export async function resolveEmailStepContent(
     orgId: string;
     clientId: string;
     estimateId: string | null;
+    meetingId?: string | null;
     subjectTemplate: string;
     bodyTemplate: string;
     toSelection?: string[];
@@ -37,11 +39,15 @@ export async function resolveEmailStepContent(
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
-    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id")
+    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id, do_not_market")
     .eq("id", params.clientId)
     .single();
 
   if (!client) return { error: "client not found" };
+  // Same opt-out flag Sales Campaigns checks before sending — a client who
+  // used the unsubscribe link should stop getting automation emails too,
+  // not just campaign blasts.
+  if (client.do_not_market) return { error: "client has opted out of marketing emails (do_not_market)" };
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
   const toEmails = new Set<string>();
@@ -66,23 +72,29 @@ export async function resolveEmailStepContent(
 
   if (toEmails.size === 0) return { error: "no resolvable recipient email for the selected 'to' options" };
 
-  let fromAddress = DEFAULT_FROM_ADDRESS;
-  if (params.fromSelection === "sales_rep" && client.sales_rep_id) {
-    const { data: rep } = await supabase
-      .from("profiles")
-      .select("name, email")
-      .eq("id", client.sales_rep_id)
-      .single();
-    if (rep?.email) {
-      fromAddress = rep.name ? `${rep.name} <${rep.email}>` : (rep.email as string);
-    }
-  }
-
   const { data: orgRow } = await supabase
     .from("organizations")
     .select("name")
     .eq("id", params.orgId)
     .single();
+
+  // Default sender is the tenant's own name on the shared verified domain —
+  // never a hard-coded tenant.
+  let fromAddress = orgEmailFrom(orgRow?.name as string | null | undefined);
+  if (params.fromSelection === "sales_rep" && client.sales_rep_id) {
+    // clients.sales_rep_id references crm_employees, not profiles — an
+    // employee's email/name live there directly regardless of whether they
+    // have a login (profiles row) at all.
+    const { data: rep } = await supabase
+      .from("crm_employees")
+      .select("first_name, last_name, email")
+      .eq("id", client.sales_rep_id)
+      .single();
+    if (rep?.email) {
+      const repName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim();
+      fromAddress = repName ? `${repName} <${rep.email}>` : (rep.email as string);
+    }
+  }
 
   let estimateNumber: string | null = null;
   if (params.estimateId) {
@@ -93,6 +105,28 @@ export async function resolveEmailStepContent(
       .single();
     if (estRow?.estimate_number != null) {
       estimateNumber = String(estRow.estimate_number).padStart(5, "0");
+    }
+  }
+
+  let meetingDate = "";
+  let meetingTime = "";
+  let meetingLocation = "";
+  let meetingTitle = "";
+  let salesRepName = "";
+  if (params.meetingId) {
+    const { data: meeting } = await supabase
+      .from("crm_sales_meetings")
+      .select("title, scheduled_at, location, crm_employees(first_name, last_name)")
+      .eq("id", params.meetingId)
+      .single();
+    if (meeting) {
+      const when = new Date(meeting.scheduled_at as string);
+      meetingDate = when.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+      meetingTime = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      meetingLocation = (meeting.location as string | null) ?? "";
+      meetingTitle = (meeting.title as string) ?? "";
+      const rep = meeting.crm_employees as { first_name: string; last_name: string } | null;
+      salesRepName = rep ? `${rep.first_name} ${rep.last_name}`.trim() : "";
     }
   }
 
@@ -113,6 +147,11 @@ export async function resolveEmailStepContent(
     "[billingstate]": (client.billing_state as string | null) ?? "",
     "[billingzip]": (client.billing_zip as string | null) ?? "",
     "[accountnumber]": (client.account_number as string | null) ?? "",
+    "[meetingdate]": meetingDate,
+    "[meetingtime]": meetingTime,
+    "[meetinglocation]": meetingLocation,
+    "[meetingtitle]": meetingTitle,
+    "[salesrepname]": salesRepName,
   };
   const resolve = (template: string) =>
     template.replace(/\[(\w+)\]/gi, (match) => {
@@ -171,9 +210,19 @@ export async function sendResolvedSequenceEmail(
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, reason: "RESEND_API_KEY not configured" };
 
+  let fromAddress = params.fromAddress;
+  if (!fromAddress) {
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", params.orgId)
+      .single();
+    fromAddress = orgEmailFrom(orgRow?.name as string | null | undefined);
+  }
+
   const resend = new Resend(resendKey);
   const { data: sent, error: sendErr } = await resend.emails.send({
-    from: params.fromAddress || DEFAULT_FROM_ADDRESS,
+    from: fromAddress,
     to: params.toEmails,
     subject: params.subject,
     html: params.bodyHtml,
@@ -239,14 +288,16 @@ export async function advanceEnrollmentPastStep(
   }
 
   if (nextEvent.event_type === "wait") {
-    const days = (nextEvent.config as Record<string, number>)?.days ?? 0;
-    const d = new Date();
-    d.setDate(d.getDate() + days);
+    const waitConfig = (nextEvent.config as Record<string, number>) ?? {};
+    const days = waitConfig.days ?? 0;
+    const hours = waitConfig.hours ?? 0;
+    const minutes = waitConfig.minutes ?? 0;
+    const d = computeWaitFireAt(waitConfig);
     await supabase
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextEvent.position + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
       .eq("id", params.enrollmentId);
-    return `advanced → wait ${days}d`;
+    return `advanced → wait ${days}d ${hours}h ${minutes}m`;
   }
 
   await supabase

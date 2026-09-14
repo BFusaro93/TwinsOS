@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils";
 import { DASHBOARD_TEMPLATES } from "@/lib/reports/dashboard-templates";
@@ -29,6 +30,7 @@ import {
   useDashboards,
   useDeleteDashboard,
 } from "@/lib/hooks/use-report-center";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { Dashboard } from "@/types/crm-reports";
 
 function NewDashboardMenu() {
@@ -63,6 +65,8 @@ function NewDashboardMenu() {
 }
 
 export function DashboardsList() {
+  const { can } = usePermissions();
+  const canManage = can("manage_report_center");
   const { data: dashboards = [], isLoading } = useDashboards();
   const createDashboard = useCreateDashboard();
   const deleteDashboard = useDeleteDashboard();
@@ -73,6 +77,7 @@ export function DashboardsList() {
       name: `${dashboard.name} (Copy)`,
       description: dashboard.description,
       config: dashboard.config,
+      visibleToCrew: dashboard.visibleToCrew,
     });
   };
 
@@ -82,7 +87,7 @@ export function DashboardsList() {
         <p className="text-sm text-slate-500">
           Multi-tab dashboards built from your saved analyses.
         </p>
-        <NewDashboardMenu />
+        {canManage && <NewDashboardMenu />}
       </div>
 
       {isLoading ? (
@@ -102,12 +107,14 @@ export function DashboardsList() {
               Combine your saved analyses into a multi-tab dashboard.
             </p>
           </div>
-          <Button size="sm" variant="outline" asChild>
-            <Link href="/crm/admin/reports/dashboards/new">
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              New Dashboard
-            </Link>
-          </Button>
+          {canManage && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/crm/admin/reports/dashboards/new">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                New Dashboard
+              </Link>
+            </Button>
+          )}
         </div>
       ) : (
         <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
@@ -135,6 +142,16 @@ export function DashboardsList() {
                       >
                         {dashboard.name}
                       </Link>
+                      {dashboard.isSystemSeeded && (
+                        <Badge variant="secondary" className="ml-2 align-middle text-[10px]">
+                          Built-in
+                        </Badge>
+                      )}
+                      {dashboard.visibleToCrew && (
+                        <Badge variant="outline" className="ml-2 align-middle text-[10px]">
+                          Crew
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">
                       {dashboard.description || "—"}
@@ -164,22 +181,26 @@ export function DashboardsList() {
                               Open
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/crm/admin/reports/dashboards/${dashboard.id}/edit`}>
-                              Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDuplicate(dashboard)}
-                          >
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-600 focus:text-red-600"
-                            onClick={() => setPendingDelete(dashboard)}
-                          >
-                            Delete
-                          </DropdownMenuItem>
+                          {canManage && (
+                            <>
+                              <DropdownMenuItem asChild>
+                                <Link href={`/crm/admin/reports/dashboards/${dashboard.id}/edit`}>
+                                  Edit
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDuplicate(dashboard)}
+                              >
+                                Duplicate
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600 focus:text-red-600"
+                                onClick={() => setPendingDelete(dashboard)}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

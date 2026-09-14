@@ -6,6 +6,7 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPlanForPriceId } from "@/lib/stripe/plans";
 import { syncSeatOverage } from "@/lib/stripe/seat-sync";
 import { logger } from "@/lib/logger";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 const log = logger.child("stripe webhook");
 
@@ -202,11 +203,14 @@ async function applySubscriptionToOrg(
   // A downgraded/canceled subscription doesn't need its overage item
   // reconciled — the subscription itself is ending or already gone.
   if (!DOWNGRADE_STATUSES.has(subscription.status) && org?.plan) {
+    // Crew accounts are shared field-clock-in logins, not real named seats —
+    // see the matching comment in use-billing.ts.
     const { count: seatsUsed } = await db
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("org_id", org.id)
-      .neq("status", "inactive");
+      .neq("status", "inactive")
+      .neq("role", "crew");
     await syncSeatOverage(stripe, subscription, org.plan, seatsUsed ?? 0, {
       seatsIncludedOverride: org.seats_included_override,
       seatOverageCentsOverride: org.seat_overage_cents_override,
@@ -244,12 +248,12 @@ async function notifyPaymentFailed(
   const amountDisplay = invoice.amount_due != null
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: (invoice.currency ?? "usd").toUpperCase() }).format(invoice.amount_due / 100)
     : null;
-  const portalUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const portalUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   try {
     await resend.emails.send({
-      from: "Equipt <noreply@twinslawnservice.com>",
+      from: EMAIL_FROM,
       to: recipients,
       subject: `Payment failed for ${org.name}'s subscription`,
       html: `

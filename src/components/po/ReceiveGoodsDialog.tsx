@@ -31,13 +31,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useProducts, useReceiveProductCostLayer } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useReceivePartCostLayer } from "@/lib/hooks/use-parts";
-import { useCreateGoodsReceipt, useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
+import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -76,7 +78,8 @@ export function ReceiveGoodsDialog({
   const { data: parts = [] } = useParts();
   const { mutateAsync: receivePartLayer } = useReceivePartCostLayer();
   const { mutateAsync: receiveProductLayer } = useReceiveProductCostLayer();
-  const { mutate: createReceipt, isPending: saving } = useCreateGoodsReceipt();
+  const { mutateAsync: createReceipt, isPending: saving } = useCreateGoodsReceipt();
+  const { mutateAsync: deleteReceipt } = useDeleteGoodsReceipt();
   const { data: allReceipts = [], isFetched: receiptsFetched } = useGoodsReceipts();
   const [applyingInventory, setApplyingInventory] = useState(false);
 
@@ -168,7 +171,6 @@ export function ReceiveGoodsDialog({
     })
     .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
   );
-  const salesTax = Math.round(taxableSubtotal * (po.taxRatePercent / 100));
   // A PO-level discount is a single flat amount for the whole order, but
   // receiving can happen across multiple partial receipts — applying it in
   // full to every receipt would double- (or triple-) count it, while
@@ -178,6 +180,14 @@ export function ReceiveGoodsDialog({
   const discountShare = po.discountCost > 0 && po.subtotal > 0
     ? Math.round(po.discountCost * (subtotal / po.subtotal))
     : 0;
+  // The prorated share is what this receipt's tax has to work from when the
+  // PO discounts before tax, for the same reason.
+  const salesTax = computeSalesTax({
+    taxableSubtotal,
+    taxRatePercent: po.taxRatePercent,
+    discountCost: discountShare,
+    discountReducesTax: po.discountReducesTax,
+  });
   const grandTotal = subtotal - discountShare + salesTax + po.shippingCost;
 
   // Compares the CUMULATIVE received quantity (this receipt + everything
@@ -206,62 +216,17 @@ export function ReceiveGoodsDialog({
 
     const linesToReceive = lines.filter((l) => l.quantityReceived > 0);
 
-    // Update inventory + cost layers for every received line item BEFORE
-    // recording the receipt — awaited and error-surfacing (not fire-and-forget)
-    // so a failed increment (deleted catalog product, RLS mismatch, etc.)
-    // aborts the whole submission instead of silently recording a receipt
-    // that says items arrived while inventory never actually moved.
-    setApplyingInventory(true);
+    // Persist the receipt record FIRST, then apply inventory — "already
+    // received" tracking (alreadyReceivedMap above) is derived entirely from
+    // goods_receipts rows, so if inventory were applied first and this insert
+    // then failed, the increments would already be live with no receipt row
+    // to show for it; retrying the same submission would double-increment
+    // inventory with no way to tell. Applying inventory second means a
+    // failure there instead rolls back the just-created receipt (below), so
+    // there's never a receipt with no matching inventory change or vice versa.
+    let receipt: Awaited<ReturnType<typeof createReceipt>>;
     try {
-      for (const line of linesToReceive) {
-        // Find the PO line item to look up the productItemId
-        const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
-        const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
-
-        if (!matchedProduct) {
-          throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
-        }
-
-        if (matchedProduct.category === "maintenance_part") {
-          // Also update the Parts inventory record if one is linked
-          const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
-            (line.partNumber ? parts.find((pt) => pt.partNumber === line.partNumber) : null);
-          if (linkedPart) {
-            await receivePartLayer({
-              partId: linkedPart.id,
-              quantity: line.quantityReceived,
-              unitCost: line.unitCost,
-              receivedAt,
-              poNumber: po.poNumber,
-            });
-          }
-          await receiveProductLayer({
-            productId: matchedProduct.id,
-            quantity: line.quantityReceived,
-            unitCost: line.unitCost,
-            receivedAt,
-            poNumber: po.poNumber,
-          });
-        } else {
-          await receiveProductLayer({
-            productId: matchedProduct.id,
-            quantity: line.quantityReceived,
-            unitCost: line.unitCost,
-            receivedAt,
-            poNumber: po.poNumber,
-          });
-        }
-      }
-    } catch (err) {
-      setApplyingInventory(false);
-      toast.error(`Failed to update inventory: ${errMsg(err)} — receipt was not recorded.`);
-      return;
-    }
-    setApplyingInventory(false);
-
-    // Persist the goods receipt record to the database
-    createReceipt(
-      {
+      receipt = await createReceipt({
         receiptNumber,
         purchaseOrderId: po.id,
         poNumber: po.poNumber,
@@ -286,11 +251,106 @@ export function ReceiveGoodsDialog({
           unitCost: l.unitCost,
           isMaintPart: l.isMaintPart,
         })),
-      },
-      {
-        onSuccess: () => setSubmitted(true),
+      });
+    } catch (err) {
+      toast.error(`Failed to record receipt: ${errMsg(err)}`);
+      return;
+    }
+
+    setApplyingInventory(true);
+    // Tracks which lines' inventory RPCs already succeeded in this submission
+    // so a later line's failure can reverse them — otherwise a partial failure
+    // mid-loop would leave earlier lines' increments applied with no receipt
+    // surviving to account for them, and retrying the submission would then
+    // double-increment inventory.
+    const succeeded: Array<{ productId: string; partId: string | null; quantity: number }> = [];
+    try {
+      for (const line of linesToReceive) {
+        // Find the PO line item to look up the productItemId
+        const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
+        const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
+
+        if (!matchedProduct) {
+          throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
+        }
+
+        let linkedPartId: string | null = null;
+        if (matchedProduct.category === "maintenance_part") {
+          // Also update the Parts inventory record if one is linked
+          const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
+            (line.partNumber ? parts.find((pt) => pt.partNumber === line.partNumber) : null);
+          if (linkedPart) {
+            await receivePartLayer({
+              partId: linkedPart.id,
+              quantity: line.quantityReceived,
+              unitCost: line.unitCost,
+              receivedAt,
+              poNumber: po.poNumber,
+              poLineItemId: line.lineItemId,
+            });
+            linkedPartId = linkedPart.id;
+          }
+        }
+        await receiveProductLayer({
+          productId: matchedProduct.id,
+          quantity: line.quantityReceived,
+          unitCost: line.unitCost,
+          receivedAt,
+          poNumber: po.poNumber,
+          poLineItemId: line.lineItemId,
+        });
+        succeeded.push({ productId: matchedProduct.id, partId: linkedPartId, quantity: line.quantityReceived });
       }
-    );
+    } catch (err) {
+      // Reverse the inventory adjustments that already succeeded earlier in
+      // this same loop before rolling back the receipt, so the whole receipt
+      // attempt is atomic — all-or-nothing — from the user's perspective.
+      if (succeeded.length > 0) {
+        const supabase = createClient();
+        for (const applied of succeeded) {
+          if (applied.partId) {
+            const { error: partRevertErr } = await supabase.rpc("adjust_part_quantity", {
+              p_org_id: po.orgId,
+              p_part_id: applied.partId,
+              p_delta: -applied.quantity,
+              p_po_number: po.poNumber,
+            });
+            if (partRevertErr) {
+              toast.error(`Failed to reverse part inventory during rollback: ${errMsg(partRevertErr)}. Please review this PO's receipts manually.`);
+            }
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: prodRevertErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+            p_org_id: po.orgId,
+            p_product_id: applied.productId,
+            p_delta: -applied.quantity,
+            p_reason: "Receipt submission failed partway through — reversing already-applied inventory",
+          });
+          if (prodRevertErr) {
+            toast.error(`Failed to reverse product inventory during rollback: ${errMsg(prodRevertErr)}. Please review this PO's receipts manually.`);
+          }
+        }
+      }
+      setApplyingInventory(false);
+      // Inventory never moved (now reversed above if it had), so the receipt
+      // that says it did is now wrong — roll it back rather than leaving a
+      // receipt on record with no matching inventory change (which
+      // alreadyReceivedMap would then treat as real). The header delete
+      // cascades to goods_receipt_lines, including any rows for lines that
+      // succeeded before the failure.
+      try {
+        await deleteReceipt(receipt.id);
+      } catch (cleanupErr) {
+        toast.error(
+          `Failed to update inventory: ${errMsg(err)} — additionally failed to roll back the receipt that was already recorded (${errMsg(cleanupErr)}). Please review this PO's receipts manually.`
+        );
+        return;
+      }
+      toast.error(`Failed to update inventory: ${errMsg(err)} — receipt was not recorded.`);
+      return;
+    }
+    setApplyingInventory(false);
+    setSubmitted(true);
   }
 
   function handleClose() {

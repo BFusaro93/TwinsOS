@@ -2,15 +2,21 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { PhotosSidebar } from "@/components/photo-docs/PhotosSidebar";
+import { PhotosSidebar, PHOTOS_NAV, FIELD_NAV } from "@/components/photo-docs/PhotosSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
-import { useUIStore } from "@/stores";
+import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
+import { useUIStore, SidebarDrawerProvider } from "@/stores";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
+
+const INTERNAL_ONLY_PATHS = ["/photos/field/crew-checklist", "/photos/field/time-off"];
 
 export default function PhotosLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
+
+  usePageTitle(pathname, [{ items: PHOTOS_NAV }, { items: FIELD_NAV }], "Landscapt");
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -21,24 +27,30 @@ export default function PhotosLayout({ children }: { children: React.ReactNode }
       <RealtimeSync />
       <SettingsLoader />
 
-      {/* Desktop sidebar */}
-      <div className="hidden h-full md:flex">
+      {/* Docked sidebar — lg+ only. Below that (phones and portrait tablets)
+          the 260px rail leaves too little room for the content beside it, so it
+          becomes the drawer below. */}
+      <div className="hidden h-full lg:flex">
         <PhotosSidebar />
       </div>
 
       {/* Mobile drawer */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50 touch-none" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
-            <PhotosSidebar />
+            <SidebarDrawerProvider>
+              <PhotosSidebar />
+            </SidebarDrawerProvider>
           </div>
         </div>
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-4 md:p-6">
+          <InternalOnlyGuard restrictedPaths={INTERNAL_ONLY_PATHS}>{children}</InternalOnlyGuard>
+        </main>
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
 import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
-import { shouldStopSequence, logSequenceExecution } from "./sequence-enrollment";
+import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
+import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -14,6 +15,7 @@ export interface DueEnrollmentRow {
   estimate_id: string | null;
   ticket_id: string | null;
   invoice_id: string | null;
+  meeting_id: string | null;
   next_event_position: number;
 }
 
@@ -24,7 +26,7 @@ export type ProcessOutcome =
 /**
  * Processes exactly one due step for one enrollment: evaluates stop
  * conditions, dispatches on the current event's type (wait/email/text_message/
- * alert/ticket/update/note/tags), and advances (or completes/stops) the
+ * alert/ticket/update/note/tags/if_branch), and advances (or completes/stops) the
  * enrollment. Shared by the daily cron sweep (`/api/automations/run`) and by
  * the immediate-send path fired right when a client is enrolled — this is the
  * single source of truth for "what happens when a sequence step comes due" so
@@ -35,7 +37,7 @@ export async function processDueEnrollment(
   enrollment: DueEnrollmentRow
 ): Promise<ProcessOutcome> {
   const nowIso = new Date().toISOString();
-  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position } = enrollment;
+  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position } = enrollment;
 
   const { data: events } = await adminClient
     .from("crm_sequence_events")
@@ -74,18 +76,17 @@ export async function processDueEnrollment(
   const eventConfig = (currentEvent.config ?? {}) as Record<string, any>;
 
   if (currentEvent.event_type === "wait") {
+    // `currentEvent` here IS the due wait step (this branch is only reached
+    // when a wait becomes "current" — i.e. two or more `wait` steps are
+    // stacked back-to-back, since a single wait's delay is normally
+    // pre-consumed when *stepping into* it via computeWaitFireAt in
+    // enrollClientInSequence/advanceEnrollmentPastStep). So the delay for
+    // advancing past it must come from currentEvent's OWN config, not the
+    // event that follows it — using the next event's config here skipped
+    // this wait's delay entirely for any chain of 2+ consecutive waits.
     const nextPos = next_event_position + 1;
-    const nextEvent = (events ?? []).find((e: { position: number }) => e.position === nextPos);
-    let newFireAt = nowIso;
-    if (nextEvent?.event_type === "wait") {
-      const waitConfig = (nextEvent.config as Record<string, number>) ?? {};
-      const days = waitConfig.days ?? 0;
-      const hours = waitConfig.hours ?? 0;
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      d.setHours(d.getHours() + hours);
-      newFireAt = d.toISOString();
-    }
+    const waitConfig = (currentEvent.config as Record<string, number>) ?? {};
+    const newFireAt = computeWaitFireAt(waitConfig).toISOString();
     await adminClient
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextPos, next_fire_at: newFireAt, updated_at: nowIso })
@@ -118,6 +119,7 @@ export async function processDueEnrollment(
       orgId,
       clientId: client_id!,
       estimateId: estimate_id ?? null,
+      meetingId: meeting_id ?? null,
       subjectTemplate: eventConfig.subject ?? "",
       bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
       toSelection: eventConfig.to,
@@ -175,6 +177,9 @@ export async function processDueEnrollment(
       toName: built.toName,
       subject: built.subject,
       bodyHtml: built.bodyHtml,
+      // Carry the resolved sender ("from sales rep" or the org-branded
+      // default) through; the approvals path already does this.
+      fromAddress: built.fromAddress,
     });
     if (!sendResult.ok) {
       await logSequenceExecution(adminClient, {
@@ -202,6 +207,7 @@ export async function processDueEnrollment(
     const built = await resolveSmsStepContent(adminClient, {
       orgId,
       clientId: client_id!,
+      meetingId: meeting_id ?? null,
       bodyTemplate: eventConfig.message ?? "",
     });
     if ("error" in built) {
@@ -279,9 +285,21 @@ export async function processDueEnrollment(
     }
 
     const message = (eventConfig.message as string) || "Automation alert";
+    // type/title/entity_id/entity_type are required for this row to actually
+    // surface in NotificationsBell — it queries `.in("type", [...])` against
+    // an explicit allowlist, so a row with no `type` (the bug this fixes)
+    // is inserted but never shown to anyone.
     const { error: notifErr } = await adminClient
       .from("notifications")
-      .insert(recipientIds.map((userId) => ({ org_id: orgId, user_id: userId, message })));
+      .insert(recipientIds.map((userId) => ({
+        org_id: orgId,
+        user_id: userId,
+        type: "automation_alert",
+        title: "Automation Alert",
+        message,
+        entity_id: client_id ?? null,
+        entity_type: client_id ? "client" : null,
+      })));
     if (notifErr) {
       return { skipped: { enrollmentId: enrollId, reason: `failed to insert notifications: ${notifErr.message}` } };
     }
@@ -307,11 +325,11 @@ export async function processDueEnrollment(
     let assignedToName: string | null = null;
     if (assignToId) {
       const { data: assignee } = await adminClient
-        .from("profiles")
-        .select("name")
+        .from("crm_employees")
+        .select("first_name, last_name")
         .eq("id", assignToId)
         .single();
-      assignedToName = assignee?.name ?? null;
+      assignedToName = assignee ? `${assignee.first_name} ${assignee.last_name}`.trim() : null;
     }
 
     const { data: ticket, error: ticketErr } = await adminClient
@@ -466,6 +484,43 @@ export async function processDueEnrollment(
     return { fired: { enrollmentId: enrollId, action: `tags updated → ${action}` } };
   }
 
+  if (currentEvent.event_type === "if_branch") {
+    const conditions = (Array.isArray(eventConfig.conditions) ? eventConfig.conditions : []) as
+      { field: ConditionField; operator: ConditionOperator; value: string | null }[];
+    const conditionsMet = await evaluateConditionSet(
+      adminClient, conditions, "AND", client_id, estimate_id, ticket_id, invoice_id
+    );
+
+    const future = (events ?? [])
+      .filter((e: { position: number }) => e.position > next_event_position)
+      .sort((a: { position: number }, b: { position: number }) => a.position - b.position);
+
+    // crm_sequence_events is a flat, position-ordered list — there's no
+    // parent/end-marker to represent a real nested block, even though the IF
+    // Branch dialog's copy describes "events nested under this IF block".
+    // So the guarded body is exactly the single event immediately following
+    // this one: conditions met → continue into it normally; conditions not
+    // met → skip past it straight to whatever comes after. A true multi-step
+    // block needs a schema change (e.g. an explicit block/end marker) to do
+    // properly — this is the best approximation the current data model
+    // supports, and it's the only one that keeps single-event bodies (the
+    // common case) actually branching correctly.
+    const skipToPosition = conditionsMet ? next_event_position : (future[0]?.position ?? next_event_position);
+
+    const action = await advanceEnrollmentPastStep(adminClient, {
+      enrollmentId: enrollId,
+      events: events ?? [],
+      completedPosition: skipToPosition,
+      nowIso,
+    });
+    await logSequenceExecution(adminClient, {
+      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+      eventId: currentEvent.id, eventType: "if_branch", action: conditionsMet ? "branch_true" : "branch_false",
+      detail: conditionsMet ? "conditions met — continuing into branch" : "conditions not met — branch skipped",
+    });
+    return { fired: { enrollmentId: enrollId, action: `if_branch ${conditionsMet ? "true" : "false"} → ${action}` } };
+  }
+
   await logSequenceExecution(adminClient, {
     orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
     eventId: currentEvent.id, eventType: currentEvent.event_type, action: "unsupported_event_type",
@@ -492,7 +547,7 @@ export async function processEnrollmentImmediately(
   for (let i = 0; i < maxSteps; i++) {
     const { data: row } = await adminClient
       .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position, next_fire_at, completed_at, stopped_at, awaiting_approval")
+      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position, next_fire_at, completed_at, stopped_at, awaiting_approval")
       .eq("id", enrollmentId)
       .maybeSingle();
 

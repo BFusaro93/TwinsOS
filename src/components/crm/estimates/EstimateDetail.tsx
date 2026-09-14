@@ -10,6 +10,8 @@ import {
   useSaveEstimateFinancials,
   useUpsertLineItem,
   useEstimateShareTokens,
+  useEstimateShareLink,
+  useEnsureEstimateShareLink,
   useEstimateVersions,
   useEstimateChangeRequests,
   useResolveChangeRequest,
@@ -18,9 +20,12 @@ import {
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
+import { useCRMServices, useEstimateJobs } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
@@ -52,7 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, todayLocalISODate } from "@/lib/utils";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
@@ -82,6 +87,9 @@ import {
   Sparkles,
   MessageSquarePlus,
   Pencil,
+  Briefcase,
+  Link2,
+  ExternalLink,
 } from "lucide-react";
 import {
   useAttachments,
@@ -334,20 +342,26 @@ interface Props {
 
 export function EstimateDetail({ estimateId, onClose, compact = false }: Props) {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canSend = can("estimate_send");
   const searchParams = useSearchParams();
   const backClientId = searchParams.get("clientId");
   const qc = useQueryClient();
   const { data: estimate, isLoading } = useEstimate(estimateId);
+  // Jobs already converted from this estimate — drives the header's
+  // "Convert to Job" vs "View Job" action for accepted estimates.
+  const { data: estimateJobs = [] } = useEstimateJobs(estimateId);
   const { data: templates } = useEstimateTemplates();
   const { data: clients }   = useClients();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
   const { data: overheadSettings } = useOverheadSettings();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+  const { data: crmServices } = useCRMServices();
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
   const { mutateAsync: createInvoice, isPending: creatingInvoice } = useCreateInvoiceFromEstimate();
   const { data: changeRequests } = useEstimateChangeRequests(estimateId);
@@ -356,6 +370,44 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
 
   const { data: shareTokens = [] } = useEstimateShareTokens(estimate?.id ?? "");
+  // D-26: the estimate's live public proposal URL — surfaced as Copy/Open
+  // actions so staff can hand the link to a client without re-sending the
+  // email (which was previously the only way to reach it).
+  const { data: shareLink } = useEstimateShareLink(estimate?.id ?? "");
+  const { mutateAsync: ensureShareLink, isPending: ensuringShareLink } = useEnsureEstimateShareLink();
+  const liveProposalUrl = shareLink?.url ?? null;
+
+  // Resolve (minting only if nothing is live — same rule as send-email) and
+  // then copy or open. Opening pre-creates the tab synchronously so the
+  // popup blocker doesn't eat a window.open issued after an await.
+  async function resolveProposalUrl(): Promise<string | null> {
+    if (liveProposalUrl) return liveProposalUrl;
+    if (!estimate) return null;
+    try {
+      const res = await ensureShareLink(estimate.id);
+      return res.url;
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to create proposal link");
+      return null;
+    }
+  }
+  async function copyProposalLink() {
+    const url = await resolveProposalUrl();
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Proposal link copied");
+    } catch {
+      toast.error("Couldn't copy — your browser blocked clipboard access");
+    }
+  }
+  async function openProposalLink() {
+    if (liveProposalUrl) { window.open(liveProposalUrl, "_blank", "noopener"); return; }
+    const tab = window.open("", "_blank");
+    const url = await resolveProposalUrl();
+    if (!url) { tab?.close(); return; }
+    if (tab) tab.location.href = url; else window.open(url, "_blank", "noopener");
+  }
   const { data: versions = [] } = useEstimateVersions(estimate?.id ?? "");
   const { data: dbStages = [], isLoading: stagesLoading } = useEstimateStages();
   const seedStages = useSeedDefaultStages();
@@ -563,6 +615,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
       await Promise.all(
         items.map((item, idx) => {
+          // Carry over the matched service's budget method / production rate
+          // (same as EstimateLineItemsGrid's addService) so an AI-drafted item
+          // for a production_rate service doesn't silently fall back to manual
+          // budgeting with 0 budgeted hours.
+          const matchedService = item.serviceId
+            ? (crmServices ?? []).find((s) => s.id === item.serviceId)
+            : undefined;
+          const budgetMethod = matchedService?.budgetMethod ?? "manual";
+          const productionRate = matchedService?.productionRateSqftPerHr ?? null;
           const computed = computeLineItem({
             calcType: 1,
             qty: item.qty,
@@ -572,24 +633,26 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             costCents: 0,
             adjRateCents: null,
             unitType: item.unitType,
-            budgetMethod: "manual",
-          });
+            productionRateSqftPerHr: productionRate,
+            budgetMethod,
+          }, breakevenRateCents);
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
               service_id: item.serviceId ?? null,
               service_name: item.serviceName,
               estimate_desc: item.estimateDesc || null,
-              status: "draft",
+              status: "quote",
               calc_type: 1,
               qty: item.qty,
               rate_cents: item.rateCents,
               visits: item.visits,
-              cost_cents: 0,
+              cost_cents: computed.costCents,
               adj_rate_cents: null,
               sort_order: existingCount + idx,
               unit_type: item.unitType,
-              budget_method: "manual",
+              production_rate_sqft_per_hr: productionRate,
+              budget_method: budgetMethod,
               total_cents: computed.totalCents,
               budgeted_hours: computed.budgetedHours,
               total_budgeted_hours: computed.totalBudgetedHours,
@@ -656,6 +719,16 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     return <div className="p-6 text-sm text-slate-500">Estimate not found.</div>;
   }
 
+  if (!permissionsLoading && !can("estimate_edit")) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="No access"
+        description="You don't have permission to edit Estimates."
+      />
+    );
+  }
+
   const effectiveStage = (headerEdits.stage ?? estimate.stage) as EstimateStage;
 
   const visibleLineItems = (estimate.lineItems ?? []).filter((li) => {
@@ -667,7 +740,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* ── top bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-white px-6 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
@@ -701,7 +774,27 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 gap-y-2">
+          {/* An estimate accepted ONLINE (public proposal / portal) never went
+              through the in-app Accepted click that auto-opens the convert
+              dialog — so an accepted estimate always exposes Convert to Job
+              here. Opens the dialog directly: no stage re-save, no spurious
+              "moved to accepted" activity. Once a job exists, link to it. */}
+          {effectiveStage === "accepted" && (
+            estimateJobs.length > 0 ? (
+              <Button variant="outline" size="sm" className="h-8 text-xs"
+                title="A job has already been created from this estimate"
+                onClick={() => router.push(`/crm/scheduling/jobs/${estimateJobs[0].id}`)}>
+                <Briefcase className="mr-1 h-3.5 w-3.5 text-green-600" />View Job
+              </Button>
+            ) : (
+              <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700"
+                title="Create a job from this accepted estimate"
+                onClick={() => setConvertDialogOpen(true)}>
+                <Briefcase className="mr-1 h-3.5 w-3.5" />Convert to Job
+              </Button>
+            )
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             title="Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"
             onClick={() => setWonLostDialog("accepted")}>
@@ -722,14 +815,36 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             onClick={() => handleStage("draft")}>
             <Pencil className="mr-1 h-3.5 w-3.5 text-slate-400" />Draft
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            disabled={estimate.approvalStatus === "pending" || submittingForApproval}
-            onClick={handleSendClick}>
-            <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />
-            {estimate.approvalStatus === "pending" ? "Awaiting Approval"
-              : estimate.approvalStatus === "rejected" ? "Resubmit for Approval"
-              : "Send"}
-          </Button>
+          {canSend && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              disabled={estimate.approvalStatus === "pending" || submittingForApproval}
+              onClick={handleSendClick}>
+              <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />
+              {estimate.approvalStatus === "pending" ? "Awaiting Approval"
+                : estimate.approvalStatus === "rejected" ? "Resubmit for Approval"
+                : "Send"}
+            </Button>
+          )}
+          {canSend && (
+            <>
+              <Button variant="outline" size="sm" className="h-8 text-xs"
+                disabled={ensuringShareLink}
+                title={liveProposalUrl
+                  ? `Copy the client's proposal link\n${liveProposalUrl}`
+                  : "Copy a proposal link for this estimate (creates one if none is live yet)"}
+                onClick={() => void copyProposalLink()}>
+                <Link2 className="mr-1 h-3.5 w-3.5 text-slate-500" />
+                {liveProposalUrl ? "Copy link" : "Get link"}
+              </Button>
+              {liveProposalUrl && (
+                <Button variant="outline" size="sm" className="h-8 px-2 text-xs"
+                  title="Open the client's proposal page in a new tab"
+                  onClick={() => void openProposalLink()}>
+                  <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+                </Button>
+              )}
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -738,28 +853,62 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             onClick={async () => {
               if (!estimate) return;
               try {
-                const today = new Date().toISOString().slice(0, 10);
+                const today = todayLocalISODate();
+                const taxRateBps = estimate.taxRateBps ?? 0;
+                // recalcEstimateTotals taxes the whole discounted subtotal —
+                // estimate lines carry no per-line taxability — so every
+                // invoice line has to be taxable for the invoice to reproduce
+                // the tax the client was quoted.
+                const isTaxable = taxRateBps > 0;
+
+                const invoiceLines = (estimate.lineItems ?? [])
+                  .filter((li) => !li.deletedAt && li.status !== "lost")
+                  .map((li) => ({
+                    name: li.serviceName ?? li.serviceId ?? "Service",
+                    description: li.invoiceDesc ?? "",
+                    qty: li.qty,
+                    rateCents: li.rateCents,
+                    totalCents: li.totalCents,
+                    discountCents: li.discountCents,
+                    discountType: li.discountType,
+                    discountValue: li.discountValue,
+                    isTaxable,
+                  }));
+
+                // Derive the header from the lines actually being written,
+                // using the same arithmetic the invoice recalc uses
+                // (deleteInvoiceLineItemAndRecalc / useUpdateInvoiceFinancials),
+                // rather than copying the estimate's own rollups. Copying them
+                // produced an invoice whose stored header disagreed with its
+                // own lines, so the first edit "recalculated" the client's
+                // total to a different number.
+                //
+                // Note: estimate subitem revenue is not carried onto the
+                // invoice (there are no subitem rows in any org today). If
+                // subitems ever ship, they need their own invoice lines here —
+                // otherwise this subtotal would under-bill them.
+                const netLine = (li: { totalCents: number; discountCents?: number }) =>
+                  li.totalCents - (li.discountCents ?? 0);
+                const subtotalCents = invoiceLines.reduce((s, li) => s + netLine(li), 0);
+                const discountCents = Math.max(0, Math.min(estimate.discountCents ?? 0, subtotalCents));
+                const taxableBase = Math.max(0, (isTaxable ? subtotalCents : 0) - discountCents);
+                const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
+                const totalCents = subtotalCents - discountCents + taxCents;
+
                 const invoice = await createInvoice({
                   estimateId: estimate.id,
                   clientId: estimate.clientId,
                   salesRepId: estimate.salesRepId,
                   description: estimate.description ?? `Invoice for estimate #${estimate.estimateNumber}`,
                   invoiceDate: today,
-                  lineItems: (estimate.lineItems ?? [])
-                    .filter((li) => !li.deletedAt && li.status !== "lost")
-                    .map((li) => ({
-                      description: li.serviceName ?? li.serviceId ?? "Service",
-                      qty: li.qty,
-                      rateCents: li.rateCents,
-                      totalCents: li.totalCents,
-                      discountCents: li.discountCents,
-                      discountType: li.discountType,
-                      discountValue: li.discountValue,
-                    })),
-                  subtotalCents: estimate.subtotalCents ?? 0,
-                  taxRateBps: estimate.taxRateBps ?? 0,
-                  taxCents: estimate.taxCents ?? 0,
-                  totalCents: estimate.totalCents ?? 0,
+                  lineItems: invoiceLines,
+                  subtotalCents,
+                  discountCents,
+                  discountType: estimate.discountType,
+                  discountValue: estimate.discountValue,
+                  taxRateBps,
+                  taxCents,
+                  totalCents,
                 });
                 await updateStage({ id: estimate.id, stage: "invoiced" });
                 toast.success("Invoice created");
@@ -844,7 +993,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       </div>
 
       {/* ── body ────────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 items-start gap-4 overflow-auto p-6">
+      {/* Main column + summary rail. Side by side only from xl: a 256px rail
+          plus this column's own internal splits needs more room than a tablet
+          has, and below xl the header card's fields start colliding. */}
+      <div className="flex min-h-0 flex-1 flex-col xl:flex-row xl:items-start gap-4 overflow-auto p-4 md:p-6">
 
         {/* ── left ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0 pb-3">
@@ -881,12 +1033,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
               {/* Client info card + header form */}
               <div className="rounded-lg border bg-white shadow-sm overflow-hidden shrink-0">
-                <div className={cn("flex gap-0", compact && "flex-col")}>
+                <div className={cn("flex flex-col gap-0 lg:flex-row", compact && "flex-col")}>
 
                   {/* Client info card */}
                   <div className={cn(
                     "shrink-0 bg-slate-50 p-4 flex flex-col gap-2",
-                    compact ? "w-full border-b" : "w-56 border-r"
+                    compact ? "w-full border-b" : "w-full border-b lg:w-56 lg:border-b-0 lg:border-r"
                   )}>
                     <p className="text-xs font-semibold text-slate-800 uppercase tracking-wide">
                       Client
@@ -930,10 +1082,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
                   {/* Header form */}
                   <div className="flex-1 p-4 min-w-0">
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
 
                       {/* Left column */}
-                      <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-3 min-w-0">
                         <FieldRow label="Description">
                           <Input
                             value={(headerEdits.description as string) ?? estimate.description}
@@ -951,9 +1103,21 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {(clients ?? []).filter((c) => c.status !== "lead").map((c) => (
-                                <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-                              ))}
+                              {/* Leads are legitimate estimate recipients (most
+                                  estimates are written for prospects), and the
+                                  estimate's current client must always be listed
+                                  regardless of status — otherwise the combobox
+                                  renders blank and invites an accidental reassign. */}
+                              {(clients ?? [])
+                                .filter((c) => c.id === estimate.clientId || (c.status !== "inactive" && c.status !== "cancelled"))
+                                .map((c) => (
+                                  <SelectItem key={c.id} value={c.id}>
+                                    {c.displayName}{c.status === "lead" ? " (lead)" : ""}
+                                  </SelectItem>
+                                ))}
+                              {estimate.clientId && !(clients ?? []).some((c) => c.id === estimate.clientId) && (
+                                <SelectItem value={estimate.clientId}>{estimate.clientName ?? "Current client"}</SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                         </FieldRow>
@@ -967,11 +1131,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             </SelectTrigger>
                             <SelectContent>
                               {salesReps.map((e) => (
-                                <SelectItem key={e.userId as string} value={e.userId as string}>
+                                <SelectItem key={e.id} value={e.id}>
                                   {e.firstName} {e.lastName}
                                 </SelectItem>
                               ))}
-                              {estimate.salesRepId && !salesReps.some((e) => e.userId === estimate.salesRepId) && (
+                              {estimate.salesRepId && !salesReps.some((e) => e.id === estimate.salesRepId) && (
                                 <SelectItem value={estimate.salesRepId}>
                                   {estimate.salesRepName ?? "Unknown"}
                                 </SelectItem>
@@ -1021,7 +1185,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       </div>
 
                       {/* Right column */}
-                      <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-3 min-w-0">
                         <FieldRow label="Estimate Date">
                           <Input
                             type="date"
@@ -1156,9 +1320,21 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 const accepted = shareTokens.find((t) => t.acceptedAt);
                 return (
                   <div className="flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1" title={liveProposalUrl ?? "No live proposal link — every link sent has expired or been accepted"}>
                       <Send className="h-3 w-3 text-slate-400" />
                       <span>{shareTokens.length} link{shareTokens.length !== 1 ? "s" : ""} sent</span>
+                      {liveProposalUrl && canSend && (
+                        <>
+                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 hover:underline"
+                            onClick={() => void copyProposalLink()} title={liveProposalUrl}>
+                            <Link2 className="h-3 w-3" /> Copy link
+                          </button>
+                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 hover:underline"
+                            onClick={() => void openProposalLink()} title={liveProposalUrl}>
+                            <ExternalLink className="h-3 w-3" /> Open
+                          </button>
+                        </>
+                      )}
                     </div>
                     {totalViews > 0 ? (
                       <div className="flex items-center gap-1 text-brand-600 font-medium">
@@ -1205,6 +1381,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
                       await Promise.all([
                         ...(tpl.items ?? []).map((item, idx) => {
+                          // Carry over the matched service's budget method / production
+                          // rate so a production_rate service applied via template doesn't
+                          // silently fall back to manual budgeting with 0 budgeted hours.
+                          const matchedService = item.serviceId
+                            ? (crmServices ?? []).find((s) => s.id === item.serviceId)
+                            : undefined;
+                          const budgetMethod = matchedService?.budgetMethod ?? "manual";
+                          const productionRate = matchedService?.productionRateSqftPerHr ?? null;
                           const computed = computeLineItem({
                             calcType: item.calcType,
                             qty: item.qty,
@@ -1214,14 +1398,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             budgetedHours: item.budgetedHours,
                             costCents: 0,
                             adjRateCents: null,
-                            budgetMethod: "manual",
+                            productionRateSqftPerHr: productionRate,
+                            budgetMethod,
                           }, breakevenRateCents);
                           return upsertLineItem({
                             estimateId: estimate.id,
                             item: {
                               service_id: item.serviceId,
                               service_name: item.serviceName,
-                              status: "draft",
+                              status: "quote",
                               calc_type: item.calcType,
                               qty: item.qty,
                               unit_type: item.unitType,
@@ -1230,7 +1415,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               cost_cents: computed.costCents,
                               adj_rate_cents: null,
                               sort_order: existingCount + idx,
-                              budget_method: "manual",
+                              production_rate_sqft_per_hr: productionRate,
+                              budget_method: budgetMethod,
                               total_cents: computed.totalCents,
                               budgeted_hours: computed.budgetedHours,
                               total_budgeted_hours: computed.totalBudgetedHours,
@@ -1318,6 +1504,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               {/* Line items grid */}
               <EstimateLineItemsGrid
                 estimateId={estimate.id}
+                clientId={estimate.clientId}
                 items={visibleLineItems}
                 selectedIds={selectedLineItemIds}
                 onSelectionChange={setSelectedLineItemIds}
@@ -1335,7 +1522,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
           {activeTab === "payment" && (
             <div className="rounded-lg border bg-white p-4 shadow-sm">
-              <div className="grid grid-cols-2 gap-x-10 gap-y-3 max-w-2xl">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-3 max-w-2xl sm:grid-cols-2">
                 <FieldRow label="Payment Plan" title="How the client will pay: a set number of monthly installments, or custom milestone payments">
                   <Select
                     value={(headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType}
@@ -1429,6 +1616,49 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           : ""}
                       </span>
                     )}
+                    {/* Submitted but not settled. Only ever shown while no
+                        deposit has actually been recorded — the webhook clears
+                        these columns the moment the charge lands, but showing
+                        both at once would read as two deposits if a clear were
+                        ever missed. A bank debit takes days, so without this
+                        the office chases a client who has already paid. */}
+                    {/* Declined or returned by the bank. Staff arrive here
+                        from the "Deposit failed" notification, so this is the
+                        screen that has to explain what happened and what the
+                        client can do — the proposal link re-opens itself for a
+                        retry while this is set, which is not obvious. */}
+                    {estimate.depositCollectedCents === 0 && !!estimate.depositFailedAt && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700"
+                        title={`${estimate.depositFailedReason ?? "The payment was rejected."} The client can pay it again from their original proposal link — it re-opens automatically until a deposit is recorded.`}
+                      >
+                        {formatCurrency(estimate.depositFailedCents ?? 0)}{" "}
+                        {estimate.depositFailedMethod === "us_bank_account" ? "bank transfer" : "payment"} failed
+                        {estimate.depositFailedAt
+                          ? ` on ${new Date(estimate.depositFailedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
+                    {estimate.depositCollectedCents === 0 &&
+                      !estimate.depositFailedAt &&
+                      (estimate.depositPendingCents ?? 0) > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                        title={
+                          estimate.depositPendingMethod === "us_bank_account"
+                            ? "The client authorized a bank transfer. ACH debits take 3–5 business days to settle; the deposit is credited to their account automatically when it clears, and you'll be notified if it fails."
+                            : "The client's card payment is still being processed. It will be credited automatically once it completes."
+                        }
+                      >
+                        {formatCurrency(estimate.depositPendingCents ?? 0)}{" "}
+                        {estimate.depositPendingMethod === "us_bank_account"
+                          ? "bank transfer pending"
+                          : "payment pending"}
+                        {estimate.depositPendingAt
+                          ? ` — submitted ${new Date(estimate.depositPendingAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
                   </div>
                 </FieldRow>
               </div>
@@ -1507,7 +1737,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         </div>
 
         {/* ── right: summary panel ── */}
-        <div className="w-64 shrink-0 pb-3">
+        <div className="w-full xl:w-64 xl:shrink-0 pb-3">
           <EstimateSummaryPanel
             estimate={estimate}
             onRecalculate={handleSaveFinancials}
@@ -1542,7 +1772,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             const stage = wonLostDialog;
             setWonLostDialog(null);
             handleStage(stage, reason);
-            if (stage === "accepted") setConvertDialogOpen(true);
+            // Only offer conversion when nothing has been created from this
+            // estimate yet. Re-confirming "Accepted" — to correct a won reason,
+            // say — used to reopen the convert dialog pre-populated even on an
+            // estimate that already had a job, and confirming it built a second
+            // job with a second set of visits and its own auto-invoice stream.
+            // The header button already swaps to "View Job" in this case; this
+            // was the path around it.
+            if (stage === "accepted" && estimateJobs.length === 0) setConvertDialogOpen(true);
           }}
           onCancel={() => setWonLostDialog(null)}
         />
@@ -1570,6 +1807,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         estimateNumber={estimate.estimateNumber}
         clientName={estimate.clientName ?? null}
         clientEmail={estimate.clientEmail ?? null}
+        salesRepName={estimate.salesRepName ?? null}
+        totalCents={estimate.totalCents}
+        estimateDate={estimate.createdAt}
+        proposalUrl={liveProposalUrl}
+        zeroTotalLineCount={(estimate.lineItems ?? []).filter(
+          (li) => !li.deletedAt && li.status === "quote" && li.rowType !== "section" && (li.totalCents - (li.discountCents ?? 0)) <= 0
+        ).length}
         open={sendDialogOpen}
         onClose={() => setSendDialogOpen(false)}
         onSent={() => {
@@ -1585,9 +1829,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
 function FieldRow({ label, title, children }: { label: string; title?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 min-w-0">
       <Label className="w-32 shrink-0 text-slate-500 text-xs" title={title}>{label}</Label>
-      {children}
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

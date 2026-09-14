@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { BrandMark } from "@/components/shared/BrandMark";
 import {
   ArrowLeft,
-  Leaf,
   LayoutDashboard,
   Users,
   UserRound,
@@ -44,6 +45,8 @@ import {
   Phone,
   BookOpen,
   FileImage,
+  ClipboardList,
+  CalendarCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -52,6 +55,9 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   comingSoon?: boolean;
+  /** Permission key gating this item — hidden entirely when the current
+   *  user lacks it (admins always pass, per usePermissions()). */
+  permission?: string;
 }
 
 interface NavSection {
@@ -59,7 +65,7 @@ interface NavSection {
   items: NavItem[];
 }
 
-const CRM_NAV: NavSection[] = [
+export const CRM_NAV: NavSection[] = [
   {
     label: "Overview",
     items: [
@@ -69,20 +75,21 @@ const CRM_NAV: NavSection[] = [
   {
     label: "CRM",
     items: [
-      { label: "Clients",   href: "/crm/clients",   icon: UserRound },
-      { label: "Leads",     href: "/crm/leads",     icon: UserSearch },
-      { label: "Estimates",  href: "/crm/estimates",           icon: ClipboardSignature },
-      { label: "Tickets",   href: "/crm/tickets",   icon: Ticket },
-      { label: "Calls",     href: "/crm/calls",     icon: Phone },
+      { label: "Clients",   href: "/crm/clients",   icon: UserRound, permission: "client_list" },
+      { label: "Leads",     href: "/crm/leads",     icon: UserSearch, permission: "lead_list" },
+      { label: "Estimates",  href: "/crm/estimates",           icon: ClipboardSignature, permission: "estimate_list" },
+      { label: "Tickets",   href: "/crm/tickets",   icon: Ticket, permission: "tickets_view_modify" },
+      { label: "Calls",     href: "/crm/calls",     icon: Phone, permission: "tickets_view_modify" },
+      { label: "Sales Meetings", href: "/crm/sales-meetings", icon: CalendarCheck, permission: "sales_meeting_list" },
     ],
   },
   {
     label: "Scheduling",
     items: [
-      { label: "Dispatch Board", href: "/crm/scheduling/dispatch",     icon: CalendarDays },
-      { label: "Waiting List",   href: "/crm/scheduling/waiting-list", icon: ListOrdered },
+      { label: "Dispatch Board", href: "/crm/scheduling/dispatch",     icon: CalendarDays, permission: "sched_dispatch_board" },
+      { label: "Waiting List",   href: "/crm/scheduling/waiting-list", icon: ListOrdered, permission: "sched_waiting_list" },
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
-      { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake },
+      { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake, permission: "snow_dispatch_view" },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
       { label: "Job Photos",     href: "/crm/scheduling/job-photos",   icon: FileImage },
     ],
@@ -90,39 +97,40 @@ const CRM_NAV: NavSection[] = [
   {
     label: "Accounting",
     items: [
-      { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt },
-      { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard },
+      { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt, permission: "acct_view_invoice_list" },
+      { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard, permission: "acct_view_payment_list" },
+      { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList, permission: "requisition_list" },
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
-      { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature },
-      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText },
+      { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature, permission: "contract_list" },
+      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view" },
     ],
   },
   {
     label: "Communication",
     items: [
-      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap },
-      { label: "Forms",           href: "/crm/communication/forms",        icon: FormInput },
-      { label: "Email Activity",  href: "/crm/communication/email",        icon: Mail },
-      { label: "Sales Campaigns", href: "/crm/communication/campaigns",    icon: Megaphone },
+      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap, permission: "automation_view" },
+      { label: "Forms",           href: "/crm/communication/forms",        icon: FormInput, permission: "forms_view_submit" },
+      { label: "Message Activity", href: "/crm/communication/email",       icon: Mail, permission: "email_activity_view" },
+      { label: "Sales Campaigns", href: "/crm/communication/campaigns",    icon: Megaphone, permission: "campaign_list" },
     ],
   },
   {
     label: "Team",
     items: [
       { label: "Crews",     href: "/crm/team/crews",     icon: HardHat },
-      { label: "Employees", href: "/crm/team/employees", icon: UserCog },
+      { label: "Employees", href: "/crm/team/employees", icon: UserCog, permission: "emp_view_info" },
       { label: "Vendors",   href: "/crm/vendors",        icon: Building2 },
     ],
   },
   {
     label: "Administration",
     items: [
-      { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3 },
-      { label: "Services",  href: "/crm/settings/services",    icon: Layers },
+      { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3, permission: "view_report_center" },
+      { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list" },  // also hosts the Price Adjustments tab
       { label: "Products",  href: "/crm/settings/products",    icon: BookOpen },
       { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock },
-      { label: "Packages",  href: "/crm/settings/packages",    icon: Package },
-      { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit },
+      { label: "Packages",  href: "/crm/settings/packages",    icon: Package, permission: "package_list" },
+      { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit, permission: "document_template_list" },
       { label: "Settings",  href: "/crm/settings",             icon: Settings },
       { label: "Support",   href: "/crm/support",              icon: HelpCircle },
       { label: "Docs",      href: "/crm/docs",                 icon: Library },
@@ -144,9 +152,10 @@ function matchesHref(pathname: string, href: string): boolean {
 
 export function CRMSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
+  const { can } = usePermissions();
 
   // Several nav items share a path prefix with siblings (e.g. "Settings" at
   // /crm/settings and "Documents" at /crm/settings/documents) — only the
@@ -181,9 +190,7 @@ export function CRMSidebar() {
             </>
           ) : (
             <>
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500">
-                <Leaf className="h-4 w-4 text-white" />
-              </div>
+              <BrandMark variant="reversed" className="h-7 w-7 shrink-0 rounded-md" />
               {!sidebarCollapsed && (
                 <span className="truncate text-lg font-bold text-brand-400">Landscapt</span>
               )}
@@ -201,7 +208,7 @@ export function CRMSidebar() {
                 {section.label}
               </p>
             )}
-            {section.items.map((item) => {
+            {section.items.filter((item) => !item.permission || can(item.permission)).map((item) => {
               const isActive = item.href === activeHref;
               const Icon = item.icon;
 

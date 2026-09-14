@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,9 +27,11 @@ import { useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates"
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { toast } from "sonner";
 import type { Estimate } from "@/types/crm-estimates";
 
@@ -73,11 +75,13 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const { data: clients }   = useClients();
   const { data: templates } = useEstimateTemplates();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: createEstimate, isPending } = useCreateEstimate();
   const { mutateAsync: upsertLineItem }             = useUpsertLineItem();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+  const { data: crmServices } = useCRMServices();
+  const rf = useRequiredFields("estimate");
 
   const selectableClients = (clients ?? [])
     .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
@@ -110,9 +114,19 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
     if (defaultClientId) setValue("clientId", defaultClientId);
   }, [defaultClientId, setValue]);
 
+  // The auto-generated "Estimate - <date>" description is only a placeholder
+  // for an untouched field. Once the user types their own text it must never
+  // be overwritten by a later re-run of the defaults effect (which was wiping
+  // it when Sales Rep was picked) — track that with a dirty flag.
+  const descriptionDirty = useRef(false);
+  const descriptionField = register("description", {
+    onChange: () => { descriptionDirty.current = true; },
+  });
+
   // Refresh date-based defaults each time the dialog opens
   useEffect(() => {
     if (open) {
+      descriptionDirty.current = false;
       setValue("description", `Estimate - ${defaultDescription()}`);
       setValue("estimateDate", todayStr());
       setValue("validUntilDate", thirtyDaysOut());
@@ -120,6 +134,14 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   }, [open, setValue]);
 
   async function onSubmit(values: FormValues) {
+    if (rf.isRequired("valid_until") && !values.validUntilDate) {
+      toast.error("Valid Until is required");
+      return;
+    }
+    if (rf.isRequired("sales_rep") && values.salesRepId === "none") {
+      toast.error("Sales Rep is required");
+      return;
+    }
     try {
       const tpl = values.templateId && values.templateId !== "none"
         ? (templates ?? []).find((t) => t.id === values.templateId)
@@ -140,6 +162,15 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       if (tpl?.items?.length) {
         await Promise.all(
           tpl.items.map((item, idx) => {
+            // Carry over the matched service's budget method / production rate
+            // (same as EstimateLineItemsGrid's addService) so a production_rate
+            // service applied via template doesn't silently fall back to manual
+            // budgeting with 0 budgeted hours.
+            const matchedService = item.serviceId
+              ? (crmServices ?? []).find((s) => s.id === item.serviceId)
+              : undefined;
+            const budgetMethod = matchedService?.budgetMethod ?? "manual";
+            const productionRate = matchedService?.productionRateSqftPerHr ?? null;
             const computed = computeLineItem({
               calcType:      item.calcType,
               qty:           item.qty,
@@ -228,7 +259,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
           <div className="flex flex-col gap-1.5">
             <Label>Description *</Label>
             <Input
-              {...register("description")}
+              {...descriptionField}
               placeholder="e.g. Spring Cleanup Estimate"
               className={errors.description ? "border-red-400" : ""}
             />
@@ -244,7 +275,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               <Input type="date" {...register("estimateDate")} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Valid Until</Label>
+              <Label>Valid Until{rf.req("valid_until")}</Label>
               <Input type="date" {...register("validUntilDate")} />
             </div>
           </div>
@@ -265,7 +296,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Sales Rep</Label>
+              <Label>Sales Rep{rf.req("sales_rep")}</Label>
               <Select value={watch("salesRepId")} onValueChange={(v) => setValue("salesRepId", v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Assign sales rep…" />
@@ -273,7 +304,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   {salesReps.map((e) => (
-                    <SelectItem key={e.userId as string} value={e.userId as string}>
+                    <SelectItem key={e.id} value={e.id}>
                       {e.firstName} {e.lastName}
                     </SelectItem>
                   ))}
@@ -331,7 +362,14 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} disabled={isPending}>
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            disabled={
+              isPending ||
+              (rf.isRequired("valid_until") && !watch("validUntilDate")) ||
+              (rf.isRequired("sales_rep") && watch("salesRepId") === "none")
+            }
+          >
             {isPending ? "Creating…" : "Create Estimate"}
           </Button>
         </DialogFooter>

@@ -48,15 +48,33 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/proposal/") || // public estimate/proposal acceptance link
     pathname.startsWith("/invoice/") || // public "view invoice online" / pay-without-login link
     pathname.startsWith("/legal") || // public privacy policy / SMS terms pages
+    pathname.startsWith("/forms/") || // public form submission pages (iframe-embeddable)
     pathname.startsWith("/portal/login") || // client portal login
     pathname.startsWith("/portal/register") || // client portal registration
     pathname.startsWith("/api/") || // all API routes handle their own auth
-    pathname === "/";
+    pathname.startsWith("/.well-known/") || // OAuth discovery metadata, fetched pre-login
+    pathname === "/" ||
+    pathname === "/pricing" || // public marketing pages
+    pathname === "/features" ||
+    pathname.startsWith("/features/") ||
+    pathname === "/integrations" ||
+    pathname === "/contact" ||
+    pathname === "/help" ||
+    pathname === "/compare" ||
+    pathname.startsWith("/compare/") ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/robots.txt" ||
+    pathname === "/llms.txt";
 
   if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
+    // Preserve the query string (e.g. `?open=<ticketId>` on an emailed link)
+    // — using `pathname` alone here used to drop it, sending a signed-out
+    // user who clicked a deep link straight past their destination.
+    const target = pathname + request.nextUrl.search;
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("redirectTo", pathname);
+    loginUrl.search = "";
+    loginUrl.searchParams.set("redirectTo", target);
     return NextResponse.redirect(loginUrl);
   }
 

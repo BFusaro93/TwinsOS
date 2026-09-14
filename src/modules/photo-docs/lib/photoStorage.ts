@@ -12,7 +12,13 @@ export function buildPhotoPath(
   projectId: string,
   fileName: string,
 ): string {
-  const ext = fileName.split(".").pop() ?? "jpg";
+  // fileName is a browser File.name, which a crafted client can set to
+  // anything (including "/" and ".." segments) — restrict the extracted
+  // extension to a safe charset before it lands in a storage path, or a
+  // crafted name could traverse out of this org/project's prefix in the
+  // shared bucket (same class of bug fixed in the crew-app photos route).
+  const rawExt = fileName.split(".").pop() ?? "jpg";
+  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "jpg";
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
   return `${orgId}/${projectId}/${ts}-${rand}.${ext}`;
@@ -29,9 +35,12 @@ export async function uploadOriginalPhoto(
   file: File,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseClient?: any,
+  /** Explicit content type — pass the effective MIME (see lib/fileType.ts)
+   *  so a HEIC the browser reported as octet-stream isn't stored that way. */
+  contentTypeOverride?: string,
 ): Promise<string> {
   const supabase = supabaseClient ?? createClient();
-  const contentType = file.type || "application/octet-stream";
+  const contentType = contentTypeOverride || file.type || "application/octet-stream";
 
   // Safari rejects fetch uploads with File objects directly (StorageUnknownError: Load failed).
   // Converting to ArrayBuffer first works around this Safari bug.

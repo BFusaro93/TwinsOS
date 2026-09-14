@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,11 +20,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarDays, Briefcase } from "lucide-react";
+import { CalendarDays, Briefcase, Plus, Tag } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, roundHours, todayLocalISODate } from "@/lib/utils";
+import { isoNy } from "@/lib/reports/ny-date";
 import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
+import { useClientProjects } from "@/lib/hooks/use-client-cmms";
+import { useEstimateShareTokens } from "@/lib/hooks/use-estimates";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 
 const JOB_TYPES = [
@@ -33,6 +39,71 @@ const JOB_TYPES = [
   { value: "project",     label: "Project" },
   { value: "waiting_list",label: "Waiting List" },
 ];
+
+/**
+ * Net revenue per selected line after the line's own discount and its share
+ * of the estimate-level discount. Mirrors recalcEstimateTotals: a "percent"
+ * header discount is a % of the (line-discounted) subtotal; a flat one is a
+ * fixed amount clamped to the subtotal, of which the selected lines carry
+ * their proportional share. Cents are distributed largest-remainder so the
+ * allocated discount sums exactly.
+ */
+function allocateHeaderDiscount(
+  estimate: Estimate,
+  allLines: EstimateLineItem[],
+  selectedLines: EstimateLineItem[],
+): Map<string, number> {
+  const lineNet = (li: EstimateLineItem) => Math.max(0, li.totalCents - li.discountCents);
+  const fullSubtotal = allLines.reduce((s, li) => s + lineNet(li), 0);
+  const selectedSubtotal = selectedLines.reduce((s, li) => s + lineNet(li), 0);
+
+  let headerDiscount = 0;
+  if (estimate.discountType === "percent") {
+    headerDiscount = Math.round(selectedSubtotal * ((estimate.discountValue ?? 0) / 10000));
+  } else if ((estimate.discountCents ?? 0) > 0 && fullSubtotal > 0) {
+    const clamped = Math.min(estimate.discountCents, fullSubtotal);
+    headerDiscount = Math.round(clamped * (selectedSubtotal / fullSubtotal));
+  }
+  headerDiscount = Math.max(0, Math.min(headerDiscount, selectedSubtotal));
+
+  const result = new Map<string, number>();
+  if (headerDiscount === 0 || selectedSubtotal === 0) {
+    for (const li of selectedLines) result.set(li.id, lineNet(li));
+    return result;
+  }
+
+  const shares = selectedLines.map((li) => {
+    const exact = (headerDiscount * lineNet(li)) / selectedSubtotal;
+    return { id: li.id, floor: Math.floor(exact), frac: exact - Math.floor(exact) };
+  });
+  let remainder = headerDiscount - shares.reduce((s, x) => s + x.floor, 0);
+  for (const x of [...shares].sort((a, b) => b.frac - a.frac)) {
+    if (remainder <= 0) break;
+    x.floor += 1;
+    remainder -= 1;
+  }
+  const discountById = new Map(shares.map((x) => [x.id, x.floor]));
+  for (const li of selectedLines) {
+    result.set(li.id, Math.max(0, lineNet(li) - (discountById.get(li.id) ?? 0)));
+  }
+  return result;
+}
+
+/**
+ * The per-visit unit rate a job service must carry so that
+ * qty x rate_cents x visits reproduces `net`, the amount the client actually
+ * accepted for that line.
+ *
+ * Holds for both calc types: a per-unit line's total is qty x rate x visits,
+ * and a fixed-total line's total IS the rate (estimate-calc.ts), so a fixed
+ * line with qty > 1 also needs the qty divided back out or the invoice bills
+ * it qty times over.
+ */
+function rateFromNet(li: EstimateLineItem, net: number): number {
+  const units = (li.qty || 0) * Math.max(1, li.visits || 1);
+  if (units <= 0) return li.adjRateCents ?? li.rateCents;
+  return Math.round(net / units);
+}
 
 interface Props {
   open: boolean;
@@ -51,8 +122,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
   // Default to items the client actually accepted — items marked "lost" on a per-item
   // acceptance (portal or public proposal) are left unchecked, but still selectable.
+  // $0 lines (net of their own discount) are also left unchecked: they'd otherwise
+  // convert into billable $0 services on the job.
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(lineItems.filter((li) => li.status !== "lost").map((li) => li.id))
+    () => new Set(
+      lineItems
+        .filter((li) => li.status !== "lost" && Math.max(0, li.totalCents - (li.discountCents ?? 0)) > 0)
+        .map((li) => li.id)
+    )
   );
   const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(
     () => new Set(materialItems.map((dc) => dc.id))
@@ -63,14 +140,46 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const [jobType,       setJobType]       = useState("one_time");
   const [scheduledDate, setScheduledDate] = useState("");
   const [crewId,        setCrewId]        = useState("");
+  /** Crew size — lands on crm_jobs.man_count and each visit's men_count (the
+   *  dispatch board's MEN column). */
+  const [manCount,      setManCount]      = useState(1);
   const [schedule,      setSchedule]      = useState("");
   const [notesToCrew,   setNotesToCrew]   = useState(() =>
     lineItems.map((li) => li.jobNote).filter(Boolean).join("\n").trim()
   );
+  const [projectId,     setProjectId]     = useState<string | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  /** Sales rep for the job — inherits the estimate's rep, overridable here (E-15). */
+  const [salesRepId,    setSalesRepId]    = useState<string | null>(estimate.salesRepId ?? null);
+  /** Date Sold — defaults to the estimate's acceptance date (portal or public
+   *  proposal), else today. Drives the Sales by Date Sold reports (E-09). */
+  const [dateSold,      setDateSold]      = useState(() =>
+    estimate.portalAcceptedAt ? isoNy(new Date(estimate.portalAcceptedAt)) : todayLocalISODate()
+  );
+  const [dateSoldTouched, setDateSoldTouched] = useState(false);
+  const { data: shareTokens } = useEstimateShareTokens(estimate.id);
+  useEffect(() => {
+    // A public-proposal acceptance is only known once the share tokens load;
+    // adopt it as the default unless the user already picked a date.
+    if (dateSoldTouched || estimate.portalAcceptedAt) return;
+    const accepted = (shareTokens ?? [])
+      .map((t) => t.acceptedAt)
+      .filter((d): d is string => !!d)
+      .sort()
+      .pop();
+    if (accepted) setDateSold(isoNy(new Date(accepted)));
+  }, [shareTokens, dateSoldTouched, estimate.portalAcceptedAt]);
+  const { data: employees } = useSelectableEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep || e.id === salesRepId);
 
   const { data: crews = [] } = useCRMCrews();
   const { data: crmSchedules = [] } = useCRMSchedules();
+  const rf = useRequiredFields("job");
+  const { data: clientProjects } = useClientProjects(estimate.clientId, estimate.clientName ?? "");
   const createJobs = useCreateJobsFromEstimate();
+  // All-in estimated cost (revenue - net profit) — seeds a linked project's EAC
+  // if it's still unset. See rpt_projects_wip / the WIP report this feeds.
+  const eacHintCents = estimate.revenueCents - estimate.netProfitCents;
 
   function toggleAll(checked: boolean) {
     setSelected(checked ? new Set(lineItems.map((li) => li.id)) : new Set());
@@ -95,9 +204,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }
 
   const selectedItems = lineItems.filter((li) => selected.has(li.id));
-  // Net of each line's own discount — this is what the client actually
-  // agreed to pay, and what feeds the new job's rate_cents snapshot below.
-  const totalCents = selectedItems.reduce((s, li) => s + (li.totalCents - li.discountCents), 0);
+  // Net of each line's own discount AND its share of the estimate-level
+  // (header) discount — this is what the client actually agreed to pay, and
+  // what feeds the new job's rate_cents snapshot below. Before the header
+  // discount was included here, a 10%-off estimate produced a job (and thus
+  // an invoice) priced at the undiscounted subtotal.
+  const netByLineId = allocateHeaderDiscount(estimate, lineItems, selectedItems);
+  const totalCents = selectedItems.reduce((s, li) => s + (netByLineId.get(li.id) ?? 0), 0);
   const selectedMaterialItems = materialItems.filter((dc) => selectedMaterials.has(dc.id));
 
   async function handleCreate() {
@@ -109,6 +222,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.error("Schedule is required for recurring jobs");
       return;
     }
+    if (rf.isRequired("crew") && !crewId) {
+      toast.error("Crew is required");
+      return;
+    }
+    if (rf.isRequired("sales_rep") && !salesRepId) {
+      toast.error("Sales Rep is required");
+      return;
+    }
 
     try {
       const { jobId } = await createJobs.mutateAsync({
@@ -117,8 +238,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         jobType,
         scheduledDate: scheduledDate || null,
         crewId: crewId || null,
+        manCount,
         schedule: jobType === "recurring" ? schedule : null,
         notesToCrew: notesToCrew || null,
+        projectId: jobType === "project" ? projectId : null,
+        eacHintCents,
+        salesRepId,
+        dateSold: dateSold || null,
         services: selectedItems.map((li) => ({
           serviceName:   li.serviceName ?? "Service",
           serviceId:     li.serviceId ?? null,
@@ -130,9 +256,28 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           // service, so anything re-deriving a price from qty x rate
           // (job value rollups, invoice line items) billed a different
           // number than the client actually accepted.
-          rateCents:     li.adjRateCents ?? li.rateCents,
-          totalCents:    li.totalCents - li.discountCents,
-          budgetedHours: budgetedHoursFromLineItem(li),
+          // crm_job_services.rate_cents is a PER-VISIT unit rate: the
+          // visit-completion auto-invoice bills qty x rate_cents on every
+          // completed visit (complete-visit-side-effects.ts). The estimate
+          // line's net, by contrast, covers the whole engagement --
+          // totalCents is qty x rate x visits for a per-unit line
+          // (estimate-calc.ts) -- so the rate has to be divided back out by
+          // BOTH qty and visits.
+          //
+          // Dividing by qty alone left rate_cents holding rate x visits, and
+          // every single visit then billed the entire multi-visit contract:
+          // a 30-visit mow at $60 with any header discount produced
+          // rate_cents = $1,620, i.e. $48,600 billed instead of $1,620.
+          //
+          // Always deriving from the net (rather than only when a header
+          // discount is detected) also fixes the other half of that branch:
+          // the equality check treated "no header discount" as "use the raw
+          // rate", which silently dropped any LINE-level discount. With no
+          // discount at all, net = qty x rate x visits, so this reduces to
+          // the raw rate exactly.
+          rateCents:     rateFromNet(li, netByLineId.get(li.id) ?? 0),
+          totalCents:    netByLineId.get(li.id) ?? 0,
+          budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
           budgetMethod:  li.budgetMethod,
         })),
         materials: selectedMaterialItems.map((dc) => ({
@@ -146,14 +291,18 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.success("Job created from estimate");
       onConverted(jobId);
       onClose();
-    } catch {
-      toast.error("Failed to create job");
+    } catch (err) {
+      // Show the real reason where there is one — "already converted" in
+      // particular is actionable, and a bare "Failed to create job" invites
+      // the user to keep clicking.
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to create job");
     }
   }
 
   const allSelected = lineItems.length > 0 && selected.size === lineItems.length;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -300,6 +449,29 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             />
           </div>
 
+          {jobType === "project" && (
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs font-medium text-slate-600">Project</Label>
+              <div className="flex gap-2">
+                <Select value={projectId ?? "none"} onValueChange={(v) => setProjectId(v === "none" ? null : v)}>
+                  <SelectTrigger className="text-sm"><SelectValue placeholder="Link a project…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project linked</SelectItem>
+                    {(clientProjects ?? []).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" size="sm" onClick={() => setNewProjectOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Links this job to a Projects (PO cost-tracking) record for job costing and the WIP report.
+              </p>
+            </div>
+          )}
+
           {jobType === "recurring" && (
             <div className="flex flex-col gap-1">
               <Label className="text-xs font-medium text-slate-600">Schedule *</Label>
@@ -324,7 +496,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           )}
 
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">Assign Crew</Label>
+            <Label className="text-xs font-medium text-slate-600">Assign Crew{rf.req("crew")}</Label>
             <Select value={crewId || "none"} onValueChange={(v) => setCrewId(v === "none" ? "" : v)}>
               <SelectTrigger className="text-sm">
                 <SelectValue placeholder="Unassigned" />
@@ -336,6 +508,46 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-medium text-slate-600">Sales Rep{rf.req("sales_rep")}</Label>
+            <Select value={salesRepId ?? "none"} onValueChange={(v) => setSalesRepId(v === "none" ? null : v)}>
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {salesReps.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-medium text-slate-600">
+              <Tag className="inline h-3.5 w-3.5 mr-1" />
+              Date Sold
+            </Label>
+            <Input
+              type="date"
+              value={dateSold}
+              onChange={(e) => { setDateSoldTouched(true); setDateSold(e.target.value); }}
+              className="text-sm"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-medium text-slate-600">Crew Size (men)</Label>
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              value={manCount}
+              onChange={(e) => setManCount(Math.max(1, Math.round(Number(e.target.value)) || 1))}
+              className="text-sm"
+            />
           </div>
 
           <div className="flex flex-col gap-1 col-span-2">
@@ -356,7 +568,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </Button>
           <Button
             onClick={handleCreate}
-            disabled={createJobs.isPending || selectedItems.length === 0}
+            disabled={createJobs.isPending || selectedItems.length === 0 || (rf.isRequired("crew") && !crewId)}
             className="bg-green-600 hover:bg-green-700"
           >
             {createJobs.isPending ? "Creating Job…" : `Create Job (${selectedItems.length} service${selectedItems.length !== 1 ? "s" : ""})`}
@@ -364,6 +576,15 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {jobType === "project" && (
+      <NewProjectDialog
+        open={newProjectOpen}
+        onOpenChange={setNewProjectOpen}
+        defaultClientId={estimate.clientId}
+        onCreated={(project) => setProjectId(project.id)}
+      />
+    )}
+    </>
   );
 }
 

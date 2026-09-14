@@ -7,6 +7,8 @@ export type NotificationEntityType =
   | "estimate"
   | "ticket"
   | "contract"
+  | "client"
+  | "sales_meeting"
   | null;
 
 export interface AppNotification {
@@ -24,10 +26,14 @@ export interface AppNotification {
     | "estimate_change_request"
     | "estimate_client_accepted"
     | "estimate_client_rejected"
+    | "estimate_deposit_failed"
     | "ticket_created"
     | "ticket_assigned"
     | "ticket_comment"
-    | "contract_expiring";
+    | "contract_expiring"
+    | "automation_alert"
+    | "comment_mention"
+    | "sales_meeting_reminder";
   title: string;
   body: string;
   href: string;

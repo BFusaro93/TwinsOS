@@ -9,15 +9,32 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
-import { useDashboard, useRunVisualQuery } from "@/lib/hooks/use-report-center";
+import {
+  useDashboard,
+  useReportFilterOptions,
+  useRunReport,
+  useRunVisualQuery,
+} from "@/lib/hooks/use-report-center";
+import { getReport } from "@/lib/reports/registry";
+import { computeTotals } from "@/lib/reports/engine";
+import { canQueryDataset } from "@/lib/reports/report-permissions";
+import { useIsCrewOnly, usePermissions } from "@/lib/hooks/use-permissions";
+import { defaultFilterValues } from "./ReportFilterBar";
 import { VisualRenderer } from "./VisualRenderer";
-import { exportCellValue, formatCellValue } from "./ReportTable";
-import type { DashboardPanel, DashboardTab, ReportResult } from "@/types/crm-reports";
+import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
+import type { DashboardPanel, DashboardTab, ReportFieldType, ReportResult } from "@/types/crm-reports";
 
 const HUB_HREF = "/crm/admin/reports?tab=dashboards";
 
@@ -41,18 +58,130 @@ function defaultDateRange(): { from: string; to: string } {
   };
 }
 
+/** Rows for a panel's export, with a trailing "Totals" row (matching the
+ *  on-screen ReportTable footer) when the result has totalable columns and
+ *  more than one row — a single-row result's totals would just repeat it.
+ *  Skipped in subtotal mode, where a flat grand-total row would be
+ *  misleading next to the group structure. `format` is formatCellValue for
+ *  CSV/PDF or exportCellValue for Excel, so the totals cells stay the same
+ *  kind of value as the body cells in each format. */
+function exportRowsWithTotals<T>(
+  result: ReportResult,
+  format: (value: unknown, type: ReportFieldType) => T
+): (T | string)[][] {
+  const body = result.rows.map((row) => result.columns.map((c) => format(row[c.key], c.type)));
+  if (result.groupSubtotals || result.rows.length < 2) return body;
+  const totals = result.totals ?? computeTotals(result.columns, result.rows);
+  if (!totals) return body;
+  const totalsRow = result.columns.map((c, i) => {
+    if (i === 0) return "Totals";
+    const total = totals[c.key];
+    return c.totalable && total !== undefined && total !== null ? format(total, c.type) : "";
+  });
+  return [...body, totalsRow];
+}
+
+/** Embeds an existing Report Center prebuilt report (by key) inside a
+ *  dashboard panel — needed for reports with bespoke `run` logic (e.g.
+ *  date-bucketed aging reports) that can't be expressed as a plain
+ *  AnalysisConfig/VisualSpec. Deliberately minimal: no filter bar or export
+ *  buttons here (those stay on the full report page) — just the table and
+ *  a link out. Not wired into the tab's bulk CSV/Excel/PDF export (open the
+ *  full report to export it individually). */
+function ReportPanelView({
+  reportKey,
+  params,
+}: {
+  reportKey: string;
+  params?: Record<string, string>;
+}) {
+  const def = getReport(reportKey);
+  const effectiveParams = useMemo(
+    // Shared with ReportViewer so an "all_time" default writes range=all here too.
+    () => ({ ...(def ? defaultFilterValues(def.filters) : {}), ...params }),
+    [def, params]
+  );
+  const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
+
+  if (!def) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>Report &quot;{reportKey}&quot; no longer exists.</AlertDescription>
+      </Alert>
+    );
+  }
+  if (isFetching && !data) {
+    return <Skeleton className="h-40 w-full" />;
+  }
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!data) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <ReportTable result={data} formatRules={def.formatRules} />
+      <Link
+        href={`/crm/admin/reports/r/${reportKey}`}
+        className="self-start text-xs text-blue-600 hover:underline"
+      >
+        Open full report →
+      </Link>
+    </div>
+  );
+}
+
 function DashboardPanelView({
   panel,
   dateRange,
+  repFilter,
   onData,
 }: {
   panel: DashboardPanel;
   dateRange?: { from: string; to: string };
+  repFilter?: string;
   onData?: (panelId: string, result: ReportResult) => void;
 }) {
+  if (panel.reportKey) {
+    return <ReportPanelView reportKey={panel.reportKey} params={panel.reportParams} />;
+  }
+
+  return (
+    <DashboardVisualPanelView panel={panel} dateRange={dateRange} repFilter={repFilter} onData={onData} />
+  );
+}
+
+function DashboardVisualPanelView({
+  panel,
+  dateRange,
+  repFilter,
+  onData,
+}: {
+  panel: DashboardPanel;
+  dateRange?: { from: string; to: string };
+  repFilter?: string;
+  onData?: (panelId: string, result: ReportResult) => void;
+}) {
+  // Client-side mirror of the analysis/run route's per-dataset gate: a role
+  // denied every report over a sensitive dataset (payroll, invoicing, ...)
+  // gets a quiet notice instead of firing a request that 403s into an error
+  // alert. Crew logins never hold report keys — their scope is decided by
+  // the server (crew-visible dashboards), so they're not gated here.
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const { isCrewOnly, isLoading: crewLoading } = useIsCrewOnly();
+  const permissionsReady = !permissionsLoading && !crewLoading;
+  const denied = permissionsReady && !isCrewOnly && !canQueryDataset(panel.visual.config.dataset, can);
+
   const { data, isFetching, error } = useRunVisualQuery(
-    panel.visual,
-    panel.visual.useTabDateRange ? dateRange : undefined
+    permissionsReady && !denied ? panel.visual : undefined,
+    panel.visual.useTabDateRange ? dateRange : undefined,
+    panel.visual.useTabRepFilter ? repFilter : undefined
   );
 
   useEffect(() => {
@@ -60,7 +189,15 @@ function DashboardPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, panel.id]);
 
-  if (isFetching && !data) {
+  if (denied) {
+    return (
+      <div className="flex h-40 items-center justify-center text-center text-xs text-slate-400">
+        You don&apos;t have permission to view this panel.
+      </div>
+    );
+  }
+
+  if ((isFetching || !permissionsReady) && !data) {
     return <Skeleton className="h-40 w-full" />;
   }
 
@@ -80,6 +217,8 @@ function DashboardPanelView({
 
 function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboardName: string }) {
   const [dateRange, setDateRange] = useState(defaultDateRange);
+  const [repFilter, setRepFilter] = useState("");
+  const { data: salesRepOptions = [] } = useReportFilterOptions(tab.useRepFilter ? "salesReps" : undefined);
   const [panelResults, setPanelResults] = useState<Record<string, ReportResult>>({});
   const [exportingPdf, setExportingPdf] = useState(false);
 
@@ -104,6 +243,23 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange.from, dateRange.to]);
 
+  // Same idea as the date-range effect above, but for the tab's shared Sales
+  // Rep select — only clear panels that actually filter on it.
+  useEffect(() => {
+    setPanelResults((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const panel of tab.panels) {
+        if (panel.visual.useTabRepFilter && panel.id in next) {
+          delete next[panel.id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repFilter]);
+
   const handlePanelData = (panelId: string, result: ReportResult) => {
     setPanelResults((prev) => (prev[panelId] === result ? prev : { ...prev, [panelId]: result }));
   };
@@ -120,7 +276,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     downloadCSV(
       `${panel.title}.csv`,
       result.columns.map((c) => c.label),
-      result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type)))
+      exportRowsWithTotals(result, formatCellValue)
     );
   };
 
@@ -134,7 +290,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
           return {
             name: panel.title,
             headers: result.columns.map((c) => c.label),
-            rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+            rows: exportRowsWithTotals(result, exportCellValue),
           };
         })
       );
@@ -154,7 +310,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
           return {
             heading: panel.title,
             columns: result.columns.map((c) => c.label),
-            rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+            rows: exportRowsWithTotals(result, formatCellValue),
           };
         })
       );
@@ -216,6 +372,27 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
         </div>
       )}
 
+      {tab.useRepFilter && (
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-lg border bg-white p-3 shadow-sm">
+          <span className="pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Sales Rep
+          </span>
+          <Select value={repFilter || "all"} onValueChange={(v) => setRepFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="h-8 w-56 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sales Reps</SelectItem>
+              {salesRepOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
         {tab.panels.map((panel) => (
           <div key={panel.id} className={PANEL_SIZE_CLASSES[panel.size]}>
@@ -224,7 +401,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
                 <CardTitle className="text-sm">{panel.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <DashboardPanelView panel={panel} dateRange={dateRange} onData={handlePanelData} />
+                <DashboardPanelView panel={panel} dateRange={dateRange} repFilter={repFilter} onData={handlePanelData} />
               </CardContent>
             </Card>
           </div>
@@ -319,17 +496,19 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
           className="flex flex-1 flex-col overflow-hidden"
         >
           {tabs.length > 1 && (
-            <TabsList className="h-10 w-fit justify-start gap-1 rounded-none border-b bg-transparent p-0">
-              {tabs.map((tab) => (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  {tab.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="overflow-x-auto border-b">
+              <TabsList className="h-10 min-w-max justify-start gap-1 rounded-none bg-transparent p-0">
+                {tabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.id}
+                    value={tab.id}
+                    className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  >
+                    {tab.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           )}
           {tabs.map((tab) => (
             <TabsContent key={tab.id} value={tab.id} className="mt-4 flex-1 overflow-auto">

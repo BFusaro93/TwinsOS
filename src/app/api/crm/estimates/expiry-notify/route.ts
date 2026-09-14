@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { orgEmailFrom } from "@/lib/email/send";
 
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
@@ -39,7 +40,8 @@ export async function GET(req: NextRequest) {
     .gte("valid_until", todayStr)
     .lte("valid_until", windowEndStr)
     .in("stage", ["sent", "quote"])
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("expiry_notified_at", null);
 
   if (!expiring?.length) {
     return NextResponse.json({ notified: 0 });
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: profile } = await (supabase as any)
       .from("profiles")
-      .select("email, full_name, notification_prefs")
+      .select("email, name, notification_prefs")
       .eq("id", createdBy)
       .single();
 
@@ -66,7 +68,7 @@ export async function GET(req: NextRequest) {
 
     const org = est.organizations as Record<string, unknown> | null;
     const client = est.clients as Record<string, unknown> | null;
-    const orgName = (org?.name as string) ?? "TwinsOS";
+    const orgName = (org?.name as string) ?? "Your Organization";
     const brandColor = (org?.brand_color as string) ?? "#60ab45";
     const estimateNum = String(est.estimate_number as number).padStart(5, "0");
     const clientName = (client?.display_name as string) ?? "Unknown Client";
@@ -79,19 +81,23 @@ export async function GET(req: NextRequest) {
     }).format((est.total_cents as number ?? 0) / 100);
 
     const html = buildExpiryEmail({
-      orgName, brandColor, repName: profile.full_name ?? profile.email,
+      orgName, brandColor, repName: profile.name ?? profile.email,
       clientName, estimateNum, validUntil, daysLeft, total: totalFormatted,
       estimateId: est.id as string,
     });
 
     try {
       await resend.emails.send({
-        from: `${orgName} <noreply@twinslawnservice.com>`,
+        from: orgEmailFrom(orgName),
         to: profile.email,
         subject: `Estimate #${estimateNum} expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — ${clientName}`,
         html,
       });
       notified++;
+      await supabase
+        .from("estimates")
+        .update({ expiry_notified_at: new Date().toISOString() })
+        .eq("id", est.id as string);
     } catch {
       // continue to next estimate if one email fails
     }

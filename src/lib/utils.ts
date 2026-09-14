@@ -194,3 +194,79 @@ export function relativeTime(isoString: string): string {
   if (diffDays < 7) return `${diffDays}d ago`;
   return formatDate(isoString);
 }
+
+/**
+ * "YYYY-MM-DD" for a Date as it appears on the *browser's local* calendar.
+ * `new Date().toISOString().slice(0, 10)` is the UTC date, which after ~8 PM
+ * Eastern is already tomorrow — every `<input type="date">` default and every
+ * client-side "today" comparison must use this instead. (Server/report code
+ * uses the America/New_York helpers in src/lib/reports/ny-date.ts.)
+ */
+export function toLocalISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Today's local calendar date as "YYYY-MM-DD" — use for date-input defaults. */
+export function todayLocalISODate(): string {
+  return toLocalISODate(new Date());
+}
+
+/** Local calendar date `days` from today (negative = past) as "YYYY-MM-DD". */
+export function localISODateFromToday(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return toLocalISODate(d);
+}
+
+/**
+ * Round an hours value for STORAGE (default 4 decimals). Budgeted hours are
+ * derived from qty ÷ production rate and actual hours from clock deltas ×
+ * men — both produce float noise like 0.00006666666666666667 or
+ * 6.000000000000001 that would otherwise land in the DB and the audit trail.
+ */
+export function roundHours(hours: number, decimals = 4): number {
+  if (!Number.isFinite(hours)) return 0;
+  const f = 10 ** decimals;
+  return Math.round(hours * f) / f;
+}
+
+/**
+ * Format an hours value for DISPLAY — fixed decimals (default 2), no unit.
+ * Use this everywhere budgeted/actual hours are rendered so "0.00006666…h"
+ * and "6.000000000000001" never reach the UI. Null/undefined → "—".
+ */
+export function formatHours(hours: number | null | undefined, decimals = 2): string {
+  if (hours == null || !Number.isFinite(hours)) return "—";
+  return hours.toFixed(decimals);
+}
+
+/**
+ * "9/7"-style month/day from a YYYY-MM-DD string — for compact activity-
+ * timeline subjects like "Visit moved 9/7 → 9/8". No timezone math: the
+ * string is split, never parsed through Date.
+ */
+export function formatMonthDay(ymd: string | null | undefined): string {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}/.test(ymd)) return "—";
+  const [, m, d] = ymd.slice(0, 10).split("-").map(Number);
+  return `${m}/${d}`;
+}
+
+/**
+ * "9:42 PM" from a 24h "HH:mm" / "HH:mm:ss" string — the shape a Postgres
+ * `time` column (crm_job_visits.start_time/end_time) or a native
+ * <input type="time"> value uses. Returns the input untouched when it isn't
+ * a parseable time so a bad value is still visible rather than blanked.
+ */
+export function formatTimeOfDay(value: string | null | undefined): string {
+  if (!value) return "";
+  const [hStr, mStr] = value.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr ?? "0");
+  if (Number.isNaN(h) || Number.isNaN(m)) return value;
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}

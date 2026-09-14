@@ -1,9 +1,24 @@
 export type PlatformModule = "landscapt" | "equipt";
 
 /** Add-ons a plan already includes at no extra charge — see addons.ts for the full catalog. */
-export type BundledAddonKey = "job_photos" | "client_portal" | "route_optimization" | "advanced_reporting" | "api_access";
+export type BundledAddonKey = "job_photos" | "client_portal" | "route_optimization" | "advanced_reporting" | "api_access" | "chat_support";
 
+// Order here drives display order everywhere this list is rendered
+// (SubscriptionTab's plan cards, PlanComparisonTable's columns).
 export const BILLABLE_PLANS = [
+  {
+    // Internal key stays "cmms" (matches the STRIPE_PRICE_CMMS/
+    // STRIPE_PRICE_SEAT_OVERAGE_CMMS env vars and the DB plan value already
+    // in use) — only the customer-facing label changed to match the Equipt
+    // product name used everywhere else.
+    plan: "cmms",
+    label: "Equipt",
+    envVar: "STRIPE_PRICE_CMMS",
+    modules: ["equipt"] as PlatformModule[],
+    seatsIncluded: 5,
+    seatOverageCents: 500,
+    bundledAddons: [] as BundledAddonKey[],
+  },
   {
     plan: "starter",
     label: "Starter",
@@ -14,22 +29,13 @@ export const BILLABLE_PLANS = [
     bundledAddons: [] as BundledAddonKey[],
   },
   {
-    plan: "cmms",
-    label: "CMMS",
-    envVar: "STRIPE_PRICE_CMMS",
-    modules: ["equipt"] as PlatformModule[],
-    seatsIncluded: 5,
-    seatOverageCents: 1500,
-    bundledAddons: [] as BundledAddonKey[],
-  },
-  {
     plan: "growth",
     label: "Growth",
     envVar: "STRIPE_PRICE_GROWTH",
     modules: ["landscapt", "equipt"] as PlatformModule[],
     seatsIncluded: 10,
     seatOverageCents: 2000,
-    bundledAddons: ["job_photos", "client_portal"] as BundledAddonKey[],
+    bundledAddons: ["job_photos", "client_portal", "chat_support"] as BundledAddonKey[],
   },
   {
     plan: "enterprise",
@@ -38,7 +44,7 @@ export const BILLABLE_PLANS = [
     modules: ["landscapt", "equipt"] as PlatformModule[],
     seatsIncluded: 20,
     seatOverageCents: 2000,
-    bundledAddons: ["job_photos", "client_portal", "route_optimization", "advanced_reporting", "api_access"] as BundledAddonKey[],
+    bundledAddons: ["job_photos", "client_portal", "route_optimization", "advanced_reporting", "api_access", "chat_support"] as BundledAddonKey[],
   },
 ] as const;
 
@@ -87,6 +93,11 @@ export function getSeatConfig(
   };
 }
 
+/** Trial orgs and anything unrecognized get every bundled add-on too, same
+ *  full-access trial policy as getModulesForPlan above — this was missing
+ *  its own trial special-case and silently denied every add-on (Job
+ *  Photos, client portal, etc.) to brand-new trial orgs. */
 export function planIncludesAddon(plan: string, addon: BundledAddonKey): boolean {
-  return isBillablePlan(plan) && (getPlanConfig(plan).bundledAddons as readonly string[]).includes(addon);
+  if (!isBillablePlan(plan)) return true;
+  return (getPlanConfig(plan).bundledAddons as readonly string[]).includes(addon);
 }

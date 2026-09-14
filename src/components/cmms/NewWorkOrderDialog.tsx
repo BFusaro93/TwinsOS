@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCreateWorkOrder, useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +32,7 @@ import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import { EntityCombobox } from "@/components/shared/EntityCombobox";
 import { MultiEntityCombobox } from "@/components/shared/MultiEntityCombobox";
 import { Info } from "lucide-react";
+import { toast } from "sonner";
 import type { WorkOrder } from "@/types";
 
 interface NewWorkOrderDialogProps {
@@ -41,6 +42,12 @@ interface NewWorkOrderDialogProps {
   onCreated?: (wo: WorkOrder) => void;
   /** Pre-select an entity in create mode: "asset:<id>" | "vehicle:<id>" */
   defaultEntityKey?: string;
+  /** When set, creates one (or more, if multiple assets/vehicles are
+   *  selected) sub work order(s) under this existing work order instead of
+   *  a standalone/parent WO. Used by the "Add Sub Work Order" action on an
+   *  existing master WO's detail panel — sub-WOs are otherwise only
+   *  created inline when the parent itself is first created. */
+  parentWorkOrder?: WorkOrder | null;
 }
 
 // Combined option representing either an asset or vehicle
@@ -59,8 +66,9 @@ const ASSET_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "disposed", label: ASSET_STATUS_LABELS.disposed },
 ];
 
-export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated, defaultEntityKey }: NewWorkOrderDialogProps) {
+export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated, defaultEntityKey, parentWorkOrder }: NewWorkOrderDialogProps) {
   const isEditing = !!initialData;
+  const isAddingSub = !isEditing && !!parentWorkOrder;
 
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -85,7 +93,11 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
 
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = useMemo(
+    () => (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() })),
+    [employees]
+  );
   const { woCategories } = useSettingsStore();
   const enabledCategories = woCategories.filter((c) => c.enabled);
   const rf = useRequiredFields("work_order");
@@ -118,8 +130,24 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     : null;
   const statusChangeEntity = isEditing ? selectedEntity : singleCreateEntity;
 
+  // Guards against a realtime-driven refetch of ANY work order (unfiltered
+  // subscription in RealtimeSync) silently wiping in-progress edits: every
+  // "work-orders" query refetch produces a brand-new initialData object
+  // (mapWorkOrder never preserves identity), which used to re-run this whole
+  // init block — including resetting the asset/vehicle picker back to
+  // whatever's still saved in the DB — while the user was mid-edit and
+  // hadn't hit Save yet. Only (re)initialize once per record per dialog
+  // open, not on every reference change of initialData.
+  const initializedForIdRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (!open) {
+      initializedForIdRef.current = null;
+      return;
+    }
+    if (initialData && initializedForIdRef.current === initialData.id) return;
     if (open && initialData) {
+      initializedForIdRef.current = initialData.id;
       setTitle(initialData.title);
       setPriority(initialData.priority);
       setWoType(initialData.woType ?? "none");
@@ -147,10 +175,22 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     }
   }, [open, initialData, users]);
 
-  const isValid = title.trim() && priority
-    && (!rf.isRequired("category") || categoryIds.length > 0)
-    && (!rf.isRequired("assigned_to") || assignedToIds.length > 0)
-    && (!rf.isRequired("due_date") || dueDate !== "");
+  const missingFields: string[] = [
+    ...(title.trim() ? [] : ["Work Order Title"]),
+    ...(priority ? [] : ["Priority"]),
+    ...(rf.isRequired("category") && categoryIds.length === 0 ? ["Category"] : []),
+    ...(rf.isRequired("assigned_to") && assignedToIds.length === 0 ? ["Assigned To"] : []),
+    ...(rf.isRequired("due_date") && dueDate === "" ? ["Due Date"] : []),
+  ];
+  const isValid = missingFields.length === 0;
+
+  function toastMutationError(action: "create" | "update") {
+    return (err: unknown) => {
+      toast.error(`Failed to ${action} work order`, {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    };
+  }
 
   function handleClose() {
     onOpenChange(false);
@@ -229,15 +269,41 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             }
             handleClose();
           },
+          onError: toastMutationError("update"),
         }
       );
+    } else if (isAddingSub && parentWorkOrder) {
+      // Adding sub-WO(s) to an already-existing parent — one create call
+      // per selected asset/vehicle (or a single asset-less sub-WO if none
+      // selected), sequentially, same as the initial multi-entity flow.
+      const keys = entityKeys.length > 0 ? entityKeys : ["none"];
+      (async () => {
+        let firstCreated: WorkOrder | null = null;
+        for (const key of keys) {
+          await new Promise<void>((resolve) => {
+            createWO.mutate(
+              {
+                ...commonFields,
+                parentWorkOrderId: parentWorkOrder.id,
+                ...buildEntityFields(key),
+              },
+              {
+                onSuccess: (created) => { firstCreated ??= created; resolve(); },
+                onError: (err) => { toastMutationError("create")(err); resolve(); },
+              }
+            );
+          });
+        }
+        handleClose();
+        if (firstCreated) onCreated?.(firstCreated);
+      })();
     } else if (entityKeys.length > 1) {
-      // Multi-entity: create parent WO then sub-WOs sequentially
-      const parentNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      // Multi-entity: create parent WO then sub-WOs sequentially. Numbers
+      // are generated server-side (an atomic per-org counter), not client
+      // Date.now() — two concurrent creates previously could collide.
       createWO.mutate(
         {
           ...commonFields,
-          workOrderNumber: parentNumber,
           assetId: null,
           assetName: null,
           linkedEntityType: null,
@@ -247,31 +313,28 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             // Create sub-WOs sequentially to avoid race conditions
             for (let i = 0; i < entityKeys.length; i++) {
               const key = entityKeys[i];
-              const subNumber = `WO-${new Date().getFullYear()}-${(Date.now() + i + 1).toString().slice(-6)}`;
               await new Promise<void>((resolve) => {
                 createWO.mutate(
                   {
                     ...commonFields,
-                    workOrderNumber: subNumber,
                     parentWorkOrderId: parent.id,
                     ...buildEntityFields(key),
                   },
-                  { onSuccess: () => resolve(), onError: () => resolve() }
+                  { onSuccess: () => resolve(), onError: (err) => { toastMutationError("create")(err); resolve(); } }
                 );
               });
             }
             handleClose();
             onCreated?.(parent);
           },
+          onError: toastMutationError("create"),
         }
       );
     } else {
-      const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
       const singleEntityFields = buildEntityFields(entityKeys[0] ?? "none");
       createWO.mutate(
         {
           ...commonFields,
-          workOrderNumber,
           ...singleEntityFields,
         },
         {
@@ -286,6 +349,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             handleClose();
             onCreated?.(created);
           },
+          onError: toastMutationError("create"),
         }
       );
     }
@@ -296,10 +360,14 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[580px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Work Order" : "New Work Order"}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? "Edit Work Order" : isAddingSub ? "Add Sub Work Order" : "New Work Order"}
+          </DialogTitle>
           <DialogDescription>
             {isEditing
               ? "Update work order details."
+              : isAddingSub
+              ? `Create a new sub work order under ${parentWorkOrder?.workOrderNumber}.`
               : "Create a new work order to track maintenance or repair tasks."}
           </DialogDescription>
         </DialogHeader>
@@ -417,12 +485,21 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
               </div>
 
               {/* Multi-asset info banner */}
-              {!isEditing && entityKeys.length > 1 && (
+              {!isEditing && !isAddingSub && entityKeys.length > 1 && (
                 <div className="flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm text-brand-700">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
                   <span>
                     A <strong>parent work order</strong> will be created with{" "}
                     <strong>{entityKeys.length} sub work orders</strong>, one per selected asset / vehicle.
+                  </span>
+                </div>
+              )}
+              {isAddingSub && entityKeys.length > 1 && (
+                <div className="flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm text-brand-700">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+                  <span>
+                    <strong>{entityKeys.length} sub work orders</strong> will be added under{" "}
+                    <strong>{parentWorkOrder?.workOrderNumber}</strong>, one per selected asset / vehicle.
                   </span>
                 </div>
               )}
@@ -550,12 +627,23 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             </div>
           </div>
 
-          <DialogFooter className="mt-4 pt-2">
+          {!isValid && missingFields.length > 0 && (
+            <p className="mt-2 text-right text-xs text-red-500">
+              Missing required field{missingFields.length > 1 ? "s" : ""}: {missingFields.join(", ")}
+            </p>
+          )}
+          <DialogFooter className="mt-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>
             <Button type="submit" disabled={!isValid || saving}>
-              {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Work Order"}
+              {saving
+                ? "Saving..."
+                : isEditing
+                ? "Save Changes"
+                : isAddingSub
+                ? "Add Sub Work Order"
+                : "Create Work Order"}
             </Button>
           </DialogFooter>
         </form>

@@ -16,6 +16,7 @@ import {
   useUpdateClientContact,
   useDeleteClientContact,
   useAddClientProperty,
+  useUpdateClientProperty,
   useAddClientTag,
   useRemoveClientTag,
   useOrgTags,
@@ -23,10 +24,12 @@ import {
   useActivateClient,
 } from "@/lib/hooks/use-clients";
 import { TagEditor } from "@/components/crm/TagEditor";
-import { useTicket } from "@/lib/hooks/use-tickets";
+import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
-import { useInvoices, usePayments, usePayment, usePaymentAllocations } from "@/lib/hooks/use-invoices";
+import { useInvoices, usePayments, usePayment, usePaymentAllocations, useAllocatedPaymentsFromOtherClients } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
+import { useQueryClient } from "@tanstack/react-query";
+import { useClientPortalStatus, clientPortalStatusKey, type ClientPortalStatusResponse } from "@/lib/hooks/use-client-portal-status";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +41,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -48,6 +61,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { PermissionGate } from "@/components/shared/PermissionGate";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { TicketDetailSheet } from "./tickets/TicketDetailSheet";
 import { TicketsList, NewTicketDialog } from "./tickets/TicketsList";
 import { NewEstimateDialog } from "./estimates/NewEstimateDialog";
@@ -68,12 +83,17 @@ import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
 import { AccountStatementDialog } from "./clients/AccountStatementDialog";
 import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
+  useQuickBooksClientLink,
+  useSyncClientToQuickBooks,
+  type QboCustomerCandidate,
+} from "@/lib/hooks/use-quickbooks-client-sync";
+import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
   useUpsertClientCustomFieldValue,
 } from "@/lib/hooks/use-client-custom-fields";
-import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
+import { formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
@@ -109,7 +129,7 @@ import {
   Search,
   CreditCard,
 } from "lucide-react";
-import type { Client, ClientContact, ContactPhone, PhoneType } from "@/types/crm";
+import type { Client, ClientContact, ClientProperty, ContactPhone, PhoneType } from "@/types/crm";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 
 // Contact types — configurable via Settings in a future sprint
@@ -256,6 +276,7 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
   return (
     <div className="space-y-2">
       {client.savedPaymentMethodSummary ? (
+        <PermissionGate permission="client_view_credit_card">
         <div className="flex items-center gap-2 text-sm">
           <span className="text-slate-700">{client.savedPaymentMethodSummary}</span>
           <span
@@ -287,6 +308,7 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
             Remove
           </Button>
         </div>
+        </PermissionGate>
       ) : (
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-400">No payment method on file</span>
@@ -301,6 +323,98 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
         onOpenChange={setDialogOpen}
         onSaved={() => toast.success("Payment method saved")}
       />
+    </div>
+  );
+}
+
+// ── QuickBooksClientSyncSection ────────────────────────────────────────────────
+// Links this client to a QuickBooks customer (Phase 2 of the one-way sync —
+// see TASKS.md). Exact-name matches auto-link; a genuinely fuzzy or
+// no-match case creates a new QBO customer or, if there are ambiguous
+// candidates, asks the user to pick one rather than guessing.
+
+function QuickBooksClientSyncSection({ client }: { client: Client }) {
+  const { data: link, isLoading } = useQuickBooksClientLink(client.id);
+  const sync = useSyncClientToQuickBooks(client.id);
+  const [candidates, setCandidates] = useState<QboCustomerCandidate[] | null>(null);
+
+  async function handleSync(opts?: { qboCustomerId?: string; forceCreate?: boolean }) {
+    try {
+      const result = await sync.mutateAsync(opts);
+      if (result.status === "ambiguous") {
+        setCandidates(result.candidates);
+      } else {
+        setCandidates(null);
+        toast.success("Linked to QuickBooks");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sync with QuickBooks");
+    }
+  }
+
+  if (isLoading) return <p className="text-sm text-slate-400">Loading…</p>;
+
+  return (
+    <div className="space-y-2">
+      {link?.qboCustomerId ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+            Linked
+          </span>
+          <span className="text-slate-500">QBO customer {link.qboCustomerId}</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-400">Not linked</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={() => void handleSync()}
+            disabled={sync.isPending}
+          >
+            {sync.isPending ? "Syncing…" : "Sync to QuickBooks"}
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={candidates !== null} onOpenChange={(open) => !open && setCandidates(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Multiple possible matches</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            QuickBooks has more than one customer that could match &quot;{client.displayName}&quot;. Pick the right
+            one, or create a new customer instead.
+          </p>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {(candidates ?? []).map((c) => (
+              <Button
+                key={c.id}
+                variant="outline"
+                size="sm"
+                className="w-full justify-start text-xs"
+                onClick={() => void handleSync({ qboCustomerId: c.id })}
+                disabled={sync.isPending}
+              >
+                {c.displayName}
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCandidates(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleSync({ forceCreate: true })}
+              disabled={sync.isPending}
+            >
+              None of these — create new
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -421,6 +535,17 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
   const [reason, setReason] = useState("");
   const [custom, setCustom] = useState("");
 
+  // Reset the picked reason each time the dialog opens — otherwise a reason
+  // chosen (or typed) on a previous cancellation attempt lingers pre-selected
+  // the next time this dialog is opened, since it's mounted once per panel
+  // rather than remounted per open.
+  useEffect(() => {
+    if (open) {
+      setReason("");
+      setCustom("");
+    }
+  }, [open]);
+
   async function confirm() {
     const finalReason = reason === "Other" ? custom.trim() : reason;
     if (!finalReason) { toast.error("Select a cancellation reason"); return; }
@@ -512,7 +637,7 @@ function ClientCombobox({
     : [];
 
   return (
-    <div className="relative">
+    <div className="relative" data-client-combobox="">
       <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
       <Input
         className="pl-8"
@@ -523,7 +648,15 @@ function ClientCombobox({
         placeholder={placeholder}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg text-sm max-h-52 overflow-y-auto">
+        <div
+          className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg text-sm max-h-52 overflow-y-auto"
+          // Keep focus on the input while a suggestion is pressed: without this
+          // the input blurs first, the list unmounts under the pointer, and the
+          // click lands on whatever is beneath — which the enclosing Radix
+          // Dialog could read as an outside interaction and close, discarding
+          // every unsaved edit (A-03). Selection happens on mousedown below.
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {filtered.map((c) => (
             <button
               key={c.id}
@@ -551,7 +684,9 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   const { data: fieldValues = [], isLoading: fieldValuesLoading } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
   const { data: allClients = [] } = useClients();
-  const { data: sourcesOptions = [] } = useOrgList("client_sources");
+  // Shared org-level source list (same one the New Lead dialog uses) — the
+  // client's current value is appended if it isn't in the list so it still shows.
+  const { options: sourcesOptions } = useClientSourceOptions(client.source);
   const { data: orgSettings } = useOrgSettings();
 
   const [editTab, setEditTab] = useState("personal");
@@ -611,6 +746,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     defaultTerms: client.defaultTerms,
     invoiceDelivery: client.invoiceDelivery ?? "email",
     accountType: client.accountType,
+    status: client.status,
     priority: client.priority ?? "normal",
     clientSince: client.clientSince ?? "",
     isTaxable: client.isTaxable,
@@ -687,6 +823,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       defaultTerms: client.defaultTerms,
       invoiceDelivery: client.invoiceDelivery ?? "email",
       accountType: client.accountType,
+      status: client.status,
       priority: client.priority ?? "normal",
       clientSince: client.clientSince ?? "",
       isTaxable: client.isTaxable,
@@ -742,8 +879,10 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           // unified payment method — stored in both columns for compat
           paymentMethod: form.paymentMethod || null,
           defaultPaymentMethod: form.paymentMethod || null,
-          billingTerms: null,
-          mapCode: null,
+          // billingTerms / mapCode intentionally omitted here — this dialog has
+          // no fields for them. Sending explicit nulls (as before) silently wiped
+          // out any existing value on every save; leaving them undefined lets
+          // useUpdateClient skip those columns so existing data is preserved.
           turfSqft: form.turfSqft !== "" ? parseFloat(form.turfSqft) : null,
           mulchBedSqft: form.mulchBedSqft !== "" ? parseFloat(form.mulchBedSqft) : null,
           grossSqft: form.grossSqft !== "" ? parseFloat(form.grossSqft) : null,
@@ -782,9 +921,31 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
   const tabClass = "rounded-none border-b-2 border-transparent px-3 py-2 text-xs font-medium data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none";
 
+  // Cancelled must keep going through the More → Cancel Client flow (it
+  // records a cancellation reason); reactivation is More → Activate Client.
+  const statusLocked = client.status === "cancelled";
+  const statusOptions: { value: string; label: string }[] = [
+    { value: "lead", label: "Lead" },
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+  ];
+  if (form.status === "lost") statusOptions.push({ value: "lost", label: "Lost" });
+  if (form.status === "cancelled") statusOptions.push({ value: "cancelled", label: "Cancelled" });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
+      <DialogContent
+        className="max-w-2xl h-[85vh] flex flex-col p-0"
+        // The Referred-By suggestion list unmounts on the same mousedown that
+        // selects a suggestion; if Radix resolves that pointer event against a
+        // detached node it reads as "outside" and would close the dialog and
+        // drop every unsaved edit. Anything originating inside the combobox
+        // is never an outside interaction.
+        onInteractOutside={(e) => {
+          const target = e.target as Element | null;
+          if (target?.closest?.("[data-client-combobox]")) e.preventDefault();
+        }}
+      >
         <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <DialogTitle>Edit Client — {client.displayName}</DialogTitle>
         </DialogHeader>
@@ -969,17 +1130,35 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
+                  <Label>Status</Label>
+                  <Select value={form.status} onValueChange={(v) => patch("status", v)} disabled={statusLocked}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-400">
+                    {statusLocked
+                      ? "Cancelled accounts are reactivated from More → Activate Client."
+                      : "To cancel this account use More → Cancel Client (records a reason)."}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
                   <Label>Client Since</Label>
                   <Input type="date" value={form.clientSince} onChange={(e) => patch("clientSince", e.target.value)} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>Source{rf.req("source")}</Label>
                   <Select value={form.source || "__none__"} onValueChange={(v) => patch("source", v === "__none__" ? "" : v)}>
                     <SelectTrigger><SelectValue placeholder="Select source…" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">— None —</SelectItem>
-                      {sourcesOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.value}>{o.value}</SelectItem>
+                      {sourcesOptions.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1452,11 +1631,28 @@ function ContactDialog({
 
 // ── AddPropertyDialog ─────────────────────────────────────────────────────────
 
-function AddPropertyDialog({ clientId, open, onOpenChange }: { clientId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { mutateAsync: addProperty, isPending } = useAddClientProperty();
+function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientId: string; open: boolean; onOpenChange: (o: boolean) => void; property?: ClientProperty | null }) {
+  const isEditing = !!property;
+  const { mutateAsync: addProperty, isPending: isAdding } = useAddClientProperty();
+  const { mutateAsync: updateProperty, isPending: isUpdating } = useUpdateClientProperty();
+  const isPending = isAdding || isUpdating;
   const [form, setForm] = useState({
     name: "", address: "", city: "", state: "", zip: "", gateCode: "", notesToCrew: "",
   });
+
+  // Seed the form whenever the dialog opens (either for a new property, or to edit an existing one)
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      name: property?.name ?? "",
+      address: property?.address ?? "",
+      city: property?.city ?? "",
+      state: property?.state ?? "",
+      zip: property?.zip ?? "",
+      gateCode: property?.gateCode ?? "",
+      notesToCrew: property?.notesToCrew ?? "",
+    });
+  }, [open, property]);
 
   function patch(k: keyof typeof form, v: string) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -1465,17 +1661,21 @@ function AddPropertyDialog({ clientId, open, onOpenChange }: { clientId: string;
   async function handleSave() {
     if (!form.address.trim() && !form.name.trim()) { toast.error("Address or name is required"); return; }
     try {
-      await addProperty({ clientId, property: { ...form } });
-      toast.success("Property added");
-      setForm({ name: "", address: "", city: "", state: "", zip: "", gateCode: "", notesToCrew: "" });
+      if (isEditing && property) {
+        await updateProperty({ id: property.id, clientId, property: { ...form } });
+        toast.success("Property updated");
+      } else {
+        await addProperty({ clientId, property: { ...form } });
+        toast.success("Property added");
+      }
       onOpenChange(false);
-    } catch { toast.error("Failed to add property"); }
+    } catch { toast.error(isEditing ? "Failed to update property" : "Failed to add property"); }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Add Property</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{isEditing ? "Edit Property" : "Add Property"}</DialogTitle></DialogHeader>
         <div className="grid gap-3 py-1">
           <div className="flex flex-col gap-1.5">
             <Label>Property Name / Label</Label>
@@ -1536,6 +1736,18 @@ function LinkParentDialog({
   const { data: allClients } = useClients();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(currentParentId ?? "");
+
+  // Re-sync the selection to the client's actual current parent every time
+  // the dialog opens. Without this, a selection made (or a search typed) but
+  // never saved — the user picked something then hit Cancel — would still be
+  // sitting in state the next time the dialog is opened, since this
+  // component stays mounted across opens/closes rather than remounting.
+  useEffect(() => {
+    if (open) {
+      setSelectedId(currentParentId ?? "");
+      setSearch("");
+    }
+  }, [open, currentParentId]);
 
   const options = (allClients ?? []).filter(
     (c) => c.id !== clientId && c.parentClientId == null // can't link to a child
@@ -1613,6 +1825,7 @@ function jobBorderColor(job: CRMJob): string {
 // ── HomeTab ───────────────────────────────────────────────────────────────────
 
 function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; isLead?: boolean; onSwitchTab?: (tab: string) => void }) {
+  const { can } = usePermissions();
   const [jobFilter, setJobFilter] = useState<"active" | "completed">("active");
   const [clientVisitsModal, setClientVisitsModal] = useState<"upcoming" | "history" | null>(null);
   const [newEstimateOpen, setNewEstimateOpen] = useState(false);
@@ -1636,6 +1849,13 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const updateJobStatus = useUpdateJobStatus();
   const { data: invoices } = useInvoices(clientId);
   const { data: payments } = usePayments(clientId);
+  // D-16: a parent account's payment applied to one of THIS client's invoices —
+  // shown read-only with a "via <Parent>" tag, same as Invoice Payment History.
+  const { data: parentPayments } = useAllocatedPaymentsFromOtherClients(clientId);
+  const allPayments = useMemo(
+    () => [...(payments ?? []), ...(parentPayments ?? [])],
+    [payments, parentPayments],
+  );
   const { data: estimates } = useEstimates(clientId);
   const { data: contracts } = useContracts(clientId);
 
@@ -1647,7 +1867,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   // Merge invoices + payments sorted by date desc
   type AccountingRow =
     | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number }
-    | { kind: "payment"; id: string; date: string; amountCents: number };
+    | { kind: "payment"; id: string; date: string; amountCents: number; via?: string | null };
 
   const accountingRows: AccountingRow[] = [
     ...(invoices ?? []).map((inv) => ({
@@ -1663,6 +1883,14 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       id: pmt.id,
       date: pmt.paymentDate,
       amountCents: pmt.amountCents,
+    })),
+    ...(parentPayments ?? []).map((pmt) => ({
+      kind: "payment" as const,
+      id: pmt.id,
+      date: pmt.paymentDate,
+      // The share allocated to this client's invoice, not the parent's full check.
+      amountCents: pmt.displayAmountCents,
+      via: pmt.clientName ?? "parent account",
     })),
   ]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1682,10 +1910,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           <span className="font-semibold text-sm text-slate-800">
             Estimates ({(estimates ?? []).length})
           </span>
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
-            onClick={() => setNewEstimateOpen(true)}>
-            <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
-          </Button>
+          <PermissionGate permission="lead_estimates">
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
+              onClick={() => setNewEstimateOpen(true)}>
+              <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
+            </Button>
+          </PermissionGate>
         </div>
         <div className="divide-y">
           {(estimates ?? []).length === 0 ? (
@@ -1727,11 +1957,14 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   return (
     <>
-    <div className="grid min-h-[600px] bg-white px-3" style={{ gridTemplateColumns: "1fr 10px 1fr 10px 1fr" }}>
+    {/* minmax(0,1fr), not 1fr: a bare fr track won't shrink below its content's
+        min-content, so Jobs and Open Estimates were stealing width and left
+        Accounting a third narrower than its share. */}
+    <div className="grid min-h-[600px] grid-cols-1 bg-white px-3 md:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
       {/* Left — Jobs */}
       <div className="flex flex-col bg-white">
-        <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="font-semibold text-sm text-white">Jobs</span>
             <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(allJobs ?? []).length}</span>
             <span className="text-white/30 text-xs">|</span>
@@ -1822,16 +2055,27 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                         ))}
                       </div>
                       <div className="shrink-0 text-right">
-                        {job.rateCents != null && (
-                          <p className="text-xs font-medium text-slate-700">
-                            {formatCurrency(job.rateCents)}
-                          </p>
-                        )}
-                        {job.scheduledDate && (
-                          <p className="text-[10px] text-slate-400">
-                            {formatDate(job.scheduledDate)}
-                          </p>
-                        )}
+                        {(() => {
+                          // Same rule as JobsList.jobRevenueCents / the board:
+                          // Σ service qty × rate wins over the creation-time
+                          // rate_cents snapshot when the job has priced lines.
+                          const svcTotal = (job.services ?? []).reduce((sum, sv) => sum + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0);
+                          const shown = svcTotal > 0 ? svcTotal : job.rateCents;
+                          return shown != null ? (
+                            <p className="text-xs font-medium text-slate-700">
+                              {formatCurrency(shown)}
+                            </p>
+                          ) : null;
+                        })()}
+                        {(() => {
+                          const rel = relevantVisitDate(job);
+                          if (!rel) return null;
+                          return (
+                            <p className="text-[10px] text-slate-400">
+                              {rel.label ? `${rel.label} ${formatDate(rel.date)}` : formatDate(rel.date)}
+                            </p>
+                          );
+                        })()}
                       </div>
                     </div>
                   </button>
@@ -1889,12 +2133,13 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </div>
 
       {/* Divider column */}
-      <div className="flex justify-center bg-white"><div className="w-px h-full bg-slate-200" /></div>
+      <div className="hidden justify-center bg-white md:flex"><div className="w-px h-full bg-slate-200" /></div>
 
       {/* Middle — Accounting */}
+      <PermissionGate permission="client_view_billing">
       <div className="flex flex-col bg-white">
-        <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="font-semibold text-sm text-white">Accounting</span>
             <button
               className="text-[11px] text-white/70 hover:text-white"
@@ -1922,7 +2167,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           ) : (
             <>
               {accountingRowsVisible.map((row) => {
-                const pmt = row.kind === "payment" ? (payments ?? []).find((p) => p.id === row.id) : null;
+                const pmt = row.kind === "payment" ? allPayments.find((p) => p.id === row.id) : null;
                 return row.kind === "invoice" ? (
                   <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-4 py-3 hover:bg-slate-50 cursor-pointer"
                     onClick={() => setSelectedInvoiceId(row.id)}>
@@ -1944,7 +2189,10 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                     className="w-full text-left border-l-4 border-l-green-400 px-4 py-3 hover:bg-green-50 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-800">Payment{pmt?.method ? ` · ${pmt.method}` : ""}</p>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Payment{pmt?.method ? ` · ${pmt.method}` : ""}
+                        {row.via && <span className="ml-1 font-normal text-slate-400">(via {row.via})</span>}
+                      </p>
                       <p className="shrink-0 text-[10px] text-slate-400">{new Date(row.date + "T12:00:00").toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -1958,16 +2206,17 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           )}
         </div>
       </div>
+      </PermissionGate>
 
       {/* Divider column */}
-      <div className="flex justify-center bg-white"><div className="w-px h-full bg-slate-200" /></div>
+      <div className="hidden justify-center bg-white md:flex"><div className="w-px h-full bg-slate-200" /></div>
 
       {/* Right — Estimates + Contracts */}
       <div className="flex flex-col bg-white divide-y">
         {/* Estimates */}
         <div className="flex flex-col">
-          <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="font-semibold text-sm text-white">Open Estimates</span>
               <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
               <button
@@ -2014,16 +2263,18 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
         {/* Contracts */}
         <div className="flex flex-col">
-          <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="font-semibold text-sm text-white">Contracts</span>
               <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
               <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
             </div>
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
-              onClick={() => setAddingContract(true)}>
-              <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
-            </Button>
+            <PermissionGate permission="client_add_contract">
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
+                onClick={() => setAddingContract(true)}>
+                <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
+              </Button>
+            </PermissionGate>
           </div>
 
           <div className="divide-y">
@@ -2033,8 +2284,8 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               (contracts ?? []).map((contract) => (
                 <div
                   key={contract.id}
-                  className="cursor-pointer px-4 py-3 hover:bg-slate-50"
-                  onClick={() => setEditingContract(contract)}
+                  className={`px-4 py-3 hover:bg-slate-50 ${can("contract_edit") ? "cursor-pointer" : ""}`}
+                  onClick={can("contract_edit") ? () => setEditingContract(contract) : undefined}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate text-xs font-semibold text-slate-700">{contract.title}</p>
@@ -2077,7 +2328,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       onOpenChange={(open) => !open && setSelectedInvoiceId(null)}
     />
     <PaymentDetailDialog
-      payment={(payments ?? []).find((p) => p.id === selectedPaymentId) ?? null}
+      payment={allPayments.find((p) => p.id === selectedPaymentId) ?? null}
       onClose={() => setSelectedPaymentId(null)}
     />
     <NewJobDialog
@@ -2109,6 +2360,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       <AllAccountingModal
         invoices={invoices ?? []}
         payments={payments ?? []}
+        parentPayments={parentPayments ?? []}
         onClose={() => setAllAccountingOpen(false)}
         onOpenInvoice={(id) => { setAllAccountingOpen(false); setSelectedInvoiceId(id); }}
         onOpenPayment={(id) => { setAllAccountingOpen(false); setSelectedPaymentId(id); }}
@@ -2143,6 +2395,27 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 }
 
 // ── JobVisitsModal ────────────────────────────────────────────────────────────
+
+/**
+ * The date most worth showing for a job on the client's Jobs card.
+ * crm_jobs.scheduled_date is only the *original* start — a visit moved on the
+ * dispatch board leaves it untouched — so prefer the visits themselves:
+ * next upcoming non-cancelled/non-skipped visit, else the most recent visit,
+ * else fall back to the job's scheduled_date (unlabelled, as before).
+ */
+function relevantVisitDate(job: CRMJob): { date: string; label: "Next visit" | "Last visit" | null } | null {
+  const visits = job.visits ?? [];
+  if (visits.length > 0) {
+    const today = todayLocalISODate();
+    const upcoming = visits
+      .filter((v) => v.scheduledDate >= today && v.status !== "cancelled" && v.status !== "skipped")
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+    if (upcoming.length > 0) return { date: upcoming[0].scheduledDate, label: "Next visit" };
+    const latest = [...visits].sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))[0];
+    if (latest) return { date: latest.scheduledDate, label: "Last visit" };
+  }
+  return job.scheduledDate ? { date: job.scheduledDate, label: null } : null;
+}
 
 function fmtDate(iso: string) {
   return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "2-digit", day: "2-digit", year: "numeric" });
@@ -2247,8 +2520,8 @@ function JobVisitsModal({
               </thead>
               <tbody className="divide-y">
                 {isWaitingList ? waitingListRows.map((svc) => {
-                  const hrs = svc.budgetedHours > 0 ? `${svc.budgetedHours}hrs` : (job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
-                  const amt = svc.rateCents != null ? `$${(svc.rateCents / 100).toFixed(2)}` : "—";
+                  const hrs = svc.budgetedHours > 0 ? `${formatHours(svc.budgetedHours)}hrs` : (job.budgetedHours != null ? `${formatHours(job.budgetedHours)}hrs` : "—");
+                  const amt = svc.rateCents != null ? formatCurrency(svc.rateCents) : "—";
                   return (
                     <tr key={svc.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => { onClose(); onOpenJob(job.id); }}>
                       <td className="px-4 py-2.5 text-center">
@@ -2272,9 +2545,9 @@ function JobVisitsModal({
                 }) : filtered.map((v: CRMJobVisit) => {
                   // Fall back to job-level budgeted hours if visit doesn't have its own
                   const hours = mode === "history"
-                    ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
-                    : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
-                  const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : (job.rateCents != null ? `$${(job.rateCents / 100).toFixed(2)}` : "—");
+                    ? (() => { const h = computeActualHours(v); return h != null ? `${formatHours(h)}hrs` : "0hrs"; })()
+                    : (v.budgetedHours != null ? `${formatHours(v.budgetedHours)}hrs` : job.budgetedHours != null ? `${formatHours(job.budgetedHours)}hrs` : "—");
+                  const amount = v.rateCents != null ? formatCurrency(v.rateCents) : (job.rateCents != null ? formatCurrency(job.rateCents) : "—");
                   const dateStr = fmtDate(v.scheduledDate);
 
                   return (
@@ -2342,7 +2615,7 @@ function AllContactsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[700px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Contacts</h2>
           <div className="flex items-center gap-3">
@@ -2409,15 +2682,107 @@ function AllContactsModal({
   );
 }
 
+function AllPropertiesModal({
+  properties,
+  onClose,
+  onOpenProperty,
+  onAddProperty,
+}: {
+  properties: ClientProperty[];
+  onClose: () => void;
+  onOpenProperty: (p: ClientProperty) => void;
+  onAddProperty: () => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const filtered = properties.filter((p) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      (p.name ?? "").toLowerCase().includes(q) ||
+      (p.address ?? "").toLowerCase().includes(q) ||
+      (p.city ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
+        <div className="flex items-center justify-between border-b px-6 py-3">
+          <h2 className="text-base font-semibold text-neutral-800">All Properties</h2>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, address, city…"
+              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+            />
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddProperty}>
+              <Plus className="mr-1 h-3 w-3" /> Add Property
+            </Button>
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">No properties found.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-neutral-600 text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Name</th>
+                  <th className="px-4 py-2 text-left font-medium">Address</th>
+                  <th className="px-4 py-2 text-left font-medium">City</th>
+                  <th className="px-4 py-2 text-left font-medium">State</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="cursor-pointer hover:bg-neutral-50"
+                    onClick={() => onOpenProperty(p)}
+                  >
+                    <td className="px-4 py-2.5 font-medium text-neutral-800">
+                      {p.name ?? "—"}
+                      {p.isMaster && (
+                        <Badge variant="secondary" className="ml-1.5 text-[9px] h-4 px-1.5">Master</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-neutral-600">{p.address ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-neutral-600">{p.city ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-neutral-600">{p.state ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t px-6 py-2 text-xs text-neutral-400">
+          {filtered.length} propert{filtered.length !== 1 ? "ies" : "y"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AllAccountingModal({
   invoices,
   payments,
+  parentPayments = [],
   onClose,
   onOpenInvoice,
   onOpenPayment,
 }: {
   invoices: CRMInvoice[];
   payments: CRMPayment[];
+  /** Parent-account payments allocated to this client's invoices (D-16). */
+  parentPayments?: (CRMPayment & { displayAmountCents: number })[];
   onClose: () => void;
   onOpenInvoice: (id: string) => void;
   onOpenPayment: (id: string) => void;
@@ -2426,7 +2791,7 @@ function AllAccountingModal({
 
   type Row =
     | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number; status: string }
-    | { kind: "payment"; id: string; date: string; amountCents: number; method: string; reference: string | null };
+    | { kind: "payment"; id: string; date: string; amountCents: number; method: string; reference: string | null; via?: string | null };
 
   const rows: Row[] = [
     ...invoices.map((inv) => ({
@@ -2446,6 +2811,15 @@ function AllAccountingModal({
       method: pmt.method,
       reference: pmt.reference,
     })),
+    ...parentPayments.map((pmt) => ({
+      kind: "payment" as const,
+      id: pmt.id,
+      date: pmt.paymentDate,
+      amountCents: pmt.displayAmountCents,
+      method: pmt.method,
+      reference: pmt.reference,
+      via: pmt.clientName ?? "parent account",
+    })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const filtered = rows.filter((r) => {
@@ -2457,7 +2831,7 @@ function AllAccountingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Accounting</h2>
           <div className="flex items-center gap-3">
@@ -2514,6 +2888,7 @@ function AllAccountingModal({
                       <td className="px-4 py-2.5 text-neutral-500">Payment</td>
                       <td className="px-4 py-2.5 text-neutral-600">
                         {row.method}{row.reference ? ` · #${row.reference}` : ""}
+                        {row.via && <span className="ml-1 text-neutral-400">(via {row.via})</span>}
                       </td>
                       <td className="px-4 py-2.5 text-right font-medium text-green-600">({formatCurrency(row.amountCents)})</td>
                       <td className="px-4 py-2.5 text-right text-neutral-400">—</td>
@@ -2556,7 +2931,7 @@ function AllEstimatesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Estimates</h2>
           <div className="flex items-center gap-3">
@@ -2680,7 +3055,7 @@ function ClientAllVisitsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">{title}</h2>
@@ -2723,9 +3098,9 @@ function ClientAllVisitsModal({
               <tbody className="divide-y">
                 {filtered.map((v: CRMJobVisit) => {
                   const hours = mode === "history"
-                    ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
-                    : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : "—");
-                  const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : "—";
+                    ? (() => { const h = computeActualHours(v); return h != null ? `${formatHours(h)}hrs` : "0hrs"; })()
+                    : (v.budgetedHours != null ? `${formatHours(v.budgetedHours)}hrs` : "—");
+                  const amount = v.rateCents != null ? formatCurrency(v.rateCents) : "—";
                   return (
                     <tr
                       key={v.id}
@@ -2777,9 +3152,11 @@ interface Props {
 }
 
 export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }: Props) {
+  const { can } = usePermissions();
   const { data: client, isLoading } = useClient(clientId);
   const { data: contacts } = useClientContacts(clientId);
   const { data: properties } = useClientProperties(clientId);
+  const { data: clientTickets } = useTickets({ clientId });
   const { data: childClients } = useChildClients(clientId);
   const { data: parentClient } = useClient(client?.parentClientId ?? "");
   const [activeTab, setActiveTab] = useState("home");
@@ -2789,6 +3166,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [allContactsOpen, setAllContactsOpen] = useState(false);
   const [addPropertyOpen, setAddPropertyOpen] = useState(false);
+  const [editProperty, setEditProperty] = useState<ClientProperty | null>(null);
   const [aerialMeasurementOpen, setAerialMeasurementOpen] = useState(false);
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
@@ -2801,6 +3179,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [accountStatementOpen, setAccountStatementOpen] = useState(false);
+  const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
   const { mutateAsync: activate } = useActivateClient();
   const { mutate: addTag } = useAddClientTag();
@@ -2824,6 +3203,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const revenuePotentialCents = (leadEstimates ?? [])
     .filter((e) => e.stage !== "accepted" && e.stage !== "lost")
     .reduce((sum, e) => sum + e.totalCents, 0);
+  // "Open" = anything not yet closed (open/pending/on_hold) — the client-detail
+  // summary box cares about "still needs attention", not the literal "open" status.
+  const openTickets = (clientTickets ?? []).filter((t) => t.status !== "closed");
 
   if (isLoading) {
     return (
@@ -2838,6 +3220,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   if (!client) return null;
 
   async function handleConvert() {
+    setConvertConfirmOpen(false);
     try {
       await convertLead(clientId);
       toast.success(`${client!.displayName} converted to client`);
@@ -2853,7 +3236,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
     <div className="flex h-full flex-col overflow-y-auto">
       {/* Header */}
       <div className="border-b px-6 py-3">
-        <div className="flex items-stretch justify-between gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between">
           {/* Left column — stretches to match balance card height */}
           <div className="min-w-0 flex-1 flex flex-col">
             {/* Name + status row */}
@@ -2879,11 +3262,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               )}
             </div>
 
-            {/* Info row: address on left, contact details on right */}
-            <div className="mt-1.5 flex gap-8">
+            {/* Info row: address on left, contact details on right. Wraps, and
+                the address keeps its natural width — squeezed between the icon
+                and the contact block it was breaking mid-line into four. */}
+            <div className="mt-1.5 flex flex-wrap gap-x-8 gap-y-1">
               {/* Left — billing address (two lines) */}
               {(client.billingAddress || client.billingCity) && (
-                <div className="flex items-start gap-1 text-sm text-slate-500 leading-snug">
+                <div className="flex shrink-0 items-start gap-1 text-sm text-slate-500 leading-snug">
                   <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <div>
                     {client.billingAddress && <div>{client.billingAddress}</div>}
@@ -2918,30 +3303,33 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             {/* Tags + source/client since — bottom-aligned with the balance card */}
             <div className="flex flex-col gap-2">
               {client.savedPaymentMethodSummary && (
-                <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <CreditCard className="h-3.5 w-3.5 text-slate-400" />
-                  {client.savedPaymentMethodSummary}
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                      client.autopayEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    Autopay {client.autopayEnabled ? "On" : "Off"}
-                  </span>
-                </div>
+                <PermissionGate permission="client_view_credit_card">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <CreditCard className="h-3.5 w-3.5 text-slate-400" />
+                    {client.savedPaymentMethodSummary}
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        client.autopayEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      Autopay {client.autopayEnabled ? "On" : "Off"}
+                    </span>
+                  </div>
+                </PermissionGate>
               )}
               <TagEditor
                 tags={client.tags ?? []}
                 suggestions={orgTags}
                 onAdd={(tag) => addTag({ clientId, tag })}
                 onRemove={(tag) => removeTag({ clientId, tag })}
+                canCreateNew={can("tags_create_tag")}
               />
               <div className="flex flex-wrap gap-x-6 gap-y-0.5">
                 {client.accountNumber && <InfoRow label="Account #" value={client.accountNumber} />}
                 {client.priority && <InfoRow label="Priority" value={client.priority.charAt(0).toUpperCase() + client.priority.slice(1)} />}
                 {client.source && <InfoRow label="Source" value={client.source} />}
                 {client.clientSince && (
-                  <InfoRow label="Client since" value={new Date(client.clientSince).toLocaleDateString()} />
+                  <InfoRow label="Client since" value={formatDate(client.clientSince)} />
                 )}
                 {client.paymentMethod && <InfoRow label="Payment" value={client.paymentMethod} />}
                 {client.mapCode && <InfoRow label="Map code" value={client.mapCode} />}
@@ -2949,9 +3337,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-2 shrink-0">
+          <div className="flex flex-col items-start gap-2 shrink-0 md:items-end">
             {/* Action buttons row */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {onExpandChange && (
                 <Button
                   variant="outline"
@@ -2963,15 +3351,17 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setEditOpen(true)}
-              >
-                <Pencil className="mr-1 h-3 w-3" />
-                Edit
-              </Button>
+              <PermissionGate permission={isLead ? "lead_allow_edit" : "client_allow_edit"}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil className="mr-1 h-3 w-3" />
+                  Edit
+                </Button>
+              </PermissionGate>
 
               {/* Send split button */}
               <div className="flex items-center">
@@ -3072,9 +3462,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               </div>
             </div>
 
-            <div className="w-48 mt-4">
-              <BalanceCard client={client} revenuePotentialCents={revenuePotentialCents} />
-            </div>
+            <PermissionGate permission="client_view_balance">
+              <div className="w-48 mt-4">
+                <BalanceCard client={client} revenuePotentialCents={revenuePotentialCents} />
+              </div>
+            </PermissionGate>
           </div>
         </div>
 
@@ -3151,56 +3543,72 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </div>
       )}
 
-      {/* Sub-panels: Properties + Contacts + Office Notes */}
+      {/* Sub-panels: Open Tickets + Contacts + Office Notes */}
       <div className="border-b bg-slate-50/60 px-6 py-4">
-        <div className="grid grid-cols-3 gap-4">
-        {/* Properties */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Open Tickets */}
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">
-              Related Properties
-              {(properties ?? []).length > 0 && (
-                <span className="ml-1.5 text-slate-400">({(properties ?? []).length})</span>
+              Open Tickets
+              {openTickets.length > 0 && (
+                <span className="ml-1.5 text-slate-400">({openTickets.length})</span>
               )}
             </span>
             <div className="flex items-center gap-1">
-              {(properties ?? []).length > 0 && (
-                <button className="text-[10px] text-brand-600 hover:underline">All</button>
+              {openTickets.length > 0 && (
+                <button className="text-[10px] text-brand-600 hover:underline" onClick={() => setActiveTab("tickets")}>All</button>
               )}
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 px-1.5 text-xs text-brand-600 hover:bg-brand-50"
-                onClick={() => setAddPropertyOpen(true)}
+                onClick={() => setNewTicketOpen(true)}
               >
-                <Plus className="mr-0.5 h-3 w-3" /> Add Property
+                <Plus className="mr-0.5 h-3 w-3" /> Add Ticket
               </Button>
             </div>
           </div>
-          {(properties ?? []).length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No properties yet</p>
+          {openTickets.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No open tickets</p>
           ) : (
             <div className="space-y-1.5">
-              {(properties ?? []).slice(0, 4).map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-sm">
+              {openTickets.slice(0, 3).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setOpenTicketId(t.id)}
+                  className="flex w-full items-center justify-between rounded border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs shadow-sm hover:border-brand-300 hover:bg-brand-50/30"
+                >
                   <div className="min-w-0">
-                    {p.name && <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{p.name}</p>}
-                    <span className="truncate text-slate-700">
-                      {p.address || "Unnamed property"}
-                      {p.city && `, ${p.city}`}
+                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+                      #{t.ticketNumber}{t.category ? ` · ${t.category}` : ""}
+                    </p>
+                    {/* block, not inline: truncate's overflow/ellipsis have no
+                        effect on a non-replaced inline element, so a long
+                        subject ran straight out of the card. */}
+                    <span className="block truncate text-slate-700">
+                      {t.subject || "(no subject)"}
                     </span>
                   </div>
                   <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
-                </div>
+                </button>
               ))}
-              {(properties ?? []).length > 4 && (
-                <p className="text-xs text-slate-400">+{(properties ?? []).length - 4} more</p>
+              {openTickets.length > 3 && (
+                <button
+                  type="button"
+                  className="text-xs text-brand-600 hover:underline"
+                  onClick={() => setActiveTab("tickets")}
+                >
+                  +{openTickets.length - 3} more
+                </button>
               )}
             </div>
           )}
         </div>
 
         {/* Contacts */}
+        <PermissionGate permission="client_view_contacts">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">
@@ -3260,17 +3668,21 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </div>
           )}
         </div>
+        </PermissionGate>
 
         {/* Office Notes */}
+        <PermissionGate permission="client_view_notes">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">Office Notes</span>
-            <button
-              className="text-[10px] text-brand-600 hover:underline"
-              onClick={() => setEditOpen(true)}
-            >
-              Edit
-            </button>
+            <PermissionGate permission={isLead ? "lead_allow_edit" : "client_allow_edit"}>
+              <button
+                className="text-[10px] text-brand-600 hover:underline"
+                onClick={() => setEditOpen(true)}
+              >
+                Edit
+              </button>
+            </PermissionGate>
           </div>
           {client.officeNotes ? (
             <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{client.officeNotes}</p>
@@ -3278,6 +3690,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <p className="text-xs text-slate-400 italic">No office notes</p>
           )}
         </div>
+        </PermissionGate>
         </div>{/* end grid */}
       </div>
 
@@ -3288,26 +3701,48 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <UserCheck className="h-4 w-4 shrink-0" />
             <span>This is a <strong>lead</strong>. Convert to a client to schedule jobs and create invoices.</span>
           </div>
-          <Button
-            size="sm"
-            className="h-7 shrink-0 bg-yellow-600 text-xs text-white hover:bg-yellow-700"
-            onClick={handleConvert}
-            disabled={converting}
-          >
-            {converting ? "Converting…" : "Convert to Client"}
-          </Button>
+          <PermissionGate permission="lead_convert_close">
+            <Button
+              size="sm"
+              className="h-7 shrink-0 bg-yellow-600 text-xs text-white hover:bg-yellow-700"
+              onClick={() => setConvertConfirmOpen(true)}
+              disabled={converting}
+            >
+              {converting ? "Converting…" : "Convert to Client"}
+            </Button>
+          </PermissionGate>
+          <AlertDialog open={convertConfirmOpen} onOpenChange={setConvertConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Convert to Client</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Convert <span className="font-medium text-slate-800">{client.displayName}</span> to an active client?
+                  They will appear in the Clients list and can be scheduled for jobs and invoiced.
+                  Today becomes their &ldquo;Client since&rdquo; date.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void handleConvert()} className="bg-yellow-600 hover:bg-yellow-700">
+                  Convert to Client
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
-        <TabsList className="sticky top-0 z-10 shrink-0 justify-start rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
+        {/* Scrolls sideways — nine tabs don't fit beside a 340px list panel, and
+            without this Audit Trail was simply cut off the edge. */}
+        <TabsList className="sticky top-0 z-10 shrink-0 justify-start overflow-x-auto rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
           {(
             [
               { value: "home",      label: "Home" },
-              { value: "activity",  label: "Activity" },
+              ...(can("client_view_history") ? [{ value: "activity", label: "Activity" }] : []),
               { value: "tickets",   label: "Tickets" },
-              ...(!isLeadLike ? [{ value: "contracts", label: "Contracts" }] : []),
+              ...(!isLeadLike && can("contract_list") ? [{ value: "contracts", label: "Contracts" }] : []),
               { value: "projects",  label: "Projects" },
               { value: "photos",    label: "Photos" },
               { value: "files",     label: "Files" },
@@ -3318,7 +3753,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="h-full shrink-0 rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
               {tab.label}
             </TabsTrigger>
@@ -3383,6 +3818,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 Payment Method on File
               </h3>
               <SavedPaymentMethodSection client={client} />
+              <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                QuickBooks
+              </h3>
+              <QuickBooksClientSyncSection client={client} />
+              <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Client Portal
+              </h3>
+              <ClientPortalSection clientId={clientId} onInvite={() => setPortalInviteOpen(true)} />
             </div>
             <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -3398,6 +3841,62 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <InfoRow label="Gate code" value={client.gateCode} />
                 <InfoRow label="Notes to crew" value={client.notesToCrew} />
               </div>
+
+              {/* Compact address-only property list. Properties are created from
+                  More → Add Property and feed the Aerial Measurement tool; the
+                  old "Related Properties" card on Home was replaced by Open
+                  Tickets, so this is where they're viewed and edited now. */}
+              <div className="mb-3 mt-6 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Properties{properties && properties.length > 0 ? ` (${properties.length})` : ""}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setAddPropertyOpen(true)}
+                  className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+                >
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+              </div>
+              {(properties ?? []).length === 0 ? (
+                <p className="text-xs text-slate-400">No additional properties on file.</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {(properties ?? []).map((p) => {
+                    const addr = [p.address, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" · ");
+                    return (
+                      <li key={p.id} className="flex items-start justify-between gap-2 px-3 py-2">
+                        <div className="min-w-0 text-sm">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate font-medium text-slate-800">{p.name || p.address || "Property"}</span>
+                            {p.isMaster && (
+                              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">Primary</span>
+                            )}
+                          </div>
+                          {p.name && addr && <p className="truncate text-xs text-slate-500">{addr}</p>}
+                          {(p.gateCode || p.notesToCrew) && (
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {p.gateCode && <span>Gate code: <span className="font-medium text-slate-700">{p.gateCode}</span></span>}
+                              {p.gateCode && p.notesToCrew && <span> · </span>}
+                              {p.notesToCrew && <span>Crew: {p.notesToCrew}</span>}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditProperty(p)}
+                          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Edit property"
+                          aria-label={`Edit property ${p.name || p.address || ""}`.trim()}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           </div>
         </TabsContent>
@@ -3443,7 +3942,18 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           onAddContact={() => { setAllContactsOpen(false); setAddContactOpen(true); }}
         />
       )}
+      {/* Properties are created from the "More" menu's "Add Property" item (and the
+          "+ Add" link on Details → Properties); the Aerial Measurement tool only picks
+          among existing properties. The compact list on the Details tab is where they
+          are viewed and edited — the edit instance below reuses AddPropertyDialog's
+          edit mode. */}
       <AddPropertyDialog clientId={clientId} open={addPropertyOpen} onOpenChange={setAddPropertyOpen} />
+      <AddPropertyDialog
+        clientId={clientId}
+        open={!!editProperty}
+        onOpenChange={(o) => { if (!o) setEditProperty(null); }}
+        property={editProperty}
+      />
       <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
       <AccountStatementDialog
         clientId={clientId}
@@ -3481,6 +3991,58 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   );
 }
 
+// ── Client Portal status (Details tab) ────────────────────────────────────────
+
+function describePortalStatus(s: ClientPortalStatusResponse): { label: string; tone: "muted" | "amber" | "green" } {
+  if (s.status === "active") return { label: "Active", tone: "green" };
+  if (s.status === "invited") return { label: s.inviteExpired ? "Invite expired" : "Invited", tone: "amber" };
+  return { label: "No access", tone: "muted" };
+}
+
+/**
+ * D-25: the office never showed whether a client actually had a portal login —
+ * "Send Portal Invite" just offered to generate a link with no status. This
+ * reads /portal-status (client_portal_users + latest client_portal_invites +
+ * auth last_sign_in_at) and offers the matching action.
+ */
+function ClientPortalSection({ clientId, onInvite }: { clientId: string; onInvite: () => void }) {
+  const { data, isLoading, isError } = useClientPortalStatus(clientId);
+  if (isLoading) return <p className="text-xs text-slate-400">Loading…</p>;
+  if (isError || !data) return <p className="text-xs text-slate-400">Portal status unavailable.</p>;
+  const { label, tone } = describePortalStatus(data);
+  const toneClass = tone === "green"
+    ? "bg-green-100 text-green-700"
+    : tone === "amber" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600";
+  const fmt = (iso: string | null) => (iso ? formatDate(iso) : null);
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="shrink-0 text-slate-400">Status</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${toneClass}`}>{label}</span>
+      </div>
+      <InfoRow label="Login email" value={data.email} />
+      {data.status === "active" && (
+        <>
+          <InfoRow label="Registered" value={fmt(data.activeSince)} />
+          <InfoRow label="Last login" value={data.lastLoginAt ? formatDate(data.lastLoginAt) : "Never signed in"} />
+        </>
+      )}
+      {data.status === "invited" && (
+        <>
+          <InfoRow label="Invited" value={fmt(data.invitedAt)} />
+          <InfoRow label={data.inviteExpired ? "Expired" : "Expires"} value={fmt(data.inviteExpiresAt)} />
+        </>
+      )}
+      <PermissionGate permission="client_reset_portal_password">
+        <Button variant="outline" size="sm" className="h-7 text-xs mt-1" onClick={onInvite}>
+          <ExternalLink className="mr-1.5 h-3 w-3" />
+          {data.status === "active" ? "Manage portal access" : data.status === "invited" ? "Re-send invite" : "Send portal invite"}
+        </Button>
+      </PermissionGate>
+    </div>
+  );
+}
+
 // ── PortalInviteDialog ────────────────────────────────────────────────────────
 
 function PortalInviteDialog({
@@ -3494,12 +4056,18 @@ function PortalInviteDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const qc = useQueryClient();
+  const { data: portalStatus } = useClientPortalStatus(open ? clientId : undefined);
   const [email, setEmail] = useState(defaultEmail);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasExisting, setHasExisting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  // Known-active account (from portal-status) reads the same as the route's
+  // 409 — offer revoke+re-invite up front instead of after a failed attempt.
+  const alreadyActive = hasExisting || portalStatus?.status === "active";
+  const isResend = !alreadyActive && portalStatus?.status === "invited";
 
   // Sync whenever the dialog opens or the client's email changes
   useEffect(() => {
@@ -3524,6 +4092,8 @@ function PortalInviteDialog({
         setError(data.error ?? "Failed to create invite");
       } else {
         setResult({ url: data.inviteUrl });
+        qc.invalidateQueries({ queryKey: clientPortalStatusKey(clientId) });
+        qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
       }
     } catch {
       setError("Failed to create invite — check your connection and try again.");
@@ -3543,6 +4113,7 @@ function PortalInviteDialog({
         return;
       }
       setHasExisting(false);
+      qc.invalidateQueries({ queryKey: clientPortalStatusKey(clientId) });
     } catch {
       setError("Failed to reset portal access — check your connection and try again.");
       return;
@@ -3589,9 +4160,28 @@ function PortalInviteDialog({
           </div>
         ) : (
           <div className="flex flex-col gap-4 py-2">
-            <p className="text-sm text-slate-600">
-              An invite link will be generated. The client sets their password and gets access to view invoices, services, and estimates.
-            </p>
+            {alreadyActive && !error ? (
+              <div className="flex flex-col gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2">
+                <p className="text-sm text-green-800">
+                  Client already has portal access
+                  {portalStatus?.email ? <> as <span className="font-medium">{portalStatus.email}</span></> : null}
+                  {portalStatus?.lastLoginAt ? <> — last login {formatDate(portalStatus.lastLoginAt)}</> : portalStatus?.status === "active" ? " — never signed in" : null}.
+                </p>
+                <p className="text-xs text-green-700">
+                  Sending a new invite will revoke their current login so they can register again with the address below.
+                </p>
+              </div>
+            ) : isResend ? (
+              <p className="text-sm text-slate-600">
+                An invite was sent {portalStatus?.invitedAt ? `on ${formatDate(portalStatus.invitedAt)}` : "previously"}
+                {portalStatus?.inviteExpired ? " and has expired" : " but hasn't been accepted yet"}. Re-sending replaces
+                it with a fresh link (the old one stops working).
+              </p>
+            ) : (
+              <p className="text-sm text-slate-600">
+                An invite link will be generated and emailed. The client sets their password and gets access to view invoices, services, and estimates.
+              </p>
+            )}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">Client Email</label>
               <input
@@ -3621,11 +4211,15 @@ function PortalInviteDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>Close</Button>
-          {!result && (
-            <Button onClick={sendInvite} disabled={loading || resetting || !email}>
-              {loading ? "Creating…" : "Generate Invite Link"}
+          {!result && (alreadyActive ? (
+            <Button variant="destructive" onClick={resetAndInvite} disabled={loading || resetting || !email}>
+              {resetting ? "Revoking…" : loading ? "Creating…" : "Revoke access & send new invite"}
             </Button>
-          )}
+          ) : (
+            <Button onClick={sendInvite} disabled={loading || resetting || !email}>
+              {loading ? "Sending…" : isResend ? "Re-send invite" : "Send invite"}
+            </Button>
+          ))}
         </DialogFooter>
       </DialogContent>
     </Dialog>

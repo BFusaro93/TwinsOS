@@ -10,11 +10,9 @@ export async function GET(
   const supabase = await createClient();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("client_portal_invites")
-    .select("id, email, expires_at, accepted_at, client_id, org_id")
-    .eq("token", token)
-    .single() as { data: PortalInviteRow | null; error: unknown };
+  const { data: rows, error } = await (supabase as any)
+    .rpc("get_portal_invite_by_token", { p_token: token }) as { data: PortalInviteRow[] | null; error: unknown };
+  const data = rows?.[0] ?? null;
 
   if (error || !data) {
     return NextResponse.json({ error: "Invalid or expired invite" }, { status: 404 });

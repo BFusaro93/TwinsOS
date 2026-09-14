@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
+import { EMAIL_FROM, escapeHtml } from "@/lib/email/send";
 
 // Notifies staff about CRM ticket events (created / assigned / commented).
 // Mirrors src/lib/estimate-client-notify.ts's shape: per-recipient pref
@@ -7,13 +8,16 @@ import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 // an authenticated session, since this also runs from the public/portal
 // ticket-submission path).
 //
-// crm_tickets now has a real assigned_to_id (profiles.id), set alongside the
-// display-name assigned_to whenever the UI's assignee dropdown is used — see
-// migration 20260811000002_crm_tickets_assigned_to_id.sql. resolveAssigneeId()
-// prefers that; the name-fuzzy-match against crm_employees is a fallback
-// only for rows written before that column existed (or third-party/portal
-// paths that never had an id to begin with). If neither resolves, assignee
-// notifications are silently skipped rather than failing the caller.
+// crm_tickets.assigned_to_id is a crm_employees.id (repointed from profiles.id
+// in migration 20260825134105_sales_rep_assigned_to_fk_target_employees.sql),
+// set alongside the display-name assigned_to whenever the UI's assignee
+// dropdown is used. Notifications need a profiles.id (login user) to look up
+// email/in-app prefs, so resolveAssigneeId() resolves assignedToId through
+// crm_employees.user_id first; the name-fuzzy-match against crm_employees is
+// a fallback for rows written before assigned_to_id existed (or third-party/
+// portal paths that never had an id to begin with), or an employee with no
+// linked login. If neither resolves, assignee notifications are silently
+// skipped rather than failing the caller.
 export async function resolveAssigneeId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -21,7 +25,16 @@ export async function resolveAssigneeId(
   assignedToId: string | null,
   assignedToName: string | null
 ): Promise<string | null> {
-  if (assignedToId) return assignedToId;
+  if (assignedToId) {
+    const { data: employee } = await supabase
+      .from("crm_employees")
+      .select("user_id")
+      .eq("id", assignedToId)
+      .eq("org_id", orgId)
+      .is("deleted_at", null)
+      .single();
+    if (employee?.user_id) return employee.user_id;
+  }
   if (!assignedToName?.trim()) return null;
 
   const { data: employees } = await supabase
@@ -90,7 +103,7 @@ async function sendToRecipients(
   const resend = new Resend(resendKey);
   for (const p of emailEligible) {
     await resend.emails.send({
-      from: "Equipt <noreply@twinslawnservice.com>",
+      from: EMAIL_FROM,
       to: p.email,
       subject: opts.title,
       html: opts.emailHtml(p.name ?? null),
@@ -100,15 +113,22 @@ async function sendToRecipients(
   }
 }
 
-function ticketLink(ticketId: string): string {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
-  return `${siteUrl}/crm/tickets?id=${ticketId}`;
+export function ticketLink(ticketId: string): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+  return `${siteUrl}/crm/tickets?open=${ticketId}`;
 }
 
+// `heading` is always a hardcoded string literal from the call sites below —
+// never freeform data — so it's not escaped. `name` (a profile display name)
+// and `bodyHtml` (built by each caller, which is responsible for escaping
+// any freeform data it interpolates — e.g. ticket subject, commenter name,
+// comment body) both originate from user-controlled data and must be safe
+// before reaching here; escape `name` here since every caller passes it
+// through unescaped.
 function emailShell(heading: string, name: string | null, bodyHtml: string, ticketId: string): string {
   return `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
     <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${heading}</h2>
-    <p style="margin:0 0 4px;color:#475569">Hi ${name ?? "there"},</p>
+    <p style="margin:0 0 4px;color:#475569">Hi ${name ? escapeHtml(name) : "there"},</p>
     ${bodyHtml}
     <a href="${ticketLink(ticketId)}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;margin-top:16px">View Ticket</a>
   </div>`;
@@ -148,21 +168,23 @@ export async function notifyStaffOfNewTicket(
     emailHtml: (name) => emailShell(
       "New Ticket",
       name,
-      `<p style="margin:0 0 24px;color:#475569">A new ticket was created: <strong>${label}</strong>.</p>`,
+      `<p style="margin:0 0 24px;color:#475569">A new ticket was created: <strong>${escapeHtml(label)}</strong>.</p>`,
       ticketId
     ),
   });
 }
 
-/** Ticket assigned — notifies only the newly-resolved assignee. */
+/** Ticket assigned — notifies only the newly-resolved assignee (unless they
+ *  assigned the ticket to themselves — never notify the actor for their own
+ *  action, same rule enforced on every other notification trigger point). */
 export async function notifyTicketAssigned(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  params: NotifyBase & { assignedToId?: string | null; assignedToName: string | null }
+  params: NotifyBase & { assignedToId?: string | null; assignedToName: string | null; assignedByUserId?: string | null }
 ) {
-  const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName } = params;
+  const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, assignedByUserId } = params;
   const assigneeId = await resolveAssigneeId(supabase, orgId, assignedToId ?? null, assignedToName);
-  if (!assigneeId) return;
+  if (!assigneeId || assigneeId === assignedByUserId) return;
 
   const { data: assignee } = await supabase
     .from("profiles")
@@ -181,7 +203,7 @@ export async function notifyTicketAssigned(
     emailHtml: (name) => emailShell(
       "Ticket Assigned to You",
       name,
-      `<p style="margin:0 0 24px;color:#475569">You were assigned ticket <strong>${label}</strong>.</p>`,
+      `<p style="margin:0 0 24px;color:#475569">You were assigned ticket <strong>${escapeHtml(label)}</strong>.</p>`,
       ticketId
     ),
   });
@@ -215,8 +237,8 @@ export async function notifyTicketComment(
     emailHtml: (name) => emailShell(
       "New Comment on Your Ticket",
       name,
-      `<p style="margin:0 0 8px;color:#475569">${commenterName} commented on <strong>${label}</strong>:</p>
-       <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${snippet}</blockquote>`,
+      `<p style="margin:0 0 8px;color:#475569">${escapeHtml(commenterName)} commented on <strong>${escapeHtml(label)}</strong>:</p>
+       <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${escapeHtml(snippet)}</blockquote>`,
       ticketId
     ),
   });

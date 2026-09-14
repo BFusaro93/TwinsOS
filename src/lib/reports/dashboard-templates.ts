@@ -1,4 +1,5 @@
 import type { DashboardConfig } from "@/types/crm-reports";
+import { cashPaymentFilter, issuedInvoiceFilter } from "@/lib/reports/helpers";
 
 // ============================================================
 // Starter dashboard templates offered from the "New Dashboard" flow.
@@ -10,6 +11,10 @@ export interface DashboardTemplate {
   key: string;
   name: string;
   description: string;
+  /** Auto-cloned into every org as a real, editable dashboard on their first
+   *  Report Center visit (see ensureSystemDashboardsSeeded). Templates without
+   *  this flag stay picker-only starting points, same as before. */
+  seedable?: boolean;
   config: DashboardConfig;
 }
 
@@ -18,6 +23,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
     key: "sales-overview",
     name: "Sales Overview",
     description: "Estimate pipeline, win rate, and recent activity.",
+    seedable: true,
     config: {
       tabs: [
         {
@@ -26,17 +32,48 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
           useDateFilter: true,
           panels: [
             {
-              id: "new-estimates",
-              title: "New Estimates",
+              id: "invoiced-revenue-ytd",
+              title: "Invoiced Revenue (YTD)",
               size: "third",
               visual: {
-                type: "kpi",
-                useTabDateRange: true,
+                type: "gauge",
+                // True YTD (Jan 1 -> today) regardless of the tab's range so the
+                // annual gaugeMax means something.
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                kpiColumn: "sum_total_cents",
+                valueColumns: [],
+                gaugeMax: 400000000,
+                config: {
+                  dataset: "rpt_invoices",
+                  columns: [],
+                  filters: [...issuedInvoiceFilter()],
+                  groupBy: [],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortDir: "asc",
+                },
+              },
+            },
+            {
+              id: "new-leads-ytd",
+              title: "New Leads YTD",
+              size: "third",
+              visual: {
+                type: "gauge",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                dateColumn: "created_at",
                 kpiColumn: "count_all",
                 valueColumns: [],
+                gaugeMax: 600,
                 config: {
-                  dataset: "rpt_estimates",
+                  dataset: "rpt_clients",
                   columns: [],
+                  // No status filter on purpose: every account starts life as a
+                  // lead (or is entered directly as a client), and a `status eq
+                  // "lead"` filter drops leads that have since converted or been
+                  // lost. Counting all accounts by created_at is the true
+                  // "new leads received" number.
                   filters: [],
                   groupBy: [],
                   aggregates: [{ column: "*", fn: "count" }],
@@ -45,46 +82,438 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               },
             },
             {
-              id: "open-value",
-              title: "Open Estimate Value",
+              id: "new-clients-ytd",
+              title: "New Clients / Converted Leads YTD",
               size: "third",
               visual: {
-                type: "kpi",
+                type: "gauge",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                kpiColumn: "count_all",
+                valueColumns: [],
+                gaugeMax: 300,
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  filters: [{ column: "status", op: "neq", value: "lead" }],
+                  groupBy: [],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortDir: "asc",
+                },
+              },
+            },
+            {
+              id: "clients-leads-monthly",
+              title: "Clients/Leads",
+              size: "full",
+              reportKey: "clients-leads-monthly-matrix",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "close-ratios-by-sales-rep",
+              title: "Close Ratios by Sales Rep",
+              size: "half",
+              reportKey: "close-ratios-by-sales-rep",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "clients-leads-stats",
+              title: "Clients and Leads",
+              size: "half",
+              reportKey: "clients-leads-stats",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "open-estimates-leaderboard",
+              title: "Open Estimates Leaderboard",
+              size: "half",
+              visual: {
+                type: "table",
                 useTabDateRange: true,
-                kpiColumn: "sum_total_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
                   filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
-                  groupBy: [],
-                  aggregates: [{ column: "total_cents", fn: "sum" }],
-                  sortDir: "asc",
+                  groupBy: ["sales_rep"],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortColumn: "count_all",
+                  sortDir: "desc",
                 },
               },
             },
             {
-              id: "won-value",
-              title: "Won Value",
-              size: "third",
+              id: "won-estimates-leaderboard",
+              title: "Won Estimates Leaderboard",
+              size: "half",
               visual: {
-                type: "kpi",
+                type: "table",
                 useTabDateRange: true,
-                kpiColumn: "sum_total_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["won", "invoiced"] }],
-                  groupBy: [],
+                  filters: [{ column: "stage", op: "in", value: ["accepted", "invoiced"] }],
+                  groupBy: ["sales_rep"],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortColumn: "sum_total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "sales-activity-7-days",
+              title: "Sales Activity (Last 7 Days)",
+              size: "half",
+              reportKey: "sales-activity-last-7-days",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "company-scorecard",
+              title: "Company Scorecard",
+              size: "full",
+              reportKey: "company-scorecard",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "leads",
+          name: "Leads",
+          useDateFilter: true,
+          panels: [
+            {
+              id: "leads-by-source-bar",
+              title: "Leads by Source (count-YTD)",
+              size: "half",
+              visual: {
+                type: "bar",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                dateColumn: "created_at",
+                labelColumn: "source",
+                valueColumns: ["count_all"],
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  // No status filter: see "New Leads YTD" — counts every account
+                  // created this year by source, including converted/lost leads.
+                  filters: [],
+                  groupBy: ["source"],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortColumn: "count_all",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "leads-ytd-gauge",
+              title: "Leads YTD",
+              size: "half",
+              visual: {
+                type: "gauge",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                dateColumn: "created_at",
+                kpiColumn: "count_all",
+                valueColumns: [],
+                gaugeMax: 600,
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  // No status filter: see "New Leads YTD" — counts every account
+                  // created this year, including converted/lost leads.
+                  filters: [],
+                  groupBy: [],
+                  aggregates: [{ column: "*", fn: "count" }],
                   sortDir: "asc",
                 },
               },
             },
             {
-              id: "by-stage",
-              title: "Estimates by Stage",
+              id: "leads-by-source-pie",
+              title: "Leads by Source (%-YTD)",
+              size: "half",
+              visual: {
+                type: "pie",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                dateColumn: "created_at",
+                labelColumn: "source",
+                valueColumns: ["count_all"],
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  // No status filter: see "New Leads YTD" — counts every account
+                  // created this year by source, including converted/lost leads.
+                  filters: [],
+                  groupBy: ["source"],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortColumn: "count_all",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "new-leads-this-month",
+              title: "New Leads This Month",
+              size: "half",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                relativeDateFilter: "this_month",
+                dateColumn: "created_at",
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_clients",
+                  columns: ["display_name", "source", "sales_rep", "created_at"],
+                  // No status filter: see "New Leads YTD" — lists every account
+                  // created this month, including ones already converted/lost.
+                  filters: [],
+                  groupBy: [],
+                  aggregates: [],
+                  sortColumn: "created_at",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "lead-aging-summary",
+              title: "Lead Aging Summary",
+              size: "full",
+              reportKey: "lead-aging-summary",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "new-leads-report",
+              title: "New Leads Report",
+              size: "full",
+              reportKey: "new-leads",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "sales-summary-by-source",
+              title: "Sales Summary by Source",
+              size: "full",
+              reportKey: "sales-summary-by-source",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "closed-leads-summary",
+              title: "Closed Leads Summary",
+              size: "full",
+              reportKey: "closed-leads-summary",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "new-clients",
+          name: "New Clients",
+          useDateFilter: true,
+          panels: [
+            {
+              id: "clients-by-source-bar",
+              title: "Clients by Source (count-YTD)",
+              size: "half",
+              visual: {
+                type: "bar",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                labelColumn: "source",
+                valueColumns: ["count_all"],
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  filters: [{ column: "status", op: "neq", value: "lead" }],
+                  groupBy: ["source"],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortColumn: "count_all",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "clients-by-source-pie",
+              title: "Clients by Source (%-YTD)",
+              size: "half",
+              visual: {
+                type: "pie",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                labelColumn: "source",
+                valueColumns: ["count_all"],
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  filters: [{ column: "status", op: "neq", value: "lead" }],
+                  groupBy: ["source"],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortColumn: "count_all",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "new-clients-this-month",
+              title: "New Clients This Month",
+              size: "half",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                relativeDateFilter: "this_month",
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_clients",
+                  columns: ["display_name", "sales_rep", "primary_phone", "client_since"],
+                  filters: [{ column: "status", op: "neq", value: "lead" }],
+                  groupBy: [],
+                  aggregates: [],
+                  sortColumn: "client_since",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "new-clients-ytd-gauge",
+              title: "New Clients YTD",
+              size: "half",
+              visual: {
+                type: "gauge",
+                useTabDateRange: false,
+                relativeDateFilter: "this_year",
+                kpiColumn: "count_all",
+                valueColumns: [],
+                gaugeMax: 300,
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  filters: [{ column: "status", op: "neq", value: "lead" }],
+                  groupBy: [],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortDir: "asc",
+                },
+              },
+            },
+            {
+              id: "new-client-count-report",
+              title: "New Client Count Report",
+              size: "full",
+              reportKey: "new-client-count",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "new-clients-report",
+              title: "New Clients Report",
+              size: "full",
+              reportKey: "new-clients",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "estimates",
+          name: "Estimates",
+          useDateFilter: true,
+          panels: [
+            {
+              id: "revenue-by-sales-rep-pie",
+              title: "Sum of Projected Revenue by Sales Rep",
+              size: "half",
+              visual: {
+                type: "pie",
+                useTabDateRange: false,
+                labelColumn: "sales_rep",
+                valueColumns: ["sum_total_cents"],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: [],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  groupBy: ["sales_rep"],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortColumn: "sum_total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "revenue-by-stage-pie",
+              title: "Sum of Projected Revenue by Estimate Stage",
+              size: "half",
+              visual: {
+                type: "pie",
+                useTabDateRange: false,
+                labelColumn: "stage",
+                valueColumns: ["sum_total_cents"],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: [],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  groupBy: ["stage"],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortColumn: "sum_total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "pipeline-by-status-bar",
+              title: "Company Sales Pipeline by Status",
               size: "half",
               visual: {
                 type: "bar",
@@ -96,59 +525,289 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                   columns: [],
                   filters: [],
                   groupBy: ["stage"],
-                  aggregates: [
-                    { column: "total_cents", fn: "sum" },
-                    { column: "*", fn: "count" },
-                  ],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortColumn: "sum_total_cents",
                   sortDir: "desc",
                 },
               },
             },
             {
-              id: "by-source",
-              title: "Estimates by Source",
+              id: "won-estimates-leaderboard-est",
+              title: "Won Estimates Leaderboard",
               size: "half",
-              visual: {
-                type: "pie",
-                useTabDateRange: true,
-                labelColumn: "source",
-                valueColumns: ["count_all"],
-                config: {
-                  dataset: "rpt_estimates",
-                  columns: [],
-                  filters: [],
-                  groupBy: ["source"],
-                  aggregates: [{ column: "*", fn: "count" }],
-                  sortColumn: "count_all",
-                  sortDir: "desc",
-                },
-              },
-            },
-            {
-              id: "recent-estimates",
-              title: "Recent Estimates",
-              size: "full",
               visual: {
                 type: "table",
                 useTabDateRange: true,
                 valueColumns: [],
                 config: {
                   dataset: "rpt_estimates",
-                  columns: [
-                    "estimate_number",
-                    "estimate_date",
-                    "client_name",
-                    "stage",
-                    "total_cents",
-                    "sales_rep",
-                  ],
-                  filters: [],
-                  groupBy: [],
-                  aggregates: [],
-                  sortColumn: "estimate_date",
+                  columns: [],
+                  filters: [{ column: "stage", op: "in", value: ["accepted", "invoiced"] }],
+                  groupBy: ["sales_rep"],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortColumn: "sum_total_cents",
                   sortDir: "desc",
                 },
+              },
+            },
+            {
+              id: "all-open-estimates",
+              title: "All Open Estimates",
+              size: "full",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: ["client_name", "total_cents", "probability_pct", "sales_rep"],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  groupBy: [],
+                  aggregates: [],
+                  sortColumn: "total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "top-5-open-estimates",
+              title: "Top 5 Open Estimates",
+              size: "half",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: ["client_name", "total_cents"],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  groupBy: [],
+                  aggregates: [],
+                  sortColumn: "total_cents",
+                  sortDir: "desc",
+                  limit: 5,
+                },
+              },
+            },
+          ],
+        },
+        {
+          id: "estimates-by-stage",
+          name: "Estimates by Stage",
+          useDateFilter: false,
+          panels: [
+            {
+              id: "estimates-by-stage-report",
+              title: "Estimates by Stage",
+              size: "full",
+              reportKey: "estimates-by-stage",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "individual-sales-rep",
+          name: "Individual Sales Rep",
+          useDateFilter: false,
+          useRepFilter: true,
+          panels: [
+            {
+              id: "my-open-estimates",
+              title: "Open Estimates",
+              size: "half",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                useTabRepFilter: true,
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: ["client_name", "total_cents", "probability_pct"],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  groupBy: [],
+                  aggregates: [],
+                  sortColumn: "total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "my-won-estimates",
+              title: "Won Estimates",
+              size: "half",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                useTabRepFilter: true,
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: ["client_name", "total_cents"],
+                  filters: [{ column: "stage", op: "in", value: ["accepted", "invoiced"] }],
+                  groupBy: [],
+                  aggregates: [],
+                  sortColumn: "total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "my-current-month-vs-quota",
+              title: "Current Month Sales vs Quota",
+              size: "half",
+              visual: {
+                type: "gauge",
+                useTabDateRange: false,
+                useTabRepFilter: true,
+                // Summed so the gauge is correct whether or not a rep is picked
+                // in the tab's Sales Rep select (no rep = whole team vs. the sum
+                // of everyone's goals; a rep = that rep only via useTabRepFilter).
+                kpiColumn: "sum_actual_cents",
+                budgetColumn: "sum_goal_cents",
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_sales_rep_month",
+                  columns: [],
+                  filters: [],
+                  groupBy: [],
+                  aggregates: [
+                    { column: "actual_cents", fn: "sum" },
+                    { column: "goal_cents", fn: "sum" },
+                  ],
+                  sortDir: "asc",
+                },
+              },
+            },
+            {
+              id: "my-sales-pipeline",
+              title: "My Sales Pipeline",
+              size: "half",
+              visual: {
+                type: "bar",
+                useTabDateRange: false,
+                useTabRepFilter: true,
+                labelColumn: "stage",
+                valueColumns: ["sum_total_cents"],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: [],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  groupBy: ["stage"],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortColumn: "sum_total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "my-lost-estimates",
+              title: "Lost Estimates",
+              size: "half",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                useTabRepFilter: true,
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: ["client_name", "total_cents", "reason"],
+                  // "declined" is the legacy client-portal spelling of "lost";
+                  // keep matching it so older rows don't vanish from the list.
+                  filters: [{ column: "stage", op: "in", value: ["lost", "declined"] }],
+                  groupBy: [],
+                  aggregates: [],
+                  sortColumn: "total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "revenue-by-sales-rep-pie-2",
+              title: "Sum of Projected Revenue by Sales Rep",
+              size: "half",
+              visual: {
+                type: "pie",
+                useTabDateRange: false,
+                labelColumn: "sales_rep",
+                valueColumns: ["sum_total_cents"],
+                config: {
+                  dataset: "rpt_estimates",
+                  columns: [],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  groupBy: ["sales_rep"],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortColumn: "sum_total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "invoice-amount-by-sales-rep-pie",
+              title: "Sum of Invoice Amount by Sales Rep ($)",
+              size: "half",
+              visual: {
+                type: "pie",
+                useTabDateRange: false,
+                labelColumn: "sales_rep",
+                valueColumns: ["sum_total_cents"],
+                config: {
+                  dataset: "rpt_invoices",
+                  columns: [],
+                  filters: [...issuedInvoiceFilter()],
+                  groupBy: ["sales_rep"],
+                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  sortColumn: "sum_total_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "sales-count-by-sales-rep",
+              title: "Sales Count by Sales Rep",
+              size: "full",
+              visual: {
+                type: "crosstab",
+                useTabDateRange: false,
+                labelColumn: "sales_rep",
+                crosstabHeaderColumn: "service_name",
+                valueColumns: ["count_all"],
+                config: {
+                  dataset: "rpt_estimate_line_items",
+                  columns: [],
+                  // Only lines on won estimates count as sales, and not lines the
+                  // client dropped from an otherwise-accepted estimate.
+                  filters: [
+                    { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
+                    { column: "status", op: "neq", value: "lost" },
+                  ],
+                  groupBy: ["sales_rep", "service_name"],
+                  aggregates: [{ column: "*", fn: "count" }],
+                  sortDir: "asc",
+                },
+              },
+            },
+          ],
+        },
+        {
+          id: "sales-commission",
+          name: "Sales Commission",
+          useDateFilter: false,
+          panels: [
+            {
+              id: "sales-commission-report",
+              title: "Sales Commission",
+              size: "full",
+              reportKey: "sales-commission-export",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
               },
             },
           ],
@@ -160,6 +819,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
     key: "ar-overview",
     name: "A/R Overview",
     description: "Outstanding balances, collections, and payment activity.",
+    seedable: true,
     config: {
       tabs: [
         {
@@ -198,7 +858,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_invoices",
                   columns: [],
-                  filters: [{ column: "status", op: "neq", value: "void" }],
+                  filters: [...issuedInvoiceFilter()],
                   groupBy: [],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortDir: "asc",
@@ -212,14 +872,54 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               visual: {
                 type: "kpi",
                 useTabDateRange: true,
-                kpiColumn: "sum_amount_cents",
+                kpiColumn: "sum_net_amount_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
-                  filters: [],
+                  filters: [...cashPaymentFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
+                  sortDir: "asc",
+                },
+              },
+            },
+            {
+              id: "payments-made-today",
+              title: "Payments Made Today",
+              size: "third",
+              visual: {
+                type: "kpi",
+                useTabDateRange: false,
+                relativeDateFilter: "today",
+                kpiColumn: "sum_net_amount_cents",
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_payments",
+                  columns: [],
+                  filters: [...cashPaymentFilter()],
+                  groupBy: [],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
+                  sortDir: "asc",
+                },
+              },
+            },
+            {
+              id: "payments-made-yesterday",
+              title: "Payments Made Yesterday",
+              size: "third",
+              visual: {
+                type: "kpi",
+                useTabDateRange: false,
+                relativeDateFilter: "yesterday",
+                kpiColumn: "sum_net_amount_cents",
+                valueColumns: [],
+                config: {
+                  dataset: "rpt_payments",
+                  columns: [],
+                  filters: [...cashPaymentFilter()],
+                  groupBy: [],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -255,22 +955,42 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "pie",
                 useTabDateRange: true,
                 labelColumn: "method",
-                valueColumns: ["sum_amount_cents"],
+                valueColumns: ["sum_net_amount_cents"],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
-                  filters: [],
+                  filters: [...cashPaymentFilter()],
                   groupBy: ["method"],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
-                  sortColumn: "sum_amount_cents",
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
+                  sortColumn: "sum_net_amount_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "account-balance-by-type",
+              title: "Sum of Account Balance by Account Type",
+              size: "half",
+              visual: {
+                type: "pie",
+                useTabDateRange: false,
+                labelColumn: "account_type",
+                valueColumns: ["sum_balance_outstanding_cents"],
+                config: {
+                  dataset: "rpt_clients",
+                  columns: [],
+                  filters: [{ column: "status", op: "neq", value: "lead" }],
+                  groupBy: ["account_type"],
+                  aggregates: [{ column: "balance_outstanding_cents", fn: "sum" }],
+                  sortColumn: "sum_balance_outstanding_cents",
                   sortDir: "desc",
                 },
               },
             },
             {
               id: "clients-with-balance",
-              title: "Clients with a Balance",
-              size: "full",
+              title: "Top 10 Clients with a Balance",
+              size: "half",
               visual: {
                 type: "table",
                 useTabDateRange: false,
@@ -282,6 +1002,203 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                   groupBy: [],
                   aggregates: [],
                   sortColumn: "balance_outstanding_cents",
+                  sortDir: "desc",
+                  limit: 10,
+                },
+              },
+            },
+            {
+              id: "invoices-and-payments",
+              title: "Invoices and Payments",
+              size: "full",
+              reportKey: "invoices-and-payments",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "credit-card-charges",
+              title: "Credit Card Charges",
+              size: "full",
+              reportKey: "credit-card-charges",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "open-invoices",
+          name: "Open Invoices",
+          useDateFilter: false,
+          panels: [
+            {
+              id: "open-invoices-report",
+              title: "Open Invoices",
+              size: "full",
+              reportKey: "invoices-with-balances",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "aging-report-snapshot",
+          name: "Aging Report Snapshot",
+          useDateFilter: false,
+          panels: [
+            {
+              id: "aging-report-snapshot-report",
+              title: "Aging Report Snapshot",
+              size: "full",
+              reportKey: "ar-aging-snapshot",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "ar-aging-report",
+          name: "A/R Aging Report",
+          useDateFilter: false,
+          panels: [
+            {
+              id: "ar-aging-report-report",
+              title: "A/R Aging Report",
+              size: "full",
+              reportKey: "ar-aging",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+        {
+          id: "payments-reports",
+          name: "Payments Reports",
+          useDateFilter: false,
+          panels: [
+            {
+              id: "unapplied-payments-report",
+              title: "Unapplied Payments",
+              size: "third",
+              reportKey: "unapplied-payments",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "pre-payments-report",
+              title: "Pre-Payments",
+              size: "third",
+              reportKey: "pre-payments",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "payment-audit-summary-report",
+              title: "Payment Audit Summary",
+              size: "third",
+              reportKey: "payment-audit-summary",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    key: "crew-production-avb",
+    name: "Crew Production (AvB)",
+    description: "Actual vs. budgeted hours and revenue per man-hour by crew.",
+    config: {
+      tabs: [
+        {
+          id: "avb",
+          name: "AvB",
+          useDateFilter: true,
+          panels: [
+            {
+              id: "rev-per-man-hr-by-crew",
+              title: "Actual Revenue / Man Hour by Crew",
+              size: "half",
+              visual: {
+                type: "bar",
+                useTabDateRange: true,
+                labelColumn: "crew_name",
+                valueColumns: ["rev_per_man_hr"],
+                config: {
+                  dataset: "rpt_job_visits",
+                  columns: [],
+                  // Only visits with real time on them — scheduled/cancelled/
+                  // skipped visits have no actual hours and would skew the rate.
+                  filters: [{ column: "status", op: "in", value: ["completed", "in_progress"] }],
+                  groupBy: ["crew_name"],
+                  // Ratio of sums (total revenue / total man-hours), not an
+                  // average of per-visit ratios, which over-weights tiny visits.
+                  aggregates: [
+                    { column: "revenue_cents", fn: "sum" },
+                    { column: "man_hours", fn: "sum" },
+                  ],
+                  formulas: [
+                    {
+                      name: "rev_per_man_hr",
+                      left: "sum_revenue_cents",
+                      operator: "/",
+                      right: "sum_man_hours",
+                      displayType: "money",
+                    },
+                  ],
+                  sortColumn: "sum_revenue_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "variance-hours-by-crew",
+              title: "Actual Time Variance (Hours) by Crew",
+              size: "half",
+              visual: {
+                type: "bar",
+                useTabDateRange: true,
+                labelColumn: "crew_name",
+                valueColumns: ["sum_variance_hours"],
+                config: {
+                  dataset: "rpt_job_visits",
+                  columns: [],
+                  filters: [{ column: "status", op: "in", value: ["completed", "in_progress"] }],
+                  groupBy: ["crew_name"],
+                  aggregates: [{ column: "variance_hours", fn: "sum" }],
+                  sortColumn: "sum_variance_hours",
                   sortDir: "desc",
                 },
               },
@@ -296,4 +1213,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
 export function getDashboardTemplate(key: string | undefined): DashboardTemplate | undefined {
   if (!key) return undefined;
   return DASHBOARD_TEMPLATES.find((t) => t.key === key);
+}
+
+export function getSeedableDashboardTemplates(): DashboardTemplate[] {
+  return DASHBOARD_TEMPLATES.filter((t) => t.seedable);
 }

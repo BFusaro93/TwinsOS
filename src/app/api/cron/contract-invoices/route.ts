@@ -8,6 +8,12 @@ import type { Database } from "@/types/supabase";
  * For every active contract where:
  *   - is_active = true
  *   - auto_generate = true
+ *   - status is "signed" or "active" (not draft/sent/cancelled/expired —
+ *     a contract the client never signed, or one that's been cancelled or
+ *     has expired, must never be auto-billed)
+ *   - start_date is null or has already arrived, and end_date is null or
+ *     hasn't passed yet (nothing else transitions status to "expired" when
+ *     end_date arrives, so this is the only thing stopping billing past term)
  *   - billing_day_of_month = today's day-of-month (or last day of month if
  *     billing_day > days in current month)
  *   - no invoice already exists for this contract in the current billing month
@@ -56,9 +62,16 @@ export async function GET(request: Request) {
 
   const { data: contracts, error: fetchErr } = await sb
     .from("crm_contracts")
-    .select("id, org_id, client_id, title, billing_day_of_month, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id")
+    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id")
     .eq("is_active", true)
     .eq("auto_generate", true)
+    // Only a contract the client has actually agreed to should be auto-billed.
+    // is_active/auto_generate alone aren't enough to gate this: both default
+    // to true on a brand-new contract, so a still-"draft"/"sent" (never
+    // signed) contract — or one the office marked "cancelled"/"expired" —
+    // would otherwise be picked up here the moment its billing day rolls
+    // around, since nothing else in this query looks at status at all.
+    .in("status", ["signed", "active"])
     .is("deleted_at", null);
 
   if (fetchErr) {
@@ -66,14 +79,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: fetchErr.message }, { status: 500 });
   }
 
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(todayDay).padStart(2, "0")}`;
+
   // Filter to contracts whose billing day matches today (or last day of month
-  // when billing_day > days in current month).
+  // when billing_day > days in current month), that have actually started,
+  // and whose end_date (if any) hasn't passed — nothing else transitions a
+  // contract's status to "expired" automatically when its end_date arrives,
+  // so this cron is the only backstop against billing past a lapsed term.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dueTodayContracts = ((contracts ?? []) as any[]).filter((c) => {
     const effectiveDay = c.billing_day_of_month > lastDayOfMonth
       ? lastDayOfMonth
       : c.billing_day_of_month;
-    return effectiveDay === todayDay;
+    if (effectiveDay !== todayDay) return false;
+    if (c.start_date && c.start_date > todayStr) return false;
+    if (c.end_date && c.end_date < todayStr) return false;
+    return true;
   });
 
   if (dueTodayContracts.length === 0) {

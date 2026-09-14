@@ -38,6 +38,17 @@ const FILTER_TABS: { value: FilterTab; label: string; types?: string[] }[] = [
   { value: "estimates",    label: "Estimates",    types: ["estimate", "contract"] },
 ];
 
+/** Which chip an entry belongs to. Anything linked to an estimate record
+ *  (e.g. the "Estimate #N sent via email" row, stored as activity_type
+ *  'email') counts as Estimates rather than Notes, so the chip that says
+ *  "Estimates" actually holds the whole estimate story. */
+function matchesTab(item: ClientActivity, tab: (typeof FILTER_TABS)[number]): boolean {
+  if (!tab.types) return true;
+  if (tab.value === "estimates" && item.refTable === "estimates") return true;
+  if (tab.value === "notes" && item.refTable === "estimates") return false;
+  return tab.types.includes(item.activityType);
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
 }
@@ -125,7 +136,16 @@ function ActivityRow({
             <p className="text-[10px] text-slate-400">{formatTime(item.occurredAt)}</p>
           </div>
         </div>
-        {item.createdByName && <p className="mt-0.5 text-[11px] text-slate-400">{item.createdByName}</p>}
+        {(item.createdByName || item.sourceClientName) && (
+          <p className="mt-0.5 text-[11px] text-slate-400">
+            {item.sourceClientName && (
+              <span className="mr-1.5 rounded bg-slate-100 px-1 py-0.5 font-medium text-slate-500">
+                {item.sourceClientName}
+              </span>
+            )}
+            {item.createdByName}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -157,9 +177,7 @@ export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onIn
   }
 
   const tabDef = FILTER_TABS.find((t) => t.value === activeTab);
-  const visible = (activity ?? []).filter((item) =>
-    !tabDef?.types || tabDef.types.includes(item.activityType)
-  );
+  const visible = (activity ?? []).filter((item) => !tabDef || matchesTab(item, tabDef));
 
   return (
     <div className="flex h-full flex-col">
@@ -186,9 +204,7 @@ export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onIn
       {/* Filter tabs */}
       <div className="flex border-b px-4 gap-0 overflow-x-auto shrink-0">
         {FILTER_TABS.map((tab) => {
-          const count = tab.types
-            ? (activity ?? []).filter((a) => tab.types!.includes(a.activityType)).length
-            : (activity ?? []).length;
+          const count = (activity ?? []).filter((a) => matchesTab(a, tab)).length;
           return (
             <button
               key={tab.value}

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
-import { Plus, Package, BookOpen } from "lucide-react";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
+import { Plus, Package, BookOpen, ClipboardList } from "lucide-react";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
@@ -28,6 +30,7 @@ import { formatCurrency } from "@/lib/utils";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
 import { toast } from "sonner";
 import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ProductItem } from "@/types";
 
 const PRODUCTS_COLUMNS: ColumnDef[] = [
@@ -56,6 +59,13 @@ const TRACK_INVENTORY_OPTIONS = [
 export function ProductsPage() {
   const { data: products, isLoading } = useProducts();
   const { mutateAsync: bulkImportProducts } = useBulkImportProducts();
+  const { allowed: hasLandscapt } = useModuleAccess("landscapt");
+  // This page is shared with Equipt (/po/products) — an Equipt-only user has
+  // no crm_employees/roleId at all, so only apply the Landscapt permission
+  // check to users who actually have a CRM role. Everyone else (including
+  // Equipt purchasers) keeps their existing unrestricted access.
+  const { can, isAdmin, roleId } = usePermissions();
+  const canBulkEditProducts = isAdmin || !roleId || can("bulk_edit_products");
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -127,19 +137,31 @@ export function ProductsPage() {
                 )
               }
               onImport={async (rows) => {
-                const { inserted, skipped } = await bulkImportProducts(rows);
-                if (skipped > 0) {
+                const result = await bulkImportProducts(rows);
+                const { succeeded, failed } = result;
+                if (failed.length > 0) {
                   toast.warning(
-                    `Imported ${inserted} product${inserted !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing name or unrecognised category).`
+                    `Imported ${succeeded} product${succeeded !== 1 ? "s" : ""}. ${failed.length} row${failed.length !== 1 ? "s" : ""} failed — see details below.`
                   );
                 } else {
-                  toast.success(`Successfully imported ${inserted} product${inserted !== 1 ? "s" : ""}.`);
+                  toast.success(`Successfully imported ${succeeded} product${succeeded !== 1 ? "s" : ""}.`);
                 }
+                return result;
               }}
             />
-            <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
-              Update Prices
-            </Button>
+            {canBulkEditProducts && (
+              <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
+                Update Prices
+              </Button>
+            )}
+            {hasLandscapt && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/crm/reports/materials-needed">
+                  <ClipboardList className="mr-1.5 h-4 w-4" />
+                  Materials Needed
+                </Link>
+              </Button>
+            )}
             <Button size="sm" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
               New Product

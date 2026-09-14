@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { NAV_SECTIONS } from "./nav-config";
-import { Leaf, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,9 +46,7 @@ export function AppSidebar() {
             </>
           ) : (
             <>
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500">
-                <Leaf className="h-4 w-4 text-white" />
-              </div>
+              <BrandMark variant="reversed" className="h-7 w-7 shrink-0 rounded-md" />
               {!sidebarCollapsed && (
                 <span className="truncate text-lg font-bold text-brand-400">Equipt</span>
               )}
@@ -72,7 +71,7 @@ export function AppSidebar() {
               .map((item) => {
               const isActive =
                 pathname === item.href ||
-                (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+                (!item.exact && pathname.startsWith(item.href + "/"));
               const Icon = item.icon;
 
               return (

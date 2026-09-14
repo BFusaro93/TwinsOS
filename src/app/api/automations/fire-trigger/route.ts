@@ -30,6 +30,7 @@ const ALLOWED_TRIGGER_TYPES: ReadonlySet<TriggerType> = new Set([
   "job_created",
   "client_source_updated",
   "has_opted_in_emails",
+  "has_opted_in_sms",
   "lead_cancelled",
   "ticket_reopened",
   "visit_date_changed",
@@ -81,7 +82,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
-  // Same cross-org guard for the ticket/invoice this event pertains to, if any.
+  // Same cross-org guard for the estimate/ticket/invoice this event pertains to, if any.
+  if (body.estimateId) {
+    const { data: estimate } = await db.from("estimates").select("org_id").eq("id", body.estimateId).maybeSingle();
+    if (!estimate || estimate.org_id !== profile.org_id) {
+      return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
+    }
+  }
   if (body.ticketId) {
     const { data: ticket } = await db.from("crm_tickets").select("org_id").eq("id", body.ticketId).maybeSingle();
     if (!ticket || ticket.org_id !== profile.org_id) {

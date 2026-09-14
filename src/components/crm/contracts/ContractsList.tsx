@@ -12,9 +12,17 @@ import {
   useCreateContractNote,
   useDeleteContractNote,
   useGenerateContractInvoices,
+  useContractBalance,
+  useContractVisits,
+  useContractServices,
+  useUpsertContractService,
+  useDeleteContractService,
+  useContractServiceVisitCounts,
+  useContractJobServiceRows,
+  type CRMContractService,
 } from "@/lib/hooks/use-contracts";
-import { useClients } from "@/lib/hooks/use-clients";
-import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
+import { useCRMServices, useJobsByContract } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,9 +57,12 @@ import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search } from "lucide-react";
+import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileSignature } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
 
@@ -118,7 +129,7 @@ function Section({ label, children, className }: { label: string; children: Reac
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mb-3 grid grid-cols-[160px_1fr] items-start gap-3">
+    <div className="mb-3 grid grid-cols-1 sm:grid-cols-[160px_1fr] items-start gap-3">
       <span className="pt-2 text-sm text-slate-700">{label}</span>
       <div>{children}</div>
     </div>
@@ -129,36 +140,6 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
 //    from the formatted-cents value never fights an in-progress keystroke
 //    (the previous controlled `(cents/100).toFixed(2)` value reformatted on
 //    every character, which is why e.g. typing "25" could land on "2.01") ──
-
-function MoneyInput({
-  cents,
-  onCommit,
-  className,
-}: {
-  cents: number;
-  onCommit: (cents: number) => void;
-  className?: string;
-}) {
-  const [text, setText] = useState(() => (cents / 100).toFixed(2));
-  const [focused, setFocused] = useState(false);
-
-  const displayValue = focused ? text : (cents / 100).toFixed(2);
-
-  return (
-    <Input
-      type="text"
-      inputMode="decimal"
-      className={className}
-      value={displayValue}
-      onFocus={() => setText((cents / 100).toFixed(2))}
-      onChange={(e) => { setFocused(true); setText(e.target.value); }}
-      onBlur={() => {
-        setFocused(false);
-        onCommit(Math.round((parseFloat(text) || 0) * 100));
-      }}
-    />
-  );
-}
 
 // ── contract details tab ──────────────────────────────────────────────────────
 
@@ -278,7 +259,7 @@ function ContractDetailsTab({
             {monthsLeft.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
-                <MoneyInput
+                <CurrencyInput
                   className="h-7 w-28 text-sm"
                   cents={state.monthlyAmounts[key] ?? 0}
                   onCommit={(cents) => onChange({
@@ -301,7 +282,7 @@ function ContractDetailsTab({
             {monthsRight.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
-                <MoneyInput
+                <CurrencyInput
                   className="h-7 w-28 text-sm"
                   cents={state.monthlyAmounts[key] ?? 0}
                   onCommit={(cents) => onChange({
@@ -455,7 +436,7 @@ function OtherDetailsTab({
   onChange: (patch: { source?: string; salesRepId?: string }) => void;
 }) {
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
 
   return (
     <div>
@@ -475,11 +456,11 @@ function OtherDetailsTab({
             <SelectTrigger className="h-8 w-64 text-sm"><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
             <SelectContent>
               {salesReps.map((e) => (
-                <SelectItem key={e.userId as string} value={e.userId as string}>
+                <SelectItem key={e.id} value={e.id}>
                   {e.firstName} {e.lastName}
                 </SelectItem>
               ))}
-              {salesRepId && !salesReps.some((e) => e.userId === salesRepId) && (
+              {salesRepId && !salesReps.some((e) => e.id === salesRepId) && (
                 <SelectItem value={salesRepId}>{salesRepName ?? "Unknown"}</SelectItem>
               )}
             </SelectContent>
@@ -490,9 +471,94 @@ function OtherDetailsTab({
   );
 }
 
+// ── overview tab (covered locations, remaining visits, balance) ──────────────
+
+function StatCard({
+  label, value, detail, emphasize,
+}: { label: string; value: string; detail?: string; emphasize?: boolean }) {
+  return (
+    <div className="rounded border bg-slate-50 p-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={cn("mt-1 text-2xl font-bold", emphasize ? "text-brand-600" : "text-slate-800")}>
+        {value}
+      </div>
+      {detail && <div className="mt-1 text-xs text-slate-500">{detail}</div>}
+    </div>
+  );
+}
+
+function ContractOverviewTab({ contract }: { contract: CRMContract }) {
+  const { data: balance, isLoading: loadingBalance } = useContractBalance(contract.id);
+  const { data: visits, isLoading: loadingVisits } = useContractVisits(contract.id);
+  const { data: properties, isLoading: loadingProps } = useClientProperties(contract.clientId);
+
+  // include_sub_properties=false means the contract only covers the client's
+  // primary property, not every property on the account.
+  const coveredProperties = contract.includeSubProperties
+    ? (properties ?? [])
+    : (properties ?? []).filter((p) => p.isMaster);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Covered Locations"
+          value={loadingProps ? "…" : String(coveredProperties.length)}
+          detail={coveredProperties.length === 1 ? (coveredProperties[0].name ?? coveredProperties[0].address ?? undefined) : undefined}
+        />
+        <StatCard
+          label="Remaining Visits"
+          value={loadingVisits ? "…" : String(visits?.remainingVisits ?? 0)}
+          detail={
+            loadingVisits ? undefined
+              : visits?.nextVisit ? `Next visit: ${fmtDate(visits.nextVisit.scheduledDate)}`
+              : "No upcoming visits"
+          }
+        />
+        <StatCard
+          label="Remaining Balance"
+          value={loadingBalance ? "…" : formatCurrency(balance?.remainingBalanceCents ?? 0)}
+          detail={loadingBalance ? undefined : `${formatCurrency(balance?.totalBilledCents ?? 0)} billed`}
+          emphasize
+        />
+      </div>
+
+      <Section label="Covered Locations">
+        {loadingProps ? (
+          <Skeleton className="h-4 w-full" />
+        ) : coveredProperties.length === 0 ? (
+          <p className="text-sm text-slate-400">No covered locations found for this client.</p>
+        ) : (
+          <ul className="divide-y">
+            {coveredProperties.map((p) => (
+              <li key={p.id} className="flex items-center justify-between py-1.5 text-sm">
+                <span className="text-slate-700">
+                  {p.name || p.address || "Untitled property"}
+                  {p.isMaster && <span className="ml-2 text-xs text-slate-400">(Primary)</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 // ── jobs under contract tab ───────────────────────────────────────────────────
 
+const JOB_TYPE_LABEL: Record<string, string> = {
+  recurring: "Recurring",
+  one_time: "One Time",
+  waiting_list: "Waiting List",
+  package: "Package",
+  snow: "Snow",
+  project: "Project",
+};
+
 function JobsUnderContractTab({ contractId }: { contractId?: string }) {
+  const { data: jobs, isLoading } = useJobsByContract(contractId);
+
   if (!contractId) {
     return (
       <Section label="Scheduled Services">
@@ -500,26 +566,255 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
       </Section>
     );
   }
+
+  const rows = jobs ?? [];
+
   return (
     <Section label="Scheduled Services">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs font-semibold text-slate-500">
-            <th className="py-2 pr-3">Jobs Under Contract</th>
-            <th className="py-2 pr-3">Rate</th>
-            <th className="py-2 pr-3">Schedule / Type</th>
-            <th className="py-2 pr-3">Quantity</th>
-            <th className="py-2">Contracted Hours</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td colSpan={5} className="py-4 text-sm text-slate-400">
-              No scheduled services on this contract yet.
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs font-semibold text-slate-500">
+              <th className="py-2 pr-3">Jobs Under Contract</th>
+              <th className="py-2 pr-3">Rate</th>
+              <th className="py-2 pr-3">Schedule / Type</th>
+              <th className="py-2 pr-3">Quantity</th>
+              <th className="py-2">Contracted Hours</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={5} className="py-4"><Skeleton className="h-4 w-full" /></td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-4 text-sm text-slate-400">
+                  No scheduled services on this contract yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((job) => {
+                const serviceNames = job.services?.map((s) => s.serviceName).filter(Boolean).join(", ");
+                const qty = job.services?.reduce((sum, s) => sum + (s.qty ?? 1), 0) ?? 1;
+                const hours = job.services?.reduce((sum, s) => sum + (Number(s.budgetedHours) || 0), 0) ?? job.budgetedHours ?? 0;
+                return (
+                  <tr key={job.id} className="border-b last:border-0">
+                    <td className="py-1.5 pr-3 text-slate-700">
+                      {serviceNames || JOB_TYPE_LABEL[job.jobType] || job.jobType}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">
+                      {job.rateCents != null ? formatCurrency(job.rateCents) : "—"}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">
+                      {job.schedule || JOB_TYPE_LABEL[job.jobType] || job.jobType}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">{qty}</td>
+                    <td className="py-1.5 text-slate-600">{hours || "—"}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  );
+}
+
+// ── included services tab (bundled visit caps, e.g. "25 mowings included") ───
+
+function IncludedServiceRow({
+  service,
+  usedCount,
+  contractId,
+}: {
+  service: CRMContractService;
+  usedCount: number;
+  contractId: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [countDraft, setCountDraft] = useState(String(service.visitsIncluded));
+  const { mutateAsync: upsert, isPending } = useUpsertContractService();
+  const { mutateAsync: remove } = useDeleteContractService();
+
+  async function save() {
+    const visitsIncluded = parseInt(countDraft, 10);
+    if (!Number.isFinite(visitsIncluded) || visitsIncluded < 0) {
+      toast.error("Enter a valid included count");
+      return;
+    }
+    try {
+      await upsert({
+        id: service.id,
+        contractId,
+        serviceId: service.serviceId,
+        serviceName: service.serviceName,
+        visitsIncluded,
+        sortOrder: service.sortOrder,
+      });
+      setEditing(false);
+    } catch {
+      toast.error("Failed to update");
+    }
+  }
+
+  const overIncluded = usedCount > service.visitsIncluded;
+
+  return (
+    <tr className="group border-b last:border-0">
+      <td className="py-1.5 pr-4 text-slate-700">{service.serviceName}</td>
+      <td className="py-1.5 pr-4 text-right">
+        {editing ? (
+          <div className="flex items-center justify-end gap-1.5">
+            <Input
+              type="number"
+              min={0}
+              className="h-7 w-20 text-right text-sm"
+              value={countDraft}
+              onChange={(e) => setCountDraft(e.target.value)}
+              autoFocus
+            />
+            <Button size="sm" className="h-7 px-2 text-xs" onClick={save} disabled={isPending}>
+              Save
+            </Button>
+          </div>
+        ) : (
+          <button
+            className="text-slate-700 hover:underline"
+            onClick={() => { setCountDraft(String(service.visitsIncluded)); setEditing(true); }}
+          >
+            {service.visitsIncluded}
+          </button>
+        )}
+      </td>
+      <td className={cn("py-1.5 pr-4 text-right font-medium", overIncluded ? "text-red-600" : "text-slate-600")}>
+        {usedCount}
+        {overIncluded && <span className="ml-1 text-xs font-normal">(over)</span>}
+      </td>
+      <td className="py-1.5">
+        <button
+          onClick={() => remove({ id: service.id, contractId })}
+          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function AddIncludedServiceRow({ contractId, sortOrder }: { contractId: string; sortOrder: number }) {
+  const { data: services } = useCRMServices();
+  const { mutateAsync: upsert, isPending } = useUpsertContractService();
+  const [serviceId, setServiceId] = useState("");
+  const [count, setCount] = useState("1");
+
+  async function add() {
+    const service = (services ?? []).find((s) => s.id === serviceId);
+    if (!service) { toast.error("Pick a service"); return; }
+    const visitsIncluded = parseInt(count, 10);
+    if (!Number.isFinite(visitsIncluded) || visitsIncluded < 0) { toast.error("Enter a valid included count"); return; }
+    try {
+      await upsert({ contractId, serviceId: service.id, serviceName: service.name, visitsIncluded, sortOrder });
+      setServiceId("");
+      setCount("1");
+    } catch {
+      toast.error("Failed to add");
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 border-t pt-3 mt-1">
+      <Select value={serviceId} onValueChange={setServiceId}>
+        <SelectTrigger className="h-8 w-56 text-sm"><SelectValue placeholder="Select service…" /></SelectTrigger>
+        <SelectContent>
+          {(services ?? []).filter((s) => s.isActive).map((s) => (
+            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        type="number"
+        min={0}
+        className="h-8 w-24 text-sm"
+        value={count}
+        onChange={(e) => setCount(e.target.value)}
+        placeholder="Visits"
+      />
+      <Button size="sm" onClick={add} disabled={isPending || !serviceId}>
+        <Plus className="mr-1 h-3.5 w-3.5" /> Add
+      </Button>
+    </div>
+  );
+}
+
+function IncludedServicesTab({ contractId }: { contractId?: string }) {
+  const { data: contractServices, isLoading: loadingServices } = useContractServices(contractId);
+  const { data: visitCounts } = useContractServiceVisitCounts(contractId);
+  const { data: jobServiceRows } = useContractJobServiceRows(contractId);
+
+  if (!contractId) {
+    return (
+      <Section label="Included Services">
+        <p className="text-sm text-slate-400">Save the contract first to bundle included services.</p>
+      </Section>
+    );
+  }
+
+  // Roll job_service-row-level completed counts (keyed by crm_job_services.id)
+  // up to a per-service_id total, so a service scheduled across multiple jobs
+  // under the same contract (or re-added over time) still sums correctly.
+  const usedByServiceId = new Map<string, number>();
+  const usedByServiceName = new Map<string, number>();
+  for (const jsRow of jobServiceRows ?? []) {
+    const n = visitCounts?.get(jsRow.id) ?? 0;
+    if (n === 0) continue;
+    if (jsRow.service_id) {
+      usedByServiceId.set(jsRow.service_id, (usedByServiceId.get(jsRow.service_id) ?? 0) + n);
+    } else {
+      usedByServiceName.set(jsRow.service_name, (usedByServiceName.get(jsRow.service_name) ?? 0) + n);
+    }
+  }
+
+  const rows = contractServices ?? [];
+
+  return (
+    <Section label="Included Services">
+      <p className="mb-3 text-xs text-slate-500">
+        Visits bundled into this contract&apos;s price, e.g. 25 mowings for a seasonal maintenance
+        plan. Tracked against actual completed visits — doesn&apos;t block scheduling, just flags
+        when a service runs over.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs font-semibold text-slate-500">
+              <th className="py-2 pr-4">Service</th>
+              <th className="py-2 pr-4 text-right">Included</th>
+              <th className="py-2 pr-4 text-right">Used</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {loadingServices ? (
+              <tr><td colSpan={4} className="py-4"><Skeleton className="h-4 w-full" /></td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={4} className="py-4 text-sm text-slate-400">No bundled services yet.</td></tr>
+            ) : (
+              rows.map((s) => (
+                <IncludedServiceRow
+                  key={s.id}
+                  service={s}
+                  usedCount={(s.serviceId ? usedByServiceId.get(s.serviceId) : usedByServiceName.get(s.serviceName)) ?? 0}
+                  contractId={contractId}
+                />
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <AddIncludedServiceRow contractId={contractId} sortOrder={rows.length} />
     </Section>
   );
 }
@@ -556,33 +851,35 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
         ) : (notes ?? []).length === 0 ? (
           <p className="text-sm text-slate-400">No notes yet.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs font-semibold text-slate-500">
-                <th className="pb-1 pr-4">Internal Note</th>
-                <th className="pb-1 pr-4">Created</th>
-                <th className="pb-1">Modified</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(notes ?? []).map((n) => (
-                <tr key={n.id} className="group border-b last:border-0">
-                  <td className="py-1.5 pr-4 text-slate-700">{n.body}</td>
-                  <td className="py-1.5 pr-4 text-xs text-slate-400">{fmtDate(n.createdAt.slice(0, 10))}</td>
-                  <td className="py-1.5 text-xs text-slate-400">{fmtDate(n.updatedAt.slice(0, 10))}</td>
-                  <td className="py-1.5">
-                    <button
-                      onClick={() => delNote({ id: n.id, contractId: contractId! })}
-                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs font-semibold text-slate-500">
+                  <th className="pb-1 pr-4">Internal Note</th>
+                  <th className="pb-1 pr-4">Created</th>
+                  <th className="pb-1">Modified</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(notes ?? []).map((n) => (
+                  <tr key={n.id} className="group border-b last:border-0">
+                    <td className="py-1.5 pr-4 text-slate-700">{n.body}</td>
+                    <td className="py-1.5 pr-4 text-xs text-slate-400">{fmtDate(n.createdAt.slice(0, 10))}</td>
+                    <td className="py-1.5 text-xs text-slate-400">{fmtDate(n.updatedAt.slice(0, 10))}</td>
+                    <td className="py-1.5">
+                      <button
+                        onClick={() => delNote({ id: n.id, contractId: contractId! })}
+                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       <div className="flex gap-2">
@@ -603,16 +900,20 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
 
 // ── contract dialog (new + edit) ──────────────────────────────────────────────
 
-type TabId = "details" | "other" | "jobs" | "notes" | "attachments" | "audit";
+type TabId = "overview" | "details" | "other" | "jobs" | "included" | "notes" | "attachments" | "audit";
 
 const NEW_TABS: { id: TabId; label: string }[] = [
   { id: "details", label: "Contract Details" },
   { id: "other", label: "Other Details" },
   { id: "jobs", label: "Jobs Under Contract" },
+  { id: "included", label: "Included Services" },
   { id: "notes", label: "Contract Notes" },
 ];
 
+// Overview needs a saved contract (invoices/visits key off contract_id), so
+// it's only available once editing an existing contract, not on create.
 const EDIT_TABS: { id: TabId; label: string }[] = [
+  { id: "overview", label: "Overview" },
   ...NEW_TABS,
   { id: "attachments", label: "Contract Attachments" },
   { id: "audit", label: "Audit Trail" },
@@ -633,7 +934,7 @@ export function ContractDialog({
 }) {
   const isNew = !contract;
   const tabs = isNew ? NEW_TABS : EDIT_TABS;
-  const [activeTab, setActiveTab] = useState<TabId>("details");
+  const [activeTab, setActiveTab] = useState<TabId>(isNew ? "details" : "overview");
 
   const [details, setDetails] = useState<DetailsState>({
     clientId: contract?.clientId ?? defaultClientId ?? "",
@@ -652,7 +953,7 @@ export function ContractDialog({
     // very differently: absent falls back to the contract's averaged
     // monthlyAmountCents, while explicit 0 means "don't bill this month."
     // Without this, a seasonal contract whose off-months are never focused
-    // (so MoneyInput never commits them) could get billed the averaged
+    // (so CurrencyInput never commits them) could get billed the averaged
     // amount in a month the user meant to leave at $0.
     monthlyAmounts: contract
       ? MONTHS.reduce((acc, { key }) => {
@@ -680,9 +981,14 @@ export function ContractDialog({
   async function handleStatusChange(status: ContractStatus) {
     if (!contract) return;
     try {
-      await updateStatus({ id: contract.id, status });
-      toast.success(`Contract marked as ${status}`);
-    } catch { toast.error("Failed to update contract status"); }
+      const result = await updateStatus({ id: contract.id, status });
+      if (!result.skipped) toast.success(`Contract marked as ${status}`);
+    } catch (err) {
+      // Invalid state-machine transitions (e.g. cancelled -> active) throw a
+      // descriptive Error from useUpdateContractStatus — surface that instead
+      // of a generic failure message.
+      toast.error(err instanceof Error ? err.message : "Failed to update contract status");
+    }
   }
 
   function patchDetails(patch: Partial<DetailsState>) {
@@ -798,6 +1104,9 @@ export function ContractDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-auto px-6 py-4">
+          {activeTab === "overview" && contract && (
+            <ContractOverviewTab contract={contract} />
+          )}
           {activeTab === "details" && (
             <ContractDetailsTab
               state={details}
@@ -819,6 +1128,9 @@ export function ContractDialog({
           )}
           {activeTab === "jobs" && (
             <JobsUnderContractTab contractId={contract?.id} />
+          )}
+          {activeTab === "included" && (
+            <IncludedServicesTab contractId={contract?.id} />
           )}
           {activeTab === "notes" && (
             <ContractNotesTab contractId={contract?.id} />
@@ -868,6 +1180,11 @@ interface Props { clientId?: string; }
 type ActiveFilter = "active" | "inactive" | "all";
 
 export function ContractsList({ clientId }: Props) {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("contract_add");
+  const canEdit = can("contract_edit");
+  const canDelete = can("contract_delete");
+  const canCreateInvoices = can("contract_create_invoices");
   const [filter, setFilter] = useState<ActiveFilter>("active");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -995,6 +1312,16 @@ export function ContractsList({ clientId }: Props) {
     all:      allContracts.length,
   };
 
+  if (!permissionsLoading && !can("contract_list")) {
+    return (
+      <EmptyState
+        icon={FileSignature}
+        title="No access"
+        description="You don't have permission to view Contracts."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -1003,9 +1330,11 @@ export function ContractsList({ clientId }: Props) {
           title="Contracts"
           description={!isLoading ? `${allContracts.length} contracts` : "Service agreements and recurring billing"}
           action={
-            <Button size="sm" onClick={openNew}>
-              <Plus className="mr-1.5 h-4 w-4" /> Add Contract
-            </Button>
+            canAdd ? (
+              <Button size="sm" onClick={openNew}>
+                <Plus className="mr-1.5 h-4 w-4" /> Add Contract
+              </Button>
+            ) : undefined
           }
         />
       )}
@@ -1028,17 +1357,23 @@ export function ContractsList({ clientId }: Props) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" sideOffset={4} className="w-52 z-50">
             <DropdownMenuLabel className="text-xs text-slate-500">Actions</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={openNew}>Add Contract</DropdownMenuItem>
+            {canAdd && <DropdownMenuItem onSelect={openNew}>Add Contract</DropdownMenuItem>}
             <DropdownMenuItem onSelect={() => { setSearch(""); clearSelection(); }}>Clear Filters</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-slate-500">Active/Inactive</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => bulkSetActive(true)} disabled={selected.size === 0}>Make Active</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => bulkSetActive(false)} disabled={selected.size === 0}>Make Inactive</DropdownMenuItem>
+            {canEdit && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs text-slate-500">Active/Inactive</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => bulkSetActive(true)} disabled={selected.size === 0}>Make Active</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => bulkSetActive(false)} disabled={selected.size === 0}>Make Inactive</DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-slate-500">Invoice/Export</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices || selected.size === 0}>
-              {generatingInvoices ? "Creating…" : "Create Invoices"}
-            </DropdownMenuItem>
+            {canCreateInvoices && (
+              <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices || selected.size === 0}>
+                {generatingInvoices ? "Creating…" : "Create Invoices"}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onSelect={handleExport}>Export</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1089,7 +1424,7 @@ export function ContractsList({ clientId }: Props) {
 
         {/* Right side */}
         <div className="ml-auto flex items-center gap-2">
-          {clientId && (
+          {clientId && canAdd && (
             <Button size="sm" className="h-7 text-xs bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a]" onClick={openNew}>
               <Plus className="mr-1 h-3.5 w-3.5" /> Add Contract
             </Button>
@@ -1148,9 +1483,10 @@ export function ContractsList({ clientId }: Props) {
               filtered.map((c) => (
                 <tr
                   key={c.id}
-                  onClick={() => openEdit(c)}
+                  onClick={canEdit ? () => openEdit(c) : undefined}
                   className={cn(
-                    "group cursor-pointer border-b hover:bg-slate-50",
+                    "group border-b hover:bg-slate-50",
+                    canEdit && "cursor-pointer",
                     selected.has(c.id) && "bg-brand-50"
                   )}
                 >
@@ -1163,12 +1499,14 @@ export function ContractsList({ clientId }: Props) {
                     />
                   </td>
                   <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => openEdit(c)}
-                      className="text-slate-400 hover:text-slate-700"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => openEdit(c)}
+                        className="text-slate-400 hover:text-slate-700"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                   {!clientId && visibleKeys.includes("client") && (
                     <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -1208,12 +1546,14 @@ export function ContractsList({ clientId }: Props) {
                     <td className="px-3 py-2.5 text-xs text-slate-500">{fmtDate(c.lastBilledDate)}</td>
                   )}
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => handleDelete(c)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(c)}
+                        className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

@@ -14,16 +14,23 @@ import {
   useDeleteSafetyWeek,
 } from "@/lib/hooks/use-safety-weeks";
 import type { DriverData, SafetyWeekData } from "@/lib/hooks/use-safety-weeks";
+import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
+import { useCurrentUserStore } from "@/stores";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Tab = "overview" | "history" | "import";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const VEHICLES = [
+// Twins Lawn Service's own fleet — used only as manual-entry autocomplete
+// suggestions for their org; other orgs type their own vehicle names.
+const TWINS_VEHICLES = [
   "Truck #7","Truck #8","Truck #10","Truck #11","Truck #12",
-  "Truck #14","Truck #15","Truck #16","Truck #17","Truck #19","Truck #20",
+  "Truck #14","Truck #15","Truck #16","Truck #17","Truck #18 - Dad","Truck #19","Truck #20",
 ];
-const EXCLUDE_VEHICLES = new Set(["Truck #18 - Dad"]);
+// Truck #18 is Dad's personal vehicle, not part of Twins' fleet reporting —
+// this exclusion is specific to the Twins org, not a general rule.
+const TWINS_EXCLUDE_VEHICLES = new Set(["Truck #18 - Dad"]);
+const NO_EXCLUDED_VEHICLES = new Set<string>();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function scoreColor(s: number): string {
@@ -78,7 +85,7 @@ type XlsxLib = {
   };
 };
 
-async function parseSamsaraXlsx(file: File): Promise<DriverData[]> {
+async function parseSamsaraXlsx(file: File, excludeVehicles: Set<string>): Promise<DriverData[]> {
   if (!(window as { XLSX?: unknown }).XLSX) {
     await new Promise<void>((res, rej) => {
       const s = document.createElement("script");
@@ -123,7 +130,7 @@ async function parseSamsaraXlsx(file: File): Promise<DriverData[]> {
     .filter(r => {
       const name = String(col(r, ["Vehicle Name", "Vehicle"]) ?? "").trim();
       const rank = col(r, ["Rank"]);
-      return name && name !== "-" && rank !== "-" && !EXCLUDE_VEHICLES.has(name);
+      return name && name !== "-" && rank !== "-" && !excludeVehicles.has(name);
     })
     .map(r => ({
       name: String(col(r, ["Vehicle Name", "Vehicle"])).trim(),
@@ -185,6 +192,13 @@ export function SafetyDashboard() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const { isInternalOrg } = useIsInternalOrg();
+  const excludeVehicles = isInternalOrg ? TWINS_EXCLUDE_VEHICLES : NO_EXCLUDED_VEHICLES;
+
+  // Everyone (including crew) can view; only admins/managers can import/edit/delete a week.
+  const { currentUser } = useCurrentUserStore();
+  const canManageWeeks = currentUser.role === "admin" || currentUser.role === "manager";
+
   const { data: weeks = [], isLoading } = useSafetyWeeks();
   const upsert = useUpsertSafetyWeek();
   const del = useDeleteSafetyWeek();
@@ -199,7 +213,7 @@ export function SafetyDashboard() {
     setXlsxSt("Parsing…");
     setUploadedDrivers([]);
     try {
-      const drivers = await parseSamsaraXlsx(file);
+      const drivers = await parseSamsaraXlsx(file, excludeVehicles);
       if (!drivers.length) throw new Error("No driver rows found in file");
       setUploadedDrivers(drivers);
       setXlsxSt(`✓ ${drivers.length} drivers found`);
@@ -211,10 +225,11 @@ export function SafetyDashboard() {
     } catch (e) {
       setXlsxSt("Error: " + String(e));
     }
-  }, []);
+  }, [excludeVehicles]);
 
   // Save week
   const saveWeek = async (drivers: DriverData[]) => {
+    if (!canManageWeeks) return;
     if (!importWeekEnd || !importLabel.trim()) {
       alert("Please fill in both the Week Label and Week End date.");
       return;
@@ -252,15 +267,19 @@ export function SafetyDashboard() {
       <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-16 text-center">
         <ShieldCheck className="mb-3 h-8 w-8 text-slate-300" />
         <p className="text-sm font-medium text-slate-500">No safety data yet</p>
-        <p className="mt-1 text-xs text-slate-400">Import a week to get started</p>
-        <button onClick={() => setTab("import")} className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">
-          Import Week
-        </button>
+        <p className="mt-1 text-xs text-slate-400">
+          {canManageWeeks ? "Import a week to get started" : "An admin or manager needs to import a week first"}
+        </p>
+        {canManageWeeks && (
+          <button onClick={() => setTab("import")} className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">
+            Import Week
+          </button>
+        )}
       </div>
     );
 
     const drivers = (curWeek?.data.drivers ?? [])
-      .filter(d => !EXCLUDE_VEHICLES.has(d.name))
+      .filter(d => !excludeVehicles.has(d.name))
       .sort((a, b) => b.score - a.score);
 
     const prevDrivers = prevWeek?.data.drivers ?? [];
@@ -325,19 +344,21 @@ export function SafetyDashboard() {
             </>);
           })()}
           <div className="ml-auto flex gap-2">
-            <button
-              onClick={() => {
-                if (!curWeek) return;
-                setImportLabel(curWeek.data.label);
-                setImportWeekEnd(curWeek.weekEnd);
-                setPendingDrivers([...curWeek.data.drivers]);
-                setImportMode("manual");
-                setTab("import");
-              }}
-              className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
-            >
-              <Pencil className="h-3 w-3" /> Edit Week
-            </button>
+            {canManageWeeks && (
+              <button
+                onClick={() => {
+                  if (!curWeek) return;
+                  setImportLabel(curWeek.data.label);
+                  setImportWeekEnd(curWeek.weekEnd);
+                  setPendingDrivers([...curWeek.data.drivers]);
+                  setImportMode("manual");
+                  setTab("import");
+                }}
+                className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
+              >
+                <Pencil className="h-3 w-3" /> Edit Week
+              </button>
+            )}
           </div>
         </div>
 
@@ -505,7 +526,7 @@ export function SafetyDashboard() {
 
     const recentWeeks = weeks.slice(-6);
     const trendData = recentWeeks.map(w => {
-      const drivers = (w.data.drivers ?? []).filter(d => !EXCLUDE_VEHICLES.has(d.name));
+      const drivers = (w.data.drivers ?? []).filter(d => !excludeVehicles.has(d.name));
       const avg = drivers.length ? Math.round(drivers.reduce((s, d) => s + d.score, 0) / drivers.length) : 0;
       const perfect = drivers.filter(d => d.score === 100).length;
       const attn = drivers.filter(d => d.score < 75).length;
@@ -513,10 +534,10 @@ export function SafetyDashboard() {
     });
 
     // Per-truck trend data
-    const allTrucks = [...new Set(recentWeeks.flatMap(w => w.data.drivers.map(d => d.name)))].filter(n => !EXCLUDE_VEHICLES.has(n)).sort();
+    const allTrucks = [...new Set(recentWeeks.flatMap(w => w.data.drivers.map(d => d.name)))].filter(n => !excludeVehicles.has(n)).sort();
     const truckTrendData = recentWeeks.map(w => {
       const row: Record<string, string | number> = { week: w.data.label || fmtDate(w.weekEnd) };
-      w.data.drivers.forEach(d => { if (!EXCLUDE_VEHICLES.has(d.name)) row[d.name] = d.score; });
+      w.data.drivers.forEach(d => { if (!excludeVehicles.has(d.name)) row[d.name] = d.score; });
       return row;
     });
     const TRUCK_COLORS = ["#3b82f6","#60ab45","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#ec4899","#14b8a6","#f97316","#a3e635","#94a3b8"];
@@ -567,7 +588,7 @@ export function SafetyDashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {[...weeks].reverse().map(w => {
-                  const drivers = (w.data.drivers ?? []).filter(d => !EXCLUDE_VEHICLES.has(d.name));
+                  const drivers = (w.data.drivers ?? []).filter(d => !excludeVehicles.has(d.name));
                   const avg = drivers.length ? Math.round(drivers.reduce((s, d) => s + d.score, 0) / drivers.length) : 0;
                   const perfect = drivers.filter(d => d.score === 100).length;
                   const attn = drivers.filter(d => d.score < 75).length;
@@ -580,23 +601,25 @@ export function SafetyDashboard() {
                       <Td right cls="text-green-600 font-semibold">{perfect}</Td>
                       <Td right cls={attn > 0 ? "text-red-600 font-semibold" : "text-slate-400"}>{attn > 0 ? attn : "—"}</Td>
                       <td className="px-4 py-3 pr-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <button
-                            onClick={() => {
-                              setImportLabel(w.data.label);
-                              setImportWeekEnd(w.weekEnd);
-                              setPendingDrivers([...w.data.drivers]);
-                              setImportMode("manual");
-                              setTab("import");
-                            }}
-                            className="text-slate-400 hover:text-brand-600"
-                            title="Edit week"
-                          ><Pencil className="h-4 w-4" /></button>
-                          <button
-                            onClick={() => { if (confirm("Delete " + (w.data.label || fmtDate(w.weekEnd)) + "?")) del.mutate(w.weekEnd); }}
-                            className="text-red-400 hover:text-red-600"
-                          ><Trash2 className="h-4 w-4" /></button>
-                        </div>
+                        {canManageWeeks && (
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => {
+                                setImportLabel(w.data.label);
+                                setImportWeekEnd(w.weekEnd);
+                                setPendingDrivers([...w.data.drivers]);
+                                setImportMode("manual");
+                                setTab("import");
+                              }}
+                              className="text-slate-400 hover:text-brand-600"
+                              title="Edit week"
+                            ><Pencil className="h-4 w-4" /></button>
+                            <button
+                              onClick={() => { if (confirm("Delete " + (w.data.label || fmtDate(w.weekEnd)) + "?")) del.mutate(w.weekEnd); }}
+                              className="text-red-400 hover:text-red-600"
+                            ><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -724,14 +747,19 @@ export function SafetyDashboard() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div className="col-span-2 sm:col-span-1">
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Vehicle</label>
-                <select
+                <input
+                  type="text"
+                  list="safety-vehicle-suggestions"
+                  placeholder="e.g. Truck #12"
                   value={manVehicle}
                   onChange={e => setManVehicle(e.target.value)}
                   className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-                >
-                  <option value="">— select —</option>
-                  {VEHICLES.map(v => <option key={v}>{v}</option>)}
-                </select>
+                />
+                {isInternalOrg && (
+                  <datalist id="safety-vehicle-suggestions">
+                    {TWINS_VEHICLES.map(v => <option key={v} value={v} />)}
+                  </datalist>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Safety Score</label>
@@ -820,7 +848,7 @@ export function SafetyDashboard() {
   const TABS: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "history", label: "History & Trends" },
-    { key: "import", label: "Import Week" },
+    ...(canManageWeeks ? [{ key: "import" as Tab, label: "Import Week" }] : []),
   ];
 
   return (
@@ -829,12 +857,14 @@ export function SafetyDashboard() {
         title="Driver Safety Scores"
         description="Weekly Samsara safety scores by vehicle — fleet average, rankings, and trends"
         action={
-          <button
-            onClick={() => { setImportLabel(""); setImportWeekEnd(""); setUploadedDrivers([]); setPendingDrivers([]); setXlsxSt(""); setTab("import"); }}
-            className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-          >
-            <Upload className="h-4 w-4" /> Import Week
-          </button>
+          canManageWeeks ? (
+            <button
+              onClick={() => { setImportLabel(""); setImportWeekEnd(""); setUploadedDrivers([]); setPendingDrivers([]); setXlsxSt(""); setTab("import"); }}
+              className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+            >
+              <Upload className="h-4 w-4" /> Import Week
+            </button>
+          ) : undefined
         }
       />
 
@@ -856,7 +886,7 @@ export function SafetyDashboard() {
         <>
           {tab === "overview" && Overview()}
           {tab === "history" && History()}
-          {tab === "import" && Import()}
+          {tab === "import" && canManageWeeks && Import()}
         </>
       )}
     </div>

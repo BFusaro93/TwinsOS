@@ -24,6 +24,9 @@ export interface CRMService {
   defaultBCostCents: number;
   showInSnowDispatch: boolean;
   onlyForEstimates: boolean;
+  /** Crews can suggest this service from the crew app — see field upsells. */
+  showInFieldUpsells: boolean;
+  upsellPitch: string | null;
   trackChemicals: boolean;
   invoiceDescription: string | null;
   descriptionOnEstimate: string | null;
@@ -201,6 +204,8 @@ export interface NewClientJobFormValues {
   packageName: string | null;
   packageRenewal: string | null;
   packageDiscount: string | null;
+  /** Total visits included in the package program — caps recurring-visit generation. */
+  packageTotalSteps: number | null;
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
@@ -220,10 +225,21 @@ export interface NewClientJobFormValues {
   waitingListEnd: string | null;
   startDateWindow: string | null;
   endDateWindow: string | null;
+  /** Recurring jobs only — last date visits should be generated for (season end). */
+  recurrenceEnd?: string | null;
   isComplete: boolean;
   notes: string | null;
   notesToCrew: string | null;
   services: NewClientJobServiceValues[];
+  products: NewClientJobProductValues[];
+}
+
+export interface NewClientJobProductValues {
+  productId: string | null;
+  productName: string;
+  qty: number;
+  unitPriceCents: number;
+  unitCostCents: number | null;
 }
 
 export type VisitStatus = 'scheduled' | 'dispatched' | 'in_progress' | 'completed' | 'cancelled' | 'skipped'
@@ -280,6 +296,10 @@ export interface CRMJobVisit {
   dispatchedAt: string | null
   clockedInAt: string | null
   clockedOutAt: string | null
+  /** Set while the crew is on a break (lunch, stopping for the day) mid-visit; cleared on resume. */
+  pausedAt: string | null
+  /** Accumulated break minutes across every pause/resume cycle on this visit, subtracted from actual hours at final clock-out. */
+  breakMinutes: number
   acknowledgedNotesAt: string | null
   skipReason: string | null
   createdAt: string

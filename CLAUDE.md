@@ -120,7 +120,7 @@ Understand these terms — use them consistently in code, variables, and comment
 | `ProductItem` | A catalog entry for a purchasable material/part. Has a `category`: `maintenance_part`, `stocked_material`, or `project_material` |
 | `Project` | A landscaping job. PO line items and materials can be assigned to a Project for cost tracking |
 | `ApprovalFlow` | A configurable chain of approvers for Requisitions and POs |
-| `LineItem` | A line on a Requisition or PO (quantity, unit cost, GL code, optional `project_id`, references a `ProductItem`) |
+| `LineItem` | A line on a Requisition or PO (quantity, unit cost, optional `project_id`, references a `ProductItem`) — PO lines additionally have a `taxable` flag; Requisition lines don't. No GL code field exists on either. |
 | `GoodsReceipt` | Record of physical receipt of PO line items; triggers inventory update for `maintenance_part` category |
 | `Role` | User permission level: `admin`, `manager`, `technician`, `purchaser`, `viewer` |
 | `Client` | A customer account (residential or commercial). Always separate from `Vendor`. Has a display name, billing info, and optional parent/child hierarchy for commercial property managers. |
@@ -222,7 +222,7 @@ Run `npx supabase gen types` after every schema migration and commit the updated
 - **Work Order → Requisition link:** When creating a Requisition from a Work Order, always store `work_order_id` on the `requisitions` row.
 - **Vendors are truly shared:** The `vendors` table has no `module` column. Do not add one. Both PO and CMMS vendor UIs read/write the same rows. Vendor components live in `components/shared/`.
 - **Parts ↔ Assets is a many-to-many:** Use the `asset_parts` join table. A Part can belong to multiple Assets (e.g., an oil filter used across several machines). Never store `asset_id` directly on the `parts` row.
-- **GoodsReceipt → Parts inventory:** On receipt of a `maintenance_part` line item, increment `parts.quantity_on_hand`. This is the only place quantity changes — do not update it elsewhere.
+- **GoodsReceipt → Parts inventory:** On receipt of a `maintenance_part` line item, increment `parts.quantity_on_hand`. This is the only place quantity *increases from purchasing* — do not add another increment path. Quantity legitimately *decreases* elsewhere too: adding a part to a Work Order's Costs tab, or a PM Schedule generating work orders with per-asset parts, both decrement `quantity_on_hand` through the same `adjust_part_quantity` RPC (clamped at 0, never negative).
 - **Products catalog is the single source of truth for purchasable items.** Every `line_items` row must reference a `product_items.id`. Do not allow free-text item descriptions on POs — they must be catalog entries first.
 - **Project cost tracking:** `line_items.project_id` is nullable. Only `project_material` and `stocked_material` categories should have a `project_id`. Enforce this with a DB CHECK constraint or trigger.
 - **Vercel + Supabase connection pooling:** Use the pooled connection string (port 6543) for all server-side queries. Direct connection (port 5432) is only for migrations.

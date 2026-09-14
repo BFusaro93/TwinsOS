@@ -19,6 +19,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useCreatePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
 import type { Requisition, LineItem, PurchaseOrder } from "@/types";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 interface SplitToPOsDialogProps {
   open: boolean;
@@ -107,13 +108,12 @@ export function SplitToPOsDialog({
     setCreating(true);
     const now = new Date().toISOString();
     const created: PurchaseOrder[] = [];
-    const base = Date.now();
 
     // The requisition's discount/shipping apply to the whole requisition, not
     // any one vendor's share — allocate both proportionally by each group's
     // share of the requisition's total subtotal, so the split POs' combined
     // totals reconcile back to the source requisition instead of dropping
-    // the discount/shipping and overstating tax (computed pre-discount).
+    // the discount/shipping entirely.
     const requisitionSubtotal = requisition.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
     let discountRemaining = requisition.discountCost;
     let shippingRemaining = requisition.shippingCost;
@@ -133,12 +133,15 @@ export function SplitToPOsDialog({
         discountRemaining -= discountCost;
         shippingRemaining -= shippingCost;
 
-        const taxableAfterDiscount = Math.max(0, subtotal - discountCost);
-        const salesTax = Math.round((taxableAfterDiscount * requisition.taxRatePercent) / 100);
+        const salesTax = computeSalesTax({
+          taxableSubtotal: subtotal,
+          taxRatePercent: requisition.taxRatePercent,
+          discountCost,
+          discountReducesTax: requisition.discountReducesTax,
+        });
         const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
         const result = await createPO({
-          poNumber: `PO-${new Date().getFullYear()}-${String(base).slice(-6)}-${i + 1}`,
           poDate: now.split("T")[0],
           invoiceNumber: null,
           status: "requested",
@@ -150,6 +153,7 @@ export function SplitToPOsDialog({
           salesTax,
           shippingCost,
           discountCost,
+          discountReducesTax: requisition.discountReducesTax,
           grandTotal,
           requisitionId: requisition.id,
           paymentSubmittedToAP: false,

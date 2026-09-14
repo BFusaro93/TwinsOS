@@ -11,6 +11,7 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -27,6 +28,7 @@ const EMPLOYEE_TEMPLATE_COLUMNS = [
 ];
 
 export default function EmployeesPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: employees } = useEmployees(false);
   const { mutateAsync: bulkImportEmployees } = useBulkImportEmployees();
   const [selected, setSelected] = useState<CRMEmployee | null>(null);
@@ -60,13 +62,23 @@ export default function EmployeesPage() {
     </div>
   );
 
+  if (!permissionsLoading && !can("emp_view_info")) {
+    return (
+      <EmptyState
+        icon={UserCog}
+        title="No access"
+        description="You don't have permission to view Employees."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader
         title="Employees"
         description="Manage your team members, roles, and payroll info"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {viewToggle}
             <ImportExportMenu
               entityLabel="Employees"
@@ -93,11 +105,13 @@ export default function EmployeesPage() {
                 )
               }
               onImport={async (rows) => {
-                const { created, updated, skipped } = await bulkImportEmployees(rows);
-                const parts = [`${created} created`];
-                if (updated > 0) parts.push(`${updated} updated`);
-                if (skipped > 0) parts.push(`${skipped} skipped (missing first/last name)`);
-                toast[skipped > 0 ? "warning" : "success"](`Employees import: ${parts.join(", ")}.`);
+                const result = await bulkImportEmployees(rows);
+                const { succeeded, failed } = result;
+                const message = failed.length > 0
+                  ? `Employees import: ${succeeded} succeeded, ${failed.length} failed — see details below.`
+                  : `Employees import: ${succeeded} succeeded.`;
+                toast[failed.length > 0 ? "warning" : "success"](message);
+                return result;
               }}
             />
             <PermissionGate permission="emp_add">

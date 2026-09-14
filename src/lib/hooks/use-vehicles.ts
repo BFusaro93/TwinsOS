@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapVehicle } from "@/lib/supabase/mappers";
+import type { BulkImportResult } from "@/lib/csv";
 import type { Vehicle, AssetStatus } from "@/types/cmms";
 
 function patchVehicleCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Vehicle>) {
@@ -192,15 +193,29 @@ function normaliseVehicleStatus(raw: string): string {
 export function useBulkImportVehicles() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
-      const inserts = rows
-        .filter((r) => r.name?.trim() && r.assetTag?.trim())
-        .map((r) => ({
-          statusProvided: !!r.status?.trim(),
-          row: {
-            name: r.name.trim(),
-            asset_tag: r.assetTag.trim(),
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+
+      let succeeded = 0;
+      const failed: BulkImportResult["failed"] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 1;
+        try {
+          const name = r.name?.trim();
+          const assetTag = r.assetTag?.trim();
+          if (!name || !assetTag) {
+            failed.push({ row: rowNum, error: "Missing required field: Name / Asset Tag" });
+            continue;
+          }
+
+          const statusProvided = !!r.status?.trim();
+          const row = {
+            name,
+            asset_tag: assetTag,
             make: r.make?.trim() || null,
             model: r.model?.trim() || null,
             year: r.year ? parseInt(r.year) || null : null,
@@ -215,47 +230,49 @@ export function useBulkImportVehicles() {
             payment_method: r.paymentMethod?.trim() || null,
             finance_institution: r.financeInstitution?.trim() || null,
             asset_type: "vehicle",
-          },
-        }));
-      if (inserts.length === 0) return 0;
+          };
 
-      // Insert one-by-one; on duplicate asset_tag, update the existing row
-      let count = 0;
-      for (const { row, statusProvided } of inserts) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any).from("vehicles").insert(row);
-        if (error?.code === "23505") {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-          // Re-importing a CSV to update mileage/VIN/etc with a blank status
-          // column would otherwise reset an in_shop/out_of_service vehicle
-          // back to "active" — normaliseVehicleStatus() defaults any
-          // blank/unrecognized value to "active", so status is only
-          // included in the patch when the CSV cell actually had content.
+          // Insert one-by-one; on duplicate asset_tag, update the existing row
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: updateErr } = await (supabase as any).from("vehicles").update({
-            name: row.name,
-            make: row.make,
-            model: row.model,
-            year: row.year,
-            license_plate: row.license_plate,
-            vin: row.vin,
-            fuel_type: row.fuel_type,
-            ...(statusProvided ? { status: row.status } : {}),
-            assigned_crew: row.assigned_crew,
-            purchase_vendor_name: row.purchase_vendor_name,
-            purchase_date: row.purchase_date,
-            purchase_price: row.purchase_price,
-            payment_method: row.payment_method,
-            finance_institution: row.finance_institution,
-          }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
-          if (updateErr) throw updateErr;
-        } else if (error) {
-          throw error;
+          const { error } = await (supabase as any).from("vehicles").insert(row);
+          if (error?.code === "23505") {
+            // Re-importing a CSV to update mileage/VIN/etc with a blank status
+            // column would otherwise reset an in_shop/out_of_service vehicle
+            // back to "active" — normaliseVehicleStatus() defaults any
+            // blank/unrecognized value to "active", so status is only
+            // included in the patch when the CSV cell actually had content.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: updateErr } = await (supabase as any).from("vehicles").update({
+              name: row.name,
+              make: row.make,
+              model: row.model,
+              year: row.year,
+              license_plate: row.license_plate,
+              vin: row.vin,
+              fuel_type: row.fuel_type,
+              ...(statusProvided ? { status: row.status } : {}),
+              assigned_crew: row.assigned_crew,
+              purchase_vendor_name: row.purchase_vendor_name,
+              purchase_date: row.purchase_date,
+              purchase_price: row.purchase_price,
+              payment_method: row.payment_method,
+              finance_institution: row.finance_institution,
+            }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
+            if (updateErr) {
+              failed.push({ row: rowNum, error: `"${name}": ${updateErr.message}` });
+              continue;
+            }
+          } else if (error) {
+            failed.push({ row: rowNum, error: `"${name}": ${error.message}` });
+            continue;
+          }
+
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
         }
-        count++;
       }
-      return count;
+      return { succeeded, failed };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vehicles"] }),
   });

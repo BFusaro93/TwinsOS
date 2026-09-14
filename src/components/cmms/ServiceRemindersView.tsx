@@ -12,17 +12,15 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { cn, formatDate, getInitials, getAvatarColor } from "@/lib/utils";
+import { cn, formatDate, getInitials, getAvatarColor, todayLocalISODate, localISODateFromToday } from "@/lib/utils";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import type { Vehicle } from "@/types";
 
 type ServiceBucket = "overdue" | "due-soon" | "ok" | "untracked";
 
 function getVehicleBucket(v: Vehicle, currentMiles?: number | null): ServiceBucket {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split("T")[0];
-  const monthOut = new Date(today.getTime() + 30 * 86400000).toISOString().split("T")[0];
+  const todayStr = todayLocalISODate();
+  const monthOut = localISODateFromToday(30);
 
   const hasDates = !!(v.nextOilChangeDue || v.nextInspectionStickerDue);
   const hasMileage = v.nextOilChangeMileage != null && currentMiles != null;
@@ -41,8 +39,8 @@ function dateCell(dateStr: string | null, dueMileage?: number | null, currentMil
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split("T")[0];
-  const monthOut = new Date(today.getTime() + 30 * 86400000).toISOString().split("T")[0];
+  const todayStr = todayLocalISODate();
+  const monthOut = localISODateFromToday(30);
 
   const dateColor = dateStr
     ? dateStr < todayStr ? "text-red-600" : dateStr < monthOut ? "text-amber-600" : "text-green-700"

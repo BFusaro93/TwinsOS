@@ -1,10 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { computeTotals } from "@/lib/reports/engine";
+import { TOTALS_LABEL, totalsLabelIndex } from "@/lib/reports/export-rows";
 import { FORMAT_COLORS } from "@/types/crm-reports";
 import type { FormatRule, ReportColumnDef, ReportFieldType, ReportResult, ReportResultRow } from "@/types/crm-reports";
 
@@ -35,6 +36,42 @@ function matchFormatRule(
     }
   }
   return null;
+}
+
+/** Continuous magnitude-based cell shading (light-to-dark blue) — one min/max
+ *  range per requested column, computed across the FULL result set (not just
+ *  the current page) so the scale stays consistent as the user pages
+ *  through. Complements (rather than replaces) FormatRule's discrete
+ *  threshold coloring — a rule match always wins if both apply to a cell. */
+function computeSpectrumRanges(
+  rows: ReportResultRow[],
+  columns: string[] | undefined
+): Record<string, { min: number; max: number }> {
+  const ranges: Record<string, { min: number; max: number }> = {};
+  if (!columns || columns.length === 0) return ranges;
+  for (const key of columns) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const row of rows) {
+      const v = row[key];
+      if (typeof v === "number") {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+    if (min !== Infinity) ranges[key] = { min, max };
+  }
+  return ranges;
+}
+
+function spectrumColorFor(value: number, range: { min: number; max: number }): { bg: string; text: string } {
+  const t = range.max === range.min ? 0.5 : (value - range.min) / (range.max - range.min);
+  const clamped = Math.min(1, Math.max(0, t));
+  const lightness = 92 - clamped * 52; // 92% (near white, low) -> 40% (dark blue, high)
+  return {
+    bg: `hsl(217, 70%, ${lightness}%)`,
+    text: lightness < 55 ? "#ffffff" : "#1e3a5f",
+  };
 }
 
 /** Format a single cell for display (also used by CSV export). */
@@ -88,33 +125,51 @@ export function exportCellValue(value: unknown, type: ReportFieldType): string |
   }
 }
 
-/** Sums totalable columns across only the current page's rows belonging to
- *  one group — subtotals are computed per rendered page rather than globally,
- *  same page-scoped tradeoff the existing section-header logic already makes. */
-function computeGroupSubtotal(
-  pageRows: ReportResultRow[],
+/** Per-group subtotals over the FULL result set (not just the rendered
+ *  page), keyed by the section value — so the number shown next to a group
+ *  header matches the PDF export and doesn't change as the user pages. Rows
+ *  arrive pre-sorted by section (see runAnalysis), but grouping by value
+ *  here keeps this correct even if they didn't. */
+function computeGroupSubtotals(
+  rows: ReportResultRow[],
   sectionKey: string,
-  section: string,
   columns: ReportColumnDef[]
-): Record<string, number | null> | undefined {
-  const groupRows = pageRows.filter((r) => String(r[sectionKey] ?? "") === section);
-  return computeTotals(columns, groupRows);
+): Map<string, Record<string, number | null> | undefined> {
+  const groups = new Map<string, ReportResultRow[]>();
+  for (const row of rows) {
+    const section = String(row[sectionKey] ?? "");
+    const bucket = groups.get(section);
+    if (bucket) bucket.push(row);
+    else groups.set(section, [row]);
+  }
+  const subtotals = new Map<string, Record<string, number | null> | undefined>();
+  for (const [section, groupRows] of groups) {
+    subtotals.set(section, computeTotals(columns, groupRows));
+  }
+  return subtotals;
 }
 
 function Pager({
   page,
   pageCount,
   rowCount,
+  totalCount,
   onPageChange,
 }: {
   page: number;
   pageCount: number;
   rowCount: number;
+  /** Rows matched before the engine's limit, when known and larger than rowCount. */
+  totalCount?: number;
   onPageChange: (page: number) => void;
 }) {
   return (
     <div className="flex items-center justify-between border-b px-3 py-1.5 text-xs text-muted-foreground last:border-b-0 last:border-t print:hidden">
-      <span className="tabular-nums">{rowCount.toLocaleString()} rows</span>
+      <span className="tabular-nums">
+        {totalCount !== undefined && totalCount > rowCount
+          ? `Showing first ${rowCount.toLocaleString()} of ${totalCount.toLocaleString()} rows`
+          : `${rowCount.toLocaleString()} rows`}
+      </span>
       <div className="flex items-center gap-1.5">
         <Button
           variant="outline"
@@ -144,37 +199,78 @@ function Pager({
   );
 }
 
-export function ReportTable({ result, formatRules }: { result: ReportResult; formatRules?: FormatRule[] }) {
+export function ReportTable({
+  result,
+  formatRules,
+  colorSpectrumColumns,
+}: {
+  result: ReportResult;
+  formatRules?: FormatRule[];
+  colorSpectrumColumns?: string[];
+}) {
   const [page, setPage] = useState(0);
 
   useEffect(() => {
     setPage(0);
   }, [result]);
 
+  const spectrumRanges = useMemo(
+    () => computeSpectrumRanges(result.rows, colorSpectrumColumns),
+    [result.rows, colorSpectrumColumns]
+  );
+
   const pageCount = Math.max(1, Math.ceil(result.rows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
-  const pagedRows = result.rows.slice(
-    safePage * PAGE_SIZE,
-    (safePage + 1) * PAGE_SIZE
-  );
+  const pageStart = safePage * PAGE_SIZE;
+  const pagedRows = result.rows.slice(pageStart, pageStart + PAGE_SIZE);
   const showPager = result.rows.length > PAGE_SIZE;
 
-  // A sectionColumn (e.g. "group_type" on breakdown reports) renders as a
-  // full-width divider header instead of a regular column — CSV export
+  // A sectionColumn (e.g. "crew_name" on the AvB reports) stays a real
+  // column — its own header cell — but only ever holds a value on the
+  // grand-total/subtotal rows (see below); ordinary data rows leave it
+  // blank so the group's label isn't repeated on every row. CSV export
   // still uses result.columns/rows directly, so it's untouched there.
   const sectionKey = result.sectionColumn;
-  const displayColumns = sectionKey
-    ? result.columns.filter((c) => c.key !== sectionKey)
-    : result.columns;
+  const displayColumns = result.columns;
+
+  const groupSubtotals = useMemo(
+    () =>
+      sectionKey && result.groupSubtotals
+        ? computeGroupSubtotals(result.rows, sectionKey, displayColumns)
+        : null,
+    [result.rows, result.groupSubtotals, sectionKey, displayColumns]
+  );
+
+  // Where the "Totals" label goes in the footer: the first non-totalable
+  // column. When every column is totalable (an ungrouped all-aggregate
+  // query) it's -1 and the label is prepended to the first cell instead of
+  // overwriting that column's total.
+  const totalsLabelIdx = totalsLabelIndex(displayColumns, sectionKey);
+
+  const truncated = !!result.truncated && result.totalCount !== undefined;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+        {truncated && (
+          <div
+            role="status"
+            className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Showing the first {result.rowCount.toLocaleString()} of{" "}
+              {result.totalCount!.toLocaleString()} rows — totals below cover only these rows.
+              Narrow the filters to see everything.
+            </span>
+          </div>
+        )}
         {showPager && (
           <Pager
             page={safePage}
             pageCount={pageCount}
             rowCount={result.rowCount}
+            totalCount={result.totalCount}
             onPageChange={setPage}
           />
         )}
@@ -202,73 +298,14 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {pagedRows.map((row, i) => {
-                  const section = sectionKey ? String(row[sectionKey] ?? "") : null;
-                  const prevSection = sectionKey && i > 0 ? String(pagedRows[i - 1][sectionKey] ?? "") : null;
-                  const nextSection = sectionKey && i < pagedRows.length - 1 ? String(pagedRows[i + 1][sectionKey] ?? "") : null;
-                  const showSectionHeader = section !== null && section !== prevSection;
-                  const isLastOfSection = section !== null && (i === pagedRows.length - 1 || section !== nextSection);
-                  const subtotal = result.groupSubtotals && isLastOfSection
-                    ? computeGroupSubtotal(pagedRows, sectionKey!, section!, displayColumns)
-                    : null;
-                  return (
-                    <Fragment key={i}>
-                      {showSectionHeader && (
-                        <tr className="border-b bg-slate-100">
-                          <td
-                            colSpan={displayColumns.length}
-                            className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600"
-                          >
-                            {section}
-                          </td>
-                        </tr>
-                      )}
-                      <tr className="border-b last:border-0 hover:bg-slate-50">
-                        {displayColumns.map((col) => {
-                          const ruleMatch = matchFormatRule(row[col.key], col.key, formatRules);
-                          return (
-                            <td
-                              key={col.key}
-                              className={cn(
-                                "px-3 py-2 text-slate-700",
-                                NUMERIC_TYPES.includes(col.type) &&
-                                  "text-right tabular-nums"
-                              )}
-                              style={ruleMatch ? { backgroundColor: ruleMatch.bg, color: ruleMatch.text, fontWeight: 600 } : undefined}
-                            >
-                              {formatCellValue(row[col.key], col.type)}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                      {subtotal && (
-                        <tr className="border-b bg-slate-50 font-medium text-slate-700">
-                          {displayColumns.map((col, ci) => {
-                            const total = subtotal[col.key];
-                            const hasTotal = col.totalable && total !== undefined && total !== null;
-                            return (
-                              <td
-                                key={col.key}
-                                className={cn(
-                                  "px-3 py-2",
-                                  NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
-                                )}
-                              >
-                                {ci === 0 ? `Subtotal — ${section}` : hasTotal ? formatCellValue(total, col.type) : ""}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-              {result.totals && (
-                <tfoot>
-                  <tr className="border-t bg-slate-50 font-medium text-slate-800">
-                    {displayColumns.map((col, i) => {
+              {/* In subtotal mode, the grand total leads the report (matching
+                  the legacy SA layout) instead of trailing it in a <tfoot> —
+                  ordinary grouped/ungrouped reports keep the trailing <tfoot>
+                  below unchanged. */}
+              {result.totals && result.groupSubtotals && (
+                <tbody>
+                  <tr className="border-b bg-slate-200 font-semibold text-slate-800">
+                    {displayColumns.map((col) => {
                       const total = result.totals?.[col.key];
                       const hasTotal = col.totalable && total !== undefined && total !== null;
                       return (
@@ -280,11 +317,118 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                               "text-right tabular-nums"
                           )}
                         >
-                          {i === 0
+                          {col.key === sectionKey
                             ? "Totals"
                             : hasTotal
                               ? formatCellValue(total, col.type)
                               : ""}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              )}
+              <tbody>
+                {pagedRows.map((row, i) => {
+                  const section = sectionKey ? String(row[sectionKey] ?? "") : null;
+                  // Look back across the page boundary so a group that
+                  // started on the previous page is recognized as continuing
+                  // (its header re-renders at the top of this page, labelled
+                  // "(continued)") rather than looking like a fresh group.
+                  const prevRow = sectionKey ? result.rows[pageStart + i - 1] : undefined;
+                  const prevSection = prevRow ? String(prevRow[sectionKey!] ?? "") : null;
+                  const isGroupStart = section !== null && section !== prevSection;
+                  const isContinued = section !== null && i === 0 && !isGroupStart;
+                  const showSectionHeader = isGroupStart || isContinued;
+                  // The section's subtotal renders as ONE combined row with the
+                  // header at the start of the group (crew name + its sums
+                  // together), matching the legacy SA layout, rather than a
+                  // plain divider followed by a separate subtotal row at the end.
+                  // Subtotals span the group's rows on every page, not just this one.
+                  const subtotal = showSectionHeader && groupSubtotals
+                    ? groupSubtotals.get(section!)
+                    : null;
+                  return (
+                    <Fragment key={i}>
+                      {showSectionHeader && (
+                        <tr className="border-b bg-slate-100 font-semibold text-slate-700">
+                          {displayColumns.map((col) => {
+                            const total = subtotal?.[col.key];
+                            const hasTotal = col.totalable && total !== undefined && total !== null;
+                            return (
+                              <td
+                                key={col.key}
+                                className={cn(
+                                  "px-3 py-1.5",
+                                  NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
+                                )}
+                              >
+                                {col.key === sectionKey
+                                  ? isContinued
+                                    ? `${section} (continued)`
+                                    : section
+                                  : hasTotal
+                                    ? formatCellValue(total, col.type)
+                                    : ""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )}
+                      <tr className="border-b last:border-0 hover:bg-slate-50">
+                        {displayColumns.map((col) => {
+                          const ruleMatch = matchFormatRule(row[col.key], col.key, formatRules);
+                          const cellValue = row[col.key];
+                          const spectrumRange = !ruleMatch ? spectrumRanges[col.key] : undefined;
+                          const spectrumMatch =
+                            spectrumRange && typeof cellValue === "number"
+                              ? spectrumColorFor(cellValue, spectrumRange)
+                              : null;
+                          const style = ruleMatch
+                            ? { backgroundColor: ruleMatch.bg, color: ruleMatch.text, fontWeight: 600 }
+                            : spectrumMatch
+                              ? { backgroundColor: spectrumMatch.bg, color: spectrumMatch.text }
+                              : undefined;
+                          return (
+                            <td
+                              key={col.key}
+                              className={cn(
+                                "px-3 py-2 text-slate-700",
+                                NUMERIC_TYPES.includes(col.type) &&
+                                  "text-right tabular-nums"
+                              )}
+                              style={style}
+                            >
+                              {col.key === sectionKey ? "" : formatCellValue(row[col.key], col.type)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+              {result.totals && !result.groupSubtotals && (
+                <tfoot>
+                  <tr className="border-t bg-slate-50 font-medium text-slate-800">
+                    {displayColumns.map((col, i) => {
+                      const total = result.totals?.[col.key];
+                      const hasTotal = col.totalable && total !== undefined && total !== null;
+                      const formatted = hasTotal ? formatCellValue(total, col.type) : "";
+                      return (
+                        <td
+                          key={col.key}
+                          className={cn(
+                            "px-3 py-2.5",
+                            NUMERIC_TYPES.includes(col.type) &&
+                              "text-right tabular-nums"
+                          )}
+                        >
+                          {i === totalsLabelIdx
+                            ? TOTALS_LABEL
+                            : totalsLabelIdx === -1 && i === 0
+                              ? `${TOTALS_LABEL} ${formatted}`.trim()
+                              : formatted}
                         </td>
                       );
                     })}
@@ -299,6 +443,7 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
             page={safePage}
             pageCount={pageCount}
             rowCount={result.rowCount}
+            totalCount={result.totalCount}
             onPageChange={setPage}
           />
         )}

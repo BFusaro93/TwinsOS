@@ -205,7 +205,6 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   }
 
   function handleConvertToWO() {
-    const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
     createWorkOrder(
       {
         title: request.title,
@@ -226,7 +225,6 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         dueDate: null,
         category: null,
         categories: [],
-        workOrderNumber,
         parentWorkOrderId: null,
         pmScheduleId: null,
         isRecurring: false,

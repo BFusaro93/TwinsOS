@@ -37,6 +37,7 @@ import {
   useCreateEvent,
 } from "@/lib/hooks/use-crm-automations";
 import type { EventType, TriggerType } from "@/types/crm-automations";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 
 interface AutomationTemplate {
@@ -145,6 +146,9 @@ interface Props {
 
 export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props) {
   const router = useRouter();
+  const { can } = usePermissions();
+  const canModify = can("automation_create_modify");
+  const canStop = can("automation_stop");
   const { data: automations = [], isLoading } = useAutomations();
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
@@ -246,15 +250,17 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                 <p className="text-sm font-semibold text-slate-800">{t.name}</p>
                 <p className="mt-1 text-xs text-slate-500">{t.description}</p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="self-start"
-                disabled={alreadyAdded || addingTemplate === t.name}
-                onClick={() => handleAddTemplate(t)}
-              >
-                {alreadyAdded ? "Added" : addingTemplate === t.name ? "Adding…" : "+ Add"}
-              </Button>
+              {canModify && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="self-start"
+                  disabled={alreadyAdded || addingTemplate === t.name}
+                  onClick={() => handleAddTemplate(t)}
+                >
+                  {alreadyAdded ? "Added" : addingTemplate === t.name ? "Adding…" : "+ Add"}
+                </Button>
+              )}
             </div>
           );
         })}
@@ -272,10 +278,12 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
             title="No automations yet"
             description="Create an automation to build event-driven client sequences, or add one from a template above."
             action={
-              <Button size="sm" onClick={() => onNewDialogOpenChange(true)}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                New Automation
-              </Button>
+              canModify ? (
+                <Button size="sm" onClick={() => onNewDialogOpenChange(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  New Automation
+                </Button>
+              ) : undefined
             }
           />
         </div>
@@ -315,6 +323,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={a.isActive}
+                        disabled={!canStop}
                         onCheckedChange={(checked) =>
                           updateAutomation.mutate(
                             { id: a.id, updates: { isActive: checked } },
@@ -334,24 +343,26 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                     </div>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => router.push(`/crm/communication/automations/${a.id}`)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-slate-400 hover:text-red-600"
-                        onClick={() => handleDelete(a.id, a.name)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                    {canModify && (
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => router.push(`/crm/communication/automations/${a.id}`)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-400 hover:text-red-600"
+                          onClick={() => handleDelete(a.id, a.name)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

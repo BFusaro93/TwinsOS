@@ -150,12 +150,32 @@ export async function submitEntityForApproval(
             .is("deleted_at", null)
         : { data: null }) as { data: { user_id: string | null; crm_role_id: string; first_name: string; last_name: string }[] | null };
 
-      // Drop any previous requests for this entity
+      // Steps already carrying a real 'approved' decision must survive
+      // resubmission untouched — their decided_at/comment/approver_id is
+      // audit history, and re-asking an approver to re-approve something
+      // they already signed off on (just because a line item was edited)
+      // is not the desired behavior. Only steps NOT in this set get a new
+      // pending row below.
+      const { data: existingApproved } = await supabase
+        .from("approval_requests")
+        .select("flow_step_id")
+        .eq("entity_id", entityId)
+        .eq("org_id", orgId)
+        .eq("status", "approved") as { data: { flow_step_id: string | null }[] | null };
+      const alreadyApprovedStepIds = new Set(
+        (existingApproved ?? []).map((r) => r.flow_step_id).filter((id): id is string => !!id)
+      );
+
+      // Clear out only the unresolved rows — stale 'pending' requests (being
+      // recomputed against the new total) and 'superseded' runner-ups from a
+      // prior multi-approver step. 'approved' and 'rejected' rows are left
+      // alone so their history is preserved.
       await supabase
         .from("approval_requests")
         .delete()
         .eq("entity_id", entityId)
-        .eq("org_id", orgId);
+        .eq("org_id", orgId)
+        .in("status", ["pending", "superseded"]);
 
       type StepRow = { id: string; order: number; required_role: string; threshold_cents: number; assigned_user_id: string | null };
       const steps = ((flow as unknown as { approval_flow_steps?: StepRow[] }).approval_flow_steps ?? [])
@@ -185,6 +205,10 @@ export async function submitEntityForApproval(
       const submitterIsAdmin = submitterRole === "admin";
 
       for (const step of steps) {
+        // Already satisfied by a preserved 'approved' row from before this
+        // resubmission — don't re-ask, and don't insert a duplicate row.
+        if (alreadyApprovedStepIds.has(step.id)) continue;
+
         const isRequired = step.threshold_cents === 0 || grandTotalCents >= step.threshold_cents;
 
         // Admin submitters bypass any step whose required role is below admin
@@ -236,6 +260,21 @@ export async function submitEntityForApproval(
             });
           }
         }
+      }
+
+      // Every step that applies to this flow was already satisfied by a
+      // preserved 'approved' row (the recompute produced zero new requests
+      // because the whole chain was already signed off) — the entity was
+      // unconditionally flipped to "pending" above, so it must be advanced
+      // to "approved" now or it would be stuck forever with no outstanding
+      // approval_requests row to ever move it.
+      if (newRequests.length === 0 && steps.every((s) => alreadyApprovedStepIds.has(s.id))) {
+        const { error: autoErr } = await supabase
+          .from(cfg.table)
+          .update({ [cfg.statusColumn]: "approved" })
+          .eq("id", entityId);
+        if (autoErr) throw autoErr;
+        return { entityType, autoApproved: true };
       }
 
       if (newRequests.length > 0) {
@@ -333,6 +372,25 @@ export function useDecideApproval(entityId: string) {
       const supabase = createClient();
       const now = new Date().toISOString();
 
+      // Bug 4 — re-validate the deciding user is still an active approver
+      // right before acting. Role/identity is snapshotted onto the
+      // approval_requests row at submission time and never re-checked; if
+      // the user was demoted or deactivated afterward, only
+      // `approver_id = auth.uid()` + chain-order is checked server-side
+      // (see 20260803042625_enforce_approval_chain_order.sql), which still
+      // lets a deactivated user's stale row through. Block it here too.
+      const { data: { user: actingUser } } = await supabase.auth.getUser();
+      if (!actingUser) throw new Error("Not authenticated");
+      const { data: actingProfile, error: actingProfileErr } = await supabase
+        .from("profiles")
+        .select("status")
+        .eq("id", actingUser.id)
+        .single();
+      if (actingProfileErr) throw actingProfileErr;
+      if (actingProfile?.status !== "active") {
+        throw new Error("Your account is no longer active, so you can't act on this approval. Contact an admin.");
+      }
+
       // Fetch the request first so we know flow_step_id and entity_type
       const { data: decided, error: fetchErr } = await supabase
         .from("approval_requests")
@@ -361,7 +419,65 @@ export function useDecideApproval(entityId: string) {
         throw updateErr;
       }
 
-      if (decided.flow_step_id) {
+      const entityType = decided.entity_type as EntityType;
+      const cfg = ENTITY_CONFIG[entityType];
+
+      let newEntityStatus: string | undefined;
+      let allResolved = false;
+
+      if (status === "rejected") {
+        // Bug 1 — a rejection anywhere in the chain must halt it immediately:
+        // supersede every OTHER still-pending request for this entity, not
+        // just the siblings of this same step (later-order steps must be
+        // superseded too, otherwise they're still actionable and the RLS
+        // chain-order guard only blocks on an earlier step being 'pending' —
+        // a 'rejected' predecessor doesn't block anything). Then flip the
+        // entity straight to 'rejected' right away instead of waiting for
+        // every step group to resolve (which, for a rejection, they never
+        // fully will since later steps are unrelated groups).
+        await supabase
+          .from("approval_requests")
+          .update({ status: "superseded" })
+          .eq("entity_id", decided.entity_id)
+          .neq("id", requestId)
+          .eq("status", "pending");
+
+        newEntityStatus = "rejected";
+        allResolved = true;
+
+        const { error: entityErr } = await supabase
+          .from(cfg.table)
+          .update({ [cfg.statusColumn]: newEntityStatus })
+          .eq("id", entityId)
+          .select("id")
+          .single();
+        if (entityErr) throw entityErr;
+
+        // Estimates have a Comments tab (same pattern as POs/WOs) — auto-post
+        // the rejection reason there so it's visible in context, not just in
+        // the (easy to miss) rejection email.
+        if (entityType === "crm_estimate" && comment) {
+          const { data: rejectorProfile } = await supabase
+            .from("profiles")
+            .select("org_id, name")
+            .eq("id", actingUser.id)
+            .single();
+          if (rejectorProfile) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from("comments").insert({
+              org_id: rejectorProfile.org_id,
+              created_by: actingUser.id,
+              author_id: actingUser.id,
+              record_type: "crm_estimate",
+              record_id: entityId,
+              author_name: rejectorProfile.name ?? "Approver",
+              body: `Rejected: ${comment}`,
+            });
+          }
+        }
+      } else if (decided.flow_step_id) {
+        // Approval: only the other pending approvers on THIS SAME step are
+        // superseded (multi-approver step — first to decide wins).
         await supabase
           .from("approval_requests")
           .update({ status: "superseded" })
@@ -380,72 +496,47 @@ export function useDecideApproval(entityId: string) {
 
       const freshMapped = fresh.map(mapApprovalRequest);
 
-      // ── Check if all approval steps are now resolved ──────────────────────
-      // If so, update the entity status atomically here (not in a separate mutation).
-      const stepGroups = new Map<string, typeof freshMapped>();
-      for (const r of freshMapped) {
-        if (!stepGroups.has(r.flowStepId)) stepGroups.set(r.flowStepId, []);
-        stepGroups.get(r.flowStepId)!.push(r);
-      }
+      if (status !== "rejected") {
+        // ── Check if all approval steps are now resolved ────────────────────
+        // If so, update the entity status atomically here (not in a separate
+        // mutation). Bug 2 — group by flow_step_id, but a request whose step
+        // was deleted from the flow (flow_step_id nulled out, mapped to "" by
+        // mapApprovalRequest) must NOT be bucketed together with every other
+        // orphaned request: that would collapse two independently-required,
+        // unrelated approvals into one group that looks resolved as soon as
+        // ANY one of them is approved. Key orphans by their own row id instead.
+        const stepGroups = new Map<string, typeof freshMapped>();
+        for (const r of freshMapped) {
+          const groupKey = r.flowStepId || `orphan-${r.id}`;
+          if (!stepGroups.has(groupKey)) stepGroups.set(groupKey, []);
+          stepGroups.get(groupKey)!.push(r);
+        }
 
-      const allResolved =
-        stepGroups.size > 0 &&
-        Array.from(stepGroups.values()).every((reqs) => {
-          if (reqs.every((r) => r.status === "skipped")) return true;
-          if (reqs.some((r) => r.status === "approved")) return true;
-          const active = reqs.filter((r) => r.status !== "skipped");
-          return (
-            active.length > 0 &&
-            active.some((r) => r.status === "rejected") &&
-            active.every((r) => r.status === "rejected" || r.status === "superseded")
-          );
-        });
+        allResolved =
+          stepGroups.size > 0 &&
+          Array.from(stepGroups.values()).every((reqs) => {
+            if (reqs.every((r) => r.status === "skipped")) return true;
+            if (reqs.some((r) => r.status === "approved")) return true;
+            const active = reqs.filter((r) => r.status !== "skipped");
+            return (
+              active.length > 0 &&
+              active.some((r) => r.status === "rejected") &&
+              active.every((r) => r.status === "rejected" || r.status === "superseded")
+            );
+          });
 
-      let newEntityStatus: string | undefined;
+        if (allResolved) {
+          // With rejections handled in their own branch above, every group
+          // resolving here means every group is either skipped or approved.
+          newEntityStatus = "approved";
 
-      if (allResolved) {
-        const anyRejected = Array.from(stepGroups.values()).some((reqs) => {
-          if (reqs.every((r) => r.status === "skipped")) return false;
-          if (reqs.some((r) => r.status === "approved")) return false;
-          return reqs.filter((r) => r.status !== "skipped").some((r) => r.status === "rejected");
-        });
-
-        newEntityStatus = anyRejected ? "rejected" : "approved";
-        const entityType = decided.entity_type as EntityType;
-        const cfg = ENTITY_CONFIG[entityType];
-
-        const { error: entityErr } = await supabase
-          .from(cfg.table)
-          .update({ [cfg.statusColumn]: newEntityStatus })
-          .eq("id", entityId)
-          .select("id")
-          .single();
-        if (entityErr) throw entityErr;
-
-        // Estimates have a Comments tab (same pattern as POs/WOs) — auto-post
-        // the rejection reason there so it's visible in context, not just in
-        // the (easy to miss) rejection email.
-        if (newEntityStatus === "rejected" && entityType === "crm_estimate" && comment) {
-          const { data: { user: rejectingUser } } = await supabase.auth.getUser();
-          if (rejectingUser) {
-            const { data: rejectorProfile } = await supabase
-              .from("profiles")
-              .select("org_id, name")
-              .eq("id", rejectingUser.id)
-              .single();
-            if (rejectorProfile) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              await (supabase as any).from("comments").insert({
-                org_id: rejectorProfile.org_id,
-                created_by: rejectingUser.id,
-                author_id: rejectingUser.id,
-                record_type: "crm_estimate",
-                record_id: entityId,
-                author_name: rejectorProfile.name ?? "Approver",
-                body: `Rejected: ${comment}`,
-              });
-            }
-          }
+          const { error: entityErr } = await supabase
+            .from(cfg.table)
+            .update({ [cfg.statusColumn]: newEntityStatus })
+            .eq("id", entityId)
+            .select("id")
+            .single();
+          if (entityErr) throw entityErr;
         }
       }
 

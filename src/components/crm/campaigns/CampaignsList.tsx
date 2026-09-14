@@ -12,6 +12,7 @@ import { useClients } from "@/lib/hooks/use-clients";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { CampaignAudiencePicker } from "./CampaignAudiencePicker";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMCampaign, CampaignStatus, NewCampaignFormValues } from "@/types/crm-campaigns";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -108,6 +109,19 @@ const SEGMENT_LABELS: Record<string, string> = {
   past_clients: "Past Clients",
   custom: "Custom",
 };
+
+// A campaign's updated_at is set to the moment it's claimed into "sending"
+// (see the claim UPDATE in src/lib/campaigns/send-campaign.ts) and nothing
+// touches it again until the final "completed" update — so a "sending" row
+// whose updated_at is older than this is a route that died mid-send (e.g.
+// hit the platform's function timeout), not one genuinely still in flight.
+// Keep this in sync with STUCK_SENDING_THRESHOLD_MS in send-campaign.ts.
+const STUCK_SENDING_THRESHOLD_MS = 15 * 60 * 1000;
+
+function isStuckSending(campaign: CRMCampaign): boolean {
+  if (campaign.status !== "sending") return false;
+  return Date.now() - new Date(campaign.updatedAt).getTime() > STUCK_SENDING_THRESHOLD_MS;
+}
 
 // ── Campaign Dialog ───────────────────────────────────────────────────────────
 
@@ -235,7 +249,7 @@ function CampaignDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Type</Label>
               <Select
@@ -411,9 +425,13 @@ function CampaignRow({
   campaign: CRMCampaign;
   onEdit: (c: CRMCampaign) => void;
   onDelete: (c: CRMCampaign) => void;
-  onStatusChange: (id: string, status: CampaignStatus) => void;
+  onStatusChange: (id: string, status: CampaignStatus, campaign: CRMCampaign) => void;
   onSend: (c: CRMCampaign) => void;
 }) {
+  const { can } = usePermissions();
+  const canEdit = can("campaign_edit");
+  const canDelete = can("campaign_delete");
+  const canSend = can("campaign_send");
   const openRate =
     campaign.deliveredCount > 0
       ? Math.round((campaign.openedCount / campaign.deliveredCount) * 100)
@@ -425,8 +443,8 @@ function CampaignRow({
 
   return (
     <tr
-      className="cursor-pointer border-b transition-colors hover:bg-slate-50"
-      onClick={() => onEdit(campaign)}
+      className={cn("border-b transition-colors hover:bg-slate-50", canEdit && "cursor-pointer")}
+      onClick={canEdit ? () => onEdit(campaign) : undefined}
     >
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
@@ -493,48 +511,60 @@ function CampaignRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(campaign)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            {campaign.type === "email" && (campaign.status === "draft" || campaign.status === "scheduled") && (
+            {canEdit && (
+              <DropdownMenuItem onClick={() => onEdit(campaign)}>
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canSend && campaign.type === "email" && (campaign.status === "draft" || campaign.status === "scheduled") && (
               <DropdownMenuItem onClick={() => onSend(campaign)}>
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Send Now
               </DropdownMenuItem>
             )}
-            {campaign.status === "draft" && (
+            {canSend && campaign.type === "email" && isStuckSending(campaign) && (
+              <DropdownMenuItem onClick={() => onSend(campaign)}>
+                <Send className="mr-2 h-3.5 w-3.5" />
+                Retry Send (stuck)
+              </DropdownMenuItem>
+            )}
+            {canSend && campaign.status === "draft" && (
               <DropdownMenuItem
-                onClick={() => onStatusChange(campaign.id, "scheduled")}
+                onClick={() => onStatusChange(campaign.id, "scheduled", campaign)}
               >
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Mark Scheduled
               </DropdownMenuItem>
             )}
-            {campaign.status === "active" && (
+            {canSend && campaign.status === "active" && (
               <DropdownMenuItem
-                onClick={() => onStatusChange(campaign.id, "paused")}
+                onClick={() => onStatusChange(campaign.id, "paused", campaign)}
               >
                 <PauseCircle className="mr-2 h-3.5 w-3.5" />
                 Pause
               </DropdownMenuItem>
             )}
-            {campaign.status === "paused" && (
+            {canSend && campaign.status === "paused" && (
               <DropdownMenuItem
-                onClick={() => onStatusChange(campaign.id, "active")}
+                onClick={() => onStatusChange(campaign.id, "active", campaign)}
               >
                 <PlayCircle className="mr-2 h-3.5 w-3.5" />
                 Resume
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-600"
-              onClick={() => onDelete(campaign)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-red-600"
+                  onClick={() => onDelete(campaign)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </td>
@@ -545,6 +575,11 @@ function CampaignRow({
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function CampaignsList() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("campaign_add");
+  const canEdit = can("campaign_edit");
+  const canDelete = can("campaign_delete");
+  const canSend = can("campaign_send");
   const [statusTab, setStatusTab] = useState<"all" | CampaignStatus>("all");
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -577,7 +612,16 @@ export function CampaignsList() {
     return true;
   });
 
-  async function handleStatusChange(id: string, status: CampaignStatus) {
+  async function handleStatusChange(id: string, status: CampaignStatus, campaign?: CRMCampaign) {
+    // The scheduled-send cron only ever picks up rows with a non-null
+    // scheduled_at (see /api/cron/scheduled-campaigns) — marking a campaign
+    // "scheduled" without ever having set a date silently strands it forever
+    // (Send Now still works, but nothing tells the user their "schedule" did
+    // nothing). Block the transition client-side rather than let it happen.
+    if (status === "scheduled" && !campaign?.scheduledAt) {
+      toast.error("Set a Schedule Send date before marking this campaign as scheduled");
+      return;
+    }
     try {
       await update({ id, updates: { status } });
       toast.success("Campaign updated");
@@ -608,25 +652,37 @@ export function CampaignsList() {
     }
   }
 
+  if (!permissionsLoading && !can("campaign_list")) {
+    return (
+      <EmptyState
+        icon={Megaphone}
+        title="No access"
+        description="You don't have permission to view Sales Campaigns."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader
         title="Sales Campaigns"
         description={!isLoading ? `${campaigns.length} campaigns` : undefined}
         action={
-          <Button
-            size="sm"
-            onClick={() => { setEditing(null); setDialogOpen(true); }}
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Campaign
-          </Button>
+          canAdd ? (
+            <Button
+              size="sm"
+              onClick={() => { setEditing(null); setDialogOpen(true); }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              New Campaign
+            </Button>
+          ) : undefined
         }
       />
 
       {/* Toolbar — dark actions bar matching Estimates/Invoices */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2 shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <button
             onClick={() => refetchCampaigns()}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
@@ -634,7 +690,7 @@ export function CampaignsList() {
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="ml-1 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-1 flex min-w-0 items-center gap-1 overflow-x-auto">
             {STATUS_TABS.map((t) => {
               const count =
                 t.key === "all"
@@ -694,13 +750,15 @@ export function CampaignsList() {
             title="No campaigns yet"
             description="Create a campaign to send targeted emails or SMS messages to your clients and leads."
             action={
-              <Button
-                size="sm"
-                onClick={() => { setEditing(null); setDialogOpen(true); }}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                New Campaign
-              </Button>
+              canAdd ? (
+                <Button
+                  size="sm"
+                  onClick={() => { setEditing(null); setDialogOpen(true); }}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  New Campaign
+                </Button>
+              ) : undefined
             }
           />
         ) : (

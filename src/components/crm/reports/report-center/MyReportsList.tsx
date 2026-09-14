@@ -28,9 +28,12 @@ import {
   useCustomReports,
   useDeleteCustomReport,
 } from "@/lib/hooks/use-report-center";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CustomReport } from "@/types/crm-reports";
 
 export function MyReportsList() {
+  const { can } = usePermissions();
+  const canManage = can("manage_report_center");
   const { data: reports = [], isLoading } = useCustomReports();
   const createReport = useCreateCustomReport();
   const deleteReport = useDeleteCustomReport();
@@ -50,12 +53,14 @@ export function MyReportsList() {
         <p className="text-sm text-slate-500">
           Saved custom analyses built from your CRM data.
         </p>
-        <Button size="sm" asChild>
-          <Link href="/crm/admin/reports/analysis/new">
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Analysis
-          </Link>
-        </Button>
+        {canManage && (
+          <Button size="sm" asChild>
+            <Link href="/crm/admin/reports/analysis/new">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New Analysis
+            </Link>
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -76,12 +81,14 @@ export function MyReportsList() {
               and total however you like.
             </p>
           </div>
-          <Button size="sm" variant="outline" asChild>
-            <Link href="/crm/admin/reports/analysis/new">
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              New Analysis
-            </Link>
-          </Button>
+          {canManage && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/crm/admin/reports/analysis/new">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                New Analysis
+              </Link>
+            </Button>
+          )}
         </div>
       ) : (
         <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
@@ -138,17 +145,21 @@ export function MyReportsList() {
                               Open
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDuplicate(report)}
-                          >
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-600 focus:text-red-600"
-                            onClick={() => setPendingDelete(report)}
-                          >
-                            Delete
-                          </DropdownMenuItem>
+                          {canManage && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => handleDuplicate(report)}
+                              >
+                                Duplicate
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600 focus:text-red-600"
+                                onClick={() => setPendingDelete(report)}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSettingsStore } from "@/stores/settings-store";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, ExternalLink, Download, Building2, Camera } from "lucide-react";
+import { Pencil, Trash2, Plus, ExternalLink, Download, Building2, Camera, Archive, ArchiveRestore } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { printProject } from "@/lib/print";
 import { formatCurrency, formatDate, formatAddress } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -76,6 +77,10 @@ import { RequisitionDetailPanel } from "./RequisitionDetailPanel";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { usePhotoJobByProjectId } from "@/modules/photo-docs/hooks/usePhotoJobs";
+import { useTicketsLinkedTo } from "@/lib/hooks/use-tickets";
+import { computeSalesTax } from "@/lib/utils/po-tax";
+import { TicketDetailSheet } from "@/components/crm/tickets/TicketDetailSheet";
+import { Ticket as TicketIcon } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -321,8 +326,12 @@ function MaterialsTab({ project }: { project: Project }) {
           const rawId = i.productKey.replace(/^(product:|part:)/, "");
           const unitCostCents = Math.round(i.unitCost * 100);
           runningSubtotal += i.quantity * unitCostCents;
-          const taxableAfterDiscount = Math.max(0, runningSubtotal - req.discountCost);
-          const salesTax = Math.round((taxableAfterDiscount * req.taxRatePercent) / 100);
+          const salesTax = computeSalesTax({
+            taxableSubtotal: runningSubtotal,
+            taxRatePercent: req.taxRatePercent,
+            discountCost: req.discountCost,
+            discountReducesTax: req.discountReducesTax,
+          });
           const grandTotal = runningSubtotal - req.discountCost + salesTax + req.shippingCost;
           await addReqLineItem({
             requisitionId: req.id,
@@ -379,8 +388,12 @@ function MaterialsTab({ project }: { project: Project }) {
           items = [...items, newItem];
           const subtotal = Math.round(items.reduce((s, li) => s + li.quantity * li.unitCost, 0));
           const taxableSubtotal = Math.round(items.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
-          const taxableAfterDiscount = Math.max(0, taxableSubtotal - po.discountCost);
-          const salesTax = Math.round((taxableAfterDiscount * po.taxRatePercent) / 100);
+          const salesTax = computeSalesTax({
+            taxableSubtotal,
+            taxRatePercent: po.taxRatePercent,
+            discountCost: po.discountCost,
+            discountReducesTax: po.discountReducesTax,
+          });
           const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
           await addPOLineItem({ poId: po.id, item: newItem, subtotal, salesTax, grandTotal });
         }
@@ -613,7 +626,7 @@ function MaterialsTab({ project }: { project: Project }) {
               </div>
               <div className="flex flex-1 flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
-                <Input type="number" min={0} step="any" value={editForm.unitCost} onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))} />
+                <Input type="number" step="any" value={editForm.unitCost} onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))} />
               </div>
             </div>
             <Button onClick={saveEdit} className="mt-1">Save Changes</Button>
@@ -627,12 +640,14 @@ function MaterialsTab({ project }: { project: Project }) {
 const COST_TYPE_LABELS: Record<SubcontractCostType, string> = {
   materials: "Materials",
   labor: "Labor",
+  subcontractor: "Subcontractor",
   other: "Other",
 };
 
 const COST_TYPE_COLORS: Record<SubcontractCostType, string> = {
   materials: "border-orange-200 bg-orange-50 text-orange-700",
   labor: "border-blue-200 bg-blue-50 text-blue-700",
+  subcontractor: "border-purple-200 bg-purple-50 text-purple-700",
   other: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
@@ -711,6 +726,7 @@ function SubcontractsTab({ project }: { project: Project }) {
 
   const materialTotal = costs.reduce((s, c) => c.costType === "materials" ? s + c.amount : s, 0);
   const laborTotal = costs.reduce((s, c) => c.costType === "labor" ? s + c.amount : s, 0);
+  const subcontractorTotal = costs.reduce((s, c) => c.costType === "subcontractor" ? s + c.amount : s, 0);
   const otherTotal = costs.reduce((s, c) => c.costType === "other" ? s + c.amount : s, 0);
   const grandTotal = costs.reduce((s, c) => s + c.amount, 0);
 
@@ -789,6 +805,11 @@ function SubcontractsTab({ project }: { project: Project }) {
                 <span>Labor</span><span>{formatCurrency(laborTotal)}</span>
               </div>
             )}
+            {subcontractorTotal > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Subcontractor</span><span>{formatCurrency(subcontractorTotal)}</span>
+              </div>
+            )}
             {otherTotal > 0 && (
               <div className="flex justify-between py-1 text-slate-600">
                 <span>Other</span><span>{formatCurrency(otherTotal)}</span>
@@ -848,6 +869,7 @@ function SubcontractsTab({ project }: { project: Project }) {
                 >
                   <option value="materials">Materials</option>
                   <option value="labor">Labor</option>
+                  <option value="subcontractor">Subcontractor</option>
                   <option value="other">Other</option>
                 </select>
               </div>
@@ -1171,17 +1193,17 @@ function DetailsTab({
               </div>
             </>
           )}
-          <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500">Full Rate</div>
+          <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500">Break-Even Rate</div>
           <div className="mt-2 pt-2 border-t border-slate-100">
             <RateField
-              label="Full Breakeven Rate"
+              label="Break-Even Rate"
               valueCents={effectiveFullRate}
               onSave={(cents) => onUpdateRates(cents, effectiveBurdenedRate)}
             />
           </div>
-          <div className="text-slate-500">Burdened Rate</div>
+          <div className="text-slate-500">Loaded Labor Rate (LLR)</div>
           <RateField
-            label="Burdened Rate"
+            label="Loaded Labor Rate (LLR)"
             valueCents={effectiveBurdenedRate}
             onSave={(cents) => onUpdateRates(effectiveFullRate, cents)}
           />
@@ -1206,13 +1228,13 @@ function DetailsTab({
           </div>
           {laborCostFull != null && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Full Rate ({project.laborHours}h × {formatCurrency(effectiveFullRate)})</span>
+              <span className="text-slate-500">Labor — Break-Even Rate ({project.laborHours}h × {formatCurrency(effectiveFullRate)})</span>
               <span className="font-medium text-slate-900">{formatCurrency(laborCostFull)}</span>
             </div>
           )}
           {laborCostBurdened != null && laborCostBurdened !== laborCostFull && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Burdened Rate ({project.laborHours}h × {formatCurrency(effectiveBurdenedRate)})</span>
+              <span className="text-slate-500">Labor — Loaded Labor Rate (LLR) ({project.laborHours}h × {formatCurrency(effectiveBurdenedRate)})</span>
               <span className="font-medium text-slate-900">{formatCurrency(laborCostBurdened)}</span>
             </div>
           )}
@@ -1220,7 +1242,7 @@ function DetailsTab({
           {/* Net profit rows */}
           {netFull != null && (
             <div className="flex justify-between border-t border-slate-200 pt-1.5">
-              <span className="font-semibold text-slate-700">Net Profit (Full Rate)</span>
+              <span className="font-semibold text-slate-700">Net Profit (Break-Even)</span>
               <span className={`font-semibold ${netFull >= 0 ? "text-green-600" : "text-red-600"}`}>
                 {netFull < 0 ? "-" : ""}{formatCurrency(Math.abs(netFull))}
                 {netFullPct != null && ` (${netFull < 0 ? "-" : ""}${Math.abs(netFullPct)}%)`}
@@ -1229,7 +1251,7 @@ function DetailsTab({
           )}
           {netBurdened != null && netBurdened !== netFull && (
             <div className="flex justify-between pt-0.5">
-              <span className="text-slate-500">Net Profit (Burdened Only)</span>
+              <span className="text-slate-500">Net Profit (LLR Only)</span>
               <span className={`font-medium ${netBurdened >= 0 ? "text-green-600" : "text-red-600"}`}>
                 {netBurdened < 0 ? "-" : ""}{formatCurrency(Math.abs(netBurdened))}
                 {netBurdenedPct != null && ` (${netBurdened < 0 ? "-" : ""}${Math.abs(netBurdenedPct)}%)`}
@@ -1253,6 +1275,69 @@ function DetailsTab({
           <p className="mt-2 text-xs text-slate-400">Add actual hours above to see net profit after labor costs.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+const TICKET_STATUS_CLASS: Record<string, string> = {
+  open: "border border-red-400 text-red-600",
+  on_hold: "border border-orange-400 text-orange-600",
+  pending: "bg-yellow-100 text-yellow-700",
+  closed: "bg-green-100 text-green-700",
+};
+
+function TicketsTab({ project }: { project: Project }) {
+  const { data: tickets = [], isLoading } = useTicketsLinkedTo("project", project.id);
+  const [openTicketId, setOpenTicketId] = useState<string | null>(null);
+  const openTicket = tickets.find((t) => t.id === openTicketId) ?? null;
+
+  return (
+    <div className="flex flex-col gap-4 p-6">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tickets</p>
+      {isLoading ? (
+        <p className="text-sm text-slate-400">Loading…</p>
+      ) : tickets.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-10 text-center">
+          <TicketIcon className="h-8 w-8 text-slate-300" />
+          <p className="text-sm text-slate-400">No tickets linked to this project yet.</p>
+          <p className="text-xs text-slate-400">Link a ticket to this project from the ticket&apos;s detail view.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50 text-xs">
+                <TableHead>#</TableHead>
+                <TableHead>Subject</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Due</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tickets.map((t) => (
+                <TableRow
+                  key={t.id}
+                  className="cursor-pointer text-sm hover:bg-slate-50"
+                  onClick={() => setOpenTicketId(t.id)}
+                >
+                  <TableCell className="font-mono text-xs text-slate-500">#{t.ticketNumber}</TableCell>
+                  <TableCell className="font-medium text-brand-600">{t.subject || "(no subject)"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-xs capitalize ${TICKET_STATUS_CLASS[t.status] ?? ""}`}>
+                      {t.status.replace("_", " ")}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs capitalize text-slate-600">{t.priority}</TableCell>
+                  <TableCell className="text-xs text-slate-500">{t.dueDate ? formatDate(t.dueDate) : "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <TicketDetailSheet ticket={openTicket} onClose={() => setOpenTicketId(null)} />
     </div>
   );
 }
@@ -1393,10 +1478,12 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             PDF
           </Button>
           <EditButton onClick={() => setEditOpen(true)} />
+          {/* Matches the Job Photos archive button (JobPhotosPage) — outline
+              with an Archive/ArchiveRestore icon, brand-colored when archived. */}
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className={project.isArchived ? "text-amber-600 hover:text-amber-700" : "text-slate-400 hover:text-slate-600"}
+            className={cn("gap-1.5", project.isArchived ? "border-brand-400 text-brand-600" : "border-slate-300 text-slate-500")}
             disabled={archiving}
             onClick={() => archiveProject(
               { id: project.id, archived: !project.isArchived },
@@ -1404,7 +1491,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             )}
             title={project.isArchived ? "Unarchive project" : "Archive project"}
           >
-            {project.isArchived ? "Unarchive" : "Archive"}
+            {project.isArchived ? <><ArchiveRestore className="h-3.5 w-3.5" /> Unarchive</> : <><Archive className="h-3.5 w-3.5" /> Archive</>}
           </Button>
           <Button
             variant="ghost"
@@ -1449,6 +1536,11 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             value: "subcontracts",
             label: "Other Costs",
             content: <SubcontractsTab project={project} />,
+          },
+          {
+            value: "tickets",
+            label: "Tickets",
+            content: <TicketsTab project={project} />,
           },
           {
             value: "history",

@@ -254,11 +254,24 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
   }
 
   function changeType(key: string, type: FormFieldType) {
+    const current = fields.find((f) => f._key === key);
+    // A2P 10DLC carrier review rejects bundled/implied consent (e.g. "By
+    // clicking Submit, you agree...") — this checkbox must stand alone with
+    // explicit SMS-specific language. Pre-fill compliant boilerplate so a
+    // blank/generic label isn't shipped by default; staff can still edit it,
+    // but they start from language that passes review.
+    const isSmsOptIn = type === "sms_optin";
     update(key, {
       fieldType: type,
       config: defaultConfig(type),
-      options: OPTIONS_TYPES.includes(type) ? (fields.find((f) => f._key === key)?.options ?? []) : null,
-      required: DISPLAY_TYPES.includes(type) ? false : fields.find((f) => f._key === key)?.required ?? false,
+      options: OPTIONS_TYPES.includes(type) ? (current?.options ?? []) : null,
+      required: DISPLAY_TYPES.includes(type) || type === "hidden" ? false : current?.required ?? false,
+      label: isSmsOptIn && !current?.label
+        ? "I agree to receive text messages from this business about my service appointments and account, including appointment reminders, crew arrival notices, and job status updates."
+        : current?.label ?? "",
+      description: isSmsOptIn && !current?.description
+        ? "Message frequency varies. Message and data rates may apply. Reply STOP to opt out at any time, HELP for help."
+        : current?.description ?? null,
     });
   }
 
@@ -357,11 +370,38 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       });
       return;
     }
+
+    // SMS consent has to be tied to a phone number — a form that requires
+    // the opt-in checkbox but not a phone field can collect "yes, text me"
+    // with nothing to text. If the form has no phone field at all, block
+    // the save; if it does, silently promote it to required rather than
+    // making staff notice and fix it themselves.
+    let fieldsToSave = fields;
+    if (fields.some((f) => f.fieldType === "sms_optin" && f.required)) {
+      const phoneField = fields.find((f) => f.fieldType === "phone");
+      if (!phoneField) {
+        toast.error("The SMS opt-in field is required, but this form has no Phone field — add one so consent has a number to attach to.", { duration: 7000 });
+        return;
+      }
+      if (!phoneField.required) {
+        fieldsToSave = fields.map((f) => f._key === phoneField._key ? { ...f, required: true } : f);
+        setFields(fieldsToSave);
+        toast.message("Phone is now required, since the SMS opt-in field is required.");
+      }
+    }
+
     setInvalidFieldKey(null);
     setSaving(true);
     try {
       const savedFieldData = await saveFields.mutateAsync(
-        fields.map((f, i) => ({
+        fieldsToSave.map((f, i) => ({
+          // Preserve the real DB id for fields that already exist so the
+          // server can update in place instead of delete+reinsert — that
+          // reinsert churned field ids on every save, silently orphaning any
+          // crm_form_rules row keyed to the old id (source_field_id /
+          // actionValue). Omitted for brand-new fields so the server assigns
+          // a fresh id.
+          ...(f._savedId ? { id: f._savedId } : {}),
           fieldType: f.fieldType,
           label: f.label.trim(),
           placeholder: f.placeholder || null,
@@ -379,7 +419,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       const newFieldMap = new Map<string, string>(); // _key → new id
       const savedFields = (savedFieldData?.fields ?? []) as CRMFormField[];
       savedFields.forEach((saved, i) => {
-        const draft = fields[i];
+        const draft = fieldsToSave[i];
         if (draft) newFieldMap.set(draft._key, saved.id);
       });
 
@@ -415,8 +455,12 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
   async function togglePublish() {
     const newStatus = form.status === "published" ? "draft" : "published";
-    await updateForm.mutateAsync({ status: newStatus });
-    toast.success(newStatus === "published" ? "Form published" : "Form unpublished");
+    try {
+      await updateForm.mutateAsync({ status: newStatus });
+      toast.success(newStatus === "published" ? "Form published" : "Form unpublished");
+    } catch {
+      toast.error("Failed to update form status");
+    }
   }
 
   const publicUrl = `${publicBaseUrl}/forms/${form.slug}`;
@@ -547,6 +591,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
                 idx={idx}
                 totalFields={pageFields.length}
                 hasError={field._key === invalidFieldKey}
+                lockRequired={field.fieldType === "phone" && fields.some((f) => f.fieldType === "sms_optin" && f.required)}
                 onUpdate={(patch) => update(field._key, patch)}
                 onUpdateConfig={(patch) => updateConfig(field._key, patch)}
                 onChangeType={(type) => changeType(field._key, type)}
@@ -578,7 +623,12 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
       {/* ── SETTINGS tab ── */}
       {builderTab === "settings" && (
-        <SettingsPanel form={form} onUpdate={(patch) => { updateForm.mutateAsync(patch); }} />
+        <SettingsPanel
+          form={form}
+          onUpdate={(patch) => {
+            updateForm.mutateAsync(patch).catch(() => toast.error("Failed to save setting"));
+          }}
+        />
       )}
     </div>
   );
@@ -591,6 +641,11 @@ interface FieldCardProps {
   idx: number;
   totalFields: number;
   hasError?: boolean;
+  /** True when this is the form's phone field and a required sms_optin
+   *  field exists — consent needs a number to attach to, so this can't be
+   *  turned back off from here (see handleSave, which enforces the same
+   *  rule server-side by promoting it before save). */
+  lockRequired?: boolean;
   onUpdate: (patch: Partial<DraftField>) => void;
   onUpdateConfig: (patch: Record<string, unknown>) => void;
   onChangeType: (type: FormFieldType) => void;
@@ -600,10 +655,18 @@ interface FieldCardProps {
 }
 
 function FieldCard({
-  field, idx, totalFields, hasError,
+  field, idx, totalFields, hasError, lockRequired,
   onUpdate, onUpdateConfig, onChangeType, onMoveUp, onMoveDown, onRemove,
 }: FieldCardProps) {
   const isDisplay = DISPLAY_TYPES.includes(field.fieldType);
+  // "hidden" is deliberately NOT in DISPLAY_TYPES (it still needs a label,
+  // for the formData key, and is mappable to a CRM field) — but every
+  // required-field check in the app (submit-form-response.ts,
+  // forms/[slug]/page.tsx, FillOutFormDialog.tsx) treats it as a display
+  // type and skips it, since a submitter never sees it to fill in. Leaving
+  // the Required checkbox enabled here let staff check it expecting it to
+  // block submission, when it's actually unenforceable everywhere.
+  const requiredUnenforceable = field.fieldType === "hidden";
 
   return (
     <div
@@ -614,7 +677,7 @@ function FieldCard({
       )}
     >
       {/* Card header row */}
-      <div className="grid grid-cols-[180px_1fr_auto_auto_auto] gap-3 items-start p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto_auto_auto] gap-3 items-start p-4">
         {/* Type selector */}
         <div className="space-y-1">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400">Type</Label>
@@ -671,8 +734,13 @@ function FieldCard({
         <div className="space-y-1 flex flex-col items-center pt-0.5">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400">Req.</Label>
           <Checkbox
-            checked={field.required}
-            disabled={isDisplay}
+            checked={lockRequired ? true : requiredUnenforceable ? false : field.required}
+            disabled={isDisplay || lockRequired || requiredUnenforceable}
+            title={
+              lockRequired ? "Required because the SMS opt-in field on this form is required" :
+              requiredUnenforceable ? "Hidden fields are never shown to the submitter, so \"required\" can't be enforced" :
+              undefined
+            }
             onCheckedChange={(v) => onUpdate({ required: !!v })}
             className="mt-1.5"
           />
@@ -705,8 +773,14 @@ function FieldCard({
         </button>
       </div>
 
-      {/* Field mapping */}
-      {!isDisplay && (
+      {/* Field mapping — sms_optin is detected by field type, not a mapping,
+          so it gets its own note below (in FieldTypeConfig) instead.
+          attachment is excluded too: a mapped CRM field expects a scalar
+          string (submit-form-response.ts does mappedData[field] =
+          String(value)), but an attachment's answer is a
+          {path,name,size} object — mapping one silently wrote the literal
+          text "[object Object]" into whatever CRM field it was mapped to. */}
+      {!isDisplay && field.fieldType !== "sms_optin" && field.fieldType !== "attachment" && (
         <div className="border-t border-slate-100 px-4 py-2.5 flex items-center gap-3">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400 shrink-0 w-24">
             Map to field
@@ -987,7 +1061,7 @@ function FieldTypeConfig({
     const max = (field.config.max as number) ?? 5;
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label className={labelClass}>Scale (max)</Label>
             <Select
@@ -1031,7 +1105,7 @@ function FieldTypeConfig({
     const max = (field.config.max as number) ?? 5;
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label className={labelClass}>Max stars</Label>
             <Select
@@ -1071,7 +1145,7 @@ function FieldTypeConfig({
   if (field.fieldType === "number") {
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label className={labelClass}>Starting value</Label>
             <Input
@@ -1125,6 +1199,14 @@ function FieldTypeConfig({
   if (field.fieldType === "sms_optin") {
     return (
       <div className={baseClass}>
+        <p className="text-[11px] text-slate-400">
+          No mapping needed — a checked box on submit automatically records SMS
+          consent on the matched/created client. Keep the label/consent text a
+          standalone, explicit statement rather than folding it into general
+          terms-acceptance language, or carrier review will reject it. Links to
+          the Privacy Policy and SMS Terms &amp; Conditions render automatically
+          below this field — no need to add them to the text here.
+        </p>
         <div>
           <Label className={labelClass}>Consent text</Label>
           <Input
@@ -1142,7 +1224,7 @@ function FieldTypeConfig({
     return (
       <div className={baseClass}>
         <DescriptionRow field={field} onUpdate={onUpdate} inputClass={inputClass} labelClass={labelClass} />
-        <p className="text-[11px] text-slate-400">Max file size: 100 MB. Accepted formats: any.</p>
+        <p className="text-[11px] text-slate-400">Max file size: 15 MB. Accepted formats: JPEG, PNG, WEBP, GIF, PDF.</p>
       </div>
     );
   }
@@ -1150,7 +1232,7 @@ function FieldTypeConfig({
   if (PLACEHOLDER_TYPES.includes(field.fieldType) || field.fieldType === "checkbox" || field.fieldType === "date") {
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {PLACEHOLDER_TYPES.includes(field.fieldType) && (
             <PlaceholderRow field={field} onUpdate={onUpdate} inputClass={inputClass} labelClass={labelClass} />
           )}

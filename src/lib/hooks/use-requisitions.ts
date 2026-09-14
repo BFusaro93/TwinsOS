@@ -94,9 +94,11 @@ export function useCreateRequisition() {
       salesTax: number;
       shippingCost: number;
       discountCost: number;
+      discountReducesTax: boolean;
       grandTotal: number;
       notes?: string | null;
       workOrderId?: string | null;
+      crmJobId?: string | null;
     }) => {
       const supabase = createClient();
 
@@ -104,7 +106,10 @@ export function useCreateRequisition() {
       // Prefer profile.name (set during account setup) over auth metadata fallback
       const { data: profile } = await supabase.from("profiles").select("name").eq("id", user!.id).single();
       const requestedByName = profile?.name?.trim() || user?.user_metadata?.name || user?.email || "Unknown";
-      const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      // Atomic per-org/year counter, not Date.now() — see next_requisition_number().
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: requisitionNumber, error: numberErr } = await (supabase.rpc as any)("next_requisition_number");
+      if (numberErr || !requisitionNumber) throw numberErr ?? new Error("Failed to generate requisition number");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: req, error: reqErr } = await (supabase as any)
@@ -122,9 +127,11 @@ export function useCreateRequisition() {
           sales_tax: input.salesTax,
           shipping_cost: input.shippingCost,
           discount_cost: input.discountCost,
+          discount_reduces_tax: input.discountReducesTax,
           grand_total: input.grandTotal,
           notes: input.notes ?? null,
           work_order_id: input.workOrderId ?? null,
+          crm_job_id: input.crmJobId ?? null,
         })
         .select()
         .single();
@@ -185,25 +192,35 @@ export function useAddRequisitionLineItem() {
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: lineErr } = await (supabase as any).from("requisition_line_items").insert({
-        requisition_id: requisitionId,
-        product_item_id: lineItem.productItemId || null,
-        part_id: lineItem.partId ?? null,
-        product_item_name: lineItem.productItemName,
-        part_number: lineItem.partNumber,
-        quantity: lineItem.quantity,
-        unit_cost: lineItem.unitCost,
-        total_cost: lineItem.totalCost,
-        project_id: lineItem.projectId ?? null,
-        notes: lineItem.notes ?? null,
-      });
+      const { data: inserted, error: lineErr } = await (supabase as any)
+        .from("requisition_line_items")
+        .insert({
+          requisition_id: requisitionId,
+          product_item_id: lineItem.productItemId || null,
+          part_id: lineItem.partId ?? null,
+          product_item_name: lineItem.productItemName,
+          part_number: lineItem.partNumber,
+          quantity: lineItem.quantity,
+          unit_cost: lineItem.unitCost,
+          total_cost: lineItem.totalCost,
+          project_id: lineItem.projectId ?? null,
+          notes: lineItem.notes ?? null,
+        })
+        .select()
+        .single();
       if (lineErr) throw lineErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: reqErr } = await (supabase as any)
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
-      if (reqErr) throw reqErr;
+      if (reqErr) {
+        // Header total update failed after the line item was already committed —
+        // roll back the line item so the two never drift out of sync.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("requisition_line_items").delete().eq("id", inserted.id);
+        throw reqErr;
+      }
       await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {
@@ -227,6 +244,7 @@ export function useUpdateRequisition() {
       taxRatePercent,
       shippingCost,
       discountCost,
+      discountReducesTax,
       salesTax,
       grandTotal,
       notes,
@@ -238,6 +256,7 @@ export function useUpdateRequisition() {
       taxRatePercent: number;
       shippingCost: number;
       discountCost: number;
+      discountReducesTax: boolean;
       salesTax: number;
       grandTotal: number;
       notes: string | null;
@@ -253,6 +272,7 @@ export function useUpdateRequisition() {
           tax_rate_percent: taxRatePercent,
           shipping_cost: shippingCost,
           discount_cost: discountCost,
+          discount_reduces_tax: discountReducesTax,
           sales_tax: salesTax,
           grand_total: grandTotal,
           notes,
@@ -279,11 +299,20 @@ export function useBulkImportRequisitions() {
       const { data: { user } } = await supabase.auth.getUser();
       const requestedByName = user?.user_metadata?.name ?? user?.email ?? "Unknown";
 
-      const inserts = rows
-        .filter((r) => r.title?.trim())
-        .map((r) => ({
+      const filteredRows = rows.filter((r) => r.title?.trim());
+      const inserts = [];
+      for (const r of filteredRows) {
+        let requisitionNumber = r.requisitionNumber?.trim();
+        if (!requisitionNumber) {
+          // Atomic per-org/year counter, not Date.now() — see next_requisition_number().
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data, error: numberErr } = await (supabase.rpc as any)("next_requisition_number");
+          if (numberErr || !data) throw numberErr ?? new Error("Failed to generate requisition number");
+          requisitionNumber = data;
+        }
+        inserts.push({
           title: r.title.trim(),
-          requisition_number: r.requisitionNumber?.trim() || `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
+          requisition_number: requisitionNumber,
           requested_by_id: user?.id ?? null,
           requested_by_name: requestedByName,
           vendor_name: r.vendorName?.trim() || null,
@@ -293,7 +322,8 @@ export function useBulkImportRequisitions() {
           sales_tax: 0,
           shipping_cost: 0,
           grand_total: 0,
-        }));
+        });
+      }
       if (inserts.length === 0) return 0;
 
       // Insert one-by-one; on duplicate requisition_number, update the existing row
@@ -391,6 +421,15 @@ export function useUpdateRequisitionLineItem() {
       newGrandTotal: number;
     }) => {
       const supabase = createClient();
+      // Capture the pre-update row so the line item can be reverted if the
+      // header total update below fails after this write already committed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: previousLine, error: fetchErr } = await (supabase as any)
+        .from("requisition_line_items")
+        .select("quantity, unit_cost, total_cost, project_id")
+        .eq("id", lineItemId)
+        .single();
+      if (fetchErr) throw fetchErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: lineErr } = await (supabase as any)
         .from("requisition_line_items")
@@ -407,7 +446,21 @@ export function useUpdateRequisitionLineItem() {
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
-      if (reqErr) throw reqErr;
+      if (reqErr) {
+        // Header total update failed after the line item was already committed —
+        // revert the line item to its previous values so the two never drift.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("requisition_line_items")
+          .update({
+            quantity: previousLine.quantity,
+            unit_cost: previousLine.unit_cost,
+            total_cost: previousLine.total_cost,
+            project_id: previousLine.project_id,
+          })
+          .eq("id", lineItemId);
+        throw reqErr;
+      }
       await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {
@@ -438,18 +491,28 @@ export function useDeleteRequisitionLineItem() {
       newGrandTotal: number;
     }) => {
       const supabase = createClient();
+      // Capture the full row before deleting so it can be restored if the
+      // header total update below fails after the delete already committed.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: lineErr } = await (supabase as any)
+      const { data: deletedLine, error: lineErr } = await (supabase as any)
         .from("requisition_line_items")
         .delete()
-        .eq("id", lineItemId);
+        .eq("id", lineItemId)
+        .select()
+        .single();
       if (lineErr) throw lineErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: reqErr } = await (supabase as any)
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
-      if (reqErr) throw reqErr;
+      if (reqErr) {
+        // Header total update failed after the line item was already deleted —
+        // restore the deleted row so the two never drift out of sync.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("requisition_line_items").insert(deletedLine);
+        throw reqErr;
+      }
       await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {

@@ -31,6 +31,7 @@ import {
   type RecordType,
 } from "@/lib/hooks/use-financial-periods";
 import { parseFinancialPdf } from "@/lib/utils/parse-financial-pdf";
+import { todayLocalISODate } from "@/lib/utils";
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 
@@ -318,7 +319,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
   const upsert = useUpsertFinancialPeriod();
 
   const [month, setMonth] = useState<string>(
-    initial ? toMonthValue(initial.periodMonth) : toMonthValue(new Date().toISOString().slice(0, 10))
+    initial ? toMonthValue(initial.periodMonth) : toMonthValue(todayLocalISODate())
   );
   const [recordType, setRecordType] = useState<RecordType>(initial?.recordType ?? defaultRecordType);
   const [d, setD] = useState<FinancialPeriodData>(

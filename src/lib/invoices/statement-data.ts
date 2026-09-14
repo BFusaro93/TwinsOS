@@ -1,5 +1,6 @@
 import type { InvoicePDFStatementData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 
+import { isoNy } from "@/lib/reports/ny-date";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -26,12 +27,13 @@ export async function buildInvoiceStatementData(
   const { data: otherInvoices } = await supabase
     .from("crm_invoices")
     .select("invoice_number, invoice_date, due_date, balance_cents, total_cents")
+    .eq("org_id", inv.org_id)
     .eq("client_id", inv.client_id)
     .neq("id", inv.id)
     .neq("status", "void")
     .neq("status", "draft")
     .is("deleted_at", null)
-    .lte("invoice_date", inv.invoice_date ?? new Date().toISOString().slice(0, 10))
+    .lte("invoice_date", inv.invoice_date ?? isoNy(new Date()))
     .order("invoice_date", { ascending: false });
 
   const previousBalanceCents = (otherInvoices ?? []).reduce(
@@ -66,6 +68,7 @@ export async function buildInvoiceStatementData(
   const { data: paymentRow } = await supabase
     .from("crm_payments")
     .select("amount_cents, payment_date, reference")
+    .eq("org_id", inv.org_id)
     .eq("client_id", inv.client_id)
     .is("deleted_at", null)
     .order("payment_date", { ascending: false })
@@ -84,6 +87,7 @@ export async function buildInvoiceStatementData(
     .from("clients")
     .select("account_number")
     .eq("id", inv.client_id)
+    .eq("org_id", inv.org_id)
     .maybeSingle();
 
   return {

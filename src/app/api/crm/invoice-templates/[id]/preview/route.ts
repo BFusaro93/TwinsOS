@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -36,7 +37,7 @@ const SAMPLE_INVOICE: Omit<InvoicePDFData, "invoiceNumber" | "invoiceDate"> = {
     accountNumber: "10042",
     previousBalanceCents: 47813,
     accountBalanceCents: 95626,
-    lastPayment: { amountCents: 47813, date: new Date().toISOString().slice(0, 10), reference: "7219443587" },
+    lastPayment: { amountCents: 47813, date: isoNy(new Date()), reference: "7219443587" },
     priorInvoice: {
       invoiceNumber: 1000,
       amountCents: 47813,
@@ -87,7 +88,7 @@ export async function GET(
   const invoiceData: InvoicePDFData = {
     ...SAMPLE_INVOICE,
     invoiceNumber: 1001,
-    invoiceDate: new Date().toISOString().slice(0, 10),
+    invoiceDate: isoNy(new Date()),
     notes: template.show_notes === false
       ? null
       : ((template.default_notes as string | null) || SAMPLE_INVOICE.notes),

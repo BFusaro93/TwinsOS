@@ -1,0 +1,48 @@
+# Landscapt & Equipt
+
+> Landscapt & Equipt is a multi-tenant SaaS platform for landscape and snow companies. Landscapt is the CRM / field service management product (estimating, dispatch, invoicing, client relationships). Equipt is the CMMS product (asset registry, preventive maintenance, work orders, purchasing). Both share one login and one vendor database.
+
+Landscapt runs on a real budget-engine estimating model (production rates, labor burden, overhead markup) rather than flat-rate guessing, and covers the full field-service lifecycle: clients and properties, estimates, scheduling/dispatch, invoicing and payments, snow operations, job photos, tickets, and a client portal.
+
+Equipt covers the maintenance lifecycle for the same company's fleet and equipment: asset registry, preventive maintenance schedules, work orders, parts inventory, vendor management, and purchasing/requisitions — shared with Landscapt via the same vendor table.
+
+## Product
+
+- [Features overview](https://landscapt.com/features): every module in both products
+- [Landscapt overview](https://landscapt.com/features/landscapt): CRM & field service management
+- [Equipt overview](https://landscapt.com/features/equipt): CMMS asset & maintenance management
+- [Pricing](https://landscapt.com/pricing): plans, add-ons, and feature comparison
+- [Integrations](https://landscapt.com/integrations): QuickBooks, Zapier, Stripe, Twilio, Google Maps, Samsara, and the REST API
+
+## Landscapt modules
+
+- [Estimating](https://landscapt.com/features/landscapt/estimating)
+- [Scheduling & Dispatch](https://landscapt.com/features/landscapt/scheduling)
+- [Invoicing & Payments](https://landscapt.com/features/landscapt/invoicing)
+- [Snow Operations](https://landscapt.com/features/landscapt/snow)
+- [Projects](https://landscapt.com/features/landscapt/projects)
+- [Tickets](https://landscapt.com/features/landscapt/tickets)
+- [Job Photos](https://landscapt.com/features/landscapt/job-photos)
+- [Crew App](https://landscapt.com/features/landscapt/crew-app)
+- [Client Portal](https://landscapt.com/features/landscapt/client-portal)
+- [Automations](https://landscapt.com/features/landscapt/automations)
+- [Reporting & Dashboards](https://landscapt.com/features/landscapt/reporting)
+- [API & Integrations](https://landscapt.com/features/landscapt/api-integrations)
+
+## Equipt modules
+
+- [Work Orders](https://landscapt.com/features/equipt/work-orders)
+- [Preventive Maintenance](https://landscapt.com/features/equipt/preventive-maintenance)
+- [Asset & Vehicle Registry](https://landscapt.com/features/equipt/asset-registry)
+- [Purchasing, Requisitions & Inventory](https://landscapt.com/features/equipt/purchasing-inventory)
+- [Vendor Management](https://landscapt.com/features/equipt/vendors)
+- [Automations](https://landscapt.com/features/equipt/automations)
+- [Reporting & Maintenance Costing](https://landscapt.com/features/equipt/reporting)
+- [API & Integrations](https://landscapt.com/features/equipt/api-integrations)
+
+## Company
+
+- [Contact](https://landscapt.com/contact): sales, demo booking, and support
+- [Support](https://landscapt.com/help): searchable how-to guides
+- [Privacy Policy](https://landscapt.com/legal/privacy-policy)
+- [SMS Terms & Conditions](https://landscapt.com/legal/sms-terms)

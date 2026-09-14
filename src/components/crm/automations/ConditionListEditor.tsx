@@ -74,7 +74,7 @@ export function ConditionListEditor({
   const orgTags = useOrgTags();
   const { data: services } = useCRMServices();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { data: products } = useProducts();
   const { data: ticketCategories } = useOrgList("ticket_categories");
   const { data: forms } = useForms();
@@ -88,7 +88,7 @@ export function ConditionListEditor({
     if (TAG_CONDITION_FIELDS.has(field)) return { options: orgTags.map((t) => ({ value: t, label: t })), placeholder: "Select tag(s)" };
     if (SERVICE_CONDITION_FIELDS.has(field)) return { options: (services ?? []).map((s) => ({ value: s.name, label: s.name })), placeholder: "Select service(s)" };
     if (FIXED_MULTI_CONDITION_FIELDS[field]) return { options: FIXED_MULTI_CONDITION_FIELDS[field]!, placeholder: "Select value(s)" };
-    if (EMPLOYEE_CONDITION_FIELDS.has(field)) return { options: salesReps.map((e) => ({ value: e.userId as string, label: `${e.firstName} ${e.lastName}` })), placeholder: "Select rep(s)" };
+    if (EMPLOYEE_CONDITION_FIELDS.has(field)) return { options: salesReps.map((e) => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), placeholder: "Select rep(s)" };
     if (PRODUCT_CONDITION_FIELDS.has(field)) return { options: (products ?? []).map((p) => ({ value: p.id, label: p.name })), placeholder: "Select product(s)" };
     if (TICKET_CATEGORY_CONDITION_FIELDS.has(field)) return { options: (ticketCategories ?? []).map((o) => ({ value: o.value, label: o.value })), placeholder: "Select categor(ies)" };
     if (FORM_CONDITION_FIELDS.has(field)) return { options: (forms ?? []).map((f) => ({ value: f.id, label: f.name })), placeholder: "Select form(s)" };

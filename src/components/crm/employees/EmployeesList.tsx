@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useEmployees,
   useCreateEmployee,
@@ -9,6 +9,8 @@ import {
   useActivateEmployee,
 } from "@/lib/hooks/use-employees";
 import { useRoles } from "@/lib/hooks/use-roles";
+import { useUsers } from "@/lib/hooks/use-users";
+import { MONTH_KEYS, MONTH_LABELS } from "@/lib/reports/helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,9 +41,13 @@ import { formatCurrency, getAvatarColor } from "@/lib/utils";
 import { Plus, Search, MoreHorizontal, UserCog, ChevronDown, Pencil } from "lucide-react";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PhoneInput } from "@/components/shared/PhoneInput";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 // ── section header (SA-style dark bar) ────────────────────────────────────────
 
@@ -155,20 +161,22 @@ function PersonalTab({
         </div>
       </div>
 
-      <div className="rounded border">
-        <SectionBar title="Resource Tags" />
-        <div className="p-4 space-y-1.5">
-          <Input
-            className="h-8 text-sm"
-            value={(form.resource_tags ?? []).join(", ")}
-            onChange={(e) => onChange("resource_tags", e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean))}
-            placeholder="e.g. snow, mowing, irrigation"
-          />
-          <p className="text-xs text-slate-400">
-            Type keywords or terms to group employees together. Then you can quickly select the group in the calendar.
-          </p>
+      <PermissionGate permission="emp_add_remove_tag">
+        <div className="rounded border">
+          <SectionBar title="Resource Tags" />
+          <div className="p-4 space-y-1.5">
+            <Input
+              className="h-8 text-sm"
+              value={(form.resource_tags ?? []).join(", ")}
+              onChange={(e) => onChange("resource_tags", e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean))}
+              placeholder="e.g. snow, mowing, irrigation"
+            />
+            <p className="text-xs text-slate-400">
+              Type keywords or terms to group employees together. Then you can quickly select the group in the calendar.
+            </p>
+          </div>
         </div>
-      </div>
+      </PermissionGate>
     </div>
   );
 }
@@ -324,20 +332,22 @@ function PayrollTab({
         <div className="rounded border">
           <SectionBar title="Costing Information" />
           <div className="space-y-2.5 p-4">
-            <Field label="Hourly Rate ($)">
-              <FieldInput type="number" step="0.01" min="0"
-                value={form.hourly_rate_cents != null ? (form.hourly_rate_cents / 100).toFixed(2) : "0.00"}
-                onChange={(e) => onChange("hourly_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
-                className="h-8 w-28 text-sm"
-              />
-            </Field>
-            <Field label="Overtime Rate ($)">
-              <FieldInput type="number" step="0.01" min="0"
-                value={form.overtime_rate_cents != null ? (form.overtime_rate_cents / 100).toFixed(2) : "0.00"}
-                onChange={(e) => onChange("overtime_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
-                className="h-8 w-28 text-sm"
-              />
-            </Field>
+            <PermissionGate permission="payroll_show_pay_rate">
+              <Field label="Hourly Rate ($)">
+                <CurrencyInput
+                  cents={form.hourly_rate_cents ?? 0}
+                  onChange={(cents) => onChange("hourly_rate_cents", cents)}
+                  className="h-8 w-28 text-sm"
+                />
+              </Field>
+              <Field label="Overtime Rate ($)">
+                <CurrencyInput
+                  cents={form.overtime_rate_cents ?? 0}
+                  onChange={(cents) => onChange("overtime_rate_cents", cents)}
+                  className="h-8 w-28 text-sm"
+                />
+              </Field>
+            </PermissionGate>
             <Field label="Vacation Days / Year">
               <FieldInput type="number" min="0"
                 value={form.vacation_days ?? 0}
@@ -352,16 +362,18 @@ function PayrollTab({
                 className="h-8 w-20 text-sm"
               />
             </Field>
-            <Field label="Commission %">
-              <div className="flex items-center gap-1.5">
-                <FieldInput type="number" step="0.1" min="0" max="100"
-                  value={form.commission_pct ?? 0}
-                  onChange={(e) => onChange("commission_pct", parseFloat(e.target.value) || 0)}
-                  className="h-8 w-20 text-sm"
-                />
-                <span className="text-sm text-slate-500">%</span>
-              </div>
-            </Field>
+            <PermissionGate permission="payroll_show_pay_rate">
+              <Field label="Commission %">
+                <div className="flex items-center gap-1.5">
+                  <FieldInput type="number" step="0.1" min="0" max="100"
+                    value={form.commission_pct ?? 0}
+                    onChange={(e) => onChange("commission_pct", parseFloat(e.target.value) || 0)}
+                    className="h-8 w-20 text-sm"
+                  />
+                  <span className="text-sm text-slate-500">%</span>
+                </div>
+              </Field>
+            </PermissionGate>
           </div>
         </div>
       </div>
@@ -386,16 +398,50 @@ function PayrollTab({
             </Select>
           </Field>
           <Field label="Last Pay Raise ($)">
-            <FieldInput type="number" step="0.01" min="0"
-              value={form.last_pay_raise_cents != null ? (form.last_pay_raise_cents / 100).toFixed(2) : "0.00"}
-              onChange={(e) => onChange("last_pay_raise_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
-              className="h-8 w-28 text-sm"
-            />
+            <CurrencyInput
+                  cents={form.last_pay_raise_cents ?? 0}
+                  onChange={(cents) => onChange("last_pay_raise_cents", cents)}
+                  className="h-8 w-28 text-sm"
+                />
           </Field>
           <Field label="Last Pay Raise Date">
             <FieldInput type="date" value={form.last_pay_raise_date ?? ""} onChange={(e) => onChange("last_pay_raise_date", e.target.value)} />
           </Field>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SalesGoalsTab({
+  form,
+  onChange,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onChange: (key: string, value: any) => void;
+}) {
+  const goals: Record<string, number> = form.sales_goals ?? {};
+
+  function setGoal(month: string, cents: number) {
+    onChange("sales_goals", { ...goals, [month]: cents || undefined });
+  }
+
+  return (
+    <div className="rounded border">
+      <SectionBar title="Monthly Sales Goals" />
+      <div className="grid grid-cols-4 gap-4 p-4">
+        {MONTH_KEYS.map((month, i) => (
+          <Field key={month} label={MONTH_LABELS[i]}>
+            <CurrencyInput
+              cents={goals[month] ?? 0}
+              blankWhenZero
+              onChange={(cents) => setGoal(month, cents)}
+              className="h-8 w-28 text-sm"
+            />
+          </Field>
+        ))}
       </div>
     </div>
   );
@@ -414,16 +460,31 @@ const USER_ROLES = [
   "Admin", "Manager", "Sales / Account Mgr", "Technician", "Purchaser", "Viewer",
 ];
 
+// Display labels for the platform-wide account role (org_users/profiles.role) —
+// keyed the same as PLATFORM_ROLE_LABELS in Settings > Users.
+const PLATFORM_ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  manager: "Manager",
+  purchaser: "Purchaser",
+  technician: "Technician",
+  viewer: "Viewer",
+  requestor: "Requestor",
+  crew: "Crew",
+};
+
 function UserSettingsTab({
   form,
   onChange,
   roles,
+  linkedAccountRole,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: Record<string, any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange: (key: string, value: any) => void;
   roles: { id: string; name: string }[];
+  /** The linked login's real platform role (org_users.role), or null if unlinked. */
+  linkedAccountRole: string | null;
 }) {
   return (
     <div className="rounded border">
@@ -456,14 +517,30 @@ function UserSettingsTab({
             <Checkbox checked={!!form.send_text_alerts} onCheckedChange={(c) => onChange("send_text_alerts", !!c)} />
           </Field>
           <Field label="User Role">
-            <Select value={form.user_role ?? ""} onValueChange={(v) => onChange("user_role", v || null)}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
-              <SelectContent>
-                {USER_ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {linkedAccountRole ? (
+              <>
+                <div className="flex h-8 items-center rounded border bg-slate-50 px-3 text-sm text-slate-600">
+                  {PLATFORM_ROLE_LABELS[linkedAccountRole] ?? linkedAccountRole}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Set automatically from the linked account&apos;s role. Manage it in Settings → Users.
+                </p>
+              </>
+            ) : (
+              <>
+                <Select value={form.user_role ?? ""} onValueChange={(v) => onChange("user_role", v || null)}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    {USER_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Display label only — link this employee to a login account to set it automatically.
+                </p>
+              </>
+            )}
           </Field>
           <Field label="Landscapt Role">
             <Select value={form.crm_role_id ?? "none"} onValueChange={(v) => onChange("crm_role_id", v === "none" ? null : v)}>
@@ -475,12 +552,34 @@ function UserSettingsTab({
                 ))}
               </SelectContent>
             </Select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Only applies to non-admin logins — an account with the Admin user role always has full access, regardless of what&apos;s selected here.
+            </p>
           </Field>
-          <Field label="Map Icon / Color">
-            <FieldInput value={form.map_icon_color ?? ""} onChange={(e) => onChange("map_icon_color", e.target.value)} placeholder="e.g. Gold" />
-          </Field>
-          <Field label="Map Codes">
-            <FieldInput value={form.map_codes ?? ""} onChange={(e) => onChange("map_codes", e.target.value)} />
+          <Field label="Sales Meeting Color">
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={HEX_COLOR_RE.test(form.map_icon_color ?? "") ? form.map_icon_color : "#94a3b8"}
+                onChange={(e) => onChange("map_icon_color", e.target.value)}
+                className="h-9 w-14 cursor-pointer rounded border border-slate-200 p-0.5"
+              />
+              <span className="text-xs text-slate-500">{form.map_icon_color || "No color set"}</span>
+              {form.map_icon_color && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => onChange("map_icon_color", null)}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Colors this rep&apos;s legend dot on the Sales Meetings calendar.
+            </p>
           </Field>
           <Field label="Is Sales Rep">
             <Checkbox checked={!!form.is_sales_rep} onCheckedChange={(c) => onChange("is_sales_rep", !!c)} />
@@ -566,8 +665,10 @@ function EmployeeDialog({
 }) {
   const { data: employees } = useEmployees(false);
   const { data: crmRoles } = useRoles(true);
+  const { data: orgUsers } = useUsers();
   const { mutateAsync: create, isPending: creating } = useCreateEmployee();
   const { mutateAsync: update, isPending: updating } = useUpdateEmployee();
+  const { can } = usePermissions();
 
   const isNew = !employee;
 
@@ -580,6 +681,7 @@ function EmployeeDialog({
     num_dependants: 0, hourly_rate_cents: 0, overtime_rate_cents: 0,
     vacation_days: 0, sick_days: 0, commission_pct: 0, last_pay_raise_cents: 0,
     resource_tags: [] as string[],
+    sales_goals: {} as Record<string, number>,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -610,7 +712,8 @@ function EmployeeDialog({
       show_in_calendar: e.showInCalendar, field_time_clock: e.fieldTimeClock,
       office_time_clock: e.officeTimeClock, send_text_alerts: e.sendTextAlerts,
       user_role: e.userRole, crm_role_id: e.crmRoleId, route_sheet_format: e.routeSheetFormat,
-      map_icon_color: e.mapIconColor, map_codes: e.mapCodes, is_sales_rep: e.isSalesRep,
+      map_icon_color: e.mapIconColor, is_sales_rep: e.isSalesRep,
+    sales_goals: e.salesGoals,
       starting_address: e.startingAddress, starting_city: e.startingCity,
       starting_state: e.startingState, starting_zip: e.startingZip,
       starting_lat: e.startingLat, starting_lng: e.startingLng,
@@ -628,6 +731,18 @@ function EmployeeDialog({
   function onChange(key: string, value: any) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  const linkedAccountRole: string | null =
+    (form.user_id && orgUsers?.find((u) => u.id === form.user_id)?.role) || null;
+
+  // Keep the display-only "User Role" label in sync with the linked account's
+  // actual platform role — it must never drift from what really grants access.
+  useEffect(() => {
+    if (!linkedAccountRole) return;
+    const label = PLATFORM_ROLE_LABELS[linkedAccountRole] ?? linkedAccountRole;
+    if (form.user_role !== label) onChange("user_role", label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedAccountRole]);
 
   async function submit() {
     if (!form.first_name || !form.last_name) {
@@ -653,7 +768,7 @@ function EmployeeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl p-0 gap-0 max-h-[92vh] flex flex-col">
+      <DialogContent className="max-w-5xl p-0 gap-0 h-[92vh] flex flex-col">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="text-lg font-bold">
             {isNew ? "New Employee" : `Edit Employee`}
@@ -666,8 +781,9 @@ function EmployeeDialog({
               { value: "personal", label: "Personal Information" },
               { value: "employment", label: "Employment" },
               { value: "payroll", label: "Payroll / Job Costing" },
-              { value: "user_settings", label: "User Settings" },
-              { value: "notes", label: "Notes" },
+              ...(form.is_sales_rep ? [{ value: "sales_goals", label: "Sales Goals" }] : []),
+              ...(can("emp_view_user_settings") ? [{ value: "user_settings", label: "User Settings" }] : []),
+              ...(can("emp_view_resource_notes") ? [{ value: "notes", label: "Notes" }] : []),
             ].map((tab) => (
               <TabsTrigger
                 key={tab.value}
@@ -689,18 +805,27 @@ function EmployeeDialog({
             <TabsContent value="payroll" className="mt-0">
               <PayrollTab form={form} onChange={onChange} />
             </TabsContent>
-            <TabsContent value="user_settings" className="mt-0">
-              <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []} />
-            </TabsContent>
-            <TabsContent value="notes" className="mt-0">
-              <textarea
-                className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
-                rows={10}
-                value={form.notes ?? ""}
-                onChange={(e) => onChange("notes", e.target.value)}
-                placeholder="Add notes about this employee…"
-              />
-            </TabsContent>
+            {form.is_sales_rep && (
+              <TabsContent value="sales_goals" className="mt-0">
+                <SalesGoalsTab form={form} onChange={onChange} />
+              </TabsContent>
+            )}
+            {can("emp_view_user_settings") && (
+              <TabsContent value="user_settings" className="mt-0">
+                <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []} linkedAccountRole={linkedAccountRole} />
+              </TabsContent>
+            )}
+            {can("emp_view_resource_notes") && (
+              <TabsContent value="notes" className="mt-0">
+                <textarea
+                  className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                  rows={10}
+                  value={form.notes ?? ""}
+                  onChange={(e) => onChange("notes", e.target.value)}
+                  placeholder="Add notes about this employee…"
+                />
+              </TabsContent>
+            )}
           </div>
         </Tabs>
 
@@ -787,13 +912,49 @@ function EmployeeDetail({
         <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Employment</p>
         <DetailRow label="Type" value={employee.userType?.replace("_", " ")} />
         <DetailRow label="Manager" value={employee.managerName} />
-        <DetailRow label="Date Hired" value={
-          employee.dateHired
-            ? new Date(employee.dateHired + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
-            : null
-        } />
-        <DetailRow label="Hourly Rate" value={employee.hourlyRateCents > 0 ? formatCurrency(employee.hourlyRateCents) : null} />
-        <DetailRow label="Bill Rate" value={employee.overtimeRateCents > 0 ? formatCurrency(employee.overtimeRateCents) : null} />
+        <DetailRow label="Date Hired" value={formatDetailDate(employee.dateHired)} />
+        {employee.dateReleased && <DetailRow label="Date Released" value={formatDetailDate(employee.dateReleased)} />}
+        {employee.rehireDate && <DetailRow label="Rehire Date" value={formatDetailDate(employee.rehireDate)} />}
+        <DetailRow label="Eligible for OT" value={employee.eligibleOvertime ? "Yes" : null} />
+        <DetailRow label="Compensation Type" value={employee.compensationType} />
+        <DetailRow label="Payment Frequency" value={employee.paymentFrequency} />
+        <DetailRow label="Vacation Days" value={employee.vacationDays > 0 ? employee.vacationDays : null} />
+        <DetailRow label="Sick Days" value={employee.sickDays > 0 ? employee.sickDays : null} />
+        <PermissionGate permission="payroll_show_pay_rate">
+          <DetailRow label="Hourly Rate" value={employee.hourlyRateCents > 0 ? formatCurrency(employee.hourlyRateCents) : null} />
+          <DetailRow label="Overtime Rate" value={employee.overtimeRateCents > 0 ? formatCurrency(employee.overtimeRateCents) : null} />
+          <DetailRow label="Commission %" value={employee.commissionPct > 0 ? `${employee.commissionPct}%` : null} />
+          {employee.lastPayRaiseCents > 0 && (
+            <DetailRow
+              label="Last Pay Raise"
+              value={`${formatCurrency(employee.lastPayRaiseCents)}${employee.lastPayRaiseDate ? ` on ${formatDetailDate(employee.lastPayRaiseDate)}` : ""}`}
+            />
+          )}
+        </PermissionGate>
+
+        {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance) && (
+          <PermissionGate permission="emp_view_license_info">
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Certifications &amp; Licensing</p>
+            <DetailRow label="Driver License #" value={employee.driverLicense} />
+            <DetailRow label="License Expiration" value={formatDetailDate(employee.licenseExpiration)} />
+            <DetailRow label="Certified Driver" value={employee.isCertifiedDriver ? "Yes" : null} />
+            <DetailRow label="Applicator License" value={employee.applicatorLicense} />
+            <DetailRow label="Insurance Eligibility" value={employee.insuranceEligibility} />
+            <DetailRow label="Covered by Insurance" value={employee.coveredByInsurance ? "Yes" : null} />
+          </PermissionGate>
+        )}
+
+        {(employee.birthDate || employee.maritalStatus || employee.spouseName || employee.citizenship) && (
+          <>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Personal</p>
+            <DetailRow label="Birth Date" value={formatDetailDate(employee.birthDate)} />
+            <DetailRow label="Marital Status" value={employee.maritalStatus} />
+            <DetailRow label="Spouse Name" value={employee.spouseName} />
+            <DetailRow label="Spouse Phone" value={employee.spousePhone} />
+            <DetailRow label="Dependants" value={employee.numDependants > 0 ? employee.numDependants : null} />
+            <DetailRow label="Citizenship" value={employee.citizenship} />
+          </>
+        )}
 
         {(employee.emergencyContact || employee.emergencyPhone) && (
           <>
@@ -802,9 +963,30 @@ function EmployeeDetail({
             <DetailRow label="Phone" value={employee.emergencyPhone} />
           </>
         )}
+
+        <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">App Access</p>
+        <DetailRow label="Landscapt Role" value={employee.userRole} />
+        <DetailRow label="Sales Rep" value={employee.isSalesRep ? "Yes" : null} />
+        <DetailRow label="Show in Calendar" value={employee.showInCalendar ? "Yes" : "No"} />
+        <DetailRow label="Time Clock" value={
+          [employee.fieldTimeClock && "Field", employee.officeTimeClock && "Office"].filter(Boolean).join(", ") || null
+        } />
+        <DetailRow label="Linked Login" value={employee.userId ? "Yes" : null} />
+
+        {employee.notes && (
+          <>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{employee.notes}</p>
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+function formatDetailDate(date: string | null | undefined): string | null {
+  if (!date) return null;
+  return new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 
@@ -829,6 +1011,8 @@ function EmployeeTable({
   onActivate: (id: string, name: string) => void;
   colSpan: number;
 }) {
+  const { can } = usePermissions();
+  const showPayRate = can("payroll_show_pay_rate");
   return (
     <table className="w-full text-sm">
       <thead className="sticky top-0 bg-slate-50 z-10">
@@ -839,7 +1023,7 @@ function EmployeeTable({
           <th className="px-4 py-3">Type</th>
           <th className="px-4 py-3">Phone</th>
           <th className="px-4 py-3">Email</th>
-          <th className="px-4 py-3 text-right">Hourly Rate</th>
+          {showPayRate && <th className="px-4 py-3 text-right">Hourly Rate</th>}
           <th className="px-4 py-3">Date Hired</th>
           <th className="w-10 px-4 py-3" />
         </tr>
@@ -888,9 +1072,11 @@ function EmployeeTable({
               <td className="px-4 py-2.5 capitalize text-slate-500 text-xs">{e.userType?.replace("_", " ") ?? "—"}</td>
               <td className="px-4 py-2.5 text-slate-600">{e.cellPhone ?? e.phone ?? "—"}</td>
               <td className="px-4 py-2.5 text-slate-500">{e.email ?? "—"}</td>
-              <td className="px-4 py-2.5 text-right font-medium text-slate-700">
-                {e.hourlyRateCents > 0 ? formatCurrency(e.hourlyRateCents) : "—"}
-              </td>
+              {showPayRate && (
+                <td className="px-4 py-2.5 text-right font-medium text-slate-700">
+                  {e.hourlyRateCents > 0 ? formatCurrency(e.hourlyRateCents) : "—"}
+                </td>
+              )}
               <td className="px-4 py-2.5 text-slate-500">
                 {e.dateHired ? new Date(e.dateHired + "T12:00:00").toLocaleDateString("en-US", {
                   month: "short", day: "numeric", year: "numeric",

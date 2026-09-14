@@ -3,6 +3,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 export interface CreatePaymentIntentResult {
   clientSecret: string;
   connectedAccountId: string;
+  /** false = this client_secret was minted with the org's Stripe TEST key —
+   * confirm it with the matching test-mode publishable key (see
+   * getScopedStripeJs in src/lib/stripe/client.ts). */
+  livemode: boolean;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
@@ -12,6 +16,10 @@ export interface ConnectStatus {
   status: "not_started" | "pending" | "active" | "restricted";
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
+  /** false = this org's Stripe Connect account is a Stripe TEST-mode account
+   * (e.g. the dogfood/sandbox org) — no real money moves through it. Absent/
+   * null/true = live mode (the normal case). */
+  livemode?: boolean | null;
 }
 
 export function useConnectStatus() {

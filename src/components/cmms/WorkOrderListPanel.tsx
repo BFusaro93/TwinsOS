@@ -1,12 +1,12 @@
 "use client";
 
-import { cn, formatDate, getInitials, getAvatarColor } from "@/lib/utils";
+import { cn, formatDate, getInitials, getAvatarColor, todayLocalISODate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useSettingsStore } from "@/stores";
 import { CalendarDays, ChevronDown, GitBranch } from "lucide-react";
@@ -101,7 +101,8 @@ function AssigneeMultiSelect({
 }
 
 export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrderListPanelProps) {
-  const { data: users = [] } = useUsers();
+  const { data: employees = [] } = useSelectableEmployees();
+  const users = employees.map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const { mutate: updateWO } = useUpdateWorkOrder();
   const { woCategories } = useSettingsStore();
 
@@ -125,7 +126,7 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
         const label = wo.assetName ?? wo.title;
         const initials = getInitials(label);
         const avatarColor = getAvatarColor(label);
-        const todayStr = new Date().toISOString().split("T")[0];
+        const todayStr = todayLocalISODate();
         const isFutureWO = !!wo.startDate && wo.startDate > todayStr && wo.status !== "done" && wo.status !== "skipped";
 
         return (

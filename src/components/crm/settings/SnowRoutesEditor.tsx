@@ -63,8 +63,8 @@ function ManageStopsDialog({
     try {
       await addStop.mutateAsync({ routeId, jobId: pickJobId });
       setPickJobId("");
-    } catch {
-      toast.error("Failed to add stop");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add stop");
     }
   }
 

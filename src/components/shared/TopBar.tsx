@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, PanelLeftClose, Plus, Search, UserCog } from "lucide-react";
-import { useUIStore, useCurrentUserStore, useQuickAddStore } from "@/stores";
+import { useUIStore, useCurrentUserStore, useQuickAddStore, useSidebarRailDefault } from "@/stores";
 import type { QuickAddType } from "@/stores/quick-add-store";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -27,8 +27,12 @@ import { Badge } from "@/components/ui/badge";
 import { GlobalSearchDialog } from "@/components/shared/GlobalSearchDialog";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
+import { HelpMenu } from "@/components/shared/HelpMenu";
+import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
+import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -89,19 +93,81 @@ function useBreadcrumbs() {
     support: "Support",
     photos: "Photo Docs",
     jobs: "Job Photos",
+    "job-photos": "Job Photos",
     dashboards: "Dashboards",
     home: "Home",
+    crm: "Landscapt",
+    clients: "Clients",
+    leads: "Leads",
+    estimates: "Estimates",
+    tickets: "Tickets",
+    invoices: "Invoices",
+    contracts: "Contracts",
+    scheduling: "Scheduling",
+    accounting: "Accounting",
+    communication: "Communication",
+    "sales-meetings": "Sales Meetings",
+    admin: "Admin",
+    documents: "Documents",
+    forms: "Forms",
+    analysis: "Analysis",
+    dispatch: "Dispatch Board",
+    "waiting-list": "Waiting List",
+    crew: "Crew",
+    stops: "Stops",
+    r: "Report",
+  };
+
+  // Label for a UUID segment, keyed by the collection segment before it —
+  // previously every UUID read "Job Details", so /crm/clients/{id} and
+  // /crm/estimates/{id} both showed "… / job details".
+  const detailLabels: Record<string, string> = {
+    clients: "Client Details",
+    leads: "Lead Details",
+    estimates: "Estimate Details",
+    tickets: "Ticket Details",
+    invoices: "Invoice Details",
+    contracts: "Contract Details",
+    jobs: "Job Details",
+    projects: "Project Details",
+    orders: "Purchase Order Details",
+    requisitions: "Requisition Details",
+    receiving: "Receipt Details",
+    vendors: "Vendor Details",
+    products: "Product Details",
+    "work-orders": "Work Order Details",
+    requests: "Request Details",
+    "pm-schedules": "PM Schedule Details",
+    assets: "Asset Details",
+    vehicles: "Vehicle Details",
+    parts: "Part Details",
+    meters: "Meter Details",
+    automations: "Automation Details",
+    documents: "Document Details",
+    forms: "Form Details",
+    analysis: "Analysis Details",
+    dashboards: "Dashboard Details",
+    stops: "Stop Details",
   };
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  return segments.map((seg) => {
-    if (UUID_RE.test(seg)) return "Job Details";
+  return segments.map((seg, i) => {
+    if (UUID_RE.test(seg)) {
+      const parent = i > 0 ? segments[i - 1] : "";
+      return detailLabels[parent] ?? "Details";
+    }
     return labels[seg] ?? seg;
   });
 }
 
-const CRM_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
+/** A quick-add entry either opens a QuickAdd overlay dialog (`quickAdd`) or
+ *  navigates to a page (`href`). Overlay dialogs are mounted only by the
+ *  Equipt and CRM shells — a shell without them (Photos, Dashboards) must use
+ *  `href` entries or the menu item silently does nothing. */
+type QuickAddItem = { label: string; quickAdd?: NonNullable<QuickAddType>; href?: string };
+
+const CRM_QUICK_ADD: QuickAddItem[] = [
   { label: "Client",   quickAdd: "client" },
   { label: "Estimate", quickAdd: "estimate" },
   { label: "Ticket",   quickAdd: "ticket" },
@@ -109,29 +175,36 @@ const CRM_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
   { label: "Payment",  quickAdd: "payment" },
 ];
 
-const EQUIPT_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
+const EQUIPT_QUICK_ADD: QuickAddItem[] = [
   { label: "Requisition",    quickAdd: "requisition" },
   { label: "Purchase Order", quickAdd: "purchase_order" },
   { label: "Work Order",     quickAdd: "work_order" },
   { label: "Vendor",         quickAdd: "vendor" },
 ];
 
-const CREW_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
-  { label: "Requisition", quickAdd: "requisition" },
-  { label: "Work Order",  quickAdd: "work_order" },
+// Crew live in the Photos/Dashboards shells, which don't mount the Equipt
+// quick-add dialogs (the old Requisition / Work Order entries here opened
+// nothing). Crew don't create work orders — they file a repair request, which
+// the office turns into one.
+const CREW_QUICK_ADD: QuickAddItem[] = [
+  { label: "Repair Request", href: "/photos/field/repair-request" },
 ];
 
 function QuickAddMenu() {
   const pathname = usePathname();
+  const router = useRouter();
   const { currentUser } = useCurrentUserStore();
   const { open: openQuickAdd } = useQuickAddStore();
+  const { can } = usePermissions();
   const isCRM = pathname.startsWith("/crm");
 
-  const items = currentUser.role === "crew"
-    ? CREW_QUICK_ADD
-    : isCRM
-      ? CRM_QUICK_ADD
-      : EQUIPT_QUICK_ADD;
+  const items = (
+    currentUser.role === "crew"
+      ? CREW_QUICK_ADD
+      : isCRM
+        ? CRM_QUICK_ADD
+        : EQUIPT_QUICK_ADD
+  ).filter((item) => item.quickAdd !== "client" || can("client_add"));
 
   return (
     <DropdownMenu>
@@ -149,7 +222,13 @@ function QuickAddMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.map((item) => (
-          <DropdownMenuItem key={item.label} onSelect={() => openQuickAdd(item.quickAdd!)}>
+          <DropdownMenuItem
+            key={item.label}
+            onSelect={() => {
+              if (item.href) router.push(item.href);
+              else if (item.quickAdd) openQuickAdd(item.quickAdd);
+            }}
+          >
             {item.label}
           </DropdownMenuItem>
         ))}
@@ -158,7 +237,9 @@ function QuickAddMenu() {
   );
 }
 
-export function TopBar() {
+/** `sidebarToggle={false}` hides the hamburger / collapse buttons for shells
+ *  that render no sidebar (the crew field app inside the CRM layout). */
+export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {}) {
   const { toggleSidebar, setSidebarOpen } = useUIStore();
   const { currentUser, setCurrentUser } = useCurrentUserStore();
   const { data: orgUsers = [] } = useUsers();
@@ -169,29 +250,37 @@ export function TopBar() {
 
   // Sync the currentUser store with the live Supabase session on mount
   useSyncCurrentUser();
+  // Landscape tablets / small laptop windows start on the icon rail
+  useSidebarRailDefault();
 
   return (
     <>
     <EditProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
+    <ImpersonationBanner />
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
-      {/* Mobile hamburger — opens sidebar drawer */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setSidebarOpen(true)}
-        className="shrink-0 text-slate-500 md:hidden"
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
-      {/* Desktop collapse toggle */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={toggleSidebar}
-        className="hidden shrink-0 text-slate-500 md:inline-flex"
-      >
-        <PanelLeftClose className="h-5 w-5" />
-      </Button>
+      {sidebarToggle && (
+        <>
+          {/* Hamburger — opens the drawer sidebar. Shown wherever the sidebar
+              isn't docked (phones and portrait tablets), matching the shells. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(true)}
+            className="shrink-0 text-slate-500 lg:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          {/* Collapse toggle — only meaningful where the sidebar is docked */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="hidden shrink-0 text-slate-500 lg:inline-flex"
+          >
+            <PanelLeftClose className="h-5 w-5" />
+          </Button>
+        </>
+      )}
 
       {/* Breadcrumbs */}
       <nav className="hidden items-center gap-1 text-sm text-slate-500 sm:flex lowercase">
@@ -226,6 +315,8 @@ export function TopBar() {
 
       {/* Quick Add */}
       <QuickAddMenu />
+
+      <HelpMenu />
 
       {/* Notifications — hidden for crew users (they only need photo access, not CMMS/PO alerts) */}
       {currentUser.role !== "crew" && <NotificationsBell />}
@@ -289,7 +380,11 @@ export function TopBar() {
 
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProfileOpen(true)}>Profile</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => router.push("/settings")}>Settings</DropdownMenuItem>
+          {/* /settings shows non-admins only their OAuth Connected Apps — meaningless
+              for a shared crew tablet login, so don't offer it. */}
+          {currentUser.role !== "crew" && (
+            <DropdownMenuItem onSelect={() => router.push("/settings")}>Settings</DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-red-600"
@@ -304,6 +399,7 @@ export function TopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
+    <SupportChatWidget />
     </>
   );
 }

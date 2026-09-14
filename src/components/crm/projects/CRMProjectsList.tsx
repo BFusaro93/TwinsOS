@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useProjects, useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useInvoices } from "@/lib/hooks/use-invoices";
@@ -11,6 +12,16 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MilestoneScheduleEditor } from "@/components/crm/billing/MilestoneScheduleEditor";
+import { ChangeOrdersTab } from "./ChangeOrdersTab";
+import { NewInvoiceSheet } from "@/components/crm/invoices/NewInvoiceSheet";
+import { AddPaymentDialog } from "@/components/crm/payments/PaymentsList";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +35,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
-import { Plus, Search, Pencil, FileText, TrendingUp, BarChart3 } from "lucide-react";
+import { formatCurrency, cn, todayLocalISODate } from "@/lib/utils";
+import { useSettingsStore } from "@/stores/settings-store";
+import { Plus, Search, Pencil, FileText, TrendingUp, BarChart3, ChevronDown, DollarSign, Receipt } from "lucide-react";
 import { toast } from "sonner";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { Project, ProjectStatus } from "@/types/project";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -63,15 +76,44 @@ function ProgressBar({ pct }: { pct: number }) {
   );
 }
 
-// ── milestone tab (stub) ──────────────────────────────────────────────────────
+// ── milestone tab ─────────────────────────────────────────────────────────────
 
 function MilestoneTab({ project }: { project: Project }) {
+  const { can } = usePermissions();
+  const canInvoice = can("acct_add_modify_invoices");
+
+  if (!project.clientId) {
+    return (
+      <div className="rounded-lg border bg-slate-50 p-4 text-sm text-slate-500">
+        <p className="mb-1 font-medium text-slate-700">Milestones</p>
+        <p>
+          Link <span className="font-medium">{project.name}</span> to a client before setting up a
+          billing schedule — a milestone invoice needs someone to bill.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border bg-slate-50 p-4 text-sm text-slate-500">
-        <p className="font-medium text-slate-700 mb-1">Milestones</p>
-        <p>Sub-jobs and milestones for <span className="font-medium">{project.name}</span> will appear here. Assign jobs to this project from the Dispatch Board or Job detail.</p>
+      <div>
+        <h3 className="text-sm font-semibold text-slate-700">Billing Schedule</h3>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Percentages are of the revised contract ({formatCurrency(project.contractPrice)}). Invoicing a
+          milestone creates a draft invoice on this project — and marks it invoiced on the estimate it
+          came from, since they are the same schedule. An approved change order adjusts the milestones
+          that haven&apos;t been invoiced yet, so anything already billed stays put.
+        </p>
       </div>
+      <MilestoneScheduleEditor
+        projectId={project.id}
+        clientId={project.clientId}
+        salesRepId={null}
+        totalCents={project.contractPrice}
+        showTargetDate
+        readOnly={!canInvoice}
+        basisLabel="contract price"
+      />
     </div>
   );
 }
@@ -81,25 +123,41 @@ function MilestoneTab({ project }: { project: Project }) {
 type BillingFilter = "all" | "invoice" | "payment" | "credit";
 
 function BillingTab({ project }: { project: Project }) {
+  const router = useRouter();
+  const { can } = usePermissions();
+  const canInvoice = can("acct_add_modify_invoices");
+  const canPay = can("acct_add_modify_payments");
   const [filter, setFilter] = useState<BillingFilter>("all");
-  // Only scope billing to this project's client — without a linked client_id
-  // there's no way to attribute invoices/payments to this project, so show
-  // nothing rather than the whole org's unrelated billing activity.
-  const { data: invoices } = useInvoices(project.clientId ?? undefined);
-  const { data: payments } = usePayments(project.clientId ?? undefined);
-  const hasClient = !!project.clientId;
+  const [newInvoiceOpen, setNewInvoiceOpen] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<"payment" | "credit" | null>(null);
+
+  // Scoped to the PROJECT, not the client. Billing by client listed every
+  // invoice the client had — a $200/mo mowing route showed up under a $40k
+  // patio project and was counted against its budget on the Analysis tab.
+  // A project with no client can't own billing at all, so `null` fetches
+  // nothing rather than falling back to the whole ledger.
+  const scope = project.clientId ? { projectId: project.id } : { projectId: null };
+  const { data: invoices } = useInvoices(project.clientId ?? undefined, scope);
+  const { data: payments } = usePayments(project.clientId ?? undefined, scope);
 
   const rows = [
-    ...(hasClient ? invoices ?? [] : []).map((inv) => ({
-      type: "Invoice" as const,
+    ...(invoices ?? []).map((inv) => ({
+      kind: "invoice" as BillingFilter,
+      id: inv.id,
+      type: "Invoice",
       date: inv.invoiceDate,
-      ref: inv.invoiceNumber != null ? String(inv.invoiceNumber) : "",
+      ref: inv.invoiceNumber != null ? String(inv.invoiceNumber) : "Draft",
       memo: inv.description,
       status: inv.status,
       totalCents: inv.totalCents,
     })),
-    ...(hasClient ? payments ?? [] : []).map((p) => ({
-      type: "Payment" as const,
+    // A credit is a crm_payments row flagged is_credit — that's what the
+    // Credit filter was always meant to select. It matched nothing before
+    // because every payment was labelled "Payment".
+    ...(payments ?? []).map((p) => ({
+      kind: (p.isCredit ? "credit" : "payment") as BillingFilter,
+      id: p.id,
+      type: p.isCredit ? "Credit" : "Payment",
       date: p.paymentDate,
       ref: p.reference ?? "",
       memo: p.memo ?? "",
@@ -108,15 +166,39 @@ function BillingTab({ project }: { project: Project }) {
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const filtered = filter === "all" ? rows : rows.filter((r) => r.type.toLowerCase() === filter);
+  const filtered = filter === "all" ? rows : rows.filter((r) => r.kind === filter);
 
   return (
     <div className="space-y-3">
       {/* filter bar */}
-      <div className="flex items-center gap-2">
-        <div className="rounded bg-[#4a4a4a] px-2 py-1">
-          <span className="text-xs font-semibold text-white">Actions</span>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              className="h-7 gap-1 bg-[#4a4a4a] px-2 text-xs font-semibold text-white hover:bg-[#3a3a3a]"
+              disabled={!project.clientId || (!canInvoice && !canPay)}
+              title={!project.clientId ? "Link a client to bill this project" : undefined}
+            >
+              Actions
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuItem disabled={!canInvoice} onSelect={() => setNewInvoiceOpen(true)}>
+              <FileText className="mr-2 h-3.5 w-3.5" />
+              New Invoice
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!canPay} onSelect={() => setPaymentMode("payment")}>
+              <DollarSign className="mr-2 h-3.5 w-3.5" />
+              Record Payment
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!canPay} onSelect={() => setPaymentMode("credit")}>
+              <Receipt className="mr-2 h-3.5 w-3.5" />
+              Issue Credit
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {(["all", "invoice", "payment", "credit"] as BillingFilter[]).map((f) => (
           <button
             key={f}
@@ -131,6 +213,12 @@ function BillingTab({ project }: { project: Project }) {
           </button>
         ))}
       </div>
+
+      {!project.clientId && (
+        <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          This project isn&apos;t linked to a client, so it can&apos;t be billed. Edit the project to link one.
+        </p>
+      )}
 
       {/* table */}
       <div className="overflow-auto rounded border">
@@ -153,8 +241,12 @@ function BillingTab({ project }: { project: Project }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((r, i) => (
-                <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
+              filtered.map((r) => (
+                <tr
+                  key={`${r.kind}-${r.id}`}
+                  className={`border-b last:border-0 hover:bg-slate-50 ${r.kind === "invoice" ? "cursor-pointer" : ""}`}
+                  onClick={r.kind === "invoice" ? () => router.push(`/crm/accounting/invoices/${r.id}`) : undefined}
+                >
                   <td className="px-3 py-2 text-slate-600">
                     {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
@@ -177,6 +269,23 @@ function BillingTab({ project }: { project: Project }) {
           </tbody>
         </table>
       </div>
+
+      {project.clientId && (
+        <>
+          <NewInvoiceSheet
+            open={newInvoiceOpen}
+            onClose={() => setNewInvoiceOpen(false)}
+            defaultClientId={project.clientId}
+            defaultProjectId={project.id}
+          />
+          <AddPaymentDialog
+            open={paymentMode !== null}
+            onOpenChange={(o) => !o && setPaymentMode(null)}
+            defaultClientId={project.clientId}
+            mode={paymentMode ?? "payment"}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -184,12 +293,30 @@ function BillingTab({ project }: { project: Project }) {
 // ── analysis tab ──────────────────────────────────────────────────────────────
 
 function AnalysisTab({ project }: { project: Project }) {
-  const { data: invoices } = useInvoices(project.clientId ?? undefined);
-  const { data: payments } = usePayments(project.clientId ?? undefined);
+  // Project-scoped, matching the Billing tab. These were client-scoped, so
+  // every unrelated invoice the client had inflated "Invoiced" and "Amount
+  // Due" against this project's contract price.
+  const scope = project.clientId ? { projectId: project.id } : { projectId: null };
+  const { data: invoices } = useInvoices(project.clientId ?? undefined, scope);
+  const { data: payments } = usePayments(project.clientId ?? undefined, scope);
 
-  const totalInvoiced = (invoices ?? []).reduce((s, inv) => s + inv.totalCents, 0);
+  // A voided invoice was never receivable — counting it as billed overstates
+  // revenue and understates what's left to bill. Mirrors rpt_projects_wip.
+  const totalInvoiced = (invoices ?? [])
+    .filter((inv) => inv.status !== "void")
+    .reduce((s, inv) => s + inv.totalCents, 0);
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amountCents, 0);
   const amountDue = totalInvoiced - totalPayments;
+  const remainingToBill = project.contractPrice - totalInvoiced;
+
+  // Budgeted labor cost = budgeted hours × the fully-loaded (burdened) rate
+  // captured on the project, falling back to the plain labor rate. Never the
+  // PO/material total (project.totalCost) — that's a different number.
+  const budgetRateCents = project.burdenedRateCents ?? project.laborRateCents;
+  const budgetedLaborCostCents =
+    project.budgetHours != null && budgetRateCents != null
+      ? Math.round(project.budgetHours * budgetRateCents)
+      : null;
 
   return (
     <div className="space-y-6">
@@ -198,11 +325,12 @@ function AnalysisTab({ project }: { project: Project }) {
         <h3 className="mb-3 text-sm font-semibold text-slate-700">Project Overview</h3>
         <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-slate-100">
           {[
-            { label: "Projected Revenue", value: formatCurrency(project.contractPrice) },
+            { label: "Original Contract", value: formatCurrency(project.originalContractPrice) },
             { label: "Amount Due", value: formatCurrency(amountDue), red: amountDue > 0 },
             { label: "Invoiced", value: formatCurrency(totalInvoiced) },
             { label: "Payments", value: formatCurrency(totalPayments) },
-            { label: "Contract Price", value: formatCurrency(project.contractPrice) },
+            { label: "Revised Contract", value: formatCurrency(project.contractPrice) },
+            { label: "Remaining to Bill", value: formatCurrency(remainingToBill), red: remainingToBill < 0 },
             { label: "Total Cost", value: formatCurrency(project.totalCost) },
           ].map((row) => (
             <div key={row.label} className="flex items-center justify-between bg-white px-4 py-2.5 text-sm">
@@ -220,9 +348,9 @@ function AnalysisTab({ project }: { project: Project }) {
         <h3 className="mb-3 text-sm font-semibold text-slate-700">Job / Activity Overview</h3>
         <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-slate-100">
           {[
-            { label: "Budgeted Man Hours", value: project.laborHours != null ? `${project.laborHours} Hrs` : "—" },
-            { label: "Actual Man Hours", value: "—" },
-            { label: "Budgeted Labor Cost", value: formatCurrency(project.totalCost) },
+            { label: "Budgeted Man Hours", value: project.budgetHours != null ? `${project.budgetHours} Hrs` : "—" },
+            { label: "Actual Man Hours", value: project.laborHours != null ? `${project.laborHours} Hrs` : "—" },
+            { label: "Budgeted Labor Cost", value: budgetedLaborCostCents != null ? formatCurrency(budgetedLaborCostCents) : "—" },
             { label: "Actual Labor Cost", value: "—" },
           ].map((row) => (
             <div key={row.label} className="flex items-center justify-between bg-white px-4 py-2.5 text-sm">
@@ -280,12 +408,20 @@ function ProjectDetailDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const [editMode, setEditMode] = useState(false);
+  const router = useRouter();
+
+  // useInvoices already sorts newest-first (invoice_date desc, number desc).
+  const { data: projectInvoices } = useInvoices(
+    project.clientId ?? undefined,
+    project.clientId ? { projectId: project.id } : { projectId: null },
+  );
+  const latestInvoice = projectInvoices?.[0];
 
   const clientLabel = project.clientName ?? project.customerName;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between border-b px-6 py-4">
           <div>
@@ -314,7 +450,17 @@ function ProjectDetailDialog({
                 {project.progressPct.toFixed(2)}%
               </span>
             </div>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+            {/* Was a dead button with no handler. Opens this project's most
+                recent invoice; disabled outright when there isn't one, rather
+                than looking clickable and doing nothing. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1 text-xs"
+              disabled={!latestInvoice}
+              title={latestInvoice ? undefined : "No invoices on this project yet"}
+              onClick={() => latestInvoice && router.push(`/crm/accounting/invoices/${latestInvoice.id}`)}
+            >
               <FileText className="h-3.5 w-3.5" />
               View Invoice
             </Button>
@@ -326,6 +472,7 @@ function ProjectDetailDialog({
           <TabsList className="shrink-0 border-b bg-slate-100 rounded-none justify-start px-4 py-0 h-10 gap-0">
             {[
               { value: "milestone", label: "Milestone" },
+              { value: "changeorders", label: "Change Orders" },
               { value: "billing", label: "Billing" },
               { value: "analysis", label: "Analysis" },
               { value: "notes", label: "Notes & Attachments" },
@@ -340,25 +487,26 @@ function ProjectDetailDialog({
               </TabsTrigger>
             ))}
           </TabsList>
-          <div className="flex-1 overflow-auto p-6">
-            <TabsContent value="milestone" className="mt-0">
-              <MilestoneTab project={project} />
-            </TabsContent>
-            <TabsContent value="billing" className="mt-0">
-              <BillingTab project={project} />
-            </TabsContent>
-            <TabsContent value="analysis" className="mt-0">
-              <AnalysisTab project={project} />
-            </TabsContent>
-            <TabsContent value="notes" className="mt-0">
-              <NotesTab project={project} />
-            </TabsContent>
-            <TabsContent value="audit" className="mt-0">
-              <div className="rounded-lg border bg-slate-50 p-6 text-center text-sm text-slate-400">
-                Audit trail coming soon
-              </div>
-            </TabsContent>
-          </div>
+          <TabsContent value="milestone" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <MilestoneTab project={project} />
+          </TabsContent>
+          <TabsContent value="changeorders" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <ChangeOrdersTab project={project} />
+          </TabsContent>
+          <TabsContent value="billing" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <BillingTab project={project} />
+          </TabsContent>
+          <TabsContent value="analysis" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <AnalysisTab project={project} />
+          </TabsContent>
+          <TabsContent value="notes" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <NotesTab project={project} />
+          </TabsContent>
+          <TabsContent value="audit" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <div className="rounded-lg border bg-slate-50 p-6 text-center text-sm text-slate-400">
+              Audit trail coming soon
+            </div>
+          </TabsContent>
         </Tabs>
       </DialogContent>
 
@@ -382,14 +530,25 @@ function NewProjectDialog({
   const { data: clients } = useClients();
   const { mutateAsync: create, isPending: creating } = useCreateProject();
   const { mutateAsync: update, isPending: updating } = useUpdateProject();
+  const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
   const isEditing = !!project;
   const isPending = creating || updating;
 
+  // Date defaults must be the browser's LOCAL calendar date — the UTC date
+  // (toISOString) is already tomorrow after ~8 PM Eastern.
   const [name, setName] = useState(project?.name ?? "");
   const [clientId, setClientId] = useState(project?.clientId ?? "");
   const [address, setAddress] = useState(project?.address ?? "");
-  const [contractPrice, setContractPrice] = useState(project ? String((project.contractPrice ?? 0) / 100) : "");
-  const [startDate, setStartDate] = useState(project?.startDate ?? new Date().toISOString().split("T")[0]);
+  const [city, setCity] = useState(project?.city ?? "");
+  const [state, setState] = useState(project?.state ?? "");
+  const [zip, setZip] = useState(project?.zip ?? "");
+  // The editable figure is the ORIGINAL contract. The revised one shown on the
+  // project is derived (original + approved change orders) and is maintained by
+  // the database, so editing it here would just be overwritten.
+  const [contractPrice, setContractPrice] = useState(project ? String((project.originalContractPrice ?? 0) / 100) : "");
+  const [startDate, setStartDate] = useState(project?.startDate ?? todayLocalISODate());
+  const [endDate, setEndDate] = useState(project?.endDate ?? "");
+  const [budgetHours, setBudgetHours] = useState(project?.budgetHours != null ? String(project.budgetHours) : "");
   const [status, setStatus] = useState<ProjectStatus>(project?.status ?? "sold");
 
   // Re-sync form state if a different project is opened for editing (dialog
@@ -400,19 +559,44 @@ function NewProjectDialog({
     setName(project?.name ?? "");
     setClientId(project?.clientId ?? "");
     setAddress(project?.address ?? "");
-    setContractPrice(project ? String((project.contractPrice ?? 0) / 100) : "");
-    setStartDate(project?.startDate ?? new Date().toISOString().split("T")[0]);
+    setCity(project?.city ?? "");
+    setState(project?.state ?? "");
+    setZip(project?.zip ?? "");
+    setContractPrice(project ? String((project.originalContractPrice ?? 0) / 100) : "");
+    setStartDate(project?.startDate ?? todayLocalISODate());
+    setEndDate(project?.endDate ?? "");
+    setBudgetHours(project?.budgetHours != null ? String(project.budgetHours) : "");
     setStatus(project?.status ?? "sold");
   }, [open, project]);
 
   function reset() {
-    setName(""); setClientId(""); setAddress("");
+    setName(""); setClientId(""); setAddress(""); setCity(""); setState(""); setZip("");
     setContractPrice(""); setStatus("sold");
-    setStartDate(new Date().toISOString().split("T")[0]);
+    setStartDate(todayLocalISODate());
+    setEndDate("");
+    setBudgetHours("");
   }
+
+  // Picking a client with no address typed yet pre-fills the site address
+  // from the client's billing address (still editable).
+  function handleClientChange(nextClientId: string) {
+    setClientId(nextClientId);
+    const c = (clients ?? []).find((x) => x.id === nextClientId);
+    if (c && !address && !city && !state && !zip) {
+      setAddress(c.billingAddress ?? "");
+      setCity(c.billingCity ?? "");
+      setState(c.billingState ?? "");
+      setZip(c.billingZip ?? "");
+    }
+  }
+
+  const endBeforeStart = !!endDate && !!startDate && endDate < startDate;
 
   async function submit() {
     if (!name) { toast.error("Project name is required"); return; }
+    if (endBeforeStart) { toast.error("End date must be on or after the start date"); return; }
+    const parsedBudgetHours = parseFloat(budgetHours);
+    const budgetHoursValue = Number.isFinite(parsedBudgetHours) && parsedBudgetHours > 0 ? parsedBudgetHours : null;
     const selectedClient = (clients ?? []).find((c) => c.id === clientId);
     try {
       if (isEditing && project) {
@@ -420,9 +604,14 @@ function NewProjectDialog({
           id: project.id,
           name,
           customerName: selectedClient?.displayName ?? project.customerName,
-          address: address || selectedClient?.billingAddress || project.address,
+          address,
+          city,
+          state,
+          zip,
           status,
           startDate,
+          endDate: endDate || null,
+          budgetHours: budgetHoursValue,
           contractPrice: Math.round(parseFloat(contractPrice || "0") * 100),
           clientId: clientId || null,
         });
@@ -431,20 +620,23 @@ function NewProjectDialog({
         await create({
           name,
           customerName: selectedClient?.displayName ?? "",
-          address: address || selectedClient?.billingAddress || "",
-          city: selectedClient?.billingCity || "",
-          state: selectedClient?.billingState || "",
-          zip: selectedClient?.billingZip || "",
+          address,
+          city,
+          state,
+          zip,
           status,
           startDate,
-          endDate: null,
+          endDate: endDate || null,
           laborHours: null,
           notes: null,
           contractPrice: Math.round(parseFloat(contractPrice || "0") * 100),
           clientId: clientId || null,
-          budgetHours: null,
-          laborRateCents: null,
-          burdenedRateCents: null,
+          budgetHours: budgetHoursValue,
+          // Snapshot the org's current labor rates so Budgeted Labor Cost
+          // (budget_hours × burdened rate) is computable on the Analysis tab —
+          // same as the PO-side NewProjectDialog.
+          laborRateCents: breakevenLaborRateCents || null,
+          burdenedRateCents: burdenedLaborRateCents || null,
         });
         toast.success("Project created");
         reset();
@@ -466,7 +658,7 @@ function NewProjectDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Client</Label>
-            <Select value={clientId} onValueChange={setClientId}>
+            <Select value={clientId} onValueChange={handleClientChange}>
               <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
               <SelectContent>
                 {(clients ?? []).map((c) => (
@@ -475,6 +667,29 @@ function NewProjectDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Site address — split street / city / state / zip (mirrors the PO NewProjectDialog) */}
+          <div className="flex flex-col gap-1.5">
+            <Label>Site Address</Label>
+            <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label>City</Label>
+              <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Springfield" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <Label>State</Label>
+                <Input value={state} onChange={(e) => setState(e.target.value)} placeholder="MA" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>ZIP</Label>
+                <Input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="01234" />
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Status</Label>
@@ -488,23 +703,55 @@ function NewProjectDialog({
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
+              <Label>Budgeted Hours</Label>
+              <Input
+                type="number" step="any" min="0"
+                value={budgetHours}
+                onChange={(e) => setBudgetHours(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
               <Label>Start Date</Label>
               <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>End Date</Label>
+              <Input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => setEndDate(e.target.value)}
+                aria-invalid={endBeforeStart || undefined}
+                className={endBeforeStart ? "border-red-400 focus-visible:ring-red-400" : undefined}
+              />
+              {endBeforeStart && (
+                <p className="text-xs text-red-600">End date must be on or after the start date.</p>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Contract Price ($)</Label>
+            <Label>{isEditing ? "Original Contract Price ($)" : "Contract Price ($)"}</Label>
             <Input
               type="number" step="0.01" min="0"
               value={contractPrice}
               onChange={(e) => setContractPrice(e.target.value)}
               placeholder="0.00"
             />
+            {isEditing && project && project.contractPrice !== project.originalContractPrice && (
+              <p className="text-[11px] text-slate-500">
+                Revised contract is {formatCurrency(project.contractPrice)} after approved change
+                orders. Record added scope as a change order rather than editing this — it keeps the
+                original, the approval and the billing schedule in step.
+              </p>
+            )}
           </div>
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => { if (!isEditing) reset(); onOpenChange(false); }}>Cancel</Button>
-          <Button onClick={submit} disabled={isPending}>
+          <Button onClick={submit} disabled={isPending || endBeforeStart}>
             {isEditing ? (isPending ? "Saving…" : "Save Changes") : (isPending ? "Creating…" : "Create Project")}
           </Button>
         </div>
@@ -516,6 +763,8 @@ function NewProjectDialog({
 // ── main list ─────────────────────────────────────────────────────────────────
 
 export function CRMProjectsList() {
+  const { can } = usePermissions();
+  const canModify = can("sched_add_modify_projects");
   const { data: projects, isLoading } = useProjects(true);
   const [search, setSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -535,9 +784,11 @@ export function CRMProjectsList() {
           <h1 className="text-xl font-semibold text-slate-900">Projects</h1>
           <p className="text-sm text-slate-500">Manage all client projects, milestones, and billing</p>
         </div>
-        <Button size="sm" onClick={() => setNewOpen(true)}>
-          <Plus className="mr-1.5 h-4 w-4" /> New Project
-        </Button>
+        {canModify && (
+          <Button size="sm" onClick={() => setNewOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" /> New Project
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -591,8 +842,8 @@ export function CRMProjectsList() {
               filtered.map((p) => (
                 <tr
                   key={p.id}
-                  className="border-b hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setSelectedProject(p)}
+                  className={cn("border-b hover:bg-slate-50", canModify && "cursor-pointer")}
+                  onClick={canModify ? () => setSelectedProject(p) : undefined}
                 >
                   <td className="px-4 py-3 font-medium text-brand-600">{p.name}</td>
                   <td className="px-4 py-3 text-slate-600">
@@ -615,13 +866,15 @@ export function CRMProjectsList() {
                     }) : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
-                      onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
-                      title="Open project"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    {canModify && (
+                      <button
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+                        onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
+                        title="Open project"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

@@ -11,7 +11,7 @@ interface ResolvedSmsContent {
 /** Resolves a text-message step's [mergetag] placeholders against the client/org context. */
 export async function resolveSmsStepContent(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; bodyTemplate: string }
+  params: { orgId: string; clientId: string; meetingId?: string | null; bodyTemplate: string }
 ): Promise<ResolvedSmsContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
@@ -28,6 +28,23 @@ export async function resolveSmsStepContent(
     .eq("id", params.orgId)
     .single();
 
+  let meetingDate = "";
+  let meetingTime = "";
+  let meetingLocation = "";
+  if (params.meetingId) {
+    const { data: meeting } = await supabase
+      .from("crm_sales_meetings")
+      .select("scheduled_at, location")
+      .eq("id", params.meetingId)
+      .single();
+    if (meeting) {
+      const when = new Date(meeting.scheduled_at as string);
+      meetingDate = when.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+      meetingTime = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      meetingLocation = (meeting.location as string | null) ?? "";
+    }
+  }
+
   const clientDisplayName = (client.display_name as string) ?? "";
   const clientFirstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
   const orgName = (orgRow?.name as string) ?? "Your Service Provider";
@@ -36,6 +53,9 @@ export async function resolveSmsStepContent(
     "[clientfirstname]": clientFirstName,
     "[clientfullname]": clientDisplayName,
     "[companyname]": orgName,
+    "[meetingdate]": meetingDate,
+    "[meetingtime]": meetingTime,
+    "[meetinglocation]": meetingLocation,
   };
   const resolve = (template: string) =>
     template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);

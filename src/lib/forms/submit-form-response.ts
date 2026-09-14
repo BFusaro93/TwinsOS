@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 /** File-upload answers are stored as `{path, name, size}` objects (see
  *  FormResponses.tsx) — plain string interpolation of one produces
@@ -18,15 +19,8 @@ function formatFormFieldValue(value: unknown): string {
 // formData is submitted through the fully anonymous public form endpoint —
 // interpolating it unescaped into the notification email's HTML body let a
 // crafted field value inject markup (link/button spoofing, layout
-// injection) into the staff-facing email.
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+// injection) into the staff-facing email. (escapeHtml itself now lives in
+// lib/utils/escape-html — see its own comment for why.)
 
 interface FormEmailNotification {
   recipients: string; // comma-separated emails, or "account" for the submitter
@@ -35,6 +29,137 @@ interface FormEmailNotification {
   subject: string;
   body: string;
   sendCopy?: boolean; // append the full raw submission (all fields) below the body
+}
+
+// Mirrors src/app/forms/[slug]/page.tsx's DISPLAY_TYPES/MULTI_VALUE_TYPES and
+// ruleConditionMatches() — kept in sync deliberately since this is the
+// server-side re-check of exactly what that client-side validation does.
+const DISPLAY_TYPES = new Set(["header", "paragraph", "divider", "hidden"]);
+const MULTI_VALUE_TYPES = new Set(["checklist"]);
+
+function ruleConditionMatches(value: string, operator: string, operand: string | null): boolean {
+  const v = value ?? "";
+  const op = operand ?? "";
+  switch (operator) {
+    case "equals": return v === op;
+    case "not_equals": return v !== op;
+    case "greater_than": return parseFloat(v) > parseFloat(op);
+    case "less_than": return parseFloat(v) < parseFloat(op);
+    case "contains": return v.toLowerCase().includes(op.toLowerCase());
+    case "is_empty": return v.trim() === "";
+    case "is_not_empty": return v.trim() !== "";
+    default: return false;
+  }
+}
+
+interface FormFieldRow {
+  id: string;
+  label: string;
+  field_type: string;
+  required: boolean | null;
+}
+
+/** An attachment answer's {path,name,size} was never checked against the
+ *  actual Storage object it claims to reference — a raw POST to the public
+ *  submit endpoint could fabricate a path/size for a file that was never
+ *  uploaded. Confirms the path is scoped under this form's own folder (the
+ *  upload flow in src/app/forms/[slug]/page.tsx always writes to
+ *  `${form.id}/${uuid}-${filename}`) and that an object with that exact name
+ *  actually exists in the form-attachments bucket. */
+async function attachmentPathExists(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  formId: string,
+  path: string
+): Promise<boolean> {
+  if (!path.startsWith(`${formId}/`)) return false;
+  const fileName = path.slice(formId.length + 1);
+  if (!fileName) return false;
+  const { data, error } = await db.storage
+    .from("form-attachments")
+    .list(formId, { search: fileName, limit: 1 });
+  if (error) return false;
+  return (data ?? []).some((f: { name: string }) => f.name === fileName);
+}
+
+/** Returns the labels of every attachment-type field whose submitted value
+ *  isn't a well-formed {path,name,size} object referencing a real, previously
+ *  uploaded object — empty when every submitted attachment answer checks out.
+ *  Fields with no value are skipped here; findMissingRequiredFields already
+ *  covers "required but empty". */
+async function findInvalidAttachments(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  formId: string,
+  formFields: FormFieldRow[],
+  formData: Record<string, unknown>
+): Promise<string[]> {
+  const invalid: string[] = [];
+  for (const field of formFields) {
+    if (field.field_type !== "attachment") continue;
+    const value = formData[field.label];
+    if (value === undefined || value === null || value === "") continue;
+
+    const path = value && typeof value === "object" ? (value as { path?: unknown }).path : undefined;
+    if (typeof path !== "string" || !path) {
+      invalid.push(field.label || "This field");
+      continue;
+    }
+    if (!(await attachmentPathExists(db, formId, path))) {
+      invalid.push(field.label || "This field");
+    }
+  }
+  return invalid;
+}
+
+/** Returns the labels of every required, rule-visible field with no value
+ *  in formData — empty when the submission is valid. */
+async function findMissingRequiredFields(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  formId: string,
+  formFields: FormFieldRow[],
+  formData: Record<string, unknown>
+): Promise<string[]> {
+  const { data: formRules } = await db
+    .from("crm_form_rules")
+    .select("source_field_id, operator, operand, action, action_value")
+    .eq("form_id", formId);
+
+  const fieldById = new Map(formFields.map((f) => [f.id, f]));
+  const hidden = new Set<string>();
+  for (const rule of (formRules ?? []) as {
+    source_field_id: string | null;
+    operator: string;
+    operand: string | null;
+    action: string;
+    action_value: string | null;
+  }[]) {
+    if (!rule.source_field_id) continue;
+    const sourceField = fieldById.get(rule.source_field_id);
+    if (!sourceField) continue;
+    const sourceValue = formData[sourceField.label];
+    const raw = Array.isArray(sourceValue) ? sourceValue.join(",") : sourceValue != null ? String(sourceValue) : "";
+    if (!ruleConditionMatches(raw, rule.operator, rule.operand)) continue;
+    if (rule.action === "hide_field" && rule.action_value) hidden.add(rule.action_value);
+    if (rule.action === "show_field" && rule.action_value) hidden.delete(rule.action_value);
+  }
+
+  const missing: string[] = [];
+  for (const field of formFields) {
+    if (DISPLAY_TYPES.has(field.field_type)) continue;
+    if (!field.required) continue;
+    if (hidden.has(field.id)) continue;
+
+    const value = formData[field.label];
+    const isEmpty = field.field_type === "attachment"
+      ? !value
+      : MULTI_VALUE_TYPES.has(field.field_type)
+        ? !Array.isArray(value) || value.length === 0
+        : value == null || String(value).trim() === "";
+    if (isEmpty) missing.push(field.label || "This field");
+  }
+  return missing;
 }
 
 interface FormRow {
@@ -66,21 +191,53 @@ export async function submitFormResponse(
    *  against the submitted answers — merged with the form's own static
    *  settings.tagsOnSubmit configuration below. */
   ruleTags?: { add?: string[]; remove?: string[] }
-): Promise<{ ok: true; result: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; result: string } | { ok: false; error: string; status?: number }> {
   const { data: formFields } = await db
     .from("crm_form_fields")
-    .select("id, label, mapped_field, field_type")
+    .select("id, label, mapped_field, field_type, required")
     .eq("form_id", form.id)
     .is("deleted_at", null);
 
+  // ── Server-side required-field validation ─────────────────────────────────
+  // validatePage() in src/app/forms/[slug]/page.tsx only runs in the
+  // browser — a direct POST to the public submit endpoint bypassed every
+  // required-field/conditional-rule check entirely. Recompute which fields
+  // are rule-hidden the same way the client does (evaluateRules), then
+  // require every required, non-hidden field to actually have a value.
+  if (formFields?.length) {
+    const missing = await findMissingRequiredFields(db, form.id, formFields, formData);
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        error: `Missing required field${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`,
+        status: 422,
+      };
+    }
+
+    const invalidAttachments = await findInvalidAttachments(db, form.id, formFields, formData);
+    if (invalidAttachments.length > 0) {
+      return {
+        ok: false,
+        error: `Invalid attachment${invalidAttachments.length > 1 ? "s" : ""}: ${invalidAttachments.join(", ")}`,
+        status: 422,
+      };
+    }
+  }
+
   // ── Build mapped data from field labels → mapped CRM fields ──────────────────
+  // Uses formatFormFieldValue (not a raw String(value)) so a field that was
+  // mapped to a CRM field despite holding a non-scalar answer — an
+  // attachment's {path,name,size} object is the case that actually
+  // happened, the Builder UI now excludes it from being mappable at all —
+  // degrades to the filename instead of the literal text "[object Object]"
+  // silently overwriting the mapped CRM field.
   const mappedData: Record<string, string> = {};
   if (formFields) {
     for (const field of formFields) {
       if (!field.mapped_field) continue;
       const value = formData[field.label];
       if (value !== undefined && value !== null && value !== "") {
-        mappedData[field.mapped_field] = String(value);
+        mappedData[field.mapped_field] = formatFormFieldValue(value);
       }
     }
   }
@@ -403,6 +560,7 @@ export async function submitFormResponse(
           notes_to_crew: mappedData["client.notes"] ?? null,
           source: mappedData["client.source"] ?? "form",
           status: "lead",
+          // Leads carry no client_since — it's stamped when the lead converts.
         })
         .select("id")
         .single();
@@ -431,17 +589,29 @@ export async function submitFormResponse(
   // A checked sms_optin field is affirmative, TCPA-required consent — only ever
   // sets consent true, never clears it (an unchecked/absent box just means this
   // particular form didn't ask, not that the client revoked prior consent).
-  if (relatedClientId && formFields) {
+  // Consent has to be tied to the number it applies to — if the submitter
+  // checked the box but the form didn't collect (or they didn't fill in) a
+  // phone number, we can't record real consent to text anyone. Skip the
+  // write and flag the ticket instead of silently dropping it or attaching
+  // consent to a phone-less client record.
+  let smsConsentPendingPhone = false;
+  if (formFields) {
     const optInField = formFields.find((f: { field_type?: string }) => f.field_type === "sms_optin");
     if (optInField && formData[optInField.label] === "true") {
-      await db
-        .from("clients")
-        .update({
-          sms_opt_in: true,
-          sms_opt_in_at: new Date().toISOString(),
-          sms_opt_in_source: "form",
-        })
-        .eq("id", relatedClientId);
+      if (submittedPhone) {
+        if (relatedClientId) {
+          await db
+            .from("clients")
+            .update({
+              sms_opt_in: true,
+              sms_opt_in_at: new Date().toISOString(),
+              sms_opt_in_source: "form",
+            })
+            .eq("id", relatedClientId);
+        }
+      } else {
+        smsConsentPendingPhone = true;
+      }
     }
   }
 
@@ -470,17 +640,6 @@ export async function submitFormResponse(
     }
   }
 
-  // ── Log activity on client timeline ──────────────────────────────────────────
-  if (relatedClientId) {
-    await db.from("client_activity").insert({
-      org_id: form.org_id,
-      client_id: relatedClientId,
-      activity_type: "note",
-      subject: `Form submitted: ${form.name}`,
-      body: Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
-    });
-  }
-
   // ── Create ticket ─────────────────────────────────────────────────────────────
   let relatedTicketId: string | null = null;
   {
@@ -494,7 +653,9 @@ export async function submitFormResponse(
       Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
     ].filter(Boolean).join("\n");
 
-    const { data: ticket } = await db
+    // Note: crm_tickets has no "source" column (unlike clients) — don't
+    // include one here, it would make this insert fail.
+    const { data: ticket, error: ticketErr } = await db
       .from("crm_tickets")
       .insert({
         org_id: form.org_id,
@@ -505,14 +666,35 @@ export async function submitFormResponse(
         priority: "normal",
         category: form.name,
         type: "note",
-        source: "form",
+        sms_consent_pending_phone: smsConsentPendingPhone,
       })
       .select("id, ticket_number")
       .single();
 
+    if (ticketErr) {
+      console.error("[submitFormResponse] failed to create ticket:", ticketErr.message);
+    }
+
     relatedTicketId = ticket?.id ?? null;
 
     if (ticket) {
+      // Log on the client's Activity Timeline the same way a manually-created
+      // ticket does (see useCreateTicket) — activity_type "ticket" with
+      // ref_id/ref_table so the row deep-links to the ticket, rather than an
+      // orphaned "note" duplicating the ticket's own body.
+      if (relatedClientId) {
+        await db.from("client_activity").insert({
+          org_id: form.org_id,
+          client_id: relatedClientId,
+          activity_type: "ticket",
+          subject: ticketSubject,
+          body: ticketBody,
+          status: "open",
+          ref_id: ticket.id,
+          ref_table: "crm_tickets",
+        });
+      }
+
       await notifyStaffOfNewTicket(db, {
         orgId: form.org_id,
         ticketId: ticket.id,

@@ -1,15 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Leaf } from "lucide-react";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+
+/** Only ever follow `redirectTo` back into our own app — a same-origin
+ *  relative path set by middleware.ts. Rejects absolute/protocol-relative
+ *  URLs so a crafted `?redirectTo=` can't be used as an open redirect. */
+function safeRedirectTarget(redirectTo: string | null): string {
+  if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+    return redirectTo;
+  }
+  return "/home";
+}
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,29 +38,28 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
+    const data = await res.json();
 
-    if (authError) {
-      setError(authError.message);
+    if (!res.ok) {
+      setError(data.error ?? "Something went wrong. Please try again.");
       setLoading(false);
       return;
     }
 
-    router.push("/home");
+    router.push(safeRedirectTarget(searchParams.get("redirectTo")));
     router.refresh();
   }
 
   return (
     <div className="w-full max-w-sm">
       <div className="mb-8 flex flex-col items-center gap-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
-          <Leaf className="h-6 w-6 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
+        <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
+        <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">landscapt</h1>
         <p className="text-sm text-slate-500">Sign in to your account</p>
       </div>
 

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CheckCircle2 } from "lucide-react";
+import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
 
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
@@ -34,17 +34,10 @@ interface PublicInvoice {
 
 interface CreateIntentResult {
   clientSecret: string;
+  connectedAccountId: string;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
-}
-
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(key);
-  return stripeJsPromise;
 }
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
@@ -141,8 +134,8 @@ export default function PublicInvoicePage() {
     );
   }
 
-  const stripeJs = getStripeJs();
-  const canPay = invoice.balanceCents > 0 && invoice.status !== "void" && !!stripeJs;
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
+  const canPay = invoice.balanceCents > 0 && invoice.status !== "void" && hasPublishableKey();
 
   return (
     <div className="min-h-screen bg-slate-50 py-10">

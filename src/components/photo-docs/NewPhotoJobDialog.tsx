@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import { useCreatePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useClients } from "@/lib/hooks/use-clients";
 import type { PhotoJob } from "@/modules/photo-docs/types/photo.types";
@@ -66,7 +67,10 @@ export function NewPhotoJobDialog({ open, onOpenChange, defaultClientId, onCreat
     if (!isValid) return;
     createJob.mutate(
       { name, customerName, address, city, state, zip, notes: notes || undefined, clientId: defaultClientId },
-      { onSuccess: (job) => { onCreated?.(job); handleClose(); } },
+      {
+        onSuccess: (job) => { onCreated?.(job); handleClose(); },
+        onError: () => toast.error("Failed to create job"),
+      },
     );
   }
 

@@ -42,12 +42,15 @@ export function useAvbCrews() {
     queryFn: async () => {
       const supabase = createClient();
       const orgId = await getOrgId(supabase);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       // Ordered alphabetically by name — sort_order is set once at seed time
       // and has no UI to edit afterward, so mismatched values (e.g. a crew
       // added later at sort_order 0) silently scrambled the displayed order
       // (ENHANCE2 showing above ENHANCE1). Name gives a stable, self-
       // maintaining order with no stored ordering to drift out of sync.
+      // avb_crews has no migration in supabase/migrations and so never lands
+      // in the generated Database type — the cast stays until the AvB tables
+      // are brought into the migration flow. Same for every other call below.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("avb_crews")
         .select("*")

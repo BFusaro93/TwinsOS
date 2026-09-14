@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
+import { EMAIL_FROM } from "@/lib/email/send";
+import { renderEstimatePDF } from "@/lib/estimate-pdf";
 
 // Notifies staff when a CLIENT accepts or declines an estimate — via either
 // the public proposal link or the logged-in client portal. Separate from the
@@ -23,13 +25,26 @@ export async function notifyStaffOfEstimateDecision(
   const { orgId, estimateId, estimateNumber, salesRepId, clientName, decision } = params;
 
   let recipients = await resolveBroadcastRecipients(supabase, orgId, "estimateDecisionRecipientIds");
-  if (salesRepId && !recipients.some((p) => p.id === salesRepId)) {
-    const { data: rep } = await supabase
-      .from("profiles")
-      .select("id, email, name, notification_prefs")
+  if (salesRepId) {
+    // estimates.sales_rep_id is a crm_employees.id (repointed from
+    // profiles.id) — resolve through crm_employees.user_id before querying
+    // profiles, same as resolveAssigneeId() in ticket-notify.ts.
+    const { data: employee } = await supabase
+      .from("crm_employees")
+      .select("user_id")
       .eq("id", salesRepId)
+      .eq("org_id", orgId)
+      .is("deleted_at", null)
       .single();
-    if (rep) recipients = [...recipients, rep];
+    const repUserId = employee?.user_id ?? null;
+    if (repUserId && !recipients.some((p) => p.id === repUserId)) {
+      const { data: rep } = await supabase
+        .from("profiles")
+        .select("id, email, name, notification_prefs")
+        .eq("id", repUserId)
+        .single();
+      if (rep) recipients = [...recipients, rep];
+    }
   }
   if (!recipients.length) return;
 
@@ -66,13 +81,27 @@ export async function notifyStaffOfEstimateDecision(
   if (!emailEligible.length) return;
 
   const resend = new Resend(resendKey);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   const link = `${siteUrl}/crm/estimates/${estimateId}`;
   const color = decision === "accepted" ? "#60ab45" : "#dc2626";
 
+  // Attach the accepted estimate's PDF (with its final, won line items) so
+  // staff don't have to open the app just to see what was accepted. Render
+  // failure is non-fatal — the notification email still sends without it.
+  let pdfAttachment: { filename: string; content: string } | undefined;
+  if (decision === "accepted") {
+    const buffer = await renderEstimatePDF(supabase, estimateId, orgId).catch(() => null);
+    if (buffer) {
+      pdfAttachment = {
+        filename: `estimate-${estimateNumber}.pdf`,
+        content: buffer.toString("base64"),
+      };
+    }
+  }
+
   for (const p of emailEligible) {
     await resend.emails.send({
-      from: "Equipt <noreply@twinslawnservice.com>",
+      from: EMAIL_FROM,
       to: p.email,
       subject: title,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
@@ -81,6 +110,7 @@ export async function notifyStaffOfEstimateDecision(
         <p style="margin:0 0 24px;color:#475569"><strong>${clientName}</strong> has <strong style="color:${color}">${verb}</strong> Estimate <strong>#${estimateNumber}</strong>.</p>
         <a href="${link}" style="display:inline-block;padding:12px 24px;background:${color};color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Estimate</a>
       </div>`,
+      ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
     }).catch(() => {
       // Non-fatal — one recipient's email failing shouldn't block the others
     });

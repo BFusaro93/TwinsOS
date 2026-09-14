@@ -1,6 +1,7 @@
 import type { EstimateLineItem, DirectCostType } from "@/types/crm-estimates";
 import type { CRMService } from "@/types/crm-jobs";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { productionRateAppliesToUnit } from "@/lib/estimates/units";
 
 // Duplicated from use-overhead-settings.ts rather than imported — that module
 // is "use client" and pulls in @tanstack/react-query + the browser Supabase
@@ -99,7 +100,10 @@ export function computeLineItem(
       : effectiveRate; // fixed: total IS the rate
 
   // Auto-calculate budgeted hours from production rate (Aspire engine) — only
-  // when the line item is explicitly set to that budget method.
+  // when the line item is explicitly set to that budget method AND its qty is
+  // an area. The production rate is sq ft per man-hour, so dividing a "visit"
+  // or "each" quantity by it (1 ÷ 15,000 = 0.00007 hrs) is meaningless; such
+  // lines keep whatever hours were entered manually and the grid flags them.
   let budgetedHours = item.budgetedHours;
   if (item.unitType === "hr" && item.qty > 0) {
     // Direct hours: budgeted hours = qty, regardless of budget method
@@ -109,7 +113,7 @@ export function computeLineItem(
     item.productionRateSqftPerHr &&
     item.productionRateSqftPerHr > 0 &&
     item.qty > 0 &&
-    item.unitType !== "each"
+    productionRateAppliesToUnit(item.unitType)
   ) {
     budgetedHours = item.qty / item.productionRateSqftPerHr;
   }
@@ -173,7 +177,8 @@ export function computeJobServiceBudgetedHours(
     service.budgetMethod === "production_rate" &&
     service.productionRateSqftPerHr &&
     service.productionRateSqftPerHr > 0 &&
-    service.unit !== "hour" &&
+    service.unit !== "hr" &&
+    service.unit !== "each" &&
     qty > 0
   ) {
     return qty / service.productionRateSqftPerHr;
@@ -198,6 +203,7 @@ export function budgetedHoursFromLineItem(
     li.productionRateSqftPerHr &&
     li.productionRateSqftPerHr > 0 &&
     li.unitType !== "hr" &&
+    li.unitType !== "each" &&
     li.qty > 0
   ) {
     return li.qty / li.productionRateSqftPerHr;
@@ -349,6 +355,22 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .eq("estimate_id", estimateId);
   if (dcError) throw dcError;
 
+  // Sub-items (estimate_line_item_subitems) are real priced Product/Subservice
+  // rows a user attaches under a line item (their own rate/cost/qty/total, see
+  // AddSubitemDialog) — not decorative notes. They have no estimate_id column
+  // of their own, only line_item_id, so reach them through the parent line
+  // item via an embedded filter. Excluded whenever the PARENT line item is
+  // lost or soft-deleted, matching the line-item exclusion above; subitems
+  // have no status of their own to filter on.
+  const { data: subitems, error: siError } = await supabase
+    .from("estimate_line_item_subitems")
+    .select("total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
+    .eq("estimate_line_items.estimate_id", estimateId)
+    .neq("estimate_line_items.status", "lost")
+    .is("estimate_line_items.deleted_at", null)
+    .is("deleted_at", null);
+  if (siError) throw siError;
+
   const { data: overheadRow } = await supabase
     .from("crm_overhead_settings")
     .select("*")
@@ -357,9 +379,14 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const overheadSettings = overheadRow ? mapOverheadSettingsRow(overheadRow) : OVERHEAD_SETTINGS_DEFAULTS;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + (li.total_cents - (li.discount_cents ?? 0)), 0);
+  const lineItemSubtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + (li.total_cents - (li.discount_cents ?? 0)), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0);
+  const subitemRevenueCents = (subitems ?? []).reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subitemCostCents = (subitems ?? []).reduce((s: number, si: any) => s + Math.round((si.cost_cents ?? 0) * (si.qty ?? 1)), 0);
+  const subtotalCents = lineItemSubtotalCents + subitemRevenueCents;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0) + subitemCostCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
   // A "percent" discount is a % of the subtotal at whatever it is NOW, not a
@@ -367,9 +394,13 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // it stays in sync every time line items change, instead of trusting the
   // stored discount_cents snapshot (which only `applyNamedDiscount` in
   // EstimateSummaryPanel writes, and only at the moment a discount is picked).
-  const discountCents = est.discount_type === "percent"
+  const rawDiscountCents = est.discount_type === "percent"
     ? Math.round(subtotalCents * ((est.discount_value ?? 0) / 10000))
     : (est.discount_cents ?? 0);
+  // Clamp to the subtotal — a flat discount larger than the subtotal (or a
+  // stale percent snapshot) must never drive revenue/tax/total negative,
+  // matching the line-item discount clamp in EstimateLineItemsGrid.
+  const discountCents = Math.max(0, Math.min(rawDiscountCents, subtotalCents));
   const revenueCents = subtotalCents - discountCents;
   const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
   const totalCents = revenueCents + taxCents;

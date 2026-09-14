@@ -29,6 +29,19 @@ export interface UploadResult {
   error?: string;
 }
 
+// Supabase Storage keys reject characters outside a fairly small safe set
+// (spaces and colon-like punctuation from macOS screenshot names — e.g.
+// "Screenshot 2026-09-02 at 10.41.05 AM.png" — trip its "Invalid key"
+// validation). Sanitize just the object key; the original name is kept
+// as-is in the `attachments.file_name` column for display/download.
+function sanitizeStorageFileName(name: string): string {
+  const lastDot = name.lastIndexOf(".");
+  const base = lastDot > 0 ? name.slice(0, lastDot) : name;
+  const ext = lastDot > 0 ? name.slice(lastDot) : "";
+  const safeBase = base.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return `${safeBase || "file"}${ext.replace(/[^a-zA-Z0-9.]/g, "")}`;
+}
+
 export function useUploadAttachment(recordType: AttachmentRecordType, recordId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -58,7 +71,7 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
           // wide-open "any authenticated user" policy nothing to check
           // against, so any org's users could read/overwrite another org's
           // attachments by guessing or enumerating a path.
-          const storagePath = `${profile?.org_id ?? "unknown"}/${recordType}/${recordId}/${Date.now()}-${file.name}`;
+          const storagePath = `${profile?.org_id ?? "unknown"}/${recordType}/${recordId}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
 
           // Fast path: stream File directly — no JS heap copy, fast for local files.
           // The Supabase storage client may either return { error } OR throw depending

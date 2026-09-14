@@ -7,8 +7,25 @@ import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useApprovalRequests, useDecideApproval } from "@/lib/hooks/use-approval-requests";
+import { useRoles } from "@/lib/hooks/use-roles";
 import { useCurrentUserStore } from "@/stores";
 import type { ApprovalRequest, ApprovalRequestStatus } from "@/types";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Human label for a step's required approver. PO/requisition steps store a
+ * generic role word ("manager"); crm_estimate steps store a `crm_roles.id`,
+ * which must be resolved to the role's name — never shown raw.
+ */
+function approverRoleLabel(approverRole: string, roleNames: Map<string, string>): string {
+  if (UUID_RE.test(approverRole)) {
+    const name = roleNames.get(approverRole);
+    return name ? `${name} Approval` : "Approval";
+  }
+  if (!approverRole) return "Approval";
+  return `${approverRole.charAt(0).toUpperCase()}${approverRole.slice(1)} Approval`;
+}
 
 interface ApprovalChainProps {
   entityId: string;
@@ -27,10 +44,17 @@ type StepGroup = {
 function groupByStep(requests: ApprovalRequest[]): StepGroup[] {
   const map = new Map<string, StepGroup>();
   for (const r of requests) {
-    if (!map.has(r.flowStepId)) {
-      map.set(r.flowStepId, { flowStepId: r.flowStepId, order: r.order, requests: [] });
+    // A request whose flow step was deleted comes back with flowStepId ""
+    // (see mapApprovalRequest). Bucketing every such orphan together would
+    // collapse two unrelated, independently-required approvals into one
+    // group that reads as resolved the moment either one is approved — key
+    // each orphan by its own row id instead so it stays its own group. Must
+    // match the identical logic in use-approval-requests.ts's stepGroups.
+    const groupKey = r.flowStepId || `orphan-${r.id}`;
+    if (!map.has(groupKey)) {
+      map.set(groupKey, { flowStepId: groupKey, order: r.order, requests: [] });
     }
-    map.get(r.flowStepId)!.requests.push(r);
+    map.get(groupKey)!.requests.push(r);
   }
   return Array.from(map.values()).sort((a, b) => a.order - b.order);
 }
@@ -269,7 +293,13 @@ function StepGroupCard({
   const overall = groupOverallStatus(group);
   const isMultiApprover = group.requests.filter((r) => r.status !== "skipped").length > 1;
   const firstRequest = group.requests[0];
-  const stepLabel = `Step ${stepNumber} · ${firstRequest.approverRole.charAt(0).toUpperCase()}${firstRequest.approverRole.slice(1)} Approval`;
+  // crm_estimate steps carry a crm_roles.id as approverRole — resolve it to the
+  // role's name instead of printing the UUID.
+  const { data: roles } = useRoles();
+  const roleNames = new Map<string, string>(
+    ((roles ?? []) as { id: string; name: string }[]).map((r) => [r.id, r.name]),
+  );
+  const stepLabel = `Step ${stepNumber} · ${approverRoleLabel(firstRequest.approverRole, roleNames)}`;
 
   return (
     <div className="flex gap-3">
@@ -387,21 +417,16 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
           // The hook already wrote the entity status to the DB when allResolved is true.
           // The component callbacks only need to update local UI state.
           if (!result) return;
-          const { allResolved, freshMapped } = result;
-          if (!allResolved || !freshMapped) return;
+          const { allResolved } = result;
+          if (!allResolved) return;
 
-          const anyRejected = Array.from(
-            freshMapped.reduce((m, r) => {
-              if (!m.has(r.flowStepId)) m.set(r.flowStepId, []);
-              m.get(r.flowStepId)!.push(r);
-              return m;
-            }, new Map<string, typeof freshMapped>())
-            .values()
-          ).some((reqs) => {
-            if (reqs.every((r) => r.status === "skipped")) return false;
-            if (reqs.some((r) => r.status === "approved")) return false;
-            return reqs.filter((r) => r.status !== "skipped").some((r) => r.status === "rejected");
-          });
+          // The mutation itself now decides "rejected" immediately (Bug 1 —
+          // a rejection halts the whole chain right away rather than
+          // waiting for every step group to resolve), so the decision the
+          // user just made IS the outcome — no need to re-derive it by
+          // re-grouping freshMapped by flowStepId (which used to risk the
+          // same orphan-collapsing issue as Bug 2).
+          const anyRejected = status === "rejected";
 
           if (anyRejected) {
             onRejected?.();

@@ -147,11 +147,28 @@ export function useUpsertTemplateItem() {
       item: Record<string, any>;
     }) => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("estimate_template_items")
-        .upsert({ template_id: templateId, ...item });
-      if (error) throw error;
+      // A blind .upsert() with a partial payload (e.g. just a discount patch on
+      // an existing row) fails NOT NULL validation on columns like service_name
+      // that aren't in the patch — Postgres checks the INSERT side of
+      // "INSERT ... ON CONFLICT DO UPDATE" regardless of whether the conflict
+      // branch fires. Existing rows must go through a real UPDATE instead
+      // (mirrors useUpsertLineItem in use-estimates.ts).
+      if (item.id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { id, ...patch } = item;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("estimate_template_items")
+          .update(patch)
+          .eq("id", id);
+        if (error) throw error;
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("estimate_template_items")
+          .insert({ template_id: templateId, ...item });
+        if (error) throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["estimate-templates"] }),
   });

@@ -25,6 +25,7 @@ export async function POST(
     .from("estimate_share_tokens")
     .select("*")
     .eq("token", token)
+    .is("deleted_at", null)
     .single();
 
   if (tokenErr || !shareToken) {
@@ -36,12 +37,20 @@ export async function POST(
 
   const { data: est } = await supabase
     .from("estimates")
-    .select("id, org_id, client_id, estimate_number")
+    .select("id, org_id, client_id, estimate_number, stage")
     .eq("id", shareToken.estimate_id)
     .single();
 
   if (!est) {
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
+  }
+
+  // Same guard as accept/route.ts: the token being unrevoked only says the
+  // link is still valid — it says nothing about whether staff already moved
+  // the estimate on (accepted, declined, or converted/invoiced) since the
+  // link was sent. Only a "sent" estimate is still open to change requests.
+  if (est.stage !== "sent") {
+    return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
 
   await submitEstimateChangeRequest(supabase, {

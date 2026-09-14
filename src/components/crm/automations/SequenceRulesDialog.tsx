@@ -41,6 +41,10 @@ import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
 // builder shows a "days" input for these instead of just the type selector.
 const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estimate_no_response"]);
 
+// Trigger types that fire off a minute-count gap before a scheduled moment —
+// the builder shows a "minutes before" input for these instead of "days".
+const MINUTES_GAP_TRIGGER_TYPES = new Set<TriggerType>(["sales_meeting_reminder"]);
+
 // Trigger types that fire for one specific service rather than the whole
 // job/visit — the builder shows a service picker (or "Any service") for these.
 const SERVICE_TRIGGER_TYPES = new Set<TriggerType>(["service_visit_completed"]);
@@ -186,6 +190,12 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "ticket_reopened", label: "Ticket was reopened" },
     ],
   },
+  {
+    label: "Sales Meeting",
+    items: [
+      { value: "sales_meeting_reminder", label: "Meeting is coming up" },
+    ],
+  },
 ];
 
 const RESTRICT_ENTRY_OPTIONS = [
@@ -232,7 +242,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const orgTags = useOrgTags();
   const { data: packages } = usePackages();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
 
   const FILTER_OPTIONS: Record<FilterKind, { value: string; label: string }[]> = {
     service: (services ?? []).map((s) => ({ value: s.id, label: s.name })),
@@ -241,7 +251,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
     job_type: JOB_TYPE_OPTIONS,
     package: (packages ?? []).map((p) => ({ value: p.id, label: p.name })),
     tag: orgTags.map((t) => ({ value: t, label: t })),
-    sales_rep: salesReps.map((e) => ({ value: e.userId as string, label: `${e.firstName} ${e.lastName}` })),
+    sales_rep: salesReps.map((e) => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })),
     case_type: CASE_TYPE_OPTIONS,
     payment_method: PAYMENT_METHOD_OPTIONS,
   };
@@ -548,6 +558,20 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                     <span className="text-xs text-slate-400 whitespace-nowrap">
                       {t.triggerType === "estimate_expiring" ? "days before expiry" : "days since sent"}
                     </span>
+                  </div>
+                )}
+                {MINUTES_GAP_TRIGGER_TYPES.has(t.triggerType) && (
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Input
+                      type="number"
+                      min={5}
+                      step={5}
+                      value={t.config.minutes ?? ""}
+                      onChange={(e) => updateTriggerConfig(t._key, { minutes: Number(e.target.value) || undefined })}
+                      placeholder="60"
+                      className="h-9 w-16 text-sm"
+                    />
+                    <span className="text-xs text-slate-400 whitespace-nowrap">minutes before</span>
                   </div>
                 )}
                 {SERVICE_TRIGGER_TYPES.has(t.triggerType) && (

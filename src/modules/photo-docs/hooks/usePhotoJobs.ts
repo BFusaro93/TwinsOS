@@ -86,8 +86,10 @@ export function useCreatePhotoJob() {
     mutationFn: async (input: { name: string; customerName: string; address: string; city: string; state: string; zip: string; notes?: string; projectId?: string; clientId?: string }) => {
       const db = createClient() as any;
       const { data: profile } = await db.from("profiles").select("org_id").eq("id", currentUser.id).single();
+      const orgId = profile?.org_id;
+      if (!orgId) throw new Error("No org_id found");
       const { data, error } = await db.from("photo_jobs").insert({
-        org_id: profile.org_id,
+        org_id: orgId,
         name: input.name,
         customer_name: input.customerName,
         address: input.address,

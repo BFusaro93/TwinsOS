@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { getDataset } from "@/lib/reports/datasets";
+import { getDataset, getDatasetField } from "@/lib/reports/datasets";
+import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";
+import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
 import type {
   AnalysisConfig,
+  AnalysisFilter,
   CustomReport,
   CustomReportInput,
   Dashboard,
   DashboardInput,
   ReportFilterOption,
   ReportResult,
+  SavedGraphic,
+  SavedGraphicInput,
   VisualSpec,
 } from "@/types/crm-reports";
 
@@ -178,15 +183,21 @@ export function useReportFilterOptions(source?: ReportFilterOptionsSource) {
           .map((r) => ({ value: r.name, label: r.name }));
       }
       if (source === "salesReps") {
-        // profiles columns drift from the generated Database types
+        // The rpt_* views' "sales_rep" text column is the rep's
+        // first+last name from crm_employees (see
+        // 20260903030000_report_views_sales_rep_target_employees.sql), so
+        // these filter options must be drawn from the same table/columns
+        // to actually match.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
-          .from("profiles")
-          .select("name")
-          .order("name");
+          .from("crm_employees")
+          .select("first_name, last_name")
+          .eq("is_sales_rep", true)
+          .is("deleted_at", null)
+          .order("first_name");
         if (error) throw new Error(error.message);
-        const names = ((data ?? []) as { name: string | null }[])
-          .map((r) => r.name)
+        const names = ((data ?? []) as { first_name: string | null; last_name: string | null }[])
+          .map((r) => `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim())
           .filter((n): n is string => !!n);
         return [...new Set(names)].map((n) => ({ value: n, label: n }));
       }
@@ -287,6 +298,88 @@ export function useDeleteDashboard() {
   });
 }
 
+// ── saved graphics (Graphics Library) CRUD ────────────────────────────────────
+
+export function useSavedGraphics() {
+  return useQuery<SavedGraphic[]>({
+    queryKey: ["saved-graphics"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/graphics");
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { graphics: SavedGraphic[] };
+      return body.graphics;
+    },
+  });
+}
+
+export function useCreateSavedGraphic() {
+  const queryClient = useQueryClient();
+  return useMutation<SavedGraphic, Error, SavedGraphicInput>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/crm/graphics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { graphic: SavedGraphic };
+      return body.graphic;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["saved-graphics"] });
+    },
+  });
+}
+
+export function useDeleteSavedGraphic() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/crm/graphics/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await readError(res));
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["saved-graphics"] });
+    },
+  });
+}
+
+// ── combined Graphics Library items (system catalog + org's saved graphics) ──
+
+export interface GraphicLibraryItem {
+  /** Stable across renders — template key for system graphics, row id for
+   *  saved ones. Prefixed so the two id spaces never collide. */
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  visual: VisualSpec;
+  isSystem: boolean;
+}
+
+export function useGraphicLibraryItems() {
+  const saved = useSavedGraphics();
+  const items: GraphicLibraryItem[] = [
+    ...GRAPHIC_TEMPLATES.map((t) => ({
+      id: `system:${t.key}`,
+      name: t.name,
+      description: t.description,
+      category: t.category,
+      visual: t.visual,
+      isSystem: true,
+    })),
+    ...(saved.data ?? []).map((g) => ({
+      id: `saved:${g.id}`,
+      name: g.name,
+      description: g.description,
+      category: g.category ?? "My Graphics",
+      visual: g.visual,
+      isSystem: false,
+    })),
+  ];
+  return { items, isLoading: saved.isLoading };
+}
+
 // ── run a dashboard panel's visual ────────────────────────────────────────────
 
 /**
@@ -294,33 +387,103 @@ export function useDeleteDashboard() {
  * tab date-range filter when useTabDateRange is set) and runs it through the
  * same /api/crm/reports/analysis/run endpoint the custom-analysis builder uses.
  */
+type RelativeDateFilter = NonNullable<VisualSpec["relativeDateFilter"]>;
+
+/**
+ * Inclusive "YYYY-MM-DD" bounds for a relative date filter, computed against
+ * the calendar date in America/New_York (the org's operating timezone) — a
+ * UTC `toISOString()` would roll "today" over to tomorrow at 8pm ET.
+ */
+export function relativeDateBounds(kind: RelativeDateFilter): { from: string; to: string } {
+  const today = isoNy(new Date());
+  switch (kind) {
+    case "today":
+      return { from: today, to: today };
+    case "yesterday": {
+      const yesterday = shiftYmd(today, -1);
+      return { from: yesterday, to: yesterday };
+    }
+    case "this_month":
+      return { from: `${today.slice(0, 7)}-01`, to: today };
+    case "this_year":
+      return { from: `${today.slice(0, 4)}-01-01`, to: today };
+  }
+}
+
+/**
+ * Filters selecting rows whose `dateField` falls within [from, to] (both
+ * inclusive calendar days). For `date` columns a plain gte/lte (or eq when
+ * it's a single day) is exact. For `datetime` (timestamptz) columns the RPC
+ * casts a bare "YYYY-MM-DD" literal to midnight, so `lte to` would drop the
+ * whole final day and `eq day` would match only the midnight instant — those
+ * get a half-open [from 00:00, next-day 00:00) window instead. Either bound
+ * may be blank (e.g. a cleared date input) and is then simply omitted.
+ */
+function dateWindowFilters(
+  datasetKey: string,
+  dateField: string,
+  from: string,
+  to: string
+): AnalysisFilter[] {
+  const isDatetime = getDatasetField(datasetKey, dateField)?.type === "datetime";
+  const filters: AnalysisFilter[] = [];
+  if (!isDatetime && from && to && from === to) {
+    return [{ column: dateField, op: "eq", value: from }];
+  }
+  if (from) filters.push({ column: dateField, op: "gte", value: from });
+  if (to) {
+    filters.push(
+      isDatetime
+        ? { column: dateField, op: "lt", value: shiftYmd(to, 1) }
+        : { column: dateField, op: "lte", value: to }
+    );
+  }
+  return filters;
+}
+
 export function buildEffectiveConfig(
   visual: VisualSpec,
-  dateRange?: { from: string; to: string }
+  dateRange?: { from: string; to: string },
+  repFilter?: string
 ): AnalysisConfig {
-  if (!visual.useTabDateRange || !dateRange) return visual.config;
-  const dataset = getDataset(visual.config.dataset);
-  const dateField = dataset?.defaultDateField;
-  if (!dateField) return visual.config;
-  return {
-    ...visual.config,
-    filters: [
-      ...visual.config.filters,
-      { column: dateField, op: "gte", value: dateRange.from },
-      { column: dateField, op: "lte", value: dateRange.to },
-    ],
-  };
+  let config = visual.config;
+  const dataset = getDataset(config.dataset);
+  const dateField = visual.dateColumn ?? dataset?.defaultDateField;
+  if (visual.useTabDateRange && dateRange && dateField) {
+    config = {
+      ...config,
+      filters: [
+        ...config.filters,
+        ...dateWindowFilters(config.dataset, dateField, dateRange.from, dateRange.to),
+      ],
+    };
+  }
+  if (visual.relativeDateFilter && dateField) {
+    const { from, to } = relativeDateBounds(visual.relativeDateFilter);
+    config = {
+      ...config,
+      filters: [...config.filters, ...dateWindowFilters(config.dataset, dateField, from, to)],
+    };
+  }
+  if (visual.useTabRepFilter && repFilter) {
+    config = {
+      ...config,
+      filters: [...config.filters, { column: "sales_rep", op: "eq", value: repFilter }],
+    };
+  }
+  return config;
 }
 
 export function useRunVisualQuery(
   visual: VisualSpec | undefined,
-  dateRange?: { from: string; to: string }
+  dateRange?: { from: string; to: string },
+  repFilter?: string
 ) {
   return useQuery<ReportResult>({
-    queryKey: ["run-visual", visual, dateRange],
+    queryKey: ["run-visual", visual, dateRange, repFilter],
     enabled: !!visual,
     queryFn: async () => {
-      const config = buildEffectiveConfig(visual as VisualSpec, dateRange);
+      const config = buildEffectiveConfig(visual as VisualSpec, dateRange, repFilter);
       const res = await fetch("/api/crm/reports/analysis/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

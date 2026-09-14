@@ -22,7 +22,7 @@ function MonthlyRevenueChart({ data }: { data: Array<{ month: string; revenue: n
   const max = Math.max(...data.map((d) => d.revenue), 1);
   return (
     <div className="rounded-xl border bg-white p-5 shadow-sm">
-      <p className="mb-4 text-sm font-semibold text-slate-800">Revenue — Last 6 Months</p>
+      <p className="mb-4 text-sm font-semibold text-slate-800">Collected — Last 6 Months</p>
       <div className="flex items-end gap-2 h-32">
         {data.map((d) => {
           const pct = (d.revenue / max) * 100;

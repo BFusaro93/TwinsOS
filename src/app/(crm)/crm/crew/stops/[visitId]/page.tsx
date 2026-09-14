@@ -6,17 +6,21 @@ import { format, parseISO, differenceInMinutes } from "date-fns";
 import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
-  Image as ImageIcon, Send, Loader2, CheckCircle2,
+  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles,
 } from "lucide-react";
 import {
   useStopDetail,
   useVisitPhotos,
   useStopClockIn,
   useStopClockOut,
+  useStopPause,
+  useStopResume,
   useSkipVisit,
   useAcknowledgeNotes,
   useAddCrewNote,
   useUploadVisitPhoto,
+  useFieldUpsellServices,
+  useSubmitFieldUpsell,
 } from "@/lib/hooks/use-crew-app";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,6 +33,9 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { visitServices } from "@/lib/utils/visit-stops";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { openInMaps } from "@/lib/utils/maps";
+import { toast } from "sonner";
 
 function ElapsedTimer({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
@@ -48,15 +55,25 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const router = useRouter();
   const { data: stop, isLoading } = useStopDetail(anchorVisitId);
   const { data: photos = [] } = useVisitPhotos(anchorVisitId);
+  const { data: orgSettings } = useOrgSettings();
+  const hidePricing = orgSettings?.crewHidePricing ?? false;
 
   const stopClockIn  = useStopClockIn();
   const stopClockOut = useStopClockOut();
+  const stopPause    = useStopPause();
+  const stopResume   = useStopResume();
   const skipVisit     = useSkipVisit();
   const acknowledge   = useAcknowledgeNotes();
   const addNote       = useAddCrewNote();
   const uploadPhoto   = useUploadVisitPhoto();
+  const { data: upsellServices = [] } = useFieldUpsellServices();
+  const submitUpsell  = useSubmitFieldUpsell();
 
   const [noteText, setNoteText]       = useState("");
+  const [upsellOpen, setUpsellOpen]       = useState(false);
+  const [upsellServiceId, setUpsellServiceId] = useState("");
+  const [upsellNote, setUpsellNote]       = useState("");
+  const [upsellPhoto, setUpsellPhoto]     = useState<File | null>(null);
   const [skipReason, setSkipReason]   = useState("");
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [clockOutNotes, setClockOutNotes] = useState("");
@@ -68,14 +85,23 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const acknowledged = !!anchor?.acknowledgedNotesAt;
   const isActive = stop?.derivedStatus === "in_progress";
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped";
+  const isPaused = isActive && !!stop?.pausedAt;
 
   function openMaps() {
     if (!stop?.address) return;
-    window.open(`https://maps.apple.com/?q=${encodeURIComponent(stop.address)}`, "_blank");
+    openInMaps(stop.address);
   }
 
   async function handleClockIn() {
     await stopClockIn.mutateAsync(anchorVisitId);
+  }
+
+  async function handlePause() {
+    await stopPause.mutateAsync(anchorVisitId);
+  }
+
+  async function handleResume() {
+    await stopResume.mutateAsync(anchorVisitId);
   }
 
   async function handleClockOut() {
@@ -101,12 +127,37 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     setNoteText("");
   }
 
+  async function handleSubmitUpsell() {
+    if (!upsellServiceId) return;
+    try {
+      const res = await submitUpsell.mutateAsync({
+        visitId: anchorVisitId,
+        serviceId: upsellServiceId,
+        note: upsellNote,
+        file: upsellPhoto,
+      });
+      // The photo is best-effort server-side — say so rather than implying it
+      // went through, since a crew can't tell from here.
+      toast.success(
+        res.photoAttached || !upsellPhoto
+          ? `Sent to the office — ticket #${res.ticketNumber}.`
+          : `Sent to the office — ticket #${res.ticketNumber}, but the photo didn't upload.`
+      );
+      setUpsellOpen(false);
+      setUpsellServiceId("");
+      setUpsellNote("");
+      setUpsellPhoto(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send the suggestion");
+    }
+  }
+
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file });
-    if (result?.signed_url) {
-      setPhotoUrls(prev => ({ ...prev, [result.id]: result.signed_url }));
+    if (result?.signedUrl) {
+      setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
     }
     e.target.value = "";
   }
@@ -166,17 +217,34 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <main className="flex-1 px-4 py-4 space-y-4 pb-8">
         {/* Clock status */}
         {isActive && stop.clockedInAt && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-amber-800">Job Running</p>
-              <p className="text-xs text-amber-600">
-                Started {format(parseISO(stop.clockedInAt), "h:mm a")}
-              </p>
+          isPaused && stop.pausedAt ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-800 flex items-center gap-1.5">
+                  <Coffee className="h-3.5 w-3.5" />
+                  On Break
+                </p>
+                <p className="text-xs text-blue-600">
+                  Since {format(parseISO(stop.pausedAt), "h:mm a")}
+                </p>
+              </div>
+              <div className="text-blue-700 font-mono font-bold text-lg">
+                <ElapsedTimer start={stop.pausedAt} />
+              </div>
             </div>
-            <div className="text-amber-700 font-mono font-bold text-lg">
-              <ElapsedTimer start={stop.clockedInAt} />
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-800">Job Running</p>
+                <p className="text-xs text-amber-600">
+                  Started {format(parseISO(stop.clockedInAt), "h:mm a")}
+                </p>
+              </div>
+              <div className="text-amber-700 font-mono font-bold text-lg">
+                <ElapsedTimer start={stop.clockedInAt} />
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {/* Services checklist — one row per visit in this stop, each its own service */}
@@ -206,7 +274,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {svc?.rateCents != null && (
+                    {!hidePricing && svc?.rateCents != null && (
                       <p className="text-sm text-slate-400">{formatCurrency(svc.rateCents)}</p>
                     )}
                     {v.status === "skipped" ? (
@@ -284,13 +352,35 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 Start Job
               </Button>
             ) : (
-              <Button
-                className="w-full h-14 text-base font-bold bg-red-600 hover:bg-red-700 gap-2"
-                onClick={() => setClockOutOpen(true)}
-              >
-                <StopIcon className="h-5 w-5" />
-                Stop Job
-              </Button>
+              <>
+                {isPaused ? (
+                  <Button
+                    className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 gap-2"
+                    onClick={handleResume}
+                    disabled={stopResume.isPending}
+                  >
+                    {stopResume.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
+                    Resume Job
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full h-14 text-base font-bold gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    onClick={handlePause}
+                    disabled={stopPause.isPending}
+                  >
+                    {stopPause.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Coffee className="h-5 w-5" />}
+                    Take a Break
+                  </Button>
+                )}
+                <Button
+                  className="w-full h-14 text-base font-bold bg-red-600 hover:bg-red-700 gap-2"
+                  onClick={() => setClockOutOpen(true)}
+                >
+                  <StopIcon className="h-5 w-5" />
+                  Stop Job
+                </Button>
+              </>
             )}
           </div>
         )}
@@ -360,6 +450,23 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           )}
         </div>
 
+        {/* Suggest work — hidden unless the office has opened up services for
+            crews to suggest, which is how the feature is switched on. */}
+        {upsellServices.length > 0 && (
+          <button
+            onClick={() => setUpsellOpen(true)}
+            className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left active:bg-emerald-100"
+          >
+            <span className="flex items-center gap-2 font-semibold text-emerald-800">
+              <Sparkles className="h-4 w-4" />
+              Suggest work
+            </span>
+            <span className="mt-0.5 block text-xs text-emerald-700">
+              Spotted something this property needs? Send it to the office.
+            </span>
+          </button>
+        )}
+
         {/* Notes / Comments */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100">
@@ -396,6 +503,90 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         </div>
       </main>
+
+      {/* Suggest work — crews never see or set a price here; the office prices
+          it from the photo and note. */}
+      <Dialog open={upsellOpen} onOpenChange={setUpsellOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Suggest work</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-slate-700">What does it need?</p>
+              <div className="flex flex-col gap-1.5">
+                {upsellServices.map((svc) => {
+                  const picked = upsellServiceId === svc.id;
+                  return (
+                    <button
+                      key={svc.id}
+                      onClick={() => setUpsellServiceId(svc.id)}
+                      className={`rounded-lg border px-3 py-2.5 text-left ${
+                        picked
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 active:bg-slate-50"
+                      }`}
+                    >
+                      <span className={`block text-sm font-medium ${picked ? "text-emerald-800" : "text-slate-800"}`}>
+                        {svc.name}
+                      </span>
+                      {svc.upsell_pitch && (
+                        <span className="mt-0.5 block text-xs text-slate-500">{svc.upsell_pitch}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-slate-700">
+                Anything the office should know?
+              </p>
+              <Textarea
+                placeholder="e.g. front beds are thin, client mentioned it too"
+                value={upsellNote}
+                onChange={(e) => setUpsellNote(e.target.value)}
+                className="min-h-[80px] resize-none text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 active:bg-slate-50">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(e) => setUpsellPhoto(e.target.files?.[0] ?? null)}
+                />
+                <Camera className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-600">
+                  {upsellPhoto ? "Photo attached — tap to replace" : "Add a photo"}
+                </span>
+              </label>
+              <p className="mt-1 text-xs text-slate-400">
+                A photo usually saves the office a trip out to quote it.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpsellOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitUpsell}
+              disabled={!upsellServiceId || submitUpsell.isPending}
+            >
+              {submitUpsell.isPending ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Sending…</>
+              ) : (
+                "Send to office"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Skip dialog — targets one service row at a time */}
       <Dialog open={!!skipTargetId} onOpenChange={(open) => !open && setSkipTargetId(null)}>

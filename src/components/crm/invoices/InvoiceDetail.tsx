@@ -13,7 +13,11 @@ import {
   useSetInvoiceLock,
   useAssignInvoiceNumber,
   useDeleteInvoice,
+  LINE_ITEM_MUTATION_KEY,
   useVoidInvoice,
+  voidBlockedMessage,
+  useUnappliedPayments,
+  useApplyCreditToInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -47,7 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
-import { centsToDisplay } from "@/lib/estimate-calc";
+import { parseCurrencyToCents } from "@/components/shared/CurrencyInput";
 import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
@@ -95,6 +99,9 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "ACH/E-Check",              label: "ACH / E-Check" },
   { value: "AutoPay",                  label: "AutoPay" },
   { value: "Other",                    label: "Other" },
+  // Non-cash: reduces the invoice balance without any money received.
+  // Excluded from cash-basis reporting (rpt_payments.is_cash = false).
+  { value: "AR Write-off",             label: "AR Write-off (non-cash)" },
 ];
 
 function todayStr() {
@@ -116,18 +123,30 @@ function fmtDate(dateStr: string | null) {
 // ── inline editable field ─────────────────────────────────────────────────────
 
 function InlineEdit({
-  value, onSave, type = "text", className, placeholder,
+  value, onSave, type = "text", className, placeholder, disabled = false,
 }: {
   value: string;
   onSave: (v: string) => void;
   type?: "text" | "date" | "number";
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [local, setLocal] = useState(value);
 
   useEffect(() => { setLocal(value); }, [value]);
+
+  // Locked invoices must not be editable through this field — render it as
+  // plain, non-interactive text instead of the edit-trigger button, matching
+  // "Save Invoice" and every other locked-state control on this page.
+  if (disabled) {
+    return (
+      <span className={cn("block px-1 py-0.5 text-left", !value && "text-slate-400 italic", className)}>
+        {type === "date" ? (value ? fmtDate(value) : (placeholder ?? "—")) : (value || (placeholder ?? "—"))}
+      </span>
+    );
+  }
 
   if (!editing) {
     return (
@@ -168,15 +187,30 @@ function InlineEdit({
 // ── line item row ─────────────────────────────────────────────────────────────
 
 function LineItemRow({
-  item, invoiceId, taxRateBps, discounts,
+  item, invoiceId, taxRateBps, discounts, locked = false,
 }: {
-  item: InvoiceLineItem; invoiceId: string; taxRateBps: number; discounts: CRMDiscount[];
+  item: InvoiceLineItem; invoiceId: string; taxRateBps: number; discounts: CRMDiscount[]; locked?: boolean;
 }) {
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
   const [rateStr, setRateStr] = useState(() => (item.rateCents / 100).toFixed(2));
+  // Bumped on every keystroke. A save that started BEFORE later edits must not
+  // clear `dirty` when it lands (that let the refetch-sync effect below wipe a
+  // rate the user was still typing — D-15's "typed values lost").
+  const editSeq = useRef(0);
   const { mutateAsync: upsert, isPending } = useUpsertInvoiceLineItem();
   const { mutateAsync: remove, isPending: removing } = useDeleteInvoiceLineItem();
+
+  // Re-sync local draft from the refetched prop when this row isn't mid-edit —
+  // otherwise an invalidation triggered by another row's save/delete (or a
+  // second tab editing the same invoice) leaves this row frozen on stale data
+  // forever, since there was previously no sync effect at all.
+  useEffect(() => {
+    if (!dirty) {
+      setRow(item);
+      setRateStr((item.rateCents / 100).toFixed(2));
+    }
+  }, [item, dirty]);
 
   function update<K extends keyof InvoiceLineItem>(k: K, v: InvoiceLineItem[K]) {
     setRow((p) => {
@@ -186,7 +220,13 @@ function LineItemRow({
       n.discountCents = Math.min(n.discountCents, n.totalCents);
       return n;
     });
+    editSeq.current += 1;
     setDirty(true);
+  }
+
+  /** Clear `dirty` only if no further edits happened while the save was in flight. */
+  function settleIfUnchanged(seqAtSave: number) {
+    if (editSeq.current === seqAtSave) setDirty(false);
   }
 
   function buildUpsertPayload(r: InvoiceLineItem) {
@@ -222,16 +262,18 @@ function LineItemRow({
 
   async function save() {
     if (!dirty) return;
+    const seq = editSeq.current;
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(row) });
-      setDirty(false);
+      settleIfUnchanged(seq);
     } catch { toast.error("Save failed"); }
   }
 
   async function saveRow(r: InvoiceLineItem) {
+    const seq = editSeq.current;
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(r) });
-      setDirty(false);
+      settleIfUnchanged(seq);
     } catch { toast.error("Save failed"); }
   }
 
@@ -265,7 +307,8 @@ function LineItemRow({
           onChange={(e) => update("description", e.target.value)}
           onBlur={save}
           placeholder="Description…"
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Service date */}
@@ -279,7 +322,8 @@ function LineItemRow({
             setDirty(true);
           }}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-500 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-500 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Taxable */}
@@ -287,9 +331,10 @@ function LineItemRow({
         <button
           type="button"
           onClick={toggleTaxable}
+          disabled={locked}
           title={row.isTaxable ? "Taxable — click to remove" : "Non-taxable — click to apply"}
           className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
+            "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
             row.isTaxable
               ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
               : "bg-slate-100 text-slate-400 hover:bg-slate-200"
@@ -312,7 +357,8 @@ function LineItemRow({
             setDirty(true);
           }}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Men */}
@@ -328,7 +374,8 @@ function LineItemRow({
             setDirty(true);
           }}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Qty */}
@@ -338,7 +385,8 @@ function LineItemRow({
           value={row.qty}
           onChange={(e) => update("qty", Number(e.target.value))}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Rate */}
@@ -347,27 +395,34 @@ function LineItemRow({
           type="text"
           inputMode="decimal"
           value={rateStr}
-          onChange={(e) => setRateStr(e.target.value)}
+          onChange={(e) => {
+            setRateStr(e.target.value);
+            // Typing a rate is an edit too — without this, a sibling save
+            // finishing mid-keystroke re-synced the row and wiped the rate.
+            editSeq.current += 1;
+            setDirty(true);
+          }}
           onBlur={() => {
-            const cents = Math.round((parseFloat(rateStr) || 0) * 100);
+            const cents = parseCurrencyToCents(rateStr);
             setRateStr((cents / 100).toFixed(2));
             const totalCents = Math.round(row.qty * cents);
             const updated = { ...row, rateCents: cents, totalCents, discountCents: Math.min(row.discountCents, totalCents) };
             setRow(updated);
             saveRow(updated);
           }}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Total */}
       <td className="w-24 px-2 py-2 text-right tabular-nums align-middle">
         {row.discountCents > 0 ? (
           <div className="flex flex-col items-end leading-tight">
-            <span className="text-[10px] text-slate-300 line-through">{centsToDisplay(row.totalCents)}</span>
-            <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents - row.discountCents)}</span>
+            <span className="text-[10px] text-slate-300 line-through">{formatCurrency(row.totalCents)}</span>
+            <span className="font-medium text-slate-700">{formatCurrency(row.totalCents - row.discountCents)}</span>
           </div>
         ) : (
-          <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents)}</span>
+          <span className="font-medium text-slate-700">{formatCurrency(row.totalCents)}</span>
         )}
       </td>
       {/* Discount / Delete / save indicator */}
@@ -381,6 +436,7 @@ function LineItemRow({
             lineTotalCents={row.totalCents}
             discounts={discounts}
             onSave={saveDiscount}
+            disabled={locked}
           />
           {removing ? (
             <span className="text-[10px] text-slate-400">…</span>
@@ -388,14 +444,15 @@ function LineItemRow({
             <button
               type="button"
               onClick={handleDelete}
-              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+              disabled={locked}
+              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
         {isPending && !removing && <span className="text-[10px] text-slate-400">…</span>}
-        {dirty && !isPending && (
+        {dirty && !isPending && !locked && (
           <button type="button" onClick={save} className="text-[10px] text-brand-500 hover:underline">save</button>
         )}
       </td>
@@ -416,14 +473,36 @@ function RecordPaymentDialog({
   const [ref, setRef] = useState("");
   const { mutateAsync: record, isPending } = useRecordPayment();
 
+  const amountCents = parseCurrencyToCents(amount);
+  // Never apply more than the invoice is owed (D-18: an $80 check on a $55
+  // invoice used to apply all $80 and lose the $25). The overage stays on
+  // the payment as unused credit on the client's account.
+  const appliedCents = Math.min(amountCents, Math.max(0, balanceCents));
+  const overageCents = Math.max(0, amountCents - appliedCents);
+  const isWriteOff = method === "AR Write-off";
+
   async function submit() {
-    const cents = Math.round(parseFloat(amount) * 100);
-    if (!cents || cents <= 0) { toast.error("Enter a valid amount"); return; }
+    if (!amountCents || amountCents <= 0) { toast.error("Enter a valid amount"); return; }
+    if (isWriteOff && overageCents > 0) {
+      toast.error(`A write-off can't exceed the invoice balance (${formatCurrency(balanceCents)})`);
+      return;
+    }
     try {
-      await record({ clientId, amountCents: cents, paymentDate: date, method, reference: ref || undefined, allocations: invoiceId ? [{ invoiceId, amountCents: cents }] : [] });
-      toast.success("Payment recorded");
+      await record({
+        clientId,
+        amountCents,
+        paymentDate: date,
+        method,
+        reference: ref || undefined,
+        allocations: invoiceId && appliedCents > 0 ? [{ invoiceId, amountCents: appliedCents }] : [],
+      });
+      toast.success(overageCents > 0
+        ? `Payment recorded — ${formatCurrency(appliedCents)} applied, ${formatCurrency(overageCents)} kept as account credit`
+        : "Payment recorded");
       onOpenChange(false);
-    } catch { toast.error("Failed to record payment"); }
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to record payment");
+    }
   }
 
   return (
@@ -435,10 +514,17 @@ function RecordPaymentDialog({
             <Label>Amount</Label>
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} className="pl-6" />
+              <Input value={amount} inputMode="decimal" onChange={(e) => setAmount(e.target.value)} className="pl-6" />
             </div>
+            {overageCents > 0 && (
+              <p className={cn("text-xs", isWriteOff ? "text-red-600" : "text-amber-600")}>
+                {isWriteOff
+                  ? `Exceeds the invoice balance of ${formatCurrency(balanceCents)}.`
+                  : `${formatCurrency(appliedCents)} will be applied to this invoice; ${formatCurrency(overageCents)} stays as unused credit on the client's account.`}
+              </p>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Date</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -477,7 +563,7 @@ function PaymentDetailDialog({ payment, open, onOpenChange }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Payment Detail</DialogTitle></DialogHeader>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm py-2">
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm py-2">
           <dt className="text-slate-400">Amount</dt><dd className="font-semibold text-green-600">{formatCurrency(payment.amountCents)}</dd>
           <dt className="text-slate-400">Date</dt><dd>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</dd>
           <dt className="text-slate-400">Method</dt><dd className="capitalize">{payment.method}</dd>
@@ -514,10 +600,13 @@ export function InvoiceDetail({
   const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const { mutateAsync: voidInvoice } = useVoidInvoice();
+  const applyCredit = useApplyCreditToInvoice();
+  const { data: unappliedPayments = [] } = useUnappliedPayments(invoice?.clientId);
+  const unappliedCents = unappliedPayments.reduce((s, p) => s + p.unusedAmountCents, 0);
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
   const { data: connectStatus } = useConnectStatus();
@@ -527,6 +616,10 @@ export function InvoiceDetail({
   const [lineItemPickerOpen, setLineItemPickerOpen] = useState(false);
   const [lineItemSearch, setLineItemSearch] = useState("");
   const lineItemSearchRef = useRef<HTMLInputElement>(null);
+  // In-flight guard for addLineItem: the picker's click handler can fire again
+  // (double click, or a second click while the row hasn't rendered yet) and
+  // each call used to insert another blank row — the "3 empty $0 rows" of D-15.
+  const addingLineItemRef = useRef(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [chargeCardOpen, setChargeCardOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
@@ -602,7 +695,10 @@ export function InvoiceDetail({
     </div>
   );
 
-  const lineItems = invoice.lineItems ?? [];
+  // The nested crm_invoice_line_items embed in useInvoice() has no .order()
+  // applied, so PostgREST returns rows in unspecified order — sort explicitly
+  // by sort_order to match the printed PDF (src/app/api/crm/invoices/[id]/pdf/route.ts).
+  const lineItems = [...(invoice.lineItems ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const payments = invoice.payments ?? [];
   const hasTax = taxRateBps > 0;
 
@@ -610,7 +706,11 @@ export function InvoiceDetail({
   // is a separate reduction stacked on top of that.
   const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
   const subtotal = lineItems.reduce((s, li) => s + netLineCents(li), 0);
-  const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+  // Tax base is net of the document-level discount — see
+  // use-invoices.ts's useUpdateInvoiceFinancials for why (charging tax on
+  // the pre-discount amount overcharges the customer).
+  const taxableSubtotal = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
   const previewTax = hasTax ? Math.round((taxableBase * taxRateBps) / 10000) : 0;
   const previewTotal = subtotal - discountCents + previewTax;
   const previewBalance = Math.max(0, previewTotal - invoice.amountPaidCents);
@@ -638,6 +738,8 @@ export function InvoiceDetail({
   }
 
   async function addLineItem(name?: string, description = "", rateCents = 0, isTaxable = false) {
+    if (addingLineItemRef.current) return;
+    addingLineItemRef.current = true;
     try {
       await upsertItem({
         invoiceId: invoice!.id,
@@ -652,6 +754,22 @@ export function InvoiceDetail({
         },
       });
     } catch { toast.error("Failed to add item"); }
+    finally { addingLineItemRef.current = false; }
+  }
+
+  /**
+   * Row saves are fire-on-blur, so clicking Save right after typing races the
+   * row's own upsert. Wait for any in-flight line-item mutations, then read the
+   * invoice back so validation and totals use what's actually persisted.
+   */
+  async function settledLineItems(): Promise<InvoiceLineItem[]> {
+    const deadline = Date.now() + 5000;
+    while (queryClient.isMutating({ mutationKey: LINE_ITEM_MUTATION_KEY }) > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 75));
+    }
+    await queryClient.invalidateQueries({ queryKey: ["crm-invoices", "detail", invoice!.id] });
+    const fresh = queryClient.getQueryData<{ lineItems?: InvoiceLineItem[] }>(["crm-invoices", "detail", invoice!.id]);
+    return [...(fresh?.lineItems ?? lineItems)].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }
 
   async function handleEmailSent() {
@@ -690,14 +808,27 @@ export function InvoiceDetail({
   async function handleSave() {
     setSaving(true);
     try {
+      const savedLines = await settledLineItems();
+      const isBlankLine = (li: InvoiceLineItem) =>
+        !(li.description ?? "").trim() && !(li.name ?? "").trim() && (li.totalCents ?? 0) === 0;
+      if (savedLines.length === 0 || savedLines.every(isBlankLine)) {
+        toast.error("Add at least one line item with a description or amount before saving this invoice");
+        return;
+      }
+      const netLine = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
+      const savedSubtotal = savedLines.reduce((s, li) => s + netLine(li), 0);
+      const savedTaxable = savedLines.filter((li) => li.isTaxable).reduce((s, li) => s + netLine(li), 0);
+      const savedTax = Math.round((Math.max(0, savedTaxable - discountCents) * taxRateBps) / 10000);
+      const savedTotal = savedSubtotal - discountCents + savedTax;
+
       // If this is a fresh draft (no number yet), assign one now
       if (invoice!.invoiceNumber == null) {
-        await assignNumber({ id: invoice!.id, clientId: invoice!.clientId, amountCents: previewTotal });
+        await assignNumber({ id: invoice!.id, clientId: invoice!.clientId, amountCents: savedTotal });
       }
       await Promise.all([
         updateFinancials({
           id: invoice!.id,
-          lineItems,
+          lineItems: savedLines,
           taxRateBps,
           discountCents,
           discountType,
@@ -755,11 +886,24 @@ export function InvoiceDetail({
       await voidInvoice({ id: invoice.id, clientId: invoice.clientId });
       toast.success("Invoice voided");
       setConfirmVoidOpen(false);
-    } catch { toast.error("Failed to void invoice"); }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+    }
     finally { setVoiding(false); }
   }
 
   const displayAddress = invoice.serviceAddress ?? invoice.clientAddress;
+
+  // Voiding an invoice that has payments applied would orphan those payment
+  // allocations, so it is blocked here, re-checked in useVoidInvoice, and
+  // enforced by a DB trigger. Being locked does NOT block a void: the lock
+  // freezes the invoice's amounts and is set as soon as it is sent or
+  // printed, and voiding an issued-but-unpaid invoice is the normal way to
+  // cancel one.
+  const voidBlocked: string | null =
+    invoice.amountPaidCents > 0
+      ? voidBlockedMessage(invoice.amountPaidCents)
+      : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -836,7 +980,14 @@ export function InvoiceDetail({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {invoice.status !== "void" && (
-                <DropdownMenuItem onSelect={() => setConfirmVoidOpen(true)}>
+                <DropdownMenuItem
+                  disabled={voidBlocked !== null}
+                  title={voidBlocked ?? undefined}
+                  onSelect={() => {
+                    if (voidBlocked) { toast.error(voidBlocked); return; }
+                    setConfirmVoidOpen(true);
+                  }}
+                >
                   <Ban className="mr-2 h-3.5 w-3.5 text-slate-500" /> Void Invoice
                 </DropdownMenuItem>
               )}
@@ -862,17 +1013,14 @@ export function InvoiceDetail({
             {invoice.invoiceNumber != null
               ? `Invoice #${invoice.invoiceNumber} will be marked void and its balance removed from the client's account.`
               : "This draft invoice will be marked void."}
-            {" "}The record and any payment history stay intact for your audit trail.
-            {invoice.amountPaidCents > 0 && (
-              <span className="mt-2 block font-medium text-red-600">
-                This invoice has {formatCurrency(invoice.amountPaidCents)} in recorded payments. Voiding it will
-                not reverse those payments — refund them first if that money needs to go back to the client.
-              </span>
+            {" "}The record stays intact for your audit trail.
+            {voidBlocked && (
+              <span className="mt-2 block font-medium text-red-600">{voidBlocked}</span>
             )}
           </p>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setConfirmVoidOpen(false)}>Cancel</Button>
-            <Button variant="destructive" size="sm" onClick={handleVoid} disabled={voiding}>
+            <Button variant="destructive" size="sm" onClick={handleVoid} disabled={voiding || voidBlocked !== null}>
               {voiding ? "Voiding…" : "Void Invoice"}
             </Button>
           </DialogFooter>
@@ -941,6 +1089,7 @@ export function InvoiceDetail({
                 }}
                 type="number"
                 className="ml-1 w-20 bg-brand-700 text-white text-sm font-semibold border-brand-500"
+                disabled={invoice.locked}
               />
             </span>
             {invoice.clientName && (
@@ -948,6 +1097,7 @@ export function InvoiceDetail({
             )}
             <Select
               value={invoice.status}
+              disabled={invoice.locked}
               onValueChange={(v) => {
                 // Voiding needs to zero the balance and resync the client's total,
                 // so route it through the confirm dialog instead of a bare status write.
@@ -955,7 +1105,7 @@ export function InvoiceDetail({
                 updateStatus({ id: invoice.id, status: v });
               }}
             >
-              <SelectTrigger className="h-6 w-28 text-xs bg-brand-700 border-brand-500 text-white ml-auto">
+              <SelectTrigger className="h-6 w-28 text-xs bg-brand-700 border-brand-500 text-white ml-auto disabled:opacity-60 disabled:cursor-not-allowed">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -965,7 +1115,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Header — two-column boxed layout */}
-          <div className="px-8 py-5 grid grid-cols-2 gap-5">
+          <div className="px-8 py-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Left: Bill To + Service Address */}
             <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bill To</p>
@@ -982,6 +1132,7 @@ export function InvoiceDetail({
                   onSave={(v) => updateHeader({ id: invoice.id, patch: { service_address: v || null } })}
                   className="text-xs text-slate-600 w-full"
                   placeholder="Click to set a different service address…"
+                  disabled={invoice.locked}
                 />
               </div>
             </div>
@@ -999,20 +1150,21 @@ export function InvoiceDetail({
                         onSave={(v) => setInvoiceNumber(Number(v) || invoice.invoiceNumber)}
                         type="number"
                         className="w-28"
+                        disabled={invoice.locked}
                       />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Invoice Date</td>
                     <td className="py-2 text-slate-700">
-                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" />
+                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Terms</td>
                     <td className="py-2">
-                      <Select value={terms} onValueChange={handleTermsChange}>
-                        <SelectTrigger className="h-7 text-xs w-40 border border-slate-200 shadow-none">
+                      <Select value={terms} onValueChange={handleTermsChange} disabled={invoice.locked}>
+                        <SelectTrigger className="h-7 text-xs w-40 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1026,7 +1178,7 @@ export function InvoiceDetail({
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Due Date</td>
                     <td className="py-2 text-slate-700">
-                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" />
+                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
                   <tr>
@@ -1035,6 +1187,7 @@ export function InvoiceDetail({
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
+                          disabled={invoice.locked}
                           onClick={() => {
                             const fallback = (invoice.clientDefaultTaxRateBps ?? 0) > 0
                               ? invoice.clientDefaultTaxRateBps!
@@ -1042,7 +1195,7 @@ export function InvoiceDetail({
                             setTaxRateBps(hasTax ? 0 : fallback);
                           }}
                           className={cn(
-                            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+                            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed",
                             hasTax ? "bg-amber-500" : "bg-slate-200"
                           )}
                         >
@@ -1058,6 +1211,7 @@ export function InvoiceDetail({
                               value={(taxRateBps / 100).toFixed(2)}
                               onChange={(e) => setTaxRateBps(Math.round(parseFloat(e.target.value || "0") * 100))}
                               className="h-7 w-24 text-right text-xs"
+                              disabled={invoice.locked}
                             />
                             <span className="text-slate-500 font-medium">%</span>
                           </div>
@@ -1070,7 +1224,10 @@ export function InvoiceDetail({
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium align-top">Discount</td>
                     <td className="py-2">
-                      <div className="flex items-center gap-1.5">
+                      {/* Wraps, and the saved-discount picker is capped to the
+                          cell: side by side these two overflow the details card
+                          on a narrow screen. */}
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-slate-500 font-medium">$</span>
                         <Input
                           type="number" step="0.01" min="0"
@@ -1078,10 +1235,11 @@ export function InvoiceDetail({
                           onChange={(e) => handleDiscountStrChange(e.target.value)}
                           onBlur={() => setDiscountCents(Math.round((parseFloat(discountStr) || 0) * 100))}
                           className="h-7 w-24 text-right text-xs"
+                          disabled={invoice.locked}
                         />
                         {activeDiscounts.length > 0 && (
-                          <Select onValueChange={applyNamedDiscount}>
-                            <SelectTrigger className="h-7 w-48 text-xs">
+                          <Select onValueChange={applyNamedDiscount} disabled={invoice.locked}>
+                            <SelectTrigger className="h-7 w-48 max-w-full min-w-0 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
                               <SelectValue placeholder="Apply a saved discount…" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1106,6 +1264,7 @@ export function InvoiceDetail({
                         onSave={(v) => updateHeader({ id: invoice.id, patch: { po_number: v || null } })}
                         className="w-36"
                         placeholder="Click to add…"
+                        disabled={invoice.locked}
                       />
                     </td>
                   </tr>
@@ -1115,17 +1274,18 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.salesRepId ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { sales_rep_id: v || null } })}
+                        disabled={invoice.locked}
                       >
-                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none">
+                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Assign sales rep…" />
                         </SelectTrigger>
                         <SelectContent>
                           {salesReps.map((e) => (
-                            <SelectItem key={e.userId as string} value={e.userId as string}>
+                            <SelectItem key={e.id} value={e.id}>
                               {e.firstName} {e.lastName}
                             </SelectItem>
                           ))}
-                          {invoice.salesRepId && !salesReps.some((e) => e.userId === invoice.salesRepId) && (
+                          {invoice.salesRepId && !salesReps.some((e) => e.id === invoice.salesRepId) && (
                             <SelectItem value={invoice.salesRepId}>
                               {invoice.salesRepName ?? "Unknown"}
                             </SelectItem>
@@ -1140,8 +1300,9 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.preferredPaymentMethod ?? invoice.clientDefaultPaymentMethod ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { preferred_payment_method: v || null } })}
+                        disabled={invoice.locked}
                       >
-                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none">
+                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Select method…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1172,7 +1333,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-hidden">
+          <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-brand-500 text-white">
                 <tr>
@@ -1190,7 +1351,7 @@ export function InvoiceDetail({
               </thead>
               <tbody>
                 {lineItems.map((li) => (
-                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} />
+                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} locked={invoice.locked} />
                 ))}
                 {lineItems.length === 0 && (
                   <tr>
@@ -1205,15 +1366,16 @@ export function InvoiceDetail({
             {/* Add item + totals */}
             <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50">
               <Popover
-                open={lineItemPickerOpen}
+                open={lineItemPickerOpen && !invoice.locked}
                 onOpenChange={(o) => {
+                  if (invoice.locked) return;
                   setLineItemPickerOpen(o);
                   if (!o) setLineItemSearch("");
                   else setTimeout(() => lineItemSearchRef.current?.focus(), 50);
                 }}
               >
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-xs">
+                  <Button variant="outline" size="sm" className="h-8 text-xs" disabled={invoice.locked}>
                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Line Item
                     <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
                   </Button>
@@ -1317,9 +1479,56 @@ export function InvoiceDetail({
             </div>
           </div>
 
+          {/* Unapplied money the client already has. A proposal deposit is
+              taken before any invoice exists and is never applied
+              automatically, so without this prompt a converted job gets
+              invoiced its full amount and the client is asked for money they
+              have already paid. */}
+          {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
+            <div className="mx-8 mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-blue-900">
+                  <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
+                  {unappliedPayments.length === 1 ? "payment" : "payments"} on this client
+                  {unappliedPayments.some((p) => p.isPrepayment) && " (including a deposit)"} —{" "}
+                  {formatCurrency(Math.min(unappliedCents, invoice.balanceCents))} can go to this invoice.
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={applyCredit.isPending}
+                  onClick={async () => {
+                    // Oldest money first, so a deposit taken at acceptance is
+                    // consumed before a later overpayment.
+                    let remaining = invoice.balanceCents;
+                    let total = 0;
+                    for (const p of [...unappliedPayments].sort((a, b) => a.paymentDate.localeCompare(b.paymentDate))) {
+                      if (remaining <= 0) break;
+                      const take = Math.min(p.unusedAmountCents, remaining);
+                      if (take <= 0) continue;
+                      try {
+                        const res = await applyCredit.mutateAsync({
+                          paymentId: p.id, invoiceId: invoice.id, amountCents: take,
+                        });
+                        total += res.appliedCents;
+                        remaining -= res.appliedCents;
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Couldn't apply the credit");
+                        break;
+                      }
+                    }
+                    if (total > 0) toast.success(`Applied ${formatCurrency(total)} to this invoice`);
+                  }}
+                >
+                  {applyCredit.isPending ? "Applying…" : "Apply to this invoice"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Payment history */}
           {payments.length > 0 && (
-            <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-hidden">
+            <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-x-auto">
               <div className="border-b bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Payment History
               </div>
@@ -1333,14 +1542,49 @@ export function InvoiceDetail({
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((p) => (
-                    <tr key={p.id} className="border-b hover:bg-brand-50 cursor-pointer" onClick={() => setSelectedPayment(p)}>
-                      <td className="px-4 py-2.5 text-brand-700 hover:underline font-medium">{fmtDate(p.paymentDate)}</td>
-                      <td className="px-4 py-2.5 capitalize">{p.method}</td>
-                      <td className="px-4 py-2.5 text-slate-500">{p.reference ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-green-600">{formatCurrency(p.amountCents)}</td>
-                    </tr>
-                  ))}
+                  {payments.map((p) => {
+                    // Split (multi-invoice) payments carry this invoice's actual
+                    // allocated share separately from the payment's full amount —
+                    // see useInvoice() in use-invoices.ts.
+                    const displayAmount = p.displayAmountCents ?? p.amountCents;
+                    const fullyRefunded = p.refundedAmountCents > 0 && p.refundedAmountCents >= p.amountCents;
+                    const partiallyRefunded = p.refundedAmountCents > 0 && !fullyRefunded;
+                    return (
+                      <tr key={p.id} className="border-b hover:bg-brand-50 cursor-pointer" onClick={() => setSelectedPayment(p)}>
+                        <td className="px-4 py-2.5 text-brand-700 hover:underline font-medium">{fmtDate(p.paymentDate)}</td>
+                        <td className="px-4 py-2.5 capitalize">
+                          {p.method}
+                          {p.isSplitAllocation && <span className="ml-1 text-slate-400">(split)</span>}
+                          {/* Payment recorded against a parent client_id (e.g. one
+                              check from a property manager covering several
+                              sub-accounts) but allocated to THIS invoice, whose
+                              own client is a child — make that origin explicit
+                              rather than implying the child paid directly. */}
+                          {p.clientId !== invoice.clientId && (
+                            <span className="ml-1 text-slate-400 normal-case">
+                              (via {p.clientName ?? "parent account"})
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-500">{p.reference ?? "—"}</td>
+                        <td className="px-4 py-2.5 text-right font-medium">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {(fullyRefunded || partiallyRefunded) && (
+                              <span className={cn(
+                                "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
+                                fullyRefunded ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                              )}>
+                                {fullyRefunded ? "Refunded" : "Partially Refunded"}
+                              </span>
+                            )}
+                            <span className={cn(fullyRefunded ? "text-slate-400 line-through" : "text-green-600")}>
+                              {formatCurrency(displayAmount)}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1366,8 +1610,23 @@ export function InvoiceDetail({
         open={chargeCardOpen}
         onOpenChange={setChargeCardOpen}
         onCharged={() => {
-          queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
-          setTimeout(() => queryClient.invalidateQueries({ queryKey: ["crm-invoices"] }), 4000);
+          const invalidate = () => {
+            queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
+            // Payments are a separate query from invoices — see
+            // use-autopay-invoices.ts. Omitting this left the new payment out
+            // of the client's Accounting box and the Payments page until a
+            // hard reload, even though the invoice's own Payment History
+            // (nested in the invoice query) showed it right away.
+            queryClient.invalidateQueries({ queryKey: ["crm-payments"] });
+            queryClient.invalidateQueries({ queryKey: ["clients", invoice.clientId] });
+            queryClient.invalidateQueries({ queryKey: ["clients"] });
+          };
+          invalidate();
+          // The card charge is confirmed client-side, but the invoice/balance
+          // update itself happens async in the Stripe Connect webhook
+          // (payment_intent.succeeded) — re-invalidate after it's had time to
+          // land so the balance doesn't stay stuck at its pre-payment value.
+          setTimeout(invalidate, 4000);
         }}
       />
       <PaymentDetailDialog

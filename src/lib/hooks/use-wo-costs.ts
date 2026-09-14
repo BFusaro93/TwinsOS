@@ -13,6 +13,22 @@ import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types/cmms";
  * left inventory quietly wrong with no way for the person who typed the
  * quantity to know.
  */
+/**
+ * Returns the authenticated user's org_id. Used to cross-check that a
+ * client-supplied vendor_id/part_id actually belongs to the caller's own
+ * org before it's written onto a wo_vendor_charges/wo_parts row — without
+ * this, a client could pass another org's vendor/part id and have it
+ * silently linked (see 20260902190000_wo_costs_cross_org_guard.sql, which
+ * adds the same check as a DB-level trigger for defense-in-depth).
+ */
+async function getCurrentOrgId(supabase: ReturnType<typeof createClient>): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (!profile?.org_id) throw new Error("Profile not found");
+  return profile.org_id as string;
+}
+
 async function adjustWOPartQuantity(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -168,6 +184,19 @@ export function useAddWOPart() {
       unitCost: number;
     }): Promise<WOPart> => {
       const supabase = createClient();
+
+      // Cross-org FK guard: a client-supplied partId must resolve to a part
+      // in the caller's own org — otherwise a WO could be charged against
+      // (and its cost data mixed with) another org's part record.
+      if (input.partId) {
+        const orgId = await getCurrentOrgId(supabase);
+        const { data: part } = await supabase
+          .from("parts")
+          .select("org_id")
+          .eq("id", input.partId)
+          .maybeSingle();
+        if (!part || part.org_id !== orgId) throw new Error("Part not found");
+      }
 
       // If this part was previously soft-deleted on this WO, restore it instead
       // of inserting a new row (avoids unique constraint collision on work_order_id+part_id).
@@ -455,6 +484,30 @@ export function useWOVendorCharges(workOrderId: string) {
   });
 }
 
+/**
+ * Fetches all CMMS vendor charges logged against ANY work order for a given
+ * vendor — these bypass the PO flow entirely (a direct charge from a vendor
+ * logged on a Work Order's Costs tab), so they never show up in
+ * usePurchaseOrders(). Used by VendorDetailSheet so vendor spend/history
+ * reflects both POs and this CMMS-side path instead of silently omitting it.
+ */
+export function useWOVendorChargesByVendor(vendorId: string) {
+  return useQuery({
+    queryKey: ["wo-vendors", "by-vendor", vendorId],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("wo_vendor_charges")
+        .select("*")
+        .eq("vendor_id", vendorId)
+        .is("deleted_at", null);
+      if (error) throw error;
+      return (data.map(mapWOVendorCharge)) as WOVendorCharge[];
+    },
+    enabled: !!vendorId,
+  });
+}
+
 export function useAddWOVendorCharge() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -466,6 +519,20 @@ export function useAddWOVendorCharge() {
       cost: number;
     }): Promise<WOVendorCharge> => {
       const supabase = createClient();
+
+      // Cross-org FK guard: a client-supplied vendorId must resolve to a
+      // vendor in the caller's own org — otherwise a WO could be charged
+      // against another org's vendor record.
+      if (input.vendorId) {
+        const orgId = await getCurrentOrgId(supabase);
+        const { data: vendor } = await supabase
+          .from("vendors")
+          .select("org_id")
+          .eq("id", input.vendorId)
+          .maybeSingle();
+        if (!vendor || vendor.org_id !== orgId) throw new Error("Vendor not found");
+      }
+
       const { data, error } = await supabase
         .from("wo_vendor_charges")
         .insert({
@@ -505,6 +572,18 @@ export function useUpdateWOVendorCharge() {
       cost: number;
     }) => {
       const supabase = createClient();
+
+      // Cross-org FK guard — see useAddWOVendorCharge.
+      if (vendorId) {
+        const orgId = await getCurrentOrgId(supabase);
+        const { data: vendor } = await supabase
+          .from("vendors")
+          .select("org_id")
+          .eq("id", vendorId)
+          .maybeSingle();
+        if (!vendor || vendor.org_id !== orgId) throw new Error("Vendor not found");
+      }
+
       const { error } = await supabase
         .from("wo_vendor_charges")
         .update({

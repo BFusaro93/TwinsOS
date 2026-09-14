@@ -4,6 +4,9 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 import { processDueEnrollment } from "@/lib/automations/sequence-processor";
+import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
+import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -52,7 +55,11 @@ async function executeAction(
   const orgId = ctx.orgId;
 
   if (auto.action_type === "create_work_order") {
-    const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+    // Atomic per-org/year counter, not Date.now() — see next_work_order_number().
+    const { data: workOrderNumber, error: woNumErr } = await adminClient.rpc("next_work_order_number", {
+      p_org_id_override: orgId,
+    });
+    if (woNumErr || !workOrderNumber) return { skipReason: `failed to generate WO number: ${woNumErr?.message ?? "unknown"}` };
     const { data: wo, error: woErr } = await adminClient
       .from("work_orders")
       .insert({
@@ -110,13 +117,13 @@ async function executeAction(
 
         if (eligible.length > 0) {
           const resend = new Resend(resendKey);
-          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
           const subject = `New maintenance request: ${acTitle}`;
-          const link = `${siteUrl}/cmms/work-orders`;
+          const link = `${siteUrl}/cmms/requests?id=${mr.id}`;
           await Promise.allSettled(
             eligible.map((p: { email: string | null; name: string | null }) =>
               resend.emails.send({
-                from: "Equipt <noreply@twinslawnservice.com>",
+                from: EMAIL_FROM,
                 to: p.email as string,
                 subject,
                 html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
@@ -137,7 +144,11 @@ async function executeAction(
   }
 
   if (auto.action_type === "create_requisition") {
-    const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now()}`;
+    // Atomic per-org/year counter, not Date.now() — see next_requisition_number().
+    const { data: requisitionNumber, error: reqNumErr } = await adminClient.rpc("next_requisition_number", {
+      p_org_id_override: orgId,
+    });
+    if (reqNumErr || !requisitionNumber) return { skipReason: `failed to generate requisition number: ${reqNumErr?.message ?? "unknown"}` };
     const { data: req, error: reqErr } = await adminClient
       .from("requisitions")
       .insert({
@@ -166,7 +177,15 @@ async function executeAction(
       return { skipReason: `no profiles found for role "${recipientRole}"` };
     }
 
-    const rows = profiles.map((p: { id: string }) => ({ org_id: orgId, user_id: p.id, message }));
+    const rows = profiles.map((p: { id: string }) => ({
+      org_id: orgId,
+      user_id: p.id,
+      type: "automation_alert",
+      title: "Automation Alert",
+      message,
+      entity_id: null,
+      entity_type: null,
+    }));
     const { error: notifErr } = await adminClient.from("notifications").insert(rows);
     if (notifErr) return { skipReason: `failed to insert notifications: ${notifErr.message}` };
     return { result: `notified ${profiles.length} user${profiles.length === 1 ? "" : "s"}` };
@@ -179,7 +198,7 @@ async function executeAction(
     const resendKey = process.env.RESEND_API_KEY;
     if (!resendKey) return { skipReason: "RESEND_API_KEY not configured" };
 
-    const fromEmail = process.env.FROM_EMAIL ?? "noreply@twinsOS.com";
+    const fromEmail = process.env.FROM_EMAIL ?? "noreply@landscapt.com";
     const subject = `Automation triggered: ${auto.name}`;
     const body = (ac.message as string)
       ? `${ac.message as string}\n\nTriggered by automation: ${auto.name}`
@@ -313,14 +332,56 @@ async function handleRun(request: Request) {
       if (!callerOrgId) {
         return NextResponse.json({ error: "Event-fired automations require an authenticated caller" }, { status: 401 });
       }
-      const { eventTrigger, toStatus, assetId, assetName } = body as {
+      const { eventTrigger, toStatus, assetId, assetName, workOrderId, purchaseOrderId } = body as {
         eventTrigger: typeof EVENT_TRIGGER_TYPES[number];
         toStatus?: string;
         assetId?: string | null;
         assetName?: string | null;
+        workOrderId?: string | null;
+        purchaseOrderId?: string | null;
       };
 
-      let autoQuery = (adminClient as AdminClient)
+      // assetId is a caller-supplied foreign key written directly onto the new
+      // work_orders/maintenance_requests row's asset_id column — verify it
+      // actually belongs to the caller's org before trusting it, same as
+      // workOrderId/purchaseOrderId below, so a crafted request can't link a
+      // newly created row to another org's asset.
+      let verifiedAssetId: string | null = null;
+      if (assetId) {
+        const { data: asset } = await (adminClient as AdminClient)
+          .from("assets")
+          .select("id")
+          .eq("id", assetId)
+          .eq("org_id", callerOrgId)
+          .maybeSingle();
+        verifiedAssetId = asset ? assetId : null;
+      }
+
+      // Fan out to any Zapier REST Hook subscriptions for the CMMS trigger
+      // types that piggyback on this same event round-trip — best-effort,
+      // independent of whether any internal automation matched below.
+      if (eventTrigger === "wo_status_change" && toStatus === "done" && workOrderId) {
+        const config = POLLING_TRIGGERS.work_order_completed;
+        const { data: wo } = await (adminClient as AdminClient)
+          .from("work_orders")
+          .select(config.columns)
+          .eq("id", workOrderId)
+          .eq("org_id", callerOrgId)
+          .maybeSingle();
+        if (wo) await notifyZapierSubscribers(adminClient, callerOrgId, "work_order_completed", config.map(wo));
+      }
+      if (eventTrigger === "po_status_change" && toStatus === "approved" && purchaseOrderId) {
+        const config = POLLING_TRIGGERS.po_approved;
+        const { data: po } = await (adminClient as AdminClient)
+          .from("purchase_orders")
+          .select(config.columns)
+          .eq("id", purchaseOrderId)
+          .eq("org_id", callerOrgId)
+          .maybeSingle();
+        if (po) await notifyZapierSubscribers(adminClient, callerOrgId, "po_approved", config.map(po));
+      }
+
+      const autoQuery = (adminClient as AdminClient)
         .from("automations")
         .select("*")
         .eq("trigger_type", eventTrigger)
@@ -337,16 +398,16 @@ async function handleRun(request: Request) {
       for (const auto of candidates ?? []) {
         if (eventTrigger === "wo_status_change" || eventTrigger === "po_status_change") {
           const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
-          if (tc.toStatus !== toStatus) {
-            skipped.push({ automationId: auto.id, reason: `toStatus "${toStatus}" doesn't match configured "${tc.toStatus}"` });
+          if (tc.to_status !== toStatus) {
+            skipped.push({ automationId: auto.id, reason: `toStatus "${toStatus}" doesn't match configured "${tc.to_status}"` });
             continue;
           }
         }
 
         const outcome = await executeAction(adminClient as AdminClient, auto, {
           orgId: callerOrgId,
-          assetId: assetId ?? null,
-          assetName: assetName ?? null,
+          assetId: verifiedAssetId,
+          assetName: verifiedAssetId ? (assetName ?? null) : null,
         });
         if ("skipReason" in outcome) {
           skipped.push({ automationId: auto.id, reason: outcome.skipReason });
@@ -489,7 +550,7 @@ async function handleRun(request: Request) {
 
     let enrollQuery = (adminClient as AdminClient)
       .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position")
+      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position")
       .lte("next_fire_at", nowIso)
       .is("completed_at", null)
       .is("stopped_at", null)

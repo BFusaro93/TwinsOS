@@ -16,14 +16,17 @@ export interface NotificationPrefs {
   emailEstimateApprovalRequired: boolean;
   emailEstimateClientAccepted: boolean;
   emailEstimateClientRejected: boolean;
+  emailEstimateDepositFailed: boolean;
   emailEstimateExpiring: boolean;
   emailNewTicket: boolean;
   emailTicketAssigned: boolean;
   emailTicketComment: boolean;
   emailContractExpiring: boolean;
+  emailMeetingReminder: boolean;
   emailLowStockAlert: boolean;
   emailPmScheduleDue: boolean;
   emailNewMaintenanceRequest: boolean;
+  emailMention: boolean;
   // Email — admin: any WO events (shown only to admins in Settings)
   emailAdminWoCreated: boolean;
   emailAdminWoStatusChanged: boolean;
@@ -40,14 +43,17 @@ export interface NotificationPrefs {
   inAppEstimateApprovalRequired: boolean;
   inAppEstimateClientAccepted: boolean;
   inAppEstimateClientRejected: boolean;
+  inAppEstimateDepositFailed: boolean;
   inAppEstimateChangeRequest: boolean;
   inAppNewTicket: boolean;
   inAppTicketAssigned: boolean;
   inAppTicketComment: boolean;
   inAppContractExpiring: boolean;
+  inAppMeetingReminder: boolean;
   inAppLowStockAlert: boolean;
   inAppPmScheduleDue: boolean;
   inAppNewMaintenanceRequest: boolean;
+  inAppMention: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -64,14 +70,17 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailEstimateApprovalRequired: true,
   emailEstimateClientAccepted: true,
   emailEstimateClientRejected: true,
+  emailEstimateDepositFailed: true,
   emailEstimateExpiring: true,
   emailNewTicket: true,
   emailTicketAssigned: true,
   emailTicketComment: true,
   emailContractExpiring: true,
+  emailMeetingReminder: true,
   emailLowStockAlert: true,
   emailPmScheduleDue: false,
   emailNewMaintenanceRequest: false,
+  emailMention: true,
   emailAdminWoCreated: false,
   emailAdminWoStatusChanged: false,
   emailAdminWoComment: false,
@@ -86,14 +95,17 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inAppEstimateApprovalRequired: true,
   inAppEstimateClientAccepted: true,
   inAppEstimateClientRejected: true,
+  inAppEstimateDepositFailed: true,
   inAppEstimateChangeRequest: true,
   inAppNewTicket: true,
   inAppTicketAssigned: true,
   inAppTicketComment: true,
   inAppContractExpiring: true,
+  inAppMeetingReminder: true,
   inAppLowStockAlert: true,
   inAppPmScheduleDue: false,
   inAppNewMaintenanceRequest: false,
+  inAppMention: true,
 };
 
 function mergePrefs(stored: Record<string, unknown>): NotificationPrefs {

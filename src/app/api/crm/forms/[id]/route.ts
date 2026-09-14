@@ -99,6 +99,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.accountMatchingStrategy !== undefined) allowed.account_matching_strategy = body.accountMatchingStrategy;
   if (body.accountUpdateStrategy !== undefined) allowed.account_update_strategy = body.accountUpdateStrategy;
 
+  // crm_forms.slug is only unique per-org (crm_forms_org_id_slug_key) — the
+  // public portal at /forms/[slug] resolves the form (and its org) by slug
+  // ALONE, with no org in the URL. Two orgs can independently land on the
+  // same slug (e.g. both named "Contact Us"); that's harmless while both
+  // stay draft, but the moment BOTH are published the public lookup becomes
+  // ambiguous and 404s for visitors of both orgs (see
+  // crm_forms_slug_published_key, the DB-level backstop for this). Publish
+  // is the one action that can trigger that, so resolve it here rather than
+  // surfacing a raw constraint-violation error the user has no way to act
+  // on — there's no slug editor in the UI.
+  if (allowed.status === "published") {
+    const { data: form } = await db.from("crm_forms").select("slug").eq("id", id).eq("org_id", orgId).maybeSingle();
+    if (form?.slug) {
+      const { data: collision } = await db
+        .from("crm_forms")
+        .select("id")
+        .eq("slug", form.slug)
+        .eq("status", "published")
+        .is("deleted_at", null)
+        .neq("id", id)
+        .maybeSingle();
+      if (collision) {
+        allowed.slug = `${form.slug}-${Date.now().toString(36)}`;
+      }
+    }
+  }
+
   const { data, error } = await db
     .from("crm_forms")
     .update(allowed)

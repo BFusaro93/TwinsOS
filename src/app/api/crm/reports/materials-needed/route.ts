@@ -14,6 +14,14 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Same gate as src/app/api/crm/reports/run/[reportKey]/route.ts — this is
+  // a Report Center report that happens to live on its own page (href), so
+  // the catalog's client-side permission check never covered this endpoint.
+  const { data: canView } = await supabase.rpc("has_settings_permission", {
+    p_key: "view_report_center",
+  });
+  if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   try {
     const result = await computeMaterialsNeeded(supabase);
     return NextResponse.json(result);

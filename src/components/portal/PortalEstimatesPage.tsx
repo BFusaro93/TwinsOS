@@ -16,6 +16,10 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   sent:     { label: "Awaiting Review", color: "bg-blue-50 text-blue-700 border-blue-200",    icon: <Clock className="h-3.5 w-3.5" /> },
   viewed:   { label: "Viewed",          color: "bg-yellow-50 text-yellow-700 border-yellow-200", icon: <Clock className="h-3.5 w-3.5" /> },
   accepted: { label: "Accepted",        color: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  invoiced: { label: "Accepted",        color: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  // A declined proposal is stored as stage 'lost' (the office's term); the
+  // client-facing wording stays "Declined". 'declined' is kept for any legacy rows.
+  lost:     { label: "Declined",        color: "bg-slate-100 text-slate-500 border-slate-200", icon: <XCircle className="h-3.5 w-3.5" /> },
   declined: { label: "Declined",        color: "bg-slate-100 text-slate-500 border-slate-200", icon: <XCircle className="h-3.5 w-3.5" /> },
   expired:  { label: "Expired",         color: "bg-red-50 text-red-600 border-red-200",       icon: <XCircle className="h-3.5 w-3.5" /> },
 };
@@ -364,7 +368,10 @@ export default function PortalEstimatesPage({ estimates: initial }: { estimates:
       <ul className="flex flex-col gap-2">
         {list.map((est) => {
           const cfg = STATUS_CONFIG[est.status] ?? STATUS_CONFIG.sent;
-          const expired = est.expires_at && new Date(est.expires_at) < new Date() && est.status !== "accepted";
+          // Only an estimate still awaiting a decision can expire — a decided
+          // one (accepted/invoiced/declined) keeps its outcome badge.
+          const decided = ["accepted", "invoiced", "lost", "declined"].includes(est.status);
+          const expired = est.expires_at && new Date(est.expires_at) < new Date() && !decided;
           const displayStatus = expired ? STATUS_CONFIG.expired : cfg;
           const canAct = actionable && !expired;
 
@@ -379,7 +386,7 @@ export default function PortalEstimatesPage({ estimates: initial }: { estimates:
                 </p>
                 <p className="text-xs text-slate-500">
                   Sent {fmtDate(est.created_at)}
-                  {est.expires_at && !["accepted", "declined"].includes(est.status) && (
+                  {est.expires_at && !["accepted", "lost", "invoiced"].includes(est.status) && (
                     <> · Expires {fmtDate(est.expires_at)}</>
                   )}
                 </p>
@@ -482,7 +489,7 @@ export default function PortalEstimatesPage({ estimates: initial }: { estimates:
         <DeclineDialog
           estimate={declining}
           onClose={() => setDeclining(null)}
-          onDeclined={(id) => patchStatus(id, "declined")}
+          onDeclined={(id) => patchStatus(id, "lost")}
         />
       )}
       {requestingChanges && (

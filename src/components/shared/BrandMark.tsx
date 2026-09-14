@@ -1,0 +1,29 @@
+/**
+ * Landscapt/Equipt icon mark, per brand guidelines: the green (color) variant
+ * on light/white surfaces, the reversed (white bg) variant on dark surfaces
+ * like sidebars and top nav.
+ */
+export function BrandMark({
+  variant = "color",
+  className,
+}: {
+  variant?: "color" | "reversed";
+  className?: string;
+}) {
+  const bg = variant === "reversed" ? "#ffffff" : "#005642";
+  return (
+    <svg viewBox="0 0 48 48" className={className} role="img" aria-label="Brand mark">
+      <rect x="1" y="1" width="46" height="46" rx="11" fill={bg} />
+      <path d="M15,13 L15,32" stroke="#2aa9e0" strokeWidth="5.5" fill="none" strokeLinecap="round" />
+      <path
+        d="M15,32 L33,32"
+        stroke="#60ab45"
+        strokeWidth="5.5"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M22,32 L33,20" stroke="#b7d433" strokeWidth="5.5" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}

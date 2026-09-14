@@ -11,7 +11,7 @@ import {
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Plus, RotateCcw, Search, UserCheck, X } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw, Search, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import type {
@@ -118,7 +120,10 @@ const PRIORITY_OPTIONS: Array<{ label: string; value: TicketPriority | "all" }> 
   { label: "Low", value: "low" },
 ];
 
-const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Billing", "Change Service", "Complaint", "Other"];
+// "Upsell" is the category crew-submitted field suggestions land under (see
+// /api/crm/crew/visits/[visitId]/upsell), so it has to be filterable here even
+// though nobody picks it by hand in the New Ticket dialog.
+const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Upsell", "Billing", "Change Service", "Complaint", "Other"];
 
 // ── NewTicketDialog ───────────────────────────────────────────────────────────
 
@@ -131,7 +136,8 @@ interface NewTicketDialogProps {
 
 export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultType = "note" }: NewTicketDialogProps) {
   const { data: clients } = useClients();
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const createTicket = useCreateTicket();
   const rf = useRequiredFields("ticket");
   const { data: categoryOptions } = useOrgList("ticket_categories");
@@ -201,7 +207,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
     { label: "Call", value: "call" },
     { label: "Event", value: "event" },
   ];
-  const typeLabel = form.type === "call" ? "Call" : form.type === "event" ? "Event" : "Ticket";
+  const typeLabel = form.type === "call" ? "Call" : form.type === "event" ? "Event" : form.type === "text" ? "Text" : "Ticket";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -449,7 +455,9 @@ export function TicketsList(props: Props) {
 }
 
 function TicketsListInner({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
-  const listTypeLabel = typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket";
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = typeFilter === "call" ? can("tickets_add_calls") : can("tickets_add_notes");
+  const listTypeLabel = typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket";
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -466,7 +474,8 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignId, setReassignId] = useState("");
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
 
   const { data: tickets, isLoading, refetch } = useTickets({ clientId });
   const updateTicket = useUpdateTicket();
@@ -605,6 +614,16 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     setReassignId("");
   }
 
+  if (!permissionsLoading && !can("tickets_view_modify")) {
+    return (
+      <EmptyState
+        icon={TicketIcon}
+        title="No access"
+        description={`You don't have permission to view ${title}.`}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -612,7 +631,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
         title={title}
         description={description}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ImportExportMenu
               entityLabel={title}
               templateColumns={TICKET_TEMPLATE_COLUMNS}
@@ -642,10 +661,12 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 }
               }}
             />
-            <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
-            </Button>
+            {canAdd && (
+              <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
+              </Button>
+            )}
           </div>
         }
       />
@@ -678,7 +699,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       {/* White column filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {COL_FILTERS.map(({ key, label }) => (
             <button
               key={key}
@@ -717,8 +738,8 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           {/* Actions dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -735,11 +756,15 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
-                <Plus className="mr-2 h-3.5 w-3.5" />
-                Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {canAdd && (
+                <>
+                  <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem
                 disabled={!someSelected}
                 onSelect={() => bulkSetStatus("open")}
@@ -785,7 +810,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
           </button>
 
           {/* Quick-filter tabs */}
-          <div className="ml-2 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {STATUS_QUICK.map(({ key, label }) => (
               <button
                 key={key}

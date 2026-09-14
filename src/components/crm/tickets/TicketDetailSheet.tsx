@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   useCloseTicket,
   useUpdateTicket,
@@ -8,13 +9,17 @@ import {
   useAddTicketLink,
   useRemoveTicketLink,
   useDeleteTicket,
+  useClearSmsConsentPendingPhone,
 } from "@/lib/hooks/use-tickets";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
+import { useProjects } from "@/lib/hooks/use-projects";
+import { useCreateEstimateFromUpsell } from "@/lib/hooks/use-upsell-convert";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
-import { useUsers } from "@/lib/hooks/use-users";
 import { useClients } from "@/lib/hooks/use-clients";
+import { NewClientDialog } from "@/components/crm/NewClientDialog";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import {
   useTicketContributors,
@@ -46,9 +51,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { Download, Trash2, UserPlus, X } from "lucide-react";
+import { PermissionGate } from "@/components/shared/PermissionGate";
+import { AlertTriangle, Download, FileText, Loader2, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 // ── status flow ───────────────────────────────────────────────────────────────
 
@@ -88,14 +95,8 @@ const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Billing", "Change Ser
 // upstream (submit-form-response.ts). Interpolating them unescaped into
 // document.write() lets a crafted "Full Name" or subject field execute
 // script in a staff member's browser session the moment they click Print.
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+// (escapeHtml itself now lives in lib/utils/escape-html — see its own
+// comment for why it isn't imported from lib/email/send.)
 
 function printTicket(ticket: CRMTicket) {
   const win = window.open("", "_blank", "width=700,height=900");
@@ -150,7 +151,9 @@ interface EditFormProps {
 function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
   const updateTicket = useUpdateTicket();
   const { data: clients } = useClients();
-  const { data: users } = useUsers();
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const { data: employees } = useSelectableEmployees();
+  const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -263,15 +266,37 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-xs">Client</Label>
-          <Select value={form.clientId ?? "none"} onValueChange={(v) => set("clientId", v === "none" ? null : v)}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select client…" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No client</SelectItem>
-              {(clients ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-1.5">
+            <Select value={form.clientId ?? "none"} onValueChange={(v) => set("clientId", v === "none" ? null : v)}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select client…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No client</SelectItem>
+                {(clients ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <PermissionGate permission="client_add">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 shrink-0 px-2.5"
+                onClick={() => setNewClientOpen(true)}
+                title="Create a new client and link it to this ticket"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+              </Button>
+            </PermissionGate>
+          </div>
+          <NewClientDialog
+            open={newClientOpen}
+            onOpenChange={setNewClientOpen}
+            onCreated={(client) => {
+              set("clientId", client.id);
+              toast.success(`${client.displayName} created and linked to this ticket`);
+            }}
+          />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Assigned To</Label>
@@ -310,23 +335,50 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
 // ── linked records picker ─────────────────────────────────────────────────────
 
 function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
+  const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const createEstimate = useCreateEstimateFromUpsell();
   const addLink = useAddTicketLink();
   const removeLink = useRemoveTicketLink();
   const { data: links } = useTicketLinks(ticket.id);
-  const [newLinkType, setNewLinkType] = useState<"estimate" | "invoice" | "job">("estimate");
+  const [newLinkType, setNewLinkType] = useState<"estimate" | "invoice" | "job" | "project">("estimate");
   const [selectedId, setSelectedId] = useState("");
 
   const clientId = ticket.clientId ?? "";
   const { data: estimates } = useEstimates(clientId || undefined);
   const { data: invoices } = useInvoices(clientId || undefined);
   const { data: jobs } = useJobsList(clientId ? { clientId } : undefined);
+  const { data: allProjects } = useProjects();
+  // Projects aren't always tied to a client — narrow to the ticket's client when set,
+  // otherwise offer the full active project list.
+  const projects = clientId
+    ? (allProjects ?? []).filter((p) => p.clientId === clientId)
+    : (allProjects ?? []);
 
   const options: { id: string; label: string }[] =
     newLinkType === "estimate"
       ? (estimates ?? []).map((e) => ({ id: e.id, label: `#${e.estimateNumber} — ${e.description || "(no description)"}` }))
       : newLinkType === "invoice"
       ? (invoices ?? []).map((i) => ({ id: i.id, label: `#${i.invoiceNumber} — ${i.description || "(no description)"}` }))
-      : (jobs ?? []).map((j) => ({ id: j.id, label: j.serviceAddress || j.jobType || `Job ${j.id.slice(0, 8)}` }));
+      : newLinkType === "job"
+      ? (jobs ?? []).map((j) => ({ id: j.id, label: j.serviceAddress || j.jobType || `Job ${j.id.slice(0, 8)}` }))
+      : projects.map((p) => ({ id: p.id, label: p.name }));
+
+  async function handleCreateEstimate() {
+    try {
+      const res = await createEstimate.mutateAsync(ticket);
+      toast.success(
+        res.resumed
+          ? `Estimate #${res.estimateNumber} was already created for this ticket — opening it.`
+          : res.lineAdded
+          ? `Estimate #${res.estimateNumber} created and linked, with the suggested service on it.`
+          : `Estimate #${res.estimateNumber} created and linked — add the service line to price it.`
+      );
+      router.push(`/crm/estimates/${res.estimateId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the estimate");
+    }
+  }
 
   async function handleAdd() {
     if (!selectedId) return;
@@ -336,8 +388,52 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
     setSelectedId("");
   }
 
+  // A crew-submitted upsell exists to become a quote, and the estimate link is
+  // what makes it show as converted in reporting — so offer it as one action
+  // rather than making the office create the estimate and come back to link it.
+  // Hidden once an estimate is linked, so nobody quietly quotes it twice.
+  // One click here creates a real priced estimate, which every other entry
+  // point to estimate creation gates on `estimate_add`. Without the same gate a
+  // role with tickets but deliberately no estimating rights (a dispatcher, a
+  // CSR) could mint estimates through this button — and the underlying insert
+  // is permitted, because RLS on `estimates` is org-scoped and knows nothing
+  // about the crm_roles permission catalog. Hidden rather than disabled while
+  // permissions are still loading, so it never flashes for someone who can't
+  // use it.
+  const isUpsell = ticket.category === "Upsell";
+  const canCreateEstimate = !permissionsLoading && can("estimate_add");
+  const hasEstimateLink = (links ?? []).some((l) => l.linkType === "estimate");
+
   return (
     <div>
+      {isUpsell && !hasEstimateLink && canCreateEstimate && (
+        <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-xs font-medium text-emerald-900">
+            Crew suggested this work
+          </p>
+          <p className="mt-0.5 text-xs text-emerald-700">
+            Create the quote and link it back in one step, so this shows up as converted
+            once it&apos;s won.
+          </p>
+          <Button
+            size="sm"
+            className="mt-2 h-8 gap-1.5 text-xs"
+            onClick={handleCreateEstimate}
+            disabled={createEstimate.isPending || !ticket.clientId}
+          >
+            {createEstimate.isPending ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating…</>
+            ) : (
+              <><FileText className="h-3.5 w-3.5" /> Create estimate</>
+            )}
+          </Button>
+          {!ticket.clientId && (
+            <p className="mt-1.5 text-xs text-amber-700">
+              This ticket has no client, so there&apos;s nothing to quote against.
+            </p>
+          )}
+        </div>
+      )}
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Linked Records</p>
       {(links ?? []).length === 0 ? (
         <p className="text-xs text-slate-400 mb-3">No links yet.</p>
@@ -358,22 +454,23 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
       <div className="rounded-md border bg-slate-50 p-3 space-y-2">
         <p className="text-xs font-medium text-slate-500">Add Link</p>
         <div className="flex gap-2">
-          <Select value={newLinkType} onValueChange={(v) => { setNewLinkType(v as "estimate" | "invoice" | "job"); setSelectedId(""); }}>
+          <Select value={newLinkType} onValueChange={(v) => { setNewLinkType(v as "estimate" | "invoice" | "job" | "project"); setSelectedId(""); }}>
             <SelectTrigger className="h-8 text-xs w-28"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="estimate">Estimate</SelectItem>
               <SelectItem value="invoice">Invoice</SelectItem>
               <SelectItem value="job">Job</SelectItem>
+              <SelectItem value="project">Project</SelectItem>
             </SelectContent>
           </Select>
           <Select value={selectedId} onValueChange={setSelectedId}>
             <SelectTrigger className="h-8 text-xs flex-1">
-              <SelectValue placeholder={clientId ? `Select ${newLinkType}…` : "No client on ticket"} />
+              <SelectValue placeholder={clientId || newLinkType === "project" ? `Select ${newLinkType}…` : "No client on ticket"} />
             </SelectTrigger>
             <SelectContent>
               {options.length === 0 ? (
                 <SelectItem value="__empty" disabled>
-                  {clientId ? `No ${newLinkType}s found` : "Ticket has no client"}
+                  {clientId || newLinkType === "project" ? `No ${newLinkType}s found` : "Ticket has no client"}
                 </SelectItem>
               ) : (
                 options.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)
@@ -411,8 +508,31 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
     { status: "closed",  label: "Close Ticket", className: "text-green-700 border-green-300 hover:bg-green-50" },
   ];
 
+  const clearSmsWarning = useClearSmsConsentPendingPhone();
+
   return (
     <div className="p-6 space-y-6">
+      {ticket.smsConsentPendingPhone && (
+        <div className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="font-medium">SMS consent given, but no phone number</p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              This submission checked the text-message consent box, but no phone number was captured — consent couldn&apos;t
+              be recorded on the client. Collect a phone number from them before texting.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => clearSmsWarning.mutate(ticket.id)}
+            disabled={clearSmsWarning.isPending}
+            className="shrink-0 text-xs font-medium text-amber-700 hover:text-amber-900 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Status flow */}
       <div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
@@ -612,7 +732,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
     <>
       <Sheet open={!!ticket} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
         {/* Wider sheet so the header buttons don't wrap */}
-        <SheetContent className="w-[620px] sm:max-w-[620px] flex flex-col gap-0 p-0 overflow-hidden">
+        <SheetContent className="w-full sm:max-w-[620px] md:w-[620px] flex flex-col gap-0 p-0 overflow-hidden">
 
           {/* Header — title left, actions right, pr-10 clears the Sheet X button */}
           <div className="flex items-center justify-between border-b px-5 py-3 pr-10 shrink-0">

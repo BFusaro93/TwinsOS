@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useReportFilterOptions } from "@/lib/hooks/use-report-center";
+import { ALL_TIME_RANGE_PARAM } from "@/lib/reports/helpers";
 import type { ReportFilterDef } from "@/types/crm-reports";
 
 // ── date range presets ────────────────────────────────────────────────────────
@@ -33,28 +34,70 @@ function iso(d: Date): string {
   ).padStart(2, "0")}`;
 }
 
+/** The three params a dateRange filter writes. `range` is `"all"` only for
+ *  an explicitly unbounded window (All Time, or Custom with both dates
+ *  cleared) — with `from`/`to` empty that's the only signal the server has
+ *  to NOT fall back to the report's own default window (see
+ *  `resolveDateRange` in src/lib/reports/helpers.ts). Empty otherwise, which
+ *  the run hook drops from the query string. */
+export interface DateRangeParams {
+  from: string;
+  to: string;
+  range: string;
+}
+
 /** Compute the `from`/`to` (YYYY-MM-DD) window for a preset key. */
-export function computePresetRange(preset: string): { from: string; to: string } {
+export function computePresetRange(preset: string): DateRangeParams {
   const now = new Date();
   const to = iso(now);
   switch (preset) {
     case "this_month":
-      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to };
+      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to, range: "" };
     case "last_month":
       return {
         from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
         to: iso(new Date(now.getFullYear(), now.getMonth(), 0)),
+        range: "",
       };
     case "last_30":
-      return { from: iso(new Date(now.getTime() - 30 * 86400000)), to };
+      return { from: iso(new Date(now.getTime() - 30 * 86400000)), to, range: "" };
     case "last_90":
-      return { from: iso(new Date(now.getTime() - 90 * 86400000)), to };
+      return { from: iso(new Date(now.getTime() - 90 * 86400000)), to, range: "" };
     case "this_year":
-      return { from: iso(new Date(now.getFullYear(), 0, 1)), to };
+      return { from: iso(new Date(now.getFullYear(), 0, 1)), to, range: "" };
+    case "all_time":
+      return { from: "", to: "", range: ALL_TIME_RANGE_PARAM };
     default:
-      // all_time / custom → no bounds
-      return { from: "", to: "" };
+      // custom → no bounds yet; the user is about to type dates
+      return { from: "", to: "", range: "" };
   }
+}
+
+/** `range` value for a hand-edited from/to pair: both cleared = All Time. */
+function rangeParamFor(from: string, to: string): string {
+  return !from && !to ? ALL_TIME_RANGE_PARAM : "";
+}
+
+/** Initial filter-bar values for a report's filter defs — date-range presets
+ *  resolved fresh (so a saved "this month" default never goes stale), every
+ *  other filter seeded with its literal default. Shared by the standalone
+ *  report page and dashboard embeds so all of them honor an `all_time`
+ *  default the same way. */
+export function defaultFilterValues(
+  filters: Pick<ReportFilterDef, "key" | "type" | "defaultValue">[]
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const def of filters) {
+    if (def.type === "dateRange") {
+      const { from, to, range } = computePresetRange(def.defaultValue ?? "this_month");
+      values.from = from;
+      values.to = to;
+      values.range = range;
+    } else {
+      values[def.key] = def.defaultValue ?? "";
+    }
+  }
+  return values;
 }
 
 // ── field wrapper ─────────────────────────────────────────────────────────────
@@ -84,9 +127,18 @@ function DateRangeControl({
   const handlePreset = (next: string) => {
     setPreset(next);
     if (next === "custom") return;
-    const { from, to } = computePresetRange(next);
+    const { from, to, range } = computePresetRange(next);
     onChange("from", from);
     onChange("to", to);
+    onChange("range", range);
+  };
+
+  const handleDate = (key: "from" | "to", value: string) => {
+    setPreset("custom");
+    onChange(key, value);
+    const from = key === "from" ? value : values.from ?? "";
+    const to = key === "to" ? value : values.to ?? "";
+    onChange("range", rangeParamFor(from, to));
   };
 
   return (
@@ -110,10 +162,7 @@ function DateRangeControl({
           type="date"
           className="h-8 w-36 text-sm"
           value={values.from ?? ""}
-          onChange={(e) => {
-            setPreset("custom");
-            onChange("from", e.target.value);
-          }}
+          onChange={(e) => handleDate("from", e.target.value)}
         />
       </Field>
       <Field label="To">
@@ -121,10 +170,7 @@ function DateRangeControl({
           type="date"
           className="h-8 w-36 text-sm"
           value={values.to ?? ""}
-          onChange={(e) => {
-            setPreset("custom");
-            onChange("to", e.target.value);
-          }}
+          onChange={(e) => handleDate("to", e.target.value)}
         />
       </Field>
     </div>

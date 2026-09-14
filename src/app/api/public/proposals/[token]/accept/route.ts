@@ -3,6 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
+import { orgEmailFrom } from "@/lib/email/send";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("proposal-accept");
+
+// A drawn signature arrives as a PNG data URL from the canvas. Cap the size so
+// the column can't be abused as blob storage (a 520×120 signature is ~5-20KB).
+const SIGNATURE_DATA_RE = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
+const SIGNATURE_MAX_CHARS = 512 * 1024;
 
 const serviceClient = () =>
   createClient(
@@ -30,6 +39,16 @@ export async function POST(
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  // The proposal page tells the client "By signing below … legally binding"
+  // — an acceptance with a blank pad must not be recorded.
+  const signature = body.signatureData?.trim() ?? "";
+  if (!signature) {
+    return NextResponse.json({ error: "Signature is required" }, { status: 400 });
+  }
+  if (signature.length > SIGNATURE_MAX_CHARS || !SIGNATURE_DATA_RE.test(signature)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
   // acceptedLineItemIds gets interpolated directly into a PostgREST
   // .not("id","in", "(...)") filter string below — a malformed id containing
   // `)`, `,`, or quotes could break the intended filter or change which rows
@@ -37,6 +56,19 @@ export async function POST(
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (body.acceptedLineItemIds?.some((id) => !UUID_RE.test(id))) {
     return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
+  }
+
+  // selectedTier is interpolated into a PostgREST `.or()` filter below, whose
+  // grammar is comma-separated terms inside parentheses. An unvalidated value
+  // therefore adds terms to the disjunction rather than supplying one: a tier
+  // of `basic,id.not.is.null` widens "tier is null OR tier = basic" to "…OR
+  // every row", so a client accepting the cheapest tier silently wins the
+  // premium lines too, and the matching `.neq()` below leaves them un-lost.
+  // The column's own CHECK already limits it to these three, so rejecting
+  // anything else costs nothing.
+  const TIERS = ["basic", "standard", "premium"] as const;
+  if (body.selectedTier && !TIERS.includes(body.selectedTier as (typeof TIERS)[number])) {
+    return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
   }
 
   const supabase = serviceClient();
@@ -47,6 +79,7 @@ export async function POST(
     .from("estimate_share_tokens")
     .select("*")
     .eq("token", token)
+    .is("deleted_at", null)
     .single();
 
   if (tokenErr || !shareToken) {
@@ -66,12 +99,41 @@ export async function POST(
   // logged-in portal's own accept route (api/portal/estimates/[id]/action).
   const { data: currentEstimate } = await supabase
     .from("estimates")
-    .select("stage")
+    .select("stage, total_cents")
     .eq("id", shareToken.estimate_id)
     .single();
   if (!currentEstimate || currentEstimate.stage !== "sent") {
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
+
+  // The deposit block is anyone-with-the-link input and had no validation at
+  // all — the TypeScript cast on `body` above is erased at runtime. An
+  // arbitrary depositAmount was written straight to an integer cents column,
+  // so a decimal ("100.50") threw, and because the update's error was never
+  // checked the request still returned 200 with the deposit silently dropped.
+  // A caller could equally claim a deposit far larger than the job.
+  const DEPOSIT_METHODS = new Set(["cash", "check", "ach", "credit_card", "other"]);
+  let depositAmountCents: number | null = null;
+  if (body.depositMethod !== undefined || body.depositAmount !== undefined) {
+    if (!body.depositMethod || !DEPOSIT_METHODS.has(body.depositMethod)) {
+      return NextResponse.json({ error: "Invalid deposit method" }, { status: 400 });
+    }
+    if (
+      typeof body.depositAmount !== "number" ||
+      !Number.isInteger(body.depositAmount) ||
+      body.depositAmount <= 0
+    ) {
+      return NextResponse.json({ error: "Deposit amount must be a whole number of cents" }, { status: 400 });
+    }
+    // A deposit is a down payment on this job; it can never exceed it.
+    const estimateTotal = currentEstimate.total_cents ?? 0;
+    if (estimateTotal > 0 && body.depositAmount > estimateTotal) {
+      return NextResponse.json({ error: "Deposit amount exceeds the proposal total" }, { status: 400 });
+    }
+    depositAmountCents = body.depositAmount;
+  }
+  const depositReference = body.depositReference?.slice(0, 200) ?? null;
+  const depositNotes = body.depositNotes?.slice(0, 2000) ?? null;
 
   const now = new Date().toISOString();
 
@@ -86,7 +148,7 @@ export async function POST(
     .update({
       accepted_at: now,
       accepted_by_name: body.acceptedByName.trim(),
-      signature_data: body.signatureData ?? null,
+      signature_data: signature,
       ip_address: ipAddress,
     })
     .eq("id", shareToken.id)
@@ -105,18 +167,36 @@ export async function POST(
     .update({ stage: "accepted", updated_at: now })
     .eq("id", shareToken.estimate_id);
 
-  // 2b. Record deposit if provided
-  if (body.depositMethod && body.depositAmount && body.depositAmount > 0) {
-    await supabase
+  // 2b. Record the deposit the client says they are sending.
+  //
+  // This is a CLAIM, not money received: the client picks a method and types
+  // an amount on the proposal page, and nothing is charged. So it is recorded
+  // for staff to chase and reconcile — deliberately NOT turned into a
+  // crm_payments row or an invoice credit, which would book money that may
+  // never arrive. It is also not yet deducted from what the job invoices; see
+  // the note below.
+  if (depositAmountCents !== null) {
+    const { error: depositErr } = await supabase
       .from("estimates")
       .update({
         deposit_method: body.depositMethod,
-        deposit_reference: body.depositReference ?? null,
-        deposit_notes: body.depositNotes ?? null,
-        deposit_collected_cents: body.depositAmount,
+        deposit_reference: depositReference,
+        deposit_notes: depositNotes,
+        deposit_collected_cents: depositAmountCents,
         deposit_collected_at: now,
       })
       .eq("id", shareToken.estimate_id);
+    // Previously unchecked, so a rejected write (e.g. a non-integer amount)
+    // was invisible: the client saw their deposit accepted and no record of it
+    // existed. The acceptance itself is already committed and must stand, so
+    // this logs loudly rather than failing the request.
+    if (depositErr) {
+      log.error("failed to record proposal deposit", {
+        error: depositErr,
+        estimateId: shareToken.estimate_id,
+        depositAmountCents,
+      });
+    }
   }
 
   // 3. Update line items → won/lost based on tier selection and explicit id list
@@ -166,7 +246,11 @@ export async function POST(
   // 3b. Line items are now split into won/lost — recompute the estimate's
   // stored totals down to just the won subset, so the confirmation email
   // below and any later invoice/job-conversion reflect what was actually
-  // accepted, not the full pre-acceptance (e.g. all-tiers) total.
+  // accepted, not the full pre-acceptance (e.g. all-tiers) total. This
+  // re-applies the estimate-level discount rule (percent re-derived from the
+  // won subtotal, flat clamped) and taxes the discounted amount — the same
+  // figures the public page displayed, so the recorded total_cents is the
+  // amount the client actually accepted.
   await recalcEstimateTotals(supabase, shareToken.estimate_id);
 
   // 4. Log to client_activity
@@ -236,7 +320,7 @@ export async function POST(
     try {
       const resend = new Resend(process.env.RESEND_API_KEY!);
       const { data: sent } = await resend.emails.send({
-        from: `${orgName} <noreply@twinslawnservice.com>`,
+        from: orgEmailFrom(orgName),
         to: clientEmail,
         subject: `You accepted Estimate #${est.estimate_number} — ${orgName}`,
         html: confirmHtml,
@@ -255,11 +339,16 @@ export async function POST(
       });
     } catch (err) {
       // Don't fail the accept flow if the confirmation email fails
-      console.error("[proposal-accept] confirmation email error:", err);
+      log.error("confirmation email error", {
+        estimateId: shareToken.estimate_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
-  return NextResponse.json({ ok: true });
+  // Echo the recorded (post-recalc, discount-and-tax-applied) total so the
+  // client sees the same figure that was stored.
+  return NextResponse.json({ ok: true, totalCents: est?.total_cents ?? null });
 }
 
 function buildConfirmationEmail({

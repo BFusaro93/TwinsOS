@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Users, X, Search } from "lucide-react";
-import { PermissionGate } from "@/components/shared/PermissionGate";
+import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
@@ -40,10 +40,6 @@ import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
 
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
-
-const MAP_ICON_OPTIONS = [
-  "Gold", "Silver", "Blue", "Green", "Red", "Orange", "Purple", "Teal", "Gray",
-];
 
 const ROUTE_SHEET_OPTIONS = [
   "Standard Route Sheet", "Custom Route Sheet 1", "Custom Route Sheet 2",
@@ -238,20 +234,22 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                     value={m.daysOfWeek}
                     onChange={(days) => handleChangeDays(m, days)}
                   />
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-slate-400">$</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={m.laborBurdenCentsPerHour > 0 ? (m.laborBurdenCentsPerHour / 100).toFixed(2) : ""}
-                      placeholder="0.00"
-                      className="h-8 w-20 text-right text-xs"
-                      title="Labor burden rate ($/hr)"
-                      onBlur={(e) => handleChangeBurden(m, e.target.value)}
-                    />
-                    <span className="text-xs text-slate-400">/hr</span>
-                  </div>
+                  <PermissionGate permission="payroll_show_wage_burden">
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-xs text-slate-400">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        defaultValue={m.laborBurdenCentsPerHour > 0 ? (m.laborBurdenCentsPerHour / 100).toFixed(2) : ""}
+                        placeholder="0.00"
+                        className="h-8 w-20 text-right text-xs"
+                        title="Labor burden rate ($/hr)"
+                        onBlur={(e) => handleChangeBurden(m, e.target.value)}
+                      />
+                      <span className="text-xs text-slate-400">/hr</span>
+                    </div>
+                  </PermissionGate>
                   <button
                     className="shrink-0 text-red-400 hover:text-red-600 transition-colors"
                     onClick={() => handleRemove(m)}
@@ -293,7 +291,7 @@ function Field({
   return (
     <tr className="border-b last:border-0">
       <td
-        className={`px-4 py-2.5 text-sm whitespace-nowrap w-48 ${bold ? "font-semibold text-slate-800" : "text-slate-500"}`}
+        className={`px-4 py-2.5 text-sm whitespace-nowrap w-32 sm:w-48 ${bold ? "font-semibold text-slate-800" : "text-slate-500"}`}
       >
         {label}
       </td>
@@ -360,162 +358,145 @@ function TeamDetailsTab({
   return (
     <div className="rounded border">
       <SectionBar title="Team Details" />
-      <table className="w-full text-sm">
-        <tbody>
-          <Field label="Description">
-            <Input
-              className="h-8 text-sm"
-              value={form.name ?? ""}
-              onChange={(e) => onChange("name", e.target.value)}
-            />
-          </Field>
-          <Field label="Team Code" bold>
-            <Input
-              className="h-8 text-sm font-mono"
-              value={form.code ?? ""}
-              onChange={(e) => onChange("code", e.target.value)}
-              placeholder="e.g. ENHANCE1"
-            />
-          </Field>
-          <Field label="Linked Login">
-            <Select
-              value={form.user_id ?? "none"}
-              onValueChange={(v) => onChange("user_id", v === "none" ? null : v)}
-            >
-              <SelectTrigger className="h-8 text-sm w-56">
-                <SelectValue placeholder="No shared login linked" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {availableLogins.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-1 text-xs text-slate-400">
-              The shared crew login (e.g. a field team&apos;s clock-in account) that sees this team&apos;s
-              visits in the Crew App.
-            </p>
-          </Field>
-          <Field label="Tags">
-            <Input
-              className="h-8 text-sm"
-              value={(form.tags ?? []).join(", ")}
-              onChange={(e) =>
-                onChange(
-                  "tags",
-                  e.target.value
-                    .split(",")
-                    .map((t: string) => t.trim())
-                    .filter(Boolean)
-                )
-              }
-              placeholder="comma-separated tags"
-            />
-          </Field>
-          <Field label="Route Sheet Format">
-            <Select
-              value={form.route_sheet_format ?? "none"}
-              onValueChange={(v) => onChange("route_sheet_format", v === "none" ? null : v)}
-            >
-              <SelectTrigger className="h-8 text-sm w-56">
-                <SelectValue placeholder="Select Route Sheet" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {ROUTE_SHEET_OPTIONS.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Show In Calendar">
-            <Checkbox
-              checked={!!form.show_in_calendar}
-              onCheckedChange={(c) => onChange("show_in_calendar", !!c)}
-            />
-          </Field>
-          <Field label="Map Icon / Calendar Color">
-            <Select
-              value={form.map_icon_color ?? "none"}
-              onValueChange={(v) => onChange("map_icon_color", v === "none" ? null : v)}
-            >
-              <SelectTrigger className="h-8 text-sm w-56">
-                <SelectValue placeholder="Select color…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {MAP_ICON_OPTIONS.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field label="Starting Address">
-            <Input
-              className="h-8 text-sm"
-              value={form.starting_address ?? ""}
-              onChange={(e) => onChange("starting_address", e.target.value || null)}
-              onBlur={handleAddressBlur}
-            />
-          </Field>
-          <Field label="Starting City">
-            <Input
-              className="h-8 text-sm"
-              value={form.starting_city ?? ""}
-              onChange={(e) => onChange("starting_city", e.target.value || null)}
-              onBlur={handleAddressBlur}
-            />
-          </Field>
-          <Field label="Starting State">
-            <Input
-              className="h-8 text-sm w-28"
-              value={form.starting_state ?? ""}
-              onChange={(e) => onChange("starting_state", e.target.value || null)}
-              placeholder="MA"
-              onBlur={handleAddressBlur}
-            />
-          </Field>
-          <Field label="Starting Zip">
-            <Input
-              className="h-8 text-sm w-28"
-              value={form.starting_zip ?? ""}
-              onChange={(e) => onChange("starting_zip", e.target.value || null)}
-              onBlur={handleAddressBlur}
-            />
-          </Field>
-          <Field label="Starting Lat / Lng">
-            <div className="flex items-center gap-2">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <tbody>
+            <Field label="Description">
               <Input
-                className="h-8 text-sm w-36 font-mono"
-                value={form.starting_lat ?? ""}
-                onChange={(e) =>
-                  onChange("starting_lat", e.target.value ? parseFloat(e.target.value) : null)
-                }
-                placeholder="Lat"
+                className="h-8 text-sm"
+                value={form.name ?? ""}
+                onChange={(e) => onChange("name", e.target.value)}
               />
+            </Field>
+            <Field label="Team Code" bold>
               <Input
-                className="h-8 text-sm w-36 font-mono"
-                value={form.starting_lng ?? ""}
-                onChange={(e) =>
-                  onChange("starting_lng", e.target.value ? parseFloat(e.target.value) : null)
-                }
-                placeholder="Lng"
+                className="h-8 text-sm font-mono"
+                value={form.code ?? ""}
+                onChange={(e) => onChange("code", e.target.value)}
+                placeholder="e.g. ENHANCE1"
               />
-              {geocoding && (
-                <span className="text-xs text-slate-400 animate-pulse">Locating…</span>
-              )}
-            </div>
-          </Field>
-        </tbody>
-      </table>
+            </Field>
+            <Field label="Linked Login">
+              <Select
+                value={form.user_id ?? "none"}
+                onValueChange={(v) => onChange("user_id", v === "none" ? null : v)}
+              >
+                <SelectTrigger className="h-8 text-sm w-56">
+                  <SelectValue placeholder="No shared login linked" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {availableLogins.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-slate-400">
+                The shared crew login (e.g. a field team&apos;s clock-in account) that sees this team&apos;s
+                visits in the Crew App.
+              </p>
+            </Field>
+            <Field label="Tags">
+              <Input
+                className="h-8 text-sm"
+                value={(form.tags ?? []).join(", ")}
+                onChange={(e) =>
+                  onChange(
+                    "tags",
+                    e.target.value
+                      .split(",")
+                      .map((t: string) => t.trim())
+                      .filter(Boolean)
+                  )
+                }
+                placeholder="comma-separated tags"
+              />
+            </Field>
+            <Field label="Route Sheet Format">
+              <Select
+                value={form.route_sheet_format ?? "none"}
+                onValueChange={(v) => onChange("route_sheet_format", v === "none" ? null : v)}
+              >
+                <SelectTrigger className="h-8 text-sm w-56">
+                  <SelectValue placeholder="Select Route Sheet" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {ROUTE_SHEET_OPTIONS.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Show In Calendar">
+              <Checkbox
+                checked={!!form.show_in_calendar}
+                onCheckedChange={(c) => onChange("show_in_calendar", !!c)}
+              />
+            </Field>
+            <Field label="Starting Address">
+              <Input
+                className="h-8 text-sm"
+                value={form.starting_address ?? ""}
+                onChange={(e) => onChange("starting_address", e.target.value || null)}
+                onBlur={handleAddressBlur}
+              />
+            </Field>
+            <Field label="Starting City">
+              <Input
+                className="h-8 text-sm"
+                value={form.starting_city ?? ""}
+                onChange={(e) => onChange("starting_city", e.target.value || null)}
+                onBlur={handleAddressBlur}
+              />
+            </Field>
+            <Field label="Starting State">
+              <Input
+                className="h-8 text-sm w-28"
+                value={form.starting_state ?? ""}
+                onChange={(e) => onChange("starting_state", e.target.value || null)}
+                placeholder="MA"
+                onBlur={handleAddressBlur}
+              />
+            </Field>
+            <Field label="Starting Zip">
+              <Input
+                className="h-8 text-sm w-28"
+                value={form.starting_zip ?? ""}
+                onChange={(e) => onChange("starting_zip", e.target.value || null)}
+                onBlur={handleAddressBlur}
+              />
+            </Field>
+            <Field label="Starting Lat / Lng">
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-36 font-mono"
+                  value={form.starting_lat ?? ""}
+                  onChange={(e) =>
+                    onChange("starting_lat", e.target.value ? parseFloat(e.target.value) : null)
+                  }
+                  placeholder="Lat"
+                />
+                <Input
+                  className="h-8 text-sm w-36 font-mono"
+                  value={form.starting_lng ?? ""}
+                  onChange={(e) =>
+                    onChange("starting_lng", e.target.value ? parseFloat(e.target.value) : null)
+                  }
+                  placeholder="Lng"
+                />
+                {geocoding && (
+                  <span className="text-xs text-slate-400 animate-pulse">Locating…</span>
+                )}
+              </div>
+            </Field>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -543,7 +524,6 @@ function CrewDialog({
       name: c.name, code: c.code, tags: c.tags ?? [],
       route_sheet_format: c.routeSheetFormat,
       show_in_calendar: c.showInCalendar,
-      map_icon_color: c.mapIconColor, map_codes: c.mapCodes,
       starting_address: c.startingAddress, starting_city: c.startingCity,
       starting_state: c.startingState, starting_zip: c.startingZip,
       starting_lat: c.startingLat, starting_lng: c.startingLng,
@@ -608,7 +588,7 @@ function CrewDialog({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
-          <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-6 py-0 h-10 gap-0">
+          <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-6 py-0 h-10 gap-0 overflow-x-auto flex-nowrap">
             {tabList.map((tab) => (
               <TabsTrigger
                 key={tab.value}
@@ -655,6 +635,8 @@ type ActiveFilter = "active" | "inactive" | "all";
 export function CrewsList() {
   const { data: crews, isLoading } = useCrews(false);
   const { mutateAsync: update } = useUpdateCrew();
+  const { can } = useGate();
+  const canManageTeams = can("sched_teams");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ActiveFilter>("active");
   const [dialogCrew, setDialogCrew] = useState<CRMCrew | "new" | null>(null);
@@ -711,7 +693,7 @@ export function CrewsList() {
       />
 
       {/* Dark toolbar (SA style) */}
-      <div className="border-b bg-[#4a4a4a] px-4 py-2 flex items-center">
+      <div className="border-b bg-[#4a4a4a] px-4 py-2 flex items-center flex-wrap gap-y-2">
         {TAB_FILTERS.map((t) => (
           <button
             key={t.value}
@@ -773,8 +755,8 @@ export function CrewsList() {
               filtered.map((crew) => (
                 <tr
                   key={crew.id}
-                  className="border-b hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setDialogCrew(crew)}
+                  className={`border-b ${canManageTeams ? "cursor-pointer hover:bg-slate-50" : "cursor-default"}`}
+                  onClick={() => canManageTeams && setDialogCrew(crew)}
                 >
                   <td className="px-4 py-2.5">
                     <span className="text-brand-600 hover:underline font-medium">
@@ -793,21 +775,30 @@ export function CrewsList() {
                     className="px-4 py-2.5 text-slate-600"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {crew.isActive ? (
-                      <button
-                        className="text-sm text-slate-700 hover:text-red-600 transition-colors"
-                        onClick={() => handleDeactivate(crew.id, crew.name)}
-                      >
-                        Active
-                      </button>
-                    ) : (
-                      <button
-                        className="text-sm text-slate-400 hover:text-green-600 transition-colors"
-                        onClick={() => handleActivate(crew.id)}
-                      >
-                        Inactive
-                      </button>
-                    )}
+                    <PermissionGate
+                      permission="sched_teams"
+                      fallback={
+                        <span className={`text-sm ${crew.isActive ? "text-slate-700" : "text-slate-400"}`}>
+                          {crew.isActive ? "Active" : "Inactive"}
+                        </span>
+                      }
+                    >
+                      {crew.isActive ? (
+                        <button
+                          className="text-sm text-slate-700 hover:text-red-600 transition-colors"
+                          onClick={() => handleDeactivate(crew.id, crew.name)}
+                        >
+                          Active
+                        </button>
+                      ) : (
+                        <button
+                          className="text-sm text-slate-400 hover:text-green-600 transition-colors"
+                          onClick={() => handleActivate(crew.id)}
+                        >
+                          Inactive
+                        </button>
+                      )}
+                    </PermissionGate>
                   </td>
                 </tr>
               ))

@@ -227,7 +227,7 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
         <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
           <Ticket className="h-8 w-8 text-slate-300 mx-auto mb-3" />
           <p className="text-sm text-slate-500 font-medium">No tickets yet</p>
-          <p className="text-xs text-slate-400 mt-1 mb-4">Have a question or issue? Submit a ticket and we'll get back to you.</p>
+          <p className="text-xs text-slate-400 mt-1 mb-4">Have a question or issue? Submit a ticket and we&apos;ll get back to you.</p>
           <div className="flex justify-center">
             <NewTicketDialog
               categories={categories}

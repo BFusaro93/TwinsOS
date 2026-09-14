@@ -15,10 +15,12 @@ import {
   Activity,
   MessageSquare,
   MessageSquarePlus,
+  AtSign,
+  CircleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, todayLocalISODate, localISODateFromToday } from "@/lib/utils";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
@@ -30,7 +32,27 @@ import { useRequests } from "@/lib/hooks/use-requests";
 import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
 import { useNotificationPrefs } from "@/lib/hooks/use-notification-prefs";
 import { createClient } from "@/lib/supabase/client";
-import type { AppNotification } from "@/types/notification";
+import type { AppNotification, NotificationEntityType } from "@/types/notification";
+import { recordPath } from "@/lib/notifications/record-links";
+
+// A comment_mention notification's entity_type is the CommentRecordType the
+// comment was left on (ticket, work_order, po, requisition, ...) — map each
+// to where to send the user and, where an existing store-backed detail panel
+// exists, to the NotificationEntityType handleNotifClick already knows how
+// to open (reusing its switch below instead of duplicating that logic here).
+// Only the entityType half lives here now — the paths are shared with the
+// @mention email via recordPath() so both channels open the same record.
+const MENTION_RECORD_ENTITY_TYPES: Record<string, NotificationEntityType> = {
+  ticket:       "ticket",
+  work_order:   "work_order",
+  po:           "purchase_order",
+  requisition:  "requisition",
+  crm_estimate: "estimate",
+  receiving:    null,
+  project:      null,
+  damage_case:  null,
+  job_photo:    null,
+};
 
 function timeAgo(isoString: string): string {
   const diffMs = Date.now() - new Date(isoString).getTime();
@@ -70,6 +92,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
     case "estimate_client_rejected":
       return <ThumbsDown className={cn(cls, "text-red-500")} />;
+    case "estimate_deposit_failed":
+      return <CircleAlert className={cn(cls, "text-red-500")} />;
     case "ticket_created":
     case "ticket_assigned":
       return <MessageSquarePlus className={cn(cls, "text-brand-500")} />;
@@ -77,6 +101,12 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <MessageSquare className={cn(cls, "text-slate-400")} />;
     case "contract_expiring":
       return <CalendarClock className={cn(cls, "text-amber-500")} />;
+    case "automation_alert":
+      return <Bell className={cn(cls, "text-amber-500")} />;
+    case "sales_meeting_reminder":
+      return <CalendarClock className={cn(cls, "text-sky-500")} />;
+    case "comment_mention":
+      return <AtSign className={cn(cls, "text-brand-500")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -110,7 +140,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -124,10 +154,8 @@ export function NotificationsBell() {
   const { readIds, markRead, markAllRead: markAllReadIds } = useNotificationReads(
     useMemo(() => {
       // We only need the IDs list for pruning — compute cheaply without full objects
-      const todayIso = new Date().toISOString().slice(0, 10);
-      const weekFromNow = new Date();
-      weekFromNow.setDate(weekFromNow.getDate() + 7);
-      const weekFromNowIso = weekFromNow.toISOString().slice(0, 10);
+      const todayIso = todayLocalISODate();
+      const weekFromNowIso = localISODateFromToday(7);
       return [
         ...(notifPrefs?.inAppApprovalRequired !== false ? requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`) : []),
         ...(notifPrefs?.inAppPoApprovalRequired !== false ? purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`) : []),
@@ -144,10 +172,8 @@ export function NotificationsBell() {
 
   // Derive notifications from live data
   const notifications = useMemo<AppNotification[]>(() => {
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const weekFromNow = new Date();
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
-    const weekFromNowIso = weekFromNow.toISOString().slice(0, 10);
+    const todayIso = todayLocalISODate();
+    const weekFromNowIso = localISODateFromToday(7);
 
     const items: AppNotification[] = [];
 
@@ -300,18 +326,43 @@ export function NotificationsBell() {
       estimate_change_request:    { href: (id) => `/crm/estimates/${id}`, title: "Change Requested" },
       estimate_client_accepted:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Accepted" },
       estimate_client_rejected:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Declined" },
-      ticket_created:             { href: () => "/crm/tickets", title: "New Ticket" },
-      ticket_assigned:            { href: () => "/crm/tickets", title: "Ticket Assigned" },
-      ticket_comment:             { href: () => "/crm/tickets", title: "New Comment" },
+      estimate_deposit_failed:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Failed" },
+      ticket_created:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Ticket" },
+      ticket_assigned:            { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Ticket Assigned" },
+      ticket_comment:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Comment" },
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
-      wo_status_changed:          { href: () => "/cmms/work-orders", title: "Status Changed" },
+      automation_alert:           { href: () => "/crm/communication/automations", title: "Automation Alert" },
+      wo_status_changed:          { href: (id) => id ? `/cmms/work-orders?id=${id}` : "/cmms/work-orders", title: "Status Changed" },
+      sales_meeting_reminder:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Reminder" },
     };
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;
       if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
+      if (n.type === "comment_mention" && notifPrefs?.inAppMention === false) return false;
       return true;
     }).forEach((n) => {
       const id = `db-notif-${n.id}`;
+
+      // comment_mention's href/entityType depend on WHICH record type the
+      // comment was on, unlike every other DB_NOTIF_META entry which always
+      // points at the same place — so it's resolved separately here instead
+      // of fitting the simple entityId-only map below.
+      if (n.type === "comment_mention") {
+        const entityType = n.entity_type ? MENTION_RECORD_ENTITY_TYPES[n.entity_type] ?? null : null;
+        items.push({
+          id,
+          type: "comment_mention",
+          title: n.title ?? "Mentioned You",
+          body: n.message,
+          href: recordPath(n.entity_type, n.entity_id) ?? "/crm/tickets",
+          entityId: n.entity_id,
+          entityType,
+          createdAt: n.created_at,
+          readAt: readIds.has(id) ? new Date().toISOString() : null,
+        });
+        return;
+      }
+
       const meta = n.type ? DB_NOTIF_META[n.type] : undefined;
       const notifType = (meta ? n.type : "wo_comment") as AppNotification["type"];
       const href = meta ? meta.href(n.entity_id) : "/cmms/work-orders";

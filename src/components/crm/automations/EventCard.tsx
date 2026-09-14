@@ -2,12 +2,13 @@
 
 import { X, Bell, Mail, GitBranch, StickyNote, MessageSquare, Tag, RefreshCw, Clock, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMSequenceEvent, EventType } from "@/types/crm-automations";
 
 interface Props {
   event: CRMSequenceEvent;
-  onClick: () => void;
-  onDelete: () => void;
+  onClick?: () => void;
+  onDelete?: () => void;
 }
 
 const EVENT_META: Record<
@@ -25,7 +26,7 @@ const EVENT_META: Record<
   tags: { label: "Tags", icon: Hash, color: "border-pink-500" },
 };
 
-function getConfigSummary(event: CRMSequenceEvent): string {
+function getConfigSummary(event: CRMSequenceEvent, canViewTags: boolean): string {
   const c = event.config;
   switch (event.eventType) {
     case "wait":
@@ -49,6 +50,7 @@ function getConfigSummary(event: CRMSequenceEvent): string {
     case "update":
       return c.field ? `${c.field} → ${c.value}` : "No field set";
     case "tags":
+      if (!canViewTags) return "Tag details hidden";
       return [
         c.add_tags?.length ? `+${c.add_tags.join(", ")}` : null,
         c.remove_tags?.length ? `-${c.remove_tags.join(", ")}` : null,
@@ -63,15 +65,17 @@ function getConfigSummary(event: CRMSequenceEvent): string {
 }
 
 export function EventCard({ event, onClick, onDelete }: Props) {
+  const { can } = usePermissions();
   const meta = EVENT_META[event.eventType];
   const Icon = meta.icon;
-  const summary = getConfigSummary(event);
+  const summary = getConfigSummary(event, can("automation_view_tags"));
 
   return (
     <div
       onClick={onClick}
       className={cn(
-        "relative flex cursor-pointer items-start gap-2 rounded-md border-l-4 border border-slate-200 p-3 bg-white hover:shadow-sm transition-shadow select-none",
+        "relative flex items-start gap-2 rounded-md border-l-4 border border-slate-200 p-3 bg-white transition-shadow select-none",
+        onClick && "cursor-pointer hover:shadow-sm",
         meta.color
       )}
     >
@@ -88,16 +92,18 @@ export function EventCard({ event, onClick, onDelete }: Props) {
           )}
           title={event.isActive ? "Active" : "Inactive"}
         />
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="text-slate-300 hover:text-red-500 transition-colors"
-          title="Delete event"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="text-slate-300 hover:text-red-500 transition-colors"
+            title="Delete event"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );

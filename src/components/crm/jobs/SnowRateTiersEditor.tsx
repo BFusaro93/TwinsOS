@@ -86,6 +86,30 @@ export function SnowRateTiersEditor({ jobId }: { jobId: string }) {
         parsed.push({ minInches, maxInches, rateCents, ratePerInchCents: null });
       }
     }
+
+    // priceWithTiers (src/lib/snow-billing.ts) sorts by minInches and
+    // returns the FIRST matching tier — an overlap silently makes every
+    // tier after the first match for a given depth unreachable, with no
+    // error ever surfacing to whoever created the overlap. Validate here
+    // instead of trusting the editor's row order.
+    const sorted = [...parsed].sort((a, b) => a.minInches - b.minInches);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const current = sorted[i];
+      const next = sorted[i + 1];
+      if (current.maxInches === null) {
+        toast.error(
+          `"${current.minInches}"+ is open-ended but isn't the last tier — the tier(s) after it can never apply.`
+        );
+        return;
+      }
+      if (next.minInches < current.maxInches) {
+        toast.error(
+          `Tiers overlap between ${current.minInches}–${current.maxInches}" and ${next.minInches}"+ — a storm in the overlap always prices at the lower tier's rate.`
+        );
+        return;
+      }
+    }
+
     try {
       await saveTiers.mutateAsync({ jobId, tiers: parsed });
       toast.success("Rate tiers saved.");

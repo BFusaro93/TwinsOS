@@ -9,6 +9,9 @@
  * Power Automate setup:
  *   Trigger : "When a new response is submitted" (Microsoft Forms)
  *   Action  : "HTTP" → POST this URL with the body below
+ *   Headers : "x-webhook-secret" → WORK_REQUESTS_WEBHOOK_SECRET (see below) —
+ *             lets this specific flow skip Turnstile, which a server-to-server
+ *             webhook could never solve.
  *
  * Request body (all strings unless noted):
  * {
@@ -21,7 +24,9 @@
  *   "equipmentType": "Vehicle",                 // optional
  *   "repairCategory":"Engine",                  // optional
  *   "hasRepairTag":  true,                      // optional — boolean or "yes"/"no"
- *   "priority":      "high"                     // optional — low|medium|high|critical
+ *   "priority":      "high",                    // optional — low|medium|high|critical
+ *   "turnstileToken":"..."                      // required only when TURNSTILE_SECRET_KEY is set
+ *                                                // and the request isn't the trusted webhook above
  * }
  *
  * Response 201: { requestNumber, id }
@@ -29,10 +34,29 @@
  * Response 404: { error: "Org not found or portal disabled" }
  */
 
+import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { submitWorkRequest } from "@/lib/field/submit-work-request";
+import { verifyTurnstileToken } from "@/lib/turnstile";
+
+// Twins' own operating org — see src/lib/hooks/use-internal-org.ts. The
+// webhook-secret Turnstile bypass below is scoped to this org only, so a
+// leaked secret can't be used to flood every tenant's portal, just this one.
+const TWINS_LAWN_SERVICE_ORG_ID = "619de9bb-f8f8-46cf-983c-9faf54f6a7d0";
+
+function isTrustedWebhook(req: NextRequest, orgId: string): boolean {
+  const expected = process.env.WORK_REQUESTS_WEBHOOK_SECRET;
+  if (!expected || orgId !== TWINS_LAWN_SERVICE_ORG_ID) return false;
+
+  const provided = req.headers.get("x-webhook-secret");
+  if (!provided) return false;
+
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -71,6 +95,21 @@ export async function POST(req: NextRequest) {
       { error: "Maintenance request portal is not enabled for this organisation" },
       { status: 403 }
     );
+  }
+
+  // Opt-in Turnstile gate (see verifyTurnstileToken) — no-ops when
+  // TURNSTILE_SECRET_KEY is unset. The Twins internal Power Automate flow
+  // (Microsoft Forms → this webhook) can't solve a browser challenge, so it
+  // authenticates instead with a shared secret header — see isTrustedWebhook.
+  if (!isTrustedWebhook(req, org.id)) {
+    const forwardedFor = req.headers.get("x-forwarded-for");
+    const turnstileResult = await verifyTurnstileToken(
+      body.turnstileToken as string | undefined,
+      forwardedFor?.split(",")[0]?.trim()
+    );
+    if (!turnstileResult.ok) {
+      return NextResponse.json({ error: turnstileResult.error }, { status: 400 });
+    }
   }
 
   try {

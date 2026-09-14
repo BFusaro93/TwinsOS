@@ -14,6 +14,7 @@ import {
   Phone,
   Mail,
   Ticket,
+  FolderOpen,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -25,6 +26,7 @@ interface Branding {
   supportPhone: string | null;
   allowTickets?: boolean;
   allowEstimates?: boolean;
+  allowDocuments?: boolean;
 }
 
 interface PortalShellProps {
@@ -39,6 +41,7 @@ const NAV_ITEMS = [
   { label: "Services",  href: "/portal/services",  icon: CalendarDays, always: true },
   { label: "Estimates", href: "/portal/estimates", icon: FileText,    key: "allowEstimates" },
   { label: "Tickets",   href: "/portal/tickets",   icon: Ticket,      key: "allowTickets" },
+  { label: "Documents", href: "/portal/documents", icon: FolderOpen,  key: "allowDocuments" },
   { label: "Account",   href: "/portal/account",   icon: User,        always: true },
 ] as const;
 
@@ -84,6 +87,7 @@ export default function PortalShell({ branding, clientName, children }: PortalSh
                 if ("always" in item && item.always) return true;
                 if ("key" in item && item.key === "allowEstimates") return branding.allowEstimates !== false;
                 if ("key" in item && item.key === "allowTickets") return branding.allowTickets !== false;
+                if ("key" in item && item.key === "allowDocuments") return branding.allowDocuments !== false;
                 return true;
               })
               .map(({ label, href, icon: Icon }) => (
@@ -138,6 +142,7 @@ export default function PortalShell({ branding, clientName, children }: PortalSh
                 if ("always" in item && item.always) return true;
                 if ("key" in item && item.key === "allowEstimates") return branding.allowEstimates !== false;
                 if ("key" in item && item.key === "allowTickets") return branding.allowTickets !== false;
+                if ("key" in item && item.key === "allowDocuments") return branding.allowDocuments !== false;
                 return true;
               })
               .map(({ label, href, icon: Icon }) => (

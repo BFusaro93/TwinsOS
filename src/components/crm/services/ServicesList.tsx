@@ -4,13 +4,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, DollarSign } from "lucide-react";
 import { useAllCRMServices, useDeleteCRMService, useBulkImportCRMServices } from "@/lib/hooks/use-crm-jobs";
 import type { CRMService } from "@/types/crm-jobs";
 import { formatCurrency } from "@/lib/utils";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
+import { BulkServicePriceDialog } from "./BulkServicePriceDialog";
 
 const SERVICE_TEMPLATE_COLUMNS = [
   "name", "code", "category", "unit", "defaultRate", "productionRate", "isActive",
@@ -53,11 +55,17 @@ interface Props {
 }
 
 export function ServicesList({ onAdd, onEdit }: Props) {
+  const { can } = usePermissions();
+  const canAdd = can("service_add");
+  const canEdit = can("service_edit");
+  const canDelete = can("service_delete");
+  const canBulkPrice = can("service_bulk_price");
   const { data: services = [], isLoading } = useAllCRMServices();
   const deleteService = useDeleteCRMService();
   const { mutateAsync: bulkImportServices } = useBulkImportCRMServices();
   const [tab, setTab] = useState<Tab>("active");
   const [search, setSearch] = useState("");
+  const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
 
   const filtered = services.filter((s) => {
     if (tab === "active" && !s.isActive) return false;
@@ -69,13 +77,15 @@ export function ServicesList({ onAdd, onEdit }: Props) {
 
   function handleDelete(s: CRMService) {
     if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
-    deleteService.mutate(s.id);
+    deleteService.mutate(s.id, {
+      onError: () => toast.error(`Failed to delete "${s.name}"`),
+    });
   }
 
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 gap-y-2">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
@@ -128,15 +138,23 @@ export function ServicesList({ onAdd, onEdit }: Props) {
               toast[skipped > 0 ? "warning" : "success"](`Services import: ${parts.join(", ")}.`);
             }}
           />
-          <Button size="sm" onClick={onAdd}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Service
-          </Button>
+          {canBulkPrice && (
+            <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
+              <DollarSign className="mr-1.5 h-4 w-4" />
+              Bulk Prices
+            </Button>
+          )}
+          {canAdd && (
+            <Button size="sm" onClick={onAdd}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Service
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -168,8 +186,8 @@ export function ServicesList({ onAdd, onEdit }: Props) {
             {groupServices(filtered).map(({ service: s, depth }) => (
               <tr
                 key={s.id}
-                className="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
-                onClick={() => onEdit(s)}
+                className={`border-b last:border-0 hover:bg-slate-50 ${canEdit ? "cursor-pointer" : ""}`}
+                onClick={canEdit ? () => onEdit(s) : undefined}
               >
                 <td className="px-4 py-3 font-medium text-slate-800">
                   <span style={depth > 0 ? { paddingLeft: depth * 20 } : undefined} className="inline-flex items-center gap-1.5">
@@ -198,20 +216,24 @@ export function ServicesList({ onAdd, onEdit }: Props) {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-center gap-1">
-                    <button
-                      onClick={() => onEdit(s)}
-                      className="rounded p-1 hover:bg-slate-100"
-                      title="Edit"
-                    >
-                      <Pencil className="h-3.5 w-3.5 text-slate-400" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(s)}
-                      className="rounded p-1 hover:bg-red-50"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => onEdit(s)}
+                        className="rounded p-1 hover:bg-slate-100"
+                        title="Edit"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(s)}
+                        className="rounded p-1 hover:bg-red-50"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -219,6 +241,16 @@ export function ServicesList({ onAdd, onEdit }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* Seeded with `filtered`, not all services — the dialog's quick-adjust
+          then acts on exactly the set the user can see behind it. */}
+      {canBulkPrice && (
+        <BulkServicePriceDialog
+          open={bulkPriceOpen}
+          onOpenChange={setBulkPriceOpen}
+          services={filtered}
+        />
+      )}
     </div>
   );
 }

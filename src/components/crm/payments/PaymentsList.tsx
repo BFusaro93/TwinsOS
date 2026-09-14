@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations, useBulkImportPayments } from "@/lib/hooks/use-invoices";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useChildClients } from "@/lib/hooks/use-clients";
 import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import {
@@ -14,7 +15,9 @@ import {
   type CreateMultiPaymentIntentResult,
 } from "@/lib/hooks/use-multi-invoice-charge";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
+import { guardStripeDialogDismiss, STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { exportCSV } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +40,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { Plus, RotateCcw, Search, X, Loader2, Check, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
@@ -82,9 +86,22 @@ interface InvoiceAllocation {
   invoiceDate: string;
   payInFull: boolean;
   amountCents: number;
+  /**
+   * The most this payment may apply to the invoice: its open balance plus
+   * whatever THIS payment already had allocated to it (edit mode — the
+   * invoice's balance already excludes our own prior allocation, so it
+   * alone would understate the cap). Allocation inputs clamp to this.
+   */
+  maxCents: number;
+  // Which client (parent or child sub-account) this invoice actually belongs
+  // to — used to group rows by account when the selected client has children.
+  clientId: string;
+  clientName: string | null;
+  clientAddress: string | null;
 }
 
 import type { CRMPayment } from "@/types/crm-invoices";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── multi-invoice charge form (fresh card/bank entry) ───────────────────────
 
@@ -116,7 +133,10 @@ function ChargeMultiForm({ totalChargeCents, onSuccess }: { totalChargeCents: nu
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement options={{ wallets: { link: "never" } }} />
+      {/* Fixed floor so Stripe's accordion can't resize the dialog under the pointer (F-07). */}
+      <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
+        <PaymentElement options={{ wallets: { link: "never" } }} />
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -145,6 +165,7 @@ export function AddPaymentDialog({
 }) {
   const isEdit = !!payment;
   const isCreditMode = mode === "credit" || (isEdit && !!payment?.isCredit);
+  const queryClient = useQueryClient();
   const { data: clients } = useClients();
   const { mutateAsync: record, isPending: isRecording } = useRecordPayment();
   const { mutateAsync: update, isPending: isUpdating } = useUpdatePayment();
@@ -190,17 +211,34 @@ export function AddPaymentDialog({
     }
   }, [payment?.id]);
 
-  const { data: invoices } = useInvoices(clientId || undefined);
+  // When the selected client is a commercial parent with sub-accounts, a
+  // single payment (e.g. one check from a property manager) can be
+  // allocated across the parent's own invoices AND its children's — pull
+  // in every child's open invoices too, grouped visually by account below.
+  const { data: childClients } = useChildClients(clientId || "");
+  const childClientIds = useMemo(() => (childClients ?? []).map((c) => c.id), [childClients]);
+  const hasChildAccounts = childClientIds.length > 0;
+  const { data: invoices } = useInvoices(
+    clientId ? (hasChildAccounts ? [clientId, ...childClientIds] : clientId) : undefined
+  );
   const { data: existingAllocations } = usePaymentAllocations(isEdit ? payment?.id : undefined);
 
-  // In create mode: only show unpaid invoices.
-  // In edit mode: show all non-voided invoices (paid or unpaid, but must have totalCents > 0)
-  // so that any invoice previously allocated to this payment remains visible and editable.
+  // Only ISSUED invoices can take a payment — drafts are still "uninvoiced
+  // work" (a draft that got an allocation showed a balance and left the
+  // Uninvoiced bucket while still a draft, D-22) and voids are dead. The DB
+  // trigger guard_payment_allocation_limits enforces the same rule.
+  // In create mode: only show unpaid issued invoices.
+  // In edit mode: show all issued invoices (paid or unpaid, totalCents > 0)
+  // so that any invoice previously allocated to this payment remains visible
+  // and editable — plus any invoice this payment is ALREADY allocated to,
+  // whatever its status, so a legacy allocation can still be reviewed/undone.
   const allocationInvoices = useMemo(() => {
     const all = invoices ?? [];
-    if (isEdit) return all.filter((inv) => inv.status !== "void" && inv.totalCents > 0);
-    return all.filter((inv) => inv.status !== "paid" && inv.status !== "void" && inv.totalCents > 0);
-  }, [invoices, isEdit]);
+    const alreadyAllocated = new Set((existingAllocations ?? []).map((a) => a.invoice_id));
+    const issued = (inv: CRMInvoice) => inv.status !== "draft" && inv.status !== "void";
+    if (isEdit) return all.filter((inv) => (issued(inv) && inv.totalCents > 0) || alreadyAllocated.has(inv.id));
+    return all.filter((inv) => issued(inv) && inv.status !== "paid" && inv.totalCents > 0);
+  }, [invoices, isEdit, existingAllocations]);
 
   const openInvoices = useMemo(
     () => (invoices ?? []).filter((inv) => inv.status !== "paid" && inv.status !== "void"),
@@ -247,14 +285,21 @@ export function AddPaymentDialog({
           }
         }
         const balCents = inv.balanceCents ?? inv.totalCents;
+        // In edit mode our own prior allocation has already been subtracted
+        // from the invoice's balance, so the cap is balance + that amount.
+        const maxCents = Math.max(0, balCents + (isEdit ? prefilledCents : 0));
         return {
           invoiceId: inv.id,
           invoiceNumber: inv.invoiceNumber,
           balanceCents: balCents,
           totalCents: inv.totalCents,
           invoiceDate: inv.invoiceDate,
-          payInFull: prefilledCents > 0 && prefilledCents >= balCents,
-          amountCents: prefilledCents,
+          payInFull: prefilledCents > 0 && prefilledCents >= maxCents,
+          amountCents: Math.min(prefilledCents, maxCents),
+          maxCents,
+          clientId: inv.clientId,
+          clientName: inv.clientName ?? null,
+          clientAddress: inv.clientAddress ?? null,
         };
       })
     );
@@ -265,9 +310,9 @@ export function AddPaymentDialog({
     let remaining = amountCents;
     setAllocations((prev) =>
       prev.map((a) => {
-        const apply = Math.min(remaining, a.balanceCents);
+        const apply = Math.min(remaining, a.maxCents);
         remaining -= apply;
-        return { ...a, amountCents: apply, payInFull: apply >= a.balanceCents };
+        return { ...a, amountCents: apply, payInFull: apply > 0 && apply >= a.maxCents };
       })
     );
   }
@@ -281,22 +326,30 @@ export function AddPaymentDialog({
     runAllocation();
   }
 
-  function togglePayInFull(idx: number, checked: boolean) {
+  function togglePayInFull(invoiceId: string, checked: boolean) {
     setAllocations((prev) =>
-      prev.map((a, i) =>
-        i === idx
-          ? { ...a, payInFull: checked, amountCents: checked ? a.balanceCents : 0 }
+      prev.map((a) =>
+        a.invoiceId === invoiceId
+          ? { ...a, payInFull: checked, amountCents: checked ? a.maxCents : 0 }
           : a
       )
     );
   }
 
-  function setAllocationAmount(idx: number, val: string) {
-    const cents = Math.round(parseFloat(val || "0") * 100);
+  // Never let a single invoice take more than its open balance (D-18: an $80
+  // check against a $55 invoice applied all $80 and lost the $25). Anything
+  // above the cap stays on the payment as unused credit instead.
+  function setAllocationAmount(invoiceId: string, requestedCents: number) {
+    const target = allocations.find((a) => a.invoiceId === invoiceId);
+    if (target && requestedCents > target.maxCents && target.amountCents !== target.maxCents) {
+      toast.info(`Capped at this invoice's balance (${formatCurrency(target.maxCents)}) — the rest stays as unused credit`);
+    }
     setAllocations((prev) =>
-      prev.map((a, i) =>
-        i === idx ? { ...a, amountCents: cents, payInFull: cents >= a.balanceCents } : a
-      )
+      prev.map((a) => {
+        if (a.invoiceId !== invoiceId) return a;
+        const cents = Math.max(0, Math.min(requestedCents, a.maxCents));
+        return { ...a, amountCents: cents, payInFull: cents > 0 && cents >= a.maxCents };
+      })
     );
   }
 
@@ -329,7 +382,15 @@ export function AddPaymentDialog({
       return;
     }
     try {
-      await chargeMultiSaved.mutateAsync({ clientId, allocations: chargeAllocations });
+      const result = await chargeMultiSaved.mutateAsync({ clientId, allocations: chargeAllocations });
+      if (result.status === "succeeded" && result.recorded === false) {
+        // Charged at Stripe but the ledger write failed — never let this read
+        // as "nothing happened".
+        toast.error(
+          "The charge went through at Stripe but could NOT be recorded against these invoices. Do not retry — reconcile it in Stripe first.",
+          { duration: 15000 }
+        );
+      }
       setChargeSucceeded(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to charge saved payment method");
@@ -355,6 +416,18 @@ export function AddPaymentDialog({
 
   function handleChargeSuccess() {
     setChargeSucceeded(true);
+    const invalidate = () => {
+      queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["clients", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    };
+    invalidate();
+    // The card charge is confirmed client-side, but the invoice/balance
+    // update itself happens async in the Stripe Connect webhook
+    // (payment_intent.succeeded) — re-invalidate after it's had time to land
+    // so the balance doesn't stay stuck at its pre-payment value.
+    setTimeout(invalidate, 4000);
   }
 
   async function submit(andNew: boolean) {
@@ -426,7 +499,30 @@ export function AddPaymentDialog({
 
   const selectedClient = (clients ?? []).find((c) => c.id === clientId);
 
-  const chargeStripeJs = chargeIntent ? getScopedStripeJs(chargeIntent.connectedAccountId) : null;
+  // When the client has sub-accounts, split the allocation rows into one
+  // group per account (parent first, then children in the same order as
+  // useChildClients()) so the picker reads as "Ridgeline Property
+  // Management" / its invoices, then "Oakview HOA" / its invoices, etc.
+  // With no children this collapses to a single unlabeled group so the
+  // common case renders exactly as it did before.
+  const allocationGroups = useMemo(() => {
+    if (!hasChildAccounts) {
+      return [{ clientId, clientName: null as string | null, rows: allocations }];
+    }
+    const accountOrder = [
+      { id: clientId, name: selectedClient?.displayName ?? null },
+      ...(childClients ?? []).map((c) => ({ id: c.id, name: c.displayName })),
+    ];
+    return accountOrder
+      .map((acct) => ({
+        clientId: acct.id,
+        clientName: acct.name,
+        rows: allocations.filter((a) => a.clientId === acct.id),
+      }))
+      .filter((g) => g.rows.length > 0);
+  }, [hasChildAccounts, allocations, childClients, clientId, selectedClient]);
+
+  const chargeStripeJs = chargeIntent ? getScopedStripeJs(chargeIntent.connectedAccountId, chargeIntent.livemode) : null;
 
   if (chargeSucceeded) {
     return (
@@ -450,7 +546,11 @@ export function AddPaymentDialog({
   if (chargeIntent) {
     return (
       <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent
+          className="max-w-3xl"
+          onPointerDownOutside={guardStripeDialogDismiss}
+          onInteractOutside={guardStripeDialogDismiss}
+        >
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Charge Payment Method</DialogTitle>
           </DialogHeader>
@@ -701,43 +801,53 @@ export function AddPaymentDialog({
                       </td>
                     </tr>
                   ) : (
-                    allocations.map((a, idx) => (
-                      <tr key={a.invoiceId} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-medium text-slate-700">
-                          #{a.invoiceNumber}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <Checkbox
-                            checked={a.payInFull}
-                            onCheckedChange={(c) => togglePayInFull(idx, !!c)}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            className="h-6 w-20 text-xs px-1.5"
-                            value={a.amountCents > 0 ? (a.amountCents / 100).toFixed(2) : ""}
-                            onChange={(e) => setAllocationAmount(idx, e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium">
-                          {formatCurrency(a.balanceCents)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-500">
-                          {new Date(a.invoiceDate + "T12:00:00").toLocaleDateString("en-US", {
-                            month: "2-digit", day: "2-digit", year: "numeric",
-                          })}
-                        </td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {selectedClient?.displayName ?? ""}
-                          {selectedClient?.billingAddress && (
-                            <div>{selectedClient.billingAddress}</div>
-                          )}
-                        </td>
-                      </tr>
+                    allocationGroups.map((group) => (
+                      <Fragment key={group.clientId}>
+                        {/* Sub-account grouping header — only shown when this
+                            client has child accounts, so a single-client
+                            payment renders exactly as before. */}
+                        {hasChildAccounts && (
+                          <tr className="bg-slate-100">
+                            <td colSpan={6} className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              {group.clientName ?? "Account"}
+                            </td>
+                          </tr>
+                        )}
+                        {group.rows.map((a) => (
+                          <tr key={a.invoiceId} className="border-b last:border-0">
+                            <td className="px-3 py-2 font-medium text-slate-700">
+                              #{a.invoiceNumber}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <Checkbox
+                                checked={a.payInFull}
+                                onCheckedChange={(c) => togglePayInFull(a.invoiceId, !!c)}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <CurrencyInput
+                                className="h-6 w-20 text-xs px-1.5"
+                                cents={a.amountCents}
+                                blankWhenZero
+                                onChange={(cents) => setAllocationAmount(a.invoiceId, cents)}
+                                aria-label={`Amount to apply to invoice #${a.invoiceNumber}`}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium">
+                              {formatCurrency(a.balanceCents)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-slate-500">
+                              {new Date(a.invoiceDate + "T12:00:00").toLocaleDateString("en-US", {
+                                month: "2-digit", day: "2-digit", year: "numeric",
+                              })}
+                            </td>
+                            <td className="px-3 py-2 text-slate-500">
+                              {a.clientName ?? selectedClient?.displayName ?? ""}
+                              {a.clientAddress && <div>{a.clientAddress}</div>}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
                     ))
                   )}
                 </tbody>
@@ -864,6 +974,11 @@ interface Props {
 const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
 
 export function PaymentsList({ clientId }: Props) {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  // Any of the three keys grants access — the catalog doesn't split this one
+  // action by payment method in practice.
+  const canRefund = can("acct_process_cc_refunds_voids") || can("acct_delete_card_payments") || can("acct_delete_ach_payments");
+  const canModify = can("acct_add_modify_payments");
   const { data: payments, isLoading, refetch } = usePayments(clientId);
   const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
   const searchParams = useSearchParams();
@@ -922,6 +1037,16 @@ export function PaymentsList({ clientId }: Props) {
     return list;
   }, [payments, activeTab, activeFilter, filterValue, search]);
 
+  if (!permissionsLoading && !can("acct_view_payment_list")) {
+    return (
+      <EmptyState
+        icon={CreditCard}
+        title="No access"
+        description="You don't have permission to view Payments."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -930,7 +1055,7 @@ export function PaymentsList({ clientId }: Props) {
           title="Payments"
           description={!isLoading ? `${(payments ?? []).length} payments` : undefined}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Payments"
                 templateColumns={PAYMENT_TEMPLATE_COLUMNS}
@@ -959,9 +1084,11 @@ export function PaymentsList({ clientId }: Props) {
                   }
                 }}
               />
-              <Button size="sm" onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-1.5 h-4 w-4" /> Add Payment
-              </Button>
+              {canModify && (
+                <Button size="sm" onClick={() => setDialogOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Add Payment
+                </Button>
+              )}
             </div>
           }
         />
@@ -970,7 +1097,7 @@ export function PaymentsList({ clientId }: Props) {
       {/* Filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {(["reference", "date", "client", "address", "method"] as FilterField[]).map((key) => {
             const label = { reference: "Reference #", date: "Date", client: "Client", address: "Address", method: "Payment Method" }[key];
             return (
@@ -1002,26 +1129,30 @@ export function PaymentsList({ clientId }: Props) {
         </div>
         {clientId && (
           <div className="ml-auto flex items-center gap-1.5">
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCreditDialogOpen(true)}>
-              <Plus className="mr-1 h-3 w-3" /> Issue Credit
-            </Button>
-            <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1 h-3 w-3" /> Record Payment
-            </Button>
+            {can("acct_add_modify_credits") && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCreditDialogOpen(true)}>
+                <Plus className="mr-1 h-3 w-3" /> Issue Credit
+              </Button>
+            )}
+            {canModify && (
+              <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1 h-3 w-3" /> Record Payment
+              </Button>
+            )}
           </div>
         )}
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <button
             onClick={() => refetch()}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="ml-2 flex items-center gap-1">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {(["last30", "deleted"] as Tab[]).map((tab) => (
               <button
                 key={tab}
@@ -1121,18 +1252,22 @@ export function PaymentsList({ clientId }: Props) {
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        className="rounded px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600"
-                        onClick={(e) => { e.stopPropagation(); setEditPayment(p); }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="rounded px-2 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600"
-                        onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
-                      >
-                        Refund
-                      </button>
+                      {(p.isCredit ? can("acct_add_modify_credits") : canModify) && (
+                        <button
+                          className="rounded px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600"
+                          onClick={(e) => { e.stopPropagation(); setEditPayment(p); }}
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {canRefund && (
+                        <button
+                          className="rounded px-2 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600"
+                          onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
+                        >
+                          Refund
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1216,10 +1351,12 @@ export function PaymentsList({ clientId }: Props) {
             <Button size="sm" variant="outline" onClick={() => { setEditPayment(viewPayment); setViewPayment(null); }}>
               Edit
             </Button>
-            <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
-              onClick={() => { setRefundPayment(viewPayment); setViewPayment(null); }}>
-              Refund
-            </Button>
+            {canRefund && (
+              <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => { setRefundPayment(viewPayment); setViewPayment(null); }}>
+                Refund
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

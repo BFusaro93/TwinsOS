@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
 
@@ -32,7 +32,7 @@ interface Props {
 
 export function TicketEventDialog({ open, onOpenChange, event }: Props) {
   const updateEvent = useUpdateEvent();
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
   const c = event.config;
   const [title, setTitle] = useState<string>(c.title ?? "");
   const [description, setDescription] = useState<string>(c.description ?? "");
@@ -101,9 +101,9 @@ export function TicketEventDialog({ open, onOpenChange, event }: Props) {
                 <SelectValue placeholder="Select a user" />
               </SelectTrigger>
               <SelectContent>
-                {(users ?? []).map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.name}
+                {(employees ?? []).map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.firstName} {e.lastName}
                   </SelectItem>
                 ))}
               </SelectContent>

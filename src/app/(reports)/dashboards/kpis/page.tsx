@@ -1,5 +1,5 @@
-import { KpiDashboard } from "@/components/operations/KpiDashboard";
+import { LandscaptKpiScorecard } from "@/components/crm/reports/LandscaptKpiScorecard";
 
 export default function KpisPage() {
-  return <KpiDashboard />;
+  return <LandscaptKpiScorecard />;
 }

@@ -1,12 +1,19 @@
 import { redirect } from "next/navigation";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalContext, getPortalOrgChoices } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PortalShell from "@/components/portal/PortalShell";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
 export default async function PortalShellLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getPortalContext();
-  if (!ctx) redirect("/portal/login");
+  if (!ctx) {
+    // null means either "not a portal user at all" or "portal user with
+    // more than one org and no active-org cookie yet" — tell those apart
+    // so someone who's a client of two Landscapt orgs gets sent to pick
+    // one instead of bouncing to a login screen they're already past.
+    const choices = await getPortalOrgChoices();
+    redirect(choices.length > 1 ? "/portal/select-org" : "/portal/login");
+  }
 
   const supabase = createServiceClient();
 
@@ -20,9 +27,9 @@ export default async function PortalShellLayout({ children }: { children: React.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("client_portal_settings")
-      .select("company_name, logo_url, accent_color, support_email, support_phone, allow_tickets, allow_estimates")
+      .select("company_name, logo_url, accent_color, support_email, support_phone, allow_tickets, allow_estimates, allow_documents")
       .eq("org_id", ctx.orgId)
-      .single() as Promise<{ data: Pick<PortalSettingsRow, "company_name" | "logo_url" | "accent_color" | "support_email" | "support_phone" | "allow_tickets" | "allow_estimates"> | null }>,
+      .single() as Promise<{ data: Pick<PortalSettingsRow, "company_name" | "logo_url" | "accent_color" | "support_email" | "support_phone" | "allow_tickets" | "allow_estimates" | "allow_documents"> | null }>,
 
     supabase
       .from("organizations")
@@ -42,6 +49,7 @@ export default async function PortalShellLayout({ children }: { children: React.
     supportPhone: settings?.support_phone ?? null,
     allowTickets: settings?.allow_tickets !== false,
     allowEstimates: settings?.allow_estimates !== false,
+    allowDocuments: settings?.allow_documents !== false,
   };
 
   const clientName = client?.first_name ?? client?.display_name ?? "there";

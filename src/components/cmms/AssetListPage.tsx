@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { HardHat, Maximize2, Minimize2, Plus, ScanLine } from "lucide-react";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
@@ -59,7 +60,7 @@ const ASSET_COLUMNS: ColumnDef[] = [
 export function AssetListPage() {
   const { data: assets, isLoading } = useAssets();
   const { mutateAsync: bulkImportAssets } = useBulkImportAssets();
-  const { data: vehicles } = useVehicles();
+  const { data: vehicles, isLoading: isVehiclesLoading } = useVehicles();
   const { selectedAssetId, setSelectedAssetId, setSelectedVehicleId } = useCMMSStore();
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -133,7 +134,12 @@ export function AssetListPage() {
     null;
 
   function handleBarcodeScan(raw: string) {
-    const q = raw.toLowerCase();
+    if (isLoading || isVehiclesLoading) {
+      toast.error("Assets are still loading — try scanning again in a moment.");
+      return;
+    }
+
+    const q = raw.trim().toLowerCase();
 
     // Search assets first
     const assetMatch = all.find(
@@ -157,7 +163,10 @@ export function AssetListPage() {
     if (vehicleMatch) {
       setSelectedVehicleId(vehicleMatch.id);
       router.push("/cmms/vehicles");
+      return;
     }
+
+    toast.error(`No asset or vehicle found for code "${raw}"`);
   }
 
   function handleFilterChange(key: string, value: string | string[]) {

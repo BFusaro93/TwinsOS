@@ -49,7 +49,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -77,8 +77,11 @@ import {
   MessageSquareText,
   Send,
   ChevronDown,
+  FolderKanban,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
+import { useProject } from "@/lib/hooks/use-projects";
+import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import type { CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
@@ -86,6 +89,8 @@ import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
+import { PermissionGate } from "@/components/shared/PermissionGate";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -220,8 +225,11 @@ interface Props {
 
 export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }: Props) {
   const router = useRouter();
+  const { can } = usePermissions();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
+  const { data: linkedProject } = useProject(job?.projectId ?? "");
+  const [projectSheetOpen, setProjectSheetOpen] = useState(false);
   const { data: crews = [] } = useCRMCrews();
   const updateJob = useUpdateJob();
   const createVisit = useCreateVisit();
@@ -250,9 +258,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [edits, setEdits] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
-  const [newVisitDate, setNewVisitDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [newVisitDate, setNewVisitDate] = useState(() => todayLocalISODate());
   const [newVisitCrew, setNewVisitCrew] = useState("");
   const [newVisitServiceId, setNewVisitServiceId] = useState("");
   const [newVisitInvoiceDesc, setNewVisitInvoiceDesc] = useState("");
@@ -310,6 +316,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           clientId: job.clientId,
           scheduledDate: job.scheduledDate!,
           crewId: job.crewId ?? null,
+          menCount: job.manCount,
         });
         await qc.invalidateQueries({ queryKey: ['crm-job-visits', 'job', job.id] });
       } catch {
@@ -384,7 +391,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // Auto-create a draft invoice when a one-time job is completed
       if (status === "completed" && job.jobType === "one_time") {
         try {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = todayLocalISODate();
           const serviceDate = job.scheduledDate ?? today;
           const svcs = job.services ?? [];
           const productLineItems = buildPendingProductLineItems(serviceDate);
@@ -527,7 +534,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     if (!job) return;
     setInvoicing(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalISODate();
       const serviceDate = job.scheduledDate ?? today;
       const services = job.services ?? [];
       const productLineItems = buildPendingProductLineItems(serviceDate);
@@ -707,11 +714,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             </Button>
           )}
           {effectiveStatus !== "cancelled" && !editing && (
-            <Button variant="outline" size="sm" className="h-8 text-xs"
-              onClick={() => handleStatus("cancelled")}>
-              <XCircle className="mr-1 h-3.5 w-3.5 text-red-400" />
-              Cancel Job
-            </Button>
+            <PermissionGate permission="job_cancel">
+              <Button variant="outline" size="sm" className="h-8 text-xs"
+                onClick={() => handleStatus("cancelled")}>
+                <XCircle className="mr-1 h-3.5 w-3.5 text-red-400" />
+                Cancel Job
+              </Button>
+            </PermissionGate>
           )}
           {job.jobType !== "recurring" && job.jobType !== "package" && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
@@ -773,13 +782,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       </div>
 
       {/* ── body ── */}
-      <div className="flex flex-1 gap-4 overflow-auto p-6">
+      {/* Main column + info rail — side by side only from xl, so a tablet
+          gets the full width for the tab content instead of a 256px squeeze. */}
+      <div className="flex flex-1 flex-col gap-4 overflow-auto p-4 md:p-6 xl:flex-row">
 
         {/* ── left column ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0">
 
           {tab === "overview" && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Client card */}
               <div className="rounded-lg border bg-white p-4 shadow-sm">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Client</p>
@@ -820,7 +831,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     <div className="flex flex-col gap-1">
                       <Label className="text-xs text-slate-500">Budgeted Hours</Label>
                       <p className="text-sm text-slate-500 py-1.5">
-                        {job.budgetedHours != null ? `${job.budgetedHours}h` : "—"}
+                        {job.budgetedHours != null ? `${formatHours(job.budgetedHours)}h` : "—"}
                         <span className="text-[10px] text-slate-400 ml-1.5">
                           (sum of service hours — edit per-service on the Services tab)
                         </span>
@@ -860,7 +871,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       </Select>
                     </div>
                     {job.jobType === "waiting_list" && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <div className="flex flex-col gap-1">
                           <Label className="text-xs text-slate-500">Available From</Label>
                           <Input
@@ -922,7 +933,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         {creatingSchedule && (
                           <div className="mt-1 rounded-md border bg-slate-50 p-3 flex flex-col gap-2">
                             <p className="text-[11px] font-semibold text-slate-600">New Schedule</p>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div className="flex flex-col gap-1">
                                 <Label className="text-[10px] text-slate-500">Frequency</Label>
                                 <Select value={newSchedFreq} onValueChange={(v) => setNewSchedFreq(v as "weekly" | "bi_weekly")}>
@@ -985,7 +996,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     )}
                     {job.jobType === "snow" && (
                       <>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <div className="flex flex-col gap-1">
                             <Label className="text-xs text-slate-500"># Inch Trigger</Label>
                             <Input
@@ -1224,19 +1235,19 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               {/* Revenue summary */}
               <div className="rounded-lg border bg-white p-4 shadow-sm col-span-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Revenue</p>
-                <div className="flex items-center gap-8 text-sm">
+                <div className="flex flex-wrap items-center gap-4 sm:gap-8 text-sm">
                   <div>
                     <p className="text-xs text-slate-400">Job Value</p>
                     <p className="text-xl font-bold text-slate-800">{formatCurrency(jobValueCents)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-400">Budgeted Hrs</p>
-                    <p className="text-xl font-bold text-slate-800">{job.budgetedHours?.toFixed(1) ?? "—"}</p>
+                    <p className="text-xl font-bold text-slate-800">{formatHours(job.budgetedHours)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-400">Actual Hrs</p>
                     <p className="text-xl font-bold text-slate-800">
-                      {visits.filter((v) => v.actualHours).reduce((s, v) => s + (v.actualHours ?? 0), 0).toFixed(1)}
+                      {formatHours(visits.filter((v) => v.actualHours).reduce((s, v) => s + (v.actualHours ?? 0), 0))}
                     </p>
                   </div>
                   <div>
@@ -1321,7 +1332,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           </>
                         ) : (
                           <>
-                            <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${s.budgetedHours}h` : "—"}</td>
+                            <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${formatHours(s.budgetedHours)}h` : "—"}</td>
                             <td className="px-4 py-3 text-right tabular-nums">{s.qty ?? 1}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {s.rateCents != null ? formatCurrency(s.rateCents) : "—"}
@@ -1330,20 +1341,22 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               {s.rateCents != null ? formatCurrency((s.rateCents ?? 0) * (s.qty ?? 1)) : "—"}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
-                                <button
-                                  onClick={() => startEditSvc(s)}
-                                  className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => void handleDeleteSvc(s.id)}
-                                  className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
+                              {(job.jobType !== "package" || can("job_add_remove_custom_package_line_items")) && (
+                                <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                                  <button
+                                    onClick={() => startEditSvc(s)}
+                                    className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => void handleDeleteSvc(s.id)}
+                                    className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </>
                         )}
@@ -1432,7 +1445,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   )}
                 </table>
               </div>
-              {!addingSvc && (
+              {!addingSvc && (job.jobType !== "package" || can("job_add_remove_custom_package_line_items")) && (
                 <div>
                   <Button size="sm" variant="outline" className="h-7 text-xs"
                     onClick={() => { setAddingSvc(true); setNewSvcId(""); setNewSvcRate(""); setNewSvcQty("1"); setNewSvcBHrs("0"); }}>
@@ -1450,7 +1463,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <thead>
                     <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Product</th>
-                      <th className="px-4 py-3 text-right">QTY Used</th>
+                      <th className="px-4 py-3 text-right">QTY</th>
                       <th className="px-4 py-3 text-right">QTY Invoiced</th>
                       <th className="px-4 py-3 text-right">Unit Price</th>
                       <th className="px-4 py-3 text-right">Total</th>
@@ -1676,7 +1689,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 <p className="text-sm font-medium text-slate-700">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
                 <div className="flex items-center gap-2">
                   {/* Manual generate button for recurring/package jobs */}
-                  {(job.jobType === "recurring" || job.jobType === "package") && (
+                  {(job.jobType === "recurring" || job.jobType === "package") && job.status !== "hold" && (
                     <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleGenerateVisits} disabled={generating}>
                       {generating ? "Generating…" : "Generate Visits"}
                     </Button>
@@ -1863,11 +1876,17 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         onDispatch={async (date, crewId) => {
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           const updates: Record<string, any> = { scheduled_date: date, crew_id: crewId };
-                          // Only flip status/dispatched_at the first time this visit
-                          // actually goes out — reassigning an already-dispatched (or
-                          // in-progress) visit to a different date/crew shouldn't
-                          // regress or re-stamp its status.
-                          const isFirstDispatch = v.status === "scheduled";
+                          // Flip status/dispatched_at on any transition INTO
+                          // "dispatched" — not just from "scheduled". This
+                          // matches DispatchBoard's local JobDetailSheet: a
+                          // dispatcher may legitimately reactivate a
+                          // previously-cancelled/skipped visit through this
+                          // same action, and that should count as a real
+                          // dispatch (restamping dispatched_at) rather than
+                          // silently leaving status/timestamp untouched.
+                          // Reassigning an already-dispatched visit to a
+                          // different date/crew still leaves status alone.
+                          const isFirstDispatch = v.status !== "dispatched";
                           if (isFirstDispatch) {
                             updates.status = "dispatched";
                             updates.dispatched_at = new Date().toISOString();
@@ -1976,18 +1995,37 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
              with this column — drop it there so the table has room to breathe
              instead of clipping its rightmost action buttons. */}
         {!(onClose && tab === "visits") && (
-          <div className="w-64 shrink-0 flex flex-col gap-3">
+          <div className="w-full xl:w-64 xl:shrink-0 flex flex-col gap-3">
             <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
               <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
               <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
               <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={crewSummary} title={crewSummaryTitle} />
-              <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${job.budgetedHours}h` : "—"} />
+              <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${formatHours(job.budgetedHours)}h` : "—"} />
               <InfoRow icon={<Receipt className="h-3.5 w-3.5" />} label="Revenue" value={formatCurrency(jobValueCents)} />
               {job.source && <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Source" value={job.source} />}
+              {job.projectId && (
+                <button
+                  type="button"
+                  onClick={() => setProjectSheetOpen(true)}
+                  className="flex items-center gap-2 text-left text-slate-600 hover:text-brand-600"
+                  title="Open linked Project — request materials or view cost tracking"
+                >
+                  <span className="text-slate-400"><FolderKanban className="h-3.5 w-3.5" /></span>
+                  <span className="text-slate-400 w-16 shrink-0">Project</span>
+                  <span className="font-medium truncate underline decoration-dotted">
+                    {linkedProject?.name ?? "View project"}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         )}
       </div>
+      <ProjectDetailSheet
+        project={linkedProject ?? null}
+        open={projectSheetOpen}
+        onOpenChange={setProjectSheetOpen}
+      />
     </div>
   );
 }
@@ -2097,8 +2135,8 @@ function VisitRow({
         </td>
         <td className="px-4 py-3 text-slate-600">{visitServiceName}</td>
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${visitBudgetedHours}h` : "—"}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{computeActualHours(visit)?.toFixed(1) ?? "—"}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${formatHours(visitBudgetedHours)}h` : "—"}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{formatHours(computeActualHours(visit))}</td>
         <td className="px-4 py-3 text-center">
           <Badge
             variant="outline"
@@ -2118,7 +2156,8 @@ function VisitRow({
                 <span className="font-semibold">Job note:</span> {jobNotesToCrew}
               </div>
             )}
-            {visit.notesToCrew ? (
+            {/* generate-visits copies the job note onto each visit — don't show it twice */}
+            {visit.notesToCrew && visit.notesToCrew !== jobNotesToCrew ? (
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="text-slate-600 hover:text-brand-600 text-left truncate max-w-[200px] block">
                 {visit.notesToCrew}
               </button>
@@ -2253,6 +2292,9 @@ function VisitRow({
                 try {
                   await onDispatch(dispatchDate, dispatchCrew || null);
                   setDispatching(false);
+                } catch (err) {
+                  // e.g. package min-days violation from useUpdateVisit
+                  toast.error(err instanceof Error ? err.message : "Failed to dispatch visit");
                 } finally {
                   setDispatchSaving(false);
                 }

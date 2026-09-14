@@ -1,19 +1,39 @@
+export interface ReportExportGroupedInput {
+  grandTotal: string[];
+  groups: { label: string; subtotal: string[]; rows: string[][] }[];
+}
+
 export interface ReportExportSectionInput {
   heading: string;
   columns: string[];
   rows: string[][];
+  /** Flat sections only — formatted totals row (see buildTotalsRow in
+   *  src/lib/reports/export-rows.ts) appended after the data rows. */
+  totals?: string[];
+  /** When set, `rows` is ignored — the PDF renders a grand-total row up top,
+   *  then each group's subtotal row immediately followed by its detail rows
+   *  (matches the legacy SA layout), via buildGroupedPdfSection. */
+  grouped?: ReportExportGroupedInput;
+}
+
+export interface ReportExportChartInput {
+  title: string;
+  bars: { label: string; value: number; valueLabel: string }[];
 }
 
 /** Posts already-fetched report data to the export/pdf route and triggers a
- *  browser download of the resulting file. */
+ *  browser download of the resulting file. `charts` render as simple
+ *  horizontal bar charts above the table sections, matching what's shown
+ *  on screen. */
 export async function exportReportPDF(
   title: string,
-  sections: ReportExportSectionInput[]
+  sections: ReportExportSectionInput[],
+  charts?: ReportExportChartInput[]
 ): Promise<void> {
   const res = await fetch("/api/crm/reports/export/pdf", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, sections }),
+    body: JSON.stringify({ title, sections, charts }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);

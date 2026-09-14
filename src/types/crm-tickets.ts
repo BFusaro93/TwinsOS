@@ -1,4 +1,4 @@
-export type TicketType = 'note' | 'call' | 'event';
+export type TicketType = 'note' | 'call' | 'event' | 'text';
 export type TicketStatus = 'open' | 'on_hold' | 'pending' | 'closed';
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -13,6 +13,8 @@ export interface CRMTicket {
   body: string | null;
   category: string | null;
   clientId: string | null;
+  /** Only on crew-submitted upsell tickets — the service the crew suggested. */
+  upsellServiceId: string | null;
   clientName: string | null;
   assignedTo: string | null;
   /** profiles.id of the assignee, resolved from crm_employees.user_id at
@@ -24,6 +26,10 @@ export interface CRMTicket {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /** True when this ticket's form submission checked SMS consent but no
+   *  phone number was captured — consent can't be attached to a client's
+   *  record until a phone is collected. */
+  smsConsentPendingPhone: boolean;
 }
 
 export interface NewTicketFormValues {

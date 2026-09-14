@@ -1,9 +1,14 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { todayLocalISODate } from "@/lib/utils";
+import { isoNy } from "@/lib/reports/ny-date";
+import { logger } from "@/lib/logger";
+import type { BulkImportResult } from "@/lib/csv";
 import type {
   Client,
   ClientContact,
@@ -13,6 +18,40 @@ import type {
   NewClientFormValues,
   PropertyZone,
 } from "@/types/crm";
+
+// ── activity logging ──────────────────────────────────────────────────────────
+
+/**
+ * Writes a system-style entry to the client's Activity timeline (client
+ * created, contact/tag/property added, parent linked…). Reuses the existing
+ * 'note' activity_type — the CHECK constraint on client_activity.activity_type
+ * has no dedicated "system" value and adding one would need a migration —
+ * with the event described in `subject` so it reads clearly in the feed.
+ *
+ * Never throws: the primary mutation has already committed by the time this
+ * runs, so a failed timeline write must not surface as a failed save.
+ */
+async function logClientActivity(
+  supabase: ReturnType<typeof createClient>,
+  clientId: string,
+  subject: string,
+  body?: string | null,
+) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("client_activity").insert({
+      client_id: clientId,
+      activity_type: "note",
+      subject,
+      body: body ?? null,
+      created_by: user?.id ?? null,
+    });
+    if (error) throw error;
+  } catch (err) {
+    logger.warn("client_activity log failed", { clientId, subject, error: err instanceof Error ? err.message : String(err) });
+  }
+}
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -40,7 +79,7 @@ function mapClient(row: any): Client {
     billingZip: row.billing_zip,
     billingCountry: row.billing_country ?? "US",
     billingEmail: row.billing_email,
-    invoiceFrequency: row.invoice_frequency ?? "daily",
+    invoiceFrequency: row.invoice_frequency ?? "monthly",
     defaultTaxRateBps: row.default_tax_rate_bps ?? 0,
     defaultTerms: row.default_terms ?? "due_on_receipt",
     defaultPaymentMethod: row.default_payment_method ?? null,
@@ -54,7 +93,9 @@ function mapClient(row: any): Client {
     isTaxable: row.is_taxable ?? true,
     salesTaxCode: row.sales_tax_code,
     salesRepId: row.sales_rep_id,
-    salesRepName: row.profiles?.full_name ?? null,
+    salesRepName: row.sales_rep
+      ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null
+      : null,
     source: row.source,
     referredBy: row.referred_by,
     referredByClientId: row.referred_by_client_id ?? null,
@@ -183,7 +224,7 @@ export function useClients() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("clients")
-        .select("*, client_tags(tag)")
+        .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .is("deleted_at", null)
         .order("display_name");
       if (error) throw error;
@@ -199,7 +240,7 @@ export function useChildClients(parentClientId: string) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("clients")
-        .select("*, client_tags(tag)")
+        .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .eq("parent_client_id", parentClientId)
         .is("deleted_at", null)
         .order("display_name");
@@ -220,10 +261,17 @@ export function useSetParentClient() {
         .update({ parent_client_id: parentClientId })
         .eq("id", id);
       if (error) throw error;
+      if (parentClientId) {
+        const { data: parent } = await supabase.from("clients").select("display_name").eq("id", parentClientId).maybeSingle();
+        await logClientActivity(supabase, id, `Linked to parent account${parent?.display_name ? `: ${parent.display_name}` : ""}`);
+      } else {
+        await logClientActivity(supabase, id, "Parent account link removed");
+      }
     },
     onSuccess: (_data, { id, parentClientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", id] });
+      qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
       if (parentClientId) {
         qc.invalidateQueries({ queryKey: ["clients", parentClientId, "children"] });
       }
@@ -240,7 +288,7 @@ export function useClient(id: string) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("clients")
-        .select("*, client_tags(tag)")
+        .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -294,14 +342,38 @@ export function useClientActivity(clientId: string) {
     queryKey: ["clients", clientId, "activity"],
     queryFn: async () => {
       const supabase = createClient();
+      // Parent/property-manager accounts should see a unified timeline that
+      // rolls up their children's activity too — hierarchy is capped at one
+      // level deep (see prevent_client_hierarchy_cycle), so a direct-children
+      // lookup is enough, no recursion needed.
+      const { data: children, error: childrenError } = await supabase
+        .from("clients")
+        .select("id, display_name")
+        .eq("parent_client_id", clientId)
+        .is("deleted_at", null);
+      if (childrenError) throw childrenError;
+      const childIds = (children ?? []).map((c) => c.id);
+      const childNameById = new Map((children ?? []).map((c) => [c.id, c.display_name as string]));
+      const activityClientIds = [clientId, ...childIds];
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("client_activity")
         .select("*, profiles(name)")
-        .eq("client_id", clientId)
+        .in("client_id", activityClientIds)
         .order("occurred_at", { ascending: false });
       if (error) throw error;
-      return (data.map(mapActivity)) as ClientActivity[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data.map((row: any) => {
+        const activity = mapActivity(row);
+        // Tag entries that belong to a child account so the timeline can
+        // label which sub-account they came from — the parent's own rows
+        // are left unlabeled.
+        activity.sourceClientName = row.client_id !== clientId
+          ? (childNameById.get(row.client_id) ?? null)
+          : null;
+        return activity;
+      })) as ClientActivity[];
     },
     enabled: !!clientId,
   });
@@ -331,6 +403,43 @@ export function useAddClientProperty() {
         is_master: false,
       });
       if (error) throw error;
+      const label = [property.name, property.address].filter((s) => s && s.trim()).join(" — ");
+      await logClientActivity(supabase, clientId, `Property added${label ? `: ${label}` : ""}`);
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
+    },
+  });
+}
+
+export function useUpdateClientProperty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      clientId,
+      property,
+    }: {
+      id: string;
+      clientId: string;
+      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string };
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("client_properties")
+        .update({
+          name: property.name,
+          address: property.address,
+          city: property.city,
+          state: property.state,
+          zip: property.zip,
+          gate_lock_code: property.gateCode,
+          notes_to_crew: property.notesToCrew,
+        })
+        .eq("id", id);
+      if (error) throw error;
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
@@ -353,10 +462,10 @@ export function useUpdateClientPropertyZones() {
       const supabase = createClient();
       const sums = zones.reduce(
         (acc, z) => {
-          acc.gross += z.sqft;
-          if (z.type === "turf") acc.turf += z.sqft;
-          if (z.type === "mulch_bed") acc.mulch += z.sqft;
-          if (z.type === "parking_lot") acc.parking += z.sqft;
+          acc.gross += z.sqft || 0;
+          if (z.type === "turf") acc.turf += z.sqft || 0;
+          if (z.type === "mulch_bed") acc.mulch += z.sqft || 0;
+          if (z.type === "parking_lot") acc.parking += z.sqft || 0;
           return acc;
         },
         { gross: 0, turf: 0, mulch: 0, parking: 0 }
@@ -402,16 +511,26 @@ export function useCreateClient() {
           billing_zip: values.billingZip || null,
           source: values.source || null,
           sales_rep_id: values.salesRepId || null,
-          client_since: new Date().toISOString().split("T")[0],
+          // New Client dialog can create the record as a Lead instead of
+          // jumping straight to Active (defaults to active for back-compat).
+          status: values.status ?? "active",
+          // Local calendar date — toISOString() is UTC and reads as tomorrow
+          // after ~8 PM Eastern. Leads have no client_since until converted.
+          client_since: (values.status ?? "active") === "lead" ? null : todayLocalISODate(),
         })
         .select()
         .single();
       if (error) throw error;
-      return mapClient(data);
+      const client = mapClient(data);
+      await logClientActivity(supabase, client.id, client.status === "lead" ? "Lead created" : "Client created");
+      return client;
     },
     onSuccess: (client) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
-      fireAutomationTrigger({ triggerType: "client_created", clientId: client.id });
+      fireAutomationTrigger({
+        triggerType: client.status === "lead" ? "lead_created" : "client_created",
+        clientId: client.id,
+      });
     },
   });
 }
@@ -422,23 +541,80 @@ function normalizeAccountType(value: string): "residential" | "commercial" {
   return v === "commercial" ? "commercial" : "residential";
 }
 
+/** Basic, permissive email format check — mirrors the vendor-form validation
+ *  in NewVendorDialog.tsx so every CSV import enforces the same standard
+ *  rather than accepting arbitrary strings into `primary_email`. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Loads every existing (non-deleted) client's normalized email/phone into
+ * lookup maps so a CSV row can be matched against an existing account
+ * instead of creating a duplicate. Shared by useBulkImportClients and
+ * useBulkImportLeads so both importers dedup identically.
+ */
+async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
+  const { data: existing } = await supabase
+    .from("clients")
+    .select("id, primary_email, primary_phone")
+    .is("deleted_at", null);
+  const byEmail = new Map(
+    (existing ?? []).filter((c) => c.primary_email).map((c) => [c.primary_email!.trim().toLowerCase(), c.id])
+  );
+  const byPhone = new Map(
+    (existing ?? []).filter((c) => c.primary_phone).map((c) => [c.primary_phone!.replace(/\D/g, ""), c.id])
+  );
+  return { byEmail, byPhone };
+}
+
 export function useBulkImportClients() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
-      let skipped = 0;
-      const inserts = rows
-        .map((r) => {
+      // Load existing clients once so each row can be matched against an
+      // existing account by email/phone instead of creating a duplicate —
+      // the same dedup approach useBulkImportLeads already uses, previously
+      // missing here (dedup only ever triggered on a Postgres unique-
+      // constraint conflict on account_number, a field rarely populated in
+      // a user's CSV).
+      const { byEmail, byPhone } = await loadClientDedupMaps(supabase);
+
+      let succeeded = 0;
+      const failed: BulkImportResult["failed"] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 1;
+        try {
           const displayName = r.displayName?.trim();
-          if (!displayName) { skipped++; return null; }
-          return {
+          if (!displayName) {
+            failed.push({ row: rowNum, error: "Missing required field: Display Name" });
+            continue;
+          }
+
+          const emailRaw = r.primaryEmail?.trim() || null;
+          if (emailRaw && !EMAIL_RE.test(emailRaw)) {
+            failed.push({ row: rowNum, error: `"${displayName}": invalid email format ("${emailRaw}")` });
+            continue;
+          }
+
+          const email = emailRaw?.toLowerCase() || null;
+          const phone = r.primaryPhone?.trim() || null;
+          const phoneDigits = phone?.replace(/\D/g, "") || null;
+          const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
+          if (matchedClientId) {
+            failed.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone (likely duplicate) — skipped` });
+            continue;
+          }
+
+          const row = {
             display_name: displayName,
             account_type: normalizeAccountType(r.accountType ?? ""),
             account_number: r.accountNumber?.trim() || undefined,
-            primary_phone: r.primaryPhone?.trim() || null,
-            primary_email: r.primaryEmail?.trim() || null,
+            primary_phone: phone,
+            primary_email: emailRaw,
             billing_address: r.billingAddress?.trim() || null,
             billing_city: r.billingCity?.trim() || null,
             billing_state: r.billingState?.trim() || null,
@@ -448,42 +624,53 @@ export function useBulkImportClients() {
             service_state: r.serviceState?.trim() || null,
             service_zip: r.serviceZip?.trim() || null,
             source: r.source?.trim() || null,
-            client_since: new Date().toISOString().split("T")[0],
+            client_since: todayLocalISODate(),
           };
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null);
 
-      if (inserts.length === 0) return { inserted: 0, skipped };
+          const { data: newClient, error } = await supabase
+            .from("clients")
+            .insert({ ...row, created_by: user?.id ?? null })
+            .select("id")
+            .single();
 
-      // Insert one-by-one so a duplicate account_number can be upserted instead of failing the batch.
-      // Clients without an account_number are always inserted fresh (the org auto-assigns one).
-      let inserted = 0;
-      const { data: { user } } = await supabase.auth.getUser();
+          if (error?.code === "23505" && row.account_number) {
+            // Duplicate account_number — update the existing record instead of failing the row.
+            const { error: updateError } = await supabase.from("clients").update({
+              display_name: row.display_name,
+              account_type: row.account_type,
+              primary_phone: row.primary_phone,
+              primary_email: row.primary_email,
+              billing_address: row.billing_address,
+              billing_city: row.billing_city,
+              billing_state: row.billing_state,
+              billing_zip: row.billing_zip,
+              service_address: row.service_address,
+              service_city: row.service_city,
+              service_state: row.service_state,
+              service_zip: row.service_zip,
+              source: row.source,
+            }).eq("account_number", row.account_number).is("deleted_at", null);
+            if (updateError) {
+              failed.push({ row: rowNum, error: `"${displayName}": ${updateError.message}` });
+              continue;
+            }
+          } else if (error) {
+            failed.push({ row: rowNum, error: `"${displayName}": ${error.message}` });
+            continue;
+          } else if (newClient) {
+            // Keep the dedup maps current so two rows in the SAME csv sharing
+            // an email/phone match each other instead of both inserting.
+            if (email) byEmail.set(email, newClient.id);
+            if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
+          }
 
-      for (const row of inserts) {
-        const { error } = await supabase.from("clients").insert({ ...row, created_by: user?.id ?? null });
-        if (error?.code === "23505" && row.account_number) {
-          await supabase.from("clients").update({
-            display_name: row.display_name,
-            account_type: row.account_type,
-            primary_phone: row.primary_phone,
-            primary_email: row.primary_email,
-            billing_address: row.billing_address,
-            billing_city: row.billing_city,
-            billing_state: row.billing_state,
-            billing_zip: row.billing_zip,
-            service_address: row.service_address,
-            service_city: row.service_city,
-            service_state: row.service_state,
-            service_zip: row.service_zip,
-            source: row.source,
-          }).eq("account_number", row.account_number).is("deleted_at", null);
-        } else if (error) {
-          throw error;
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
         }
-        inserted++;
       }
-      return { inserted, skipped };
+
+      return { succeeded, failed };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -499,13 +686,17 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null } | null = null;
-      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in").eq("id", id).single();
+      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status").eq("id", id).single();
         before = data;
       }
 
       const smsOptInJustEnabled = updates.smsOptIn === true && before && before.sms_opt_in !== true;
+      // Status is editable from the Edit Client → Details tab; a lead moved to
+      // active there is the same business event as the "Convert" button, so
+      // stamp client_since (the conversion date) if the form left it blank.
+      const leadConverting = updates.status === "active" && before?.status === "lead";
 
       const { error } = await supabase
         .from("clients")
@@ -545,7 +736,8 @@ export function useUpdateClient() {
           billing_email: updates.billingEmail,
           referred_by: updates.referredBy,
           referred_by_client_id: updates.referredByClientId,
-          client_since: updates.clientSince ?? null,
+          // Empty string from the date input means "cleared", not a date.
+          client_since: updates.clientSince || (leadConverting ? isoNy(new Date()) : null),
           priority: updates.priority ?? null,
           is_taxable: updates.isTaxable,
           turf_sqft: updates.turfSqft ?? null,
@@ -567,6 +759,14 @@ export function useUpdateClient() {
         ? updates.referredByClientId
         : null;
       const paymentMethodChanged = updates.paymentMethod !== undefined && before && updates.paymentMethod !== before.payment_method;
+      // Status is editable from the Edit Client → Details tab; a lead moved to
+      // active there is the same business event as the "Convert" button, so
+      // fire the same automation trigger and leave a timeline entry.
+      const statusChanged = updates.status !== undefined && before && updates.status !== before.status;
+      const leadConverted = !!statusChanged && before?.status === "lead" && updates.status === "active";
+      if (statusChanged) {
+        await logClientActivity(supabase, id, `Status changed: ${before?.status ?? "—"} → ${updates.status}`);
+      }
       return {
         sourceChanged,
         newSource: updates.source ?? null,
@@ -575,11 +775,19 @@ export function useUpdateClient() {
         newReferrerId,
         paymentMethodChanged,
         newPaymentMethod: updates.paymentMethod ?? null,
+        statusChanged,
+        leadConverted,
       };
     },
     onSuccess: (result, { id }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", id] });
+      if (result?.statusChanged) {
+        qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
+      }
+      if (result?.leadConverted) {
+        fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
+      }
       if (result?.sourceChanged) {
         fireAutomationTrigger({
           triggerType: "client_source_updated",
@@ -657,8 +865,8 @@ export function useAddClientContact() {
       contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
     }) => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const primaryPhone = contact.phones?.[0] ?? null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("client_contacts").insert({
         client_id:    clientId,
         first_name:   contact.firstName,
@@ -674,9 +882,16 @@ export function useAddClientContact() {
         notes:        contact.notes,
       });
       if (error) throw error;
+      const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+      await logClientActivity(
+        supabase,
+        clientId,
+        `Contact added${name ? `: ${name}` : ""}${contact.contactType ? ` (${contact.contactType})` : ""}`,
+      );
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
     },
   });
 }
@@ -844,12 +1059,15 @@ export function useCreateLead() {
           billing_zip: values.billingZip || null,
           source: values.source || null,
           status: "lead",
-          client_since: new Date().toISOString().split("T")[0],
+          // client_since is the conversion date — leads don't have one until
+          // they become a client (see useConvertLeadToClient).
         })
         .select()
         .single();
       if (error) throw error;
-      return mapClient(data);
+      const lead = mapClient(data);
+      await logClientActivity(supabase, lead.id, "Lead created");
+      return lead;
     },
     onSuccess: (lead) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -867,12 +1085,7 @@ export function useBulkImportLeads() {
 
       // Load every existing (non-deleted) client once so each row can be matched
       // against an existing account by email/phone instead of creating a duplicate.
-      const { data: existing } = await supabase
-        .from("clients")
-        .select("id, primary_email, primary_phone")
-        .is("deleted_at", null);
-      const byEmail = new Map((existing ?? []).filter((c) => c.primary_email).map((c) => [c.primary_email!.trim().toLowerCase(), c.id]));
-      const byPhone = new Map((existing ?? []).filter((c) => c.primary_phone).map((c) => [c.primary_phone!.replace(/\D/g, ""), c.id]));
+      const { byEmail, byPhone } = await loadClientDedupMaps(supabase);
 
       let created = 0;
       let matched = 0;
@@ -909,7 +1122,7 @@ export function useBulkImportLeads() {
           billing_zip: r.billingZip?.trim() || null,
           source: r.source?.trim() || null,
           status: "lead",
-          client_since: new Date().toISOString().split("T")[0],
+          // No client_since for leads — set on conversion.
         }).select("id").single();
         if (error) throw error;
         // The dedup maps were only built once from the DB before this loop —
@@ -941,17 +1154,25 @@ export function useConvertLeadToClient() {
       // stale UI state, or a double-click) silently reactivated it as an
       // active client and fired lead_converted_to_client, bypassing the
       // intended lead → active transition entirely.
+      //
+      // client_since is the conversion date (NULL while a lead), so stamp it
+      // here — reports measure "new clients" and "days to convert" off it.
       const { data: updated, error } = await supabase
         .from("clients")
-        .update({ status: "active" })
+        .update({ status: "active", client_since: isoNy(new Date()) })
         .eq("id", id)
         .eq("status", "lead")
         .select("id");
       if (error) throw error;
-      return { converted: (updated?.length ?? 0) > 0 };
+      const converted = (updated?.length ?? 0) > 0;
+      if (converted) {
+        await logClientActivity(supabase, id, "Converted from lead to client");
+      }
+      return { converted };
     },
     onSuccess: (result, id) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
       if (result.converted) {
         fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
       }
@@ -976,11 +1197,16 @@ export function useAddClientTag() {
         .from("client_tags")
         .upsert({ client_id: clientId, tag }, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
       if (error) throw error;
+      await logClientActivity(supabase, clientId, `Tag added: ${tag}`);
     },
     onSuccess: (_d, { clientId, tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
       fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
+    },
+    onError: () => {
+      toast.error("Failed to add tag");
     },
   });
 }
@@ -1001,6 +1227,9 @@ export function useRemoveClientTag() {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
       fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
+    },
+    onError: () => {
+      toast.error("Failed to remove tag");
     },
   });
 }

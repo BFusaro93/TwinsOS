@@ -8,6 +8,7 @@ export interface MultiChargeAllocation {
 export interface CreateMultiPaymentIntentResult {
   clientSecret: string;
   connectedAccountId: string;
+  livemode: boolean;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
@@ -47,6 +48,10 @@ export interface ChargeMultiResult {
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
+  paymentIntentId?: string;
+  /** See ChargeAutopayInvoiceResult.recorded in use-autopay-invoices.ts. */
+  recorded?: boolean;
+  recordingError?: string | null;
 }
 
 /** Charges the client's saved payment method once for a combined total split across multiple
@@ -64,8 +69,12 @@ export function useChargeMultiSaved() {
       if (!res.ok) throw new Error(body.error ?? "Failed to charge saved payment method");
       return body as ChargeMultiResult;
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      // See use-autopay-invoices.ts — payments are their own query.
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }

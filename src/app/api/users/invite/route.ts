@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 export async function POST(request: Request) {
   // 1. Validate the calling user's session and confirm they are an admin.
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
   // 3. Generate a one-time link. If the user was already invited (orphaned
   //    auth record from a previous attempt), fall back to a recovery link
@@ -89,6 +90,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to generate invite link" }, { status: 500 });
   }
 
+  // The "already registered" fallback means this email belongs to SOME
+  // existing auth user — not necessarily one in the caller's own org. Without
+  // this check, an admin in Org A entering an email that happens to belong to
+  // an Org B user would silently send that Org B user an unsolicited
+  // password-recovery email and flip their profiles.status to "invited"
+  // below — a cross-tenant write triggered by an org member with no
+  // authority over the other org's data.
+  if (linkType === "recovery" && linkData.user) {
+    const { data: existingProfile } = await adminClient
+      .from("profiles")
+      .select("org_id")
+      .eq("id", linkData.user.id)
+      .maybeSingle();
+    if (existingProfile && existingProfile.org_id !== callerProfile.org_id) {
+      return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
+    }
+  }
+
   // Build the URL directly so the user lands on /reset-password without
   // needing Supabase's redirect allowlist.
   const hashedToken = linkData.properties?.hashed_token;
@@ -100,13 +119,13 @@ export async function POST(request: Request) {
   const resend = new Resend(process.env.RESEND_API_KEY!);
 
   const { error: emailErr } = await resend.emails.send({
-    from: "Twins Lawn Service <noreply@twinslawnservice.com>",
+    from: EMAIL_FROM,
     to: email,
-    subject: "You've been invited to Equipt",
+    subject: "You've been invited to Landscapt",
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to Equipt</h2>
-        <p style="margin:0 0 24px;color:#475569">Hi ${name}, you've been added as a <strong>${role}</strong> on your team's Equipt account.</p>
+        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to Landscapt</h2>
+        <p style="margin:0 0 24px;color:#475569">Hi ${name}, you've been added as a <strong>${role}</strong> on your team's Landscapt account.</p>
         <a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Accept Invitation</a>
         <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">This link expires in 24 hours. If you weren't expecting this, you can ignore this email.</p>
       </div>

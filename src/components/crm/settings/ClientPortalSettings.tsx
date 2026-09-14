@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { PortalDocumentLibrary } from "@/components/crm/settings/PortalDocumentLibrary";
 
 interface PortalSettings {
   company_name: string;
@@ -18,6 +19,7 @@ interface PortalSettings {
   support_phone: string;
   allow_tickets: boolean;
   allow_estimates: boolean;
+  allow_documents: boolean;
   welcome_message: string;
   portal_ticket_categories: string[];
 }
@@ -30,6 +32,7 @@ const DEFAULTS: PortalSettings = {
   support_phone: "",
   allow_tickets: true,
   allow_estimates: true,
+  allow_documents: true,
   welcome_message: "",
   portal_ticket_categories: [],
 };
@@ -110,7 +113,7 @@ export function ClientPortalTab() {
               <Input
                 value={form.company_name}
                 onChange={(e) => patch("company_name", e.target.value)}
-                placeholder="Twins Lawn Service"
+                placeholder="Your Company Name"
               />
               <p className="text-xs text-slate-400">Displayed in the portal header and emails</p>
             </div>
@@ -212,8 +215,21 @@ export function ClientPortalTab() {
               onCheckedChange={(v) => patch("allow_tickets", v)}
             />
           </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Document Library</p>
+              <p className="text-xs text-slate-400 mt-0.5">Clients can browse and download shared company documents</p>
+            </div>
+            <Switch
+              checked={form.allow_documents}
+              onCheckedChange={(v) => patch("allow_documents", v)}
+            />
+          </div>
         </div>
       </section>
+
+      {/* Document library */}
+      <PortalDocumentLibrary />
 
       {/* Ticket categories */}
       <section className="rounded-xl border border-slate-200 bg-white">
@@ -235,7 +251,7 @@ export function ClientPortalTab() {
           ) : (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-slate-500 mb-1">
-                Choose which categories clients can select when submitting a ticket. Internal-only categories (e.g. "Collections", "Internal Note") should stay hidden.
+                Choose which categories clients can select when submitting a ticket. Internal-only categories (e.g. &quot;Collections&quot;, &quot;Internal Note&quot;) should stay hidden.
               </p>
               {allCategories.map((cat) => {
                 const visible = form.portal_ticket_categories.includes(cat);

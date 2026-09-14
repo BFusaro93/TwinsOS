@@ -26,6 +26,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { usePropertyCustomFieldValues } from "@/lib/hooks/use-rate-matrix";
 import { SendApplicationNoticeDialog } from "./SendApplicationNoticeDialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
 import { toast } from "sonner";
 
@@ -81,6 +82,8 @@ function ApplicationRow({
   areasTreated: { id: string; name: string }[];
   employees: { id: string; name: string; applicatorLicense: string | null }[];
 }) {
+  const { can } = usePermissions();
+  const canEdit = can("chem_add_edit_usage");
   const save = useSaveChemicalApplication();
   const del = useDeleteChemicalApplication();
   const [chemicalAmount, setChemicalAmount] = useState(application.chemicalAmount?.toString() ?? "");
@@ -109,22 +112,25 @@ function ApplicationRow({
     // employee's license was renewed/changed/revoked in the meantime.
     const applicatorChanged = (applicatorEmployeeId || null) !== (application.applicatorEmployeeId ?? null);
     const employee = applicatorChanged ? employees.find((e) => e.id === applicatorEmployeeId) : null;
-    save.mutate({
-      id: application.id,
-      jobId,
-      visitId,
-      productId: application.productId,
-      chemicalAmount: chemicalAmount ? parseFloat(chemicalAmount) : null,
-      solutionAmount: solutionAmount ? parseFloat(solutionAmount) : null,
-      unitOfMeasureId: unitOfMeasureId || null,
-      applicationMethodId: applicationMethodId || null,
-      targetIds,
-      areasTreatedIds,
-      used,
-      applicatorEmployeeId: applicatorEmployeeId || null,
-      ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
-      notes: notes || null,
-    });
+    save.mutate(
+      {
+        id: application.id,
+        jobId,
+        visitId,
+        productId: application.productId,
+        chemicalAmount: chemicalAmount ? parseFloat(chemicalAmount) : null,
+        solutionAmount: solutionAmount ? parseFloat(solutionAmount) : null,
+        unitOfMeasureId: unitOfMeasureId || null,
+        applicationMethodId: applicationMethodId || null,
+        targetIds,
+        areasTreatedIds,
+        used,
+        applicatorEmployeeId: applicatorEmployeeId || null,
+        ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
+        notes: notes || null,
+      },
+      { onError: () => toast.error("Failed to save chemical application") }
+    );
   }
 
   return (
@@ -137,20 +143,22 @@ function ApplicationRow({
             <span className={used ? "text-green-600" : "text-red-500"}>{used ? "Used" : "Not used"}</span>
           </label>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-slate-400 hover:text-red-500"
-          onClick={() => {
-            if (!confirm(`Remove ${productName} from this visit?`)) return;
-            del.mutate({ id: application.id, visitId }, {
-              onError: () => toast.error("Failed to remove chemical application"),
-            });
-          }}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        {canEdit && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-slate-400 hover:text-red-500"
+            onClick={() => {
+              if (!confirm(`Remove ${productName} from this visit?`)) return;
+              del.mutate({ id: application.id, visitId }, {
+                onError: () => toast.error("Failed to remove chemical application"),
+              });
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -241,17 +249,21 @@ function ApplicationRow({
         <Textarea rows={2} className="text-xs" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </div>
 
-      <div className="flex justify-end">
-        <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={save.isPending}>
-          {save.isPending ? "Saving…" : "Save"}
-        </Button>
-      </div>
+      {canEdit && (
+        <div className="flex justify-end">
+          <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 /** Per-visit chemical application logging — the compliance-critical record. */
 export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) {
+  const { can } = usePermissions();
+  const canEdit = can("chem_add_edit_usage");
   const { data: applications = [] } = useChemicalApplicationsForVisit(visitId);
   const { data: allProducts = [] } = useProducts();
   const { data: methods = [] } = useChemicalLookupItems("application_method");
@@ -323,32 +335,38 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
       }
     }
 
-    saveApplication.mutate({
-      jobId,
-      visitId,
-      productId: addingProductId,
-      used: true,
-      epaNumberSnapshot: selectedProduct?.epaRegistrationNumber ?? null,
-      reEntryIntervalSnapshot: selectedProduct?.reEntryInterval ?? null,
-      restrictedProductSnapshot: selectedProduct?.restrictedProduct ?? false,
-      ...(chemicalAmount !== undefined && { chemicalAmount }),
-      ...(unitOfMeasureId !== undefined && { unitOfMeasureId }),
-      ...(applicationMethodId !== undefined && { applicationMethodId }),
-    });
+    saveApplication.mutate(
+      {
+        jobId,
+        visitId,
+        productId: addingProductId,
+        used: true,
+        epaNumberSnapshot: selectedProduct?.epaRegistrationNumber ?? null,
+        reEntryIntervalSnapshot: selectedProduct?.reEntryInterval ?? null,
+        restrictedProductSnapshot: selectedProduct?.restrictedProduct ?? false,
+        ...(chemicalAmount !== undefined && { chemicalAmount }),
+        ...(unitOfMeasureId !== undefined && { unitOfMeasureId }),
+        ...(applicationMethodId !== undefined && { applicationMethodId }),
+      },
+      { onError: () => toast.error("Failed to add chemical") }
+    );
     setAddingProductId("");
   }
 
   function applyConditionsToAll() {
     applications.forEach((a) => {
-      saveApplication.mutate({
-        id: a.id,
-        jobId,
-        visitId,
-        temperature: temperature ? parseFloat(temperature) : null,
-        windSpeed: windSpeed ? parseFloat(windSpeed) : null,
-        windDirection: windDirection || null,
-        phLevel: phLevel ? parseFloat(phLevel) : null,
-      });
+      saveApplication.mutate(
+        {
+          id: a.id,
+          jobId,
+          visitId,
+          temperature: temperature ? parseFloat(temperature) : null,
+          windSpeed: windSpeed ? parseFloat(windSpeed) : null,
+          windDirection: windDirection || null,
+          phLevel: phLevel ? parseFloat(phLevel) : null,
+        },
+        { onError: () => toast.error(`Failed to update conditions for ${a.productName ?? "a chemical"}`) }
+      );
     });
   }
 
@@ -428,22 +446,24 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
         />
       ))}
 
-      <div className="flex items-center gap-2">
-        <Select value={addingProductId || "none"} onValueChange={(v) => setAddingProductId(v === "none" ? "" : v)}>
-          <SelectTrigger className="h-8 w-64 text-xs">
-            <SelectValue placeholder="Select a chemical product…" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Select a chemical product…</SelectItem>
-            {linkable.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button size="sm" className="h-8 text-xs" onClick={handleAdd} disabled={!addingProductId}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Add Chemical
-        </Button>
-      </div>
+      {canEdit && (
+        <div className="flex items-center gap-2">
+          <Select value={addingProductId || "none"} onValueChange={(v) => setAddingProductId(v === "none" ? "" : v)}>
+            <SelectTrigger className="h-8 w-64 text-xs">
+              <SelectValue placeholder="Select a chemical product…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Select a chemical product…</SelectItem>
+              {linkable.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="h-8 text-xs" onClick={handleAdd} disabled={!addingProductId}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add Chemical
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,12 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import { Package } from "lucide-react";
 import { PackagesList } from "@/components/crm/packages/PackagesList";
 import { PackageDialog } from "@/components/crm/packages/PackageDialog";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 export default function PackagesPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  if (!permissionsLoading && !can("package_list")) {
+    return (
+      <EmptyState
+        icon={Package}
+        title="No access"
+        description="You don't have permission to view Packages."
+      />
+    );
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto">

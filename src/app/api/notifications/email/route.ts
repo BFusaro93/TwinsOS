@@ -17,6 +17,8 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
+import { sendPushToUser } from "@/lib/notifications/send-push";
 
 type NotifType =
   | "wo_created"
@@ -70,8 +72,8 @@ const INAPP_PREF_KEY: Record<NotifType, string | null> = {
   new_maintenance_request: null,
 };
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
-const FROM     = "Equipt <noreply@twinslawnservice.com>";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+const FROM     = EMAIL_FROM_EQUIPT;
 
 export async function POST(request: Request) {
   // ── Auth ─────────────────────────────────────────────────────────────────
@@ -139,14 +141,49 @@ export async function POST(request: Request) {
   const directRecipientIds: string[] = [];
 
   if (notifType === "wo_assigned" || notifType === "wo_status_changed" || notifType === "wo_comment" || notifType === "wo_created") {
-    const ids: string[] = Array.isArray(entity.assigned_to_ids)
+    // work_orders.assigned_to_id/assigned_to_ids are crm_employees.id values
+    // (repointed from profiles.id) — resolve through crm_employees.user_id
+    // to get the login user(s) to notify, same as resolveAssigneeId() in
+    // ticket-notify.ts. Employees with no linked login are silently skipped.
+    const employeeIds: string[] = Array.isArray(entity.assigned_to_ids)
       ? (entity.assigned_to_ids as string[])
       : entity.assigned_to_id ? [entity.assigned_to_id as string] : [];
+    let ids: string[] = [];
+    if (employeeIds.length > 0) {
+      const { data: assignedEmployees } = await adminClient
+        .from("crm_employees")
+        .select("user_id")
+        .in("id", employeeIds)
+        .not("user_id", "is", null);
+      ids = (assignedEmployees ?? []).map((e: { user_id: string }) => e.user_id);
+    }
     directRecipientIds.push(...ids.filter((id) => id !== user.id));
 
   } else if (notifType === "approved" || notifType === "rejected") {
     const submitterId = (entity.requested_by_id ?? entity.created_by) as string | null;
-    if (submitterId && submitterId !== user.id) directRecipientIds.push(submitterId);
+    if (submitterId && submitterId !== user.id) {
+      directRecipientIds.push(submitterId);
+
+      // Push notification alongside the email below — fires for whoever
+      // submitted the requisition/PO/estimate, but only actually sends if
+      // that user has a crew_push_tokens row (sendPushToUser no-ops
+      // otherwise), i.e. only requesters who came from crew-app's field
+      // materials-request flow, not the web app. Best-effort — never let a
+      // push failure affect the email send below.
+      const isApproved = notifType === "approved";
+      const entityLabel = entityType === "requisition" ? "Materials request"
+        : entityType === "crm_estimate" ? "Estimate"
+        : "Purchase order";
+      const reason = extra.comment;
+      void sendPushToUser({
+        userId: submitterId,
+        title: `${entityLabel} ${isApproved ? "Approved" : "Rejected"}`,
+        body: isApproved
+          ? "Tap to view details."
+          : (reason ? `Reason: ${reason}` : "Tap to view details."),
+        data: { type: notifType, entityType, entityId },
+      });
+    }
 
   } else if (notifType === "new_maintenance_request") {
     const { data: managers } = await adminClient

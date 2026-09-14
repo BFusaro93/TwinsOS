@@ -1,46 +1,67 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { methodForPaymentIntent, decodeAllocations } from "@/lib/stripe/crm-payments";
+import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { statusForAccount } from "@/lib/stripe/connect";
+import { recordStripeCharge, accountOwnedByOrg } from "@/lib/stripe/record-charge";
+import {
+  recordEstimateDepositCharge,
+  markEstimateDepositPending,
+  clearEstimateDepositPending,
+  recordEstimateDepositFailure,
+} from "@/lib/stripe/record-estimate-deposit";
+import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
+import { decodeAllocations } from "@/lib/stripe/crm-payments";
+import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { notifyStaffOfFailedDeposit } from "@/lib/estimate-deposit-notify";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect webhook");
 
-/** A Standard connected account is a full, independent Stripe account — its
- * owner can call the Stripe API directly and create a PaymentIntent with
- * ARBITRARY metadata (including another org's org_id/invoice_id). Never trust
- * PaymentIntent.metadata.org_id on its own: confirm the account the event
- * actually fired on (event.account) is the one on file for that org first. */
-async function eventAccountOwnedByOrg(
-  // any: the generated Supabase types don't yet cover every table this webhook touches
-  // (crm_payment_allocations, client_activity, stripe_webhook_events) — same pattern as
-  // the pre-existing billing/crm-payments webhooks this one supersedes.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
-  orgId: string,
-  eventAccount: string
-): Promise<boolean> {
-  const { data } = await db
-    .from("organizations")
-    .select("stripe_connect_account_id")
-    .eq("id", orgId)
-    .single();
-  return data?.stripe_connect_account_id === eventAccount;
+/** Whether the connected account an event fired on is the one on file for
+ * this org — see accountOwnedByOrg()'s own comment for why this check is not
+ * optional. Re-exported through the shared recorder so both the webhook and
+ * the synchronous charge routes apply the identical rule. */
+// any: the generated Supabase types don't cover every table this webhook touches
+// (crm_payment_allocations, client_activity, stripe_webhook_events).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const eventAccountOwnedByOrg = (db: any, orgId: string, eventAccount: string) =>
+  accountOwnedByOrg(db, orgId, eventAccount);
+
+/**
+ * Stripe signs each event with the signing secret of the endpoint that sent
+ * it, and endpoints are per-mode: a live endpoint and a test/sandbox endpoint
+ * have different secrets. An org whose Connect account is test-mode (see
+ * getStripeForOrg) therefore delivers events signed with the TEST endpoint's
+ * secret, which would fail verification against the live one and silently
+ * leave its invoices unpaid — the webhook is the only thing that applies a
+ * card payment to an invoice.
+ *
+ * Try every configured secret. This cannot produce a false accept: a
+ * signature only validates against the exact secret that produced it.
+ */
+function connectWebhookSecrets(): string[] {
+  return [
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET_TEST,
+  ].filter((v): v is string => Boolean(v));
 }
 
 export async function POST(request: Request) {
-  if (!isStripeConfigured() || !process.env.STRIPE_CONNECT_WEBHOOK_SECRET) {
+  const webhookSecrets = connectWebhookSecrets();
+  if ((!isStripeConfigured() && !isStripeTestConfigured()) || webhookSecrets.length === 0) {
     log.error("connect webhook received but not configured", {
-      hasSecretKey: isStripeConfigured(),
-      hasWebhookSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
+      hasSecretKey: isStripeConfigured() || isStripeTestConfigured(),
+      hasWebhookSecret: webhookSecrets.length > 0,
     });
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
-  const stripe = getStripe();
+  // Signature verification is pure crypto against the webhook secret — it
+  // doesn't call the Stripe API, so any configured client works here
+  // regardless of which mode it holds a key for.
+  const stripe = isStripeConfigured() ? getStripe() : getStripeForOrg(false);
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
     log.error("connect webhook missing stripe-signature header");
@@ -49,11 +70,34 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_CONNECT_WEBHOOK_SECRET);
-  } catch (err) {
-    log.error("signature verification failed", { error: err });
+  let event: Stripe.Event | null = null;
+  let lastVerifyError: unknown = null;
+  for (const secret of webhookSecrets) {
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+      break;
+    } catch (err) {
+      lastVerifyError = err;
+    }
+  }
+  if (!event) {
+    log.error(
+      "Stripe Connect webhook signature verification FAILED — no configured signing secret matched. " +
+        "This is almost always a misconfigured/rotated STRIPE_CONNECT_WEBHOOK_SECRET (live) or " +
+        "STRIPE_CONNECT_WEBHOOK_SECRET_TEST (test/sandbox): the value must be the 'Signing secret' " +
+        "(whsec_...) of the SPECIFIC Stripe webhook endpoint delivering these events, in the SAME mode " +
+        "as the connected account. Card payments confirmed in the browser are applied to invoices ONLY " +
+        "by this webhook, so while this fails those payments will not be recorded.",
+      {
+        error: lastVerifyError,
+        secretsTried: webhookSecrets.length,
+        // Names only — never the values.
+        secretEnvVarsPresent: [
+          process.env.STRIPE_CONNECT_WEBHOOK_SECRET ? "STRIPE_CONNECT_WEBHOOK_SECRET" : null,
+          process.env.STRIPE_CONNECT_WEBHOOK_SECRET_TEST ? "STRIPE_CONNECT_WEBHOOK_SECRET_TEST" : null,
+        ].filter(Boolean),
+      }
+    );
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -71,10 +115,26 @@ export async function POST(request: Request) {
   });
   if (dedupeErr) {
     if (dedupeErr.code === "23505") {
-      return NextResponse.json({ received: true, duplicate: true });
+      // Seen before — but only a real duplicate if that delivery FINISHED.
+      // The dedupe row commits before the handler runs, so a row with no
+      // processed_at means a previous attempt died part-way and Stripe is
+      // retrying. Short-circuiting those was silently dropping the retry, and
+      // for payment_intent.succeeded on ACH this route is the only thing that
+      // records the payment — the customer was charged and nothing was
+      // written. Fall through and reprocess; the handlers are idempotent.
+      const { data: prior } = await db
+        .from("stripe_webhook_events")
+        .select("processed_at")
+        .eq("event_id", event.id)
+        .maybeSingle();
+      if (prior?.processed_at) {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      log.info("reprocessing a webhook whose previous delivery did not finish", { eventId: event.id, eventType: event.type });
+    } else {
+      log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
+      return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
     }
-    log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
-    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
   switch (event.type) {
@@ -87,6 +147,10 @@ export async function POST(request: Request) {
             stripe_connect_status: statusForAccount(account),
             stripe_connect_charges_enabled: account.charges_enabled,
             stripe_connect_payouts_enabled: account.payouts_enabled,
+            // Stripe's Account object itself has no `livemode` field — the
+            // enclosing Event does, and reflects the mode of the account the
+            // event fired on.
+            stripe_connect_livemode: event.livemode,
           })
           .eq("stripe_connect_account_id", account.id);
         if (error) throw error;
@@ -100,6 +164,38 @@ export async function POST(request: Request) {
     case "payment_intent.payment_failed": {
       const failedIntent = event.data.object as Stripe.PaymentIntent;
       const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
+
+      // An ACH deposit returned by the bank (NSF, closed account), or a
+      // declined card. Nothing to reverse — no crm_payments row is ever
+      // written for an unsettled debit — but the failure has to be RECORDED,
+      // not just cleared. Simply dropping the pending marker (the old
+      // behaviour) put the estimate back to looking like one where the client
+      // skipped the deposit: no trace, no notification, and no way to retry.
+      //
+      // recordEstimateDepositFailure replaces the pending marker with a
+      // failure marker in one write, and returns null for anything it
+      // shouldn't act on — including a stale event for a deposit that has
+      // since been collected, which must never un-collect it.
+      if (failedIntent.metadata?.source === "crm_estimate_deposit") {
+        const failure =
+          failedOrgId &&
+          event.account &&
+          (await eventAccountOwnedByOrg(db, failedOrgId, event.account))
+            ? await recordEstimateDepositFailure(db, failedIntent)
+            : null;
+        if (failure) {
+          await notifyStaffOfFailedDeposit(db, failure);
+        } else {
+          // Not a failure worth recording — an unattributable account, a
+          // deposit already collected, a newer attempt in flight, or a card
+          // declined while the client is still on the deposit step. Clearing
+          // the marker is all that's left to do, and it matches on the intent
+          // id so it can never clobber a newer one.
+          await clearEstimateDepositPending(db, failedIntent.id);
+        }
+        break;
+      }
+
       if (
         (failedIntent.metadata?.source === "crm_invoice" || failedIntent.metadata?.source === "crm_invoice_multi") &&
         failedOrgId &&
@@ -112,6 +208,80 @@ export async function POST(request: Request) {
           clientId: failedClientId,
           triggerType: "credit_card_charge_failed",
         });
+        // The charge is dead — drop the "payment in flight" marker so the
+        // invoice becomes chargeable again instead of looking pending forever.
+        await clearPendingCharge(db, failedIntent.id);
+      }
+      break;
+    }
+
+    // The other way an in-flight intent dies. Staff cancelling from the Stripe
+    // dashboard, or a requires_action card intent that expires unconfirmed,
+    // fire ONLY this event — never payment_failed — so without a case here the
+    // in-flight marker was never cleared. InvoicesList drops a marked invoice
+    // out of "chargeable now", disables its Charge button and skips it in
+    // Charge All, so the invoice could never be collected from the queue
+    // again. Unlike payment_failed there's no automation to fire; releasing
+    // the invoice is the whole job, and clearPendingCharge matches on the
+    // intent id so it cannot clobber a newer marker.
+    case "payment_intent.canceled": {
+      const canceledIntent = event.data.object as Stripe.PaymentIntent;
+      const canceledSource = canceledIntent.metadata?.source;
+      if (canceledSource === "crm_invoice" || canceledSource === "crm_invoice_multi") {
+        await clearPendingCharge(db, canceledIntent.id);
+      } else if (canceledSource === "crm_estimate_deposit") {
+        await clearEstimateDepositPending(db, canceledIntent.id);
+      }
+      break;
+    }
+
+    // A customer paying by bank account on the portal confirms the intent in
+    // their own browser, so the server never sees a status for it — only this
+    // event does. The autopay routes mark their own in-flight charges
+    // synchronously; this covers every other path uniformly.
+    case "payment_intent.processing": {
+      const pendingIntent = event.data.object as Stripe.PaymentIntent;
+      const pendingSource = pendingIntent.metadata?.source;
+      const pendingOrgId = pendingIntent.metadata?.org_id;
+
+      // A proposal deposit paid by ACH lands here and stays here for days.
+      // The acceptance has already gone through — a signed proposal shouldn't
+      // wait on a bank debit — so mark the estimate as having a deposit in
+      // flight, or it looks exactly like one where the client skipped it.
+      if (
+        pendingSource === "crm_estimate_deposit" &&
+        pendingOrgId &&
+        event.account &&
+        (await eventAccountOwnedByOrg(db, pendingOrgId, event.account))
+      ) {
+        await markEstimateDepositPending(db, pendingIntent);
+        break;
+      }
+
+      if (
+        !event.account ||
+        !pendingOrgId ||
+        !isPendingChargeStatus(pendingIntent.status) ||
+        (pendingSource !== "crm_invoice" && pendingSource !== "crm_invoice_multi") ||
+        !(await eventAccountOwnedByOrg(db, pendingOrgId, event.account))
+      ) {
+        break;
+      }
+      const amounts = new Map<string, number>();
+      if (pendingSource === "crm_invoice_multi" && pendingIntent.metadata?.allocations) {
+        for (const a of decodeAllocations(pendingIntent.metadata.allocations)) {
+          amounts.set(a.invoiceId, a.amountCents);
+        }
+      } else if (pendingIntent.metadata?.invoice_id) {
+        // Balance rather than the charged amount: the amount can include a
+        // processing fee, and what's pending against the invoice is its balance.
+        amounts.set(
+          pendingIntent.metadata.invoice_id,
+          Number(pendingIntent.metadata.balance_cents) || pendingIntent.amount
+        );
+      }
+      if (amounts.size > 0) {
+        await markInvoicesPendingCharge({ db, paymentIntent: pendingIntent, amountsByInvoiceId: amounts });
       }
       break;
     }
@@ -120,11 +290,147 @@ export async function POST(request: Request) {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const source = paymentIntent.metadata?.source;
       const result =
-        source === "crm_invoice_multi"
-          ? await applyCrmInvoiceMultiPayment(stripe, db, supabase, event)
-          : await applyCrmInvoicePayment(stripe, db, supabase, event);
+        source === "crm_estimate_deposit"
+          // A proposal deposit is taken before any invoice exists, so it is
+          // recorded as unapplied account credit rather than against a
+          // balance. This webhook is its only writer.
+          ? await recordEstimateDepositCharge({ db, paymentIntent, connectedAccountId: event.account })
+          : source === "crm_invoice_multi"
+            ? await applyCrmInvoiceMultiPayment(db, supabase, event)
+            : await applyCrmInvoicePayment(db, supabase, event);
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
+      }
+      // Settled: the payment is recorded and the balance is down, so the
+      // pending marker has done its job. Cleared by intent id, so this covers
+      // single and combined charges alike and is safe to run twice.
+      await clearPendingCharge(db, paymentIntent.id);
+      break;
+    }
+
+    // Fires when a saved card's details change — most commonly Stripe's Account
+    // Updater silently refreshing an expiring card's new number/exp date behind
+    // the scenes, but also any explicit update. Matched by payment method id
+    // rather than customer id since that's the identifier we actually store
+    // on the client row (src/app/api/crm/payments/connect/setup-intent/route.ts).
+    case "payment_method.updated": {
+      const pm = event.data.object as Stripe.PaymentMethod;
+      if (!event.account) break;
+
+      const { data: matchedClient } = await db
+        .from("clients")
+        .select("id, org_id")
+        .eq("saved_payment_method_id", pm.id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (matchedClient && (await eventAccountOwnedByOrg(db, matchedClient.org_id, event.account))) {
+        await db
+          .from("clients")
+          .update({ saved_payment_method_summary: summarizePaymentMethod(pm) })
+          .eq("id", matchedClient.id);
+        await fireSimpleTrigger(supabase, {
+          orgId: matchedClient.org_id,
+          clientId: matchedClient.id,
+          triggerType: "credit_card_updated",
+        });
+      }
+      break;
+    }
+
+    // Fires when a charge is refunded — including an ACH debit that
+    // initially succeeded but was later returned by the client's bank
+    // (NSF, closed account, unauthorized) days after payment_intent.succeeded
+    // already marked the invoice paid. Also fires for a refund WE initiated
+    // via /api/crm/payments/[id]/refund, so this must be idempotent against
+    // that: reconcile against Stripe's own amount_refunded rather than
+    // blindly applying charge.amount_refunded as a fresh delta, or a
+    // staff-initiated refund would get double-counted here.
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge;
+      const paymentIntentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+      if (!paymentIntentId || !event.account) break;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: payment } = await (db as any)
+        .from("crm_payments")
+        .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, processing_fee_cents")
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .maybeSingle();
+      if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, event.account))) break;
+
+      const alreadyRecordedCents = payment.refunded_amount_cents ?? 0;
+      // Stripe refunds the GROSS it charged; crm_payments.amount_cents is the
+      // net the client was credited, with any card processing fee held
+      // separately in processing_fee_cents. A full refund of a fee-bearing
+      // charge therefore reports more than the payment is worth — $2,058
+      // against a $2,000 payment — and refund_payment() raises
+      // "Refund amount exceeds remaining refundable balance". That threw out
+      // of the try below into a 500, which meant processed_at was never
+      // stamped, so Stripe retried the same event forever while the client sat
+      // on a credit they'd already been refunded.
+      //
+      // Clamp to what the ledger can actually reverse. The fee portion has no
+      // customer-money counterpart to reverse — it was never credited — so
+      // dropping it is correct, not a rounding fudge.
+      const refundableCents = Math.max(0, (payment.amount_cents ?? 0) - alreadyRecordedCents);
+      const rawDeltaCents = charge.amount_refunded - alreadyRecordedCents;
+      const deltaCents = Math.min(rawDeltaCents, refundableCents);
+      if (rawDeltaCents > refundableCents) {
+        log.info("clamped a gross Stripe refund to the payment's refundable amount", {
+          paymentIntentId,
+          chargeRefundedCents: charge.amount_refunded,
+          paymentAmountCents: payment.amount_cents,
+          processingFeeCents: payment.processing_fee_cents,
+          appliedCents: deltaCents,
+        });
+      }
+      if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: refundErr } = await (db.rpc as any)("refund_payment", {
+          p_payment_id: payment.id,
+          p_refund_amount_cents: deltaCents,
+        });
+        if (refundErr) throw refundErr;
+
+        // refund_payment() reverses the invoice side itself — it walks the
+        // allocation rows, reduces or deletes each one, and calls
+        // apply_payment_to_invoice(-share) per invoice, falling back to
+        // crm_payments.invoice_id when the payment has no allocations
+        // (20260908160000). This route used to repeat that reversal here,
+        // which double-counted every bank-returned ACH and every refund
+        // issued from the Stripe dashboard: on a full refund the RPC deletes
+        // the allocations, so the re-read below found none and the
+        // invoice_id fallback re-applied the WHOLE delta a second time. On an
+        // invoice paid by two cards, refunding one left the invoice showing
+        // the full balance again — the other payment's money vanished and the
+        // invoice went back into the autopay/"To Charge" queue, debiting the
+        // customer for money they had already paid. Do not reintroduce it.
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (db as any).from("client_activity").insert({
+          org_id: payment.org_id,
+          client_id: payment.client_id,
+          activity_type: "payment",
+          subject: `Payment reversed: $${(deltaCents / 100).toFixed(2)} (returned by bank/card issuer)`,
+          ref_id: payment.id,
+          ref_table: "crm_payments",
+          amount_cents: -deltaCents,
+        });
+
+        await fireSimpleTrigger(supabase, {
+          orgId: payment.org_id,
+          clientId: payment.client_id,
+          triggerType: "credit_card_charge_failed",
+        });
+      } catch (err) {
+        log.error("failed to reconcile charge.refunded", { error: err, paymentId: payment.id });
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
       }
       break;
     }
@@ -133,16 +439,31 @@ export async function POST(request: Request) {
       break;
   }
 
+  // Reached only when the handler above didn't bail with a 500. Stamping the
+  // row here is what makes a later delivery of the same event a genuine
+  // duplicate; leaving it unstamped keeps the event replayable.
+  await db
+    .from("stripe_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("event_id", event.id);
+
   return NextResponse.json({ received: true });
 }
 
-/** Applies a succeeded crm_invoice PaymentIntent (from a connected account) to its invoice.
- * Mirrors the platform-account version this superseded in src/app/api/crm/payments/webhook/route.ts. */
+/**
+ * Applies a succeeded crm_invoice / crm_invoice_multi PaymentIntent (from a
+ * connected account) to its invoice(s).
+ *
+ * The actual ledger write lives in src/lib/stripe/record-charge.ts and is
+ * shared with the synchronous charge routes (autopay/charge,
+ * autopay/charge-multi), which now record the payment the moment Stripe
+ * confirms it off-session. This webhook is therefore a backstop: it stays the
+ * ONLY applier for browser-confirmed intents (create-intent /
+ * create-intent-multi) and for ACH (which confirms as `processing` and only
+ * succeeds days later), and is a no-op when the synchronous path already
+ * recorded the charge — deduped in the database on the PaymentIntent id.
+ */
 async function applyCrmInvoicePayment(
-  stripe: Stripe,
-  // any: the generated Supabase types don't yet cover every table this webhook touches
-  // (crm_payment_allocations, client_activity, stripe_webhook_events) — same pattern as
-  // the pre-existing billing/crm-payments webhooks this one supersedes.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,123 +476,12 @@ async function applyCrmInvoicePayment(
     log.error("payment_intent.succeeded with no connected account on event", { paymentIntentId: paymentIntent.id });
     return "error";
   }
-
-  const { org_id: orgId, invoice_id: invoiceId, client_id: clientId } = paymentIntent.metadata;
-  const balanceCents = parseInt(paymentIntent.metadata.balance_cents, 10);
-  const feeCents = parseInt(paymentIntent.metadata.fee_cents, 10);
-
-  if (!orgId || !invoiceId || !clientId || !Number.isFinite(balanceCents) || !Number.isFinite(feeCents)) {
-    log.error("missing/invalid metadata on payment intent", { paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  if (!(await eventAccountOwnedByOrg(db, orgId, event.account))) {
-    log.error("payment intent metadata org_id does not own the connected account the event fired on", {
-      paymentIntentId: paymentIntent.id,
-      orgId,
-      eventAccount: event.account,
-    });
-    return "error";
-  }
-
-  let cardBrand: string | null = null;
-  const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
-  if (!isAch) {
-    try {
-      const charges = await stripe.charges.list(
-        { payment_intent: paymentIntent.id, limit: 1 },
-        { stripeAccount: event.account }
-      );
-      cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
-    } catch {
-      cardBrand = null;
-    }
-  }
-  const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
-
-  const { data: inserted, error: insertErr } = await db
-    .from("crm_payments")
-    .insert({
-      org_id: orgId,
-      invoice_id: invoiceId,
-      client_id: clientId,
-      amount_cents: balanceCents,
-      unused_amount_cents: 0,
-      payment_date: new Date().toISOString().slice(0, 10),
-      method,
-      memo: isAch ? "Paid online via bank transfer" : "Paid online via card",
-      is_prepayment: false,
-      processing_fee_cents: feeCents,
-      stripe_payment_intent_id: paymentIntent.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
-      return "skipped";
-    }
-    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  try {
-    const { data: invoice, error: invoiceErr } = await db
-      .from("crm_invoices")
-      .select("total_cents, amount_paid_cents, status")
-      .eq("id", invoiceId)
-      .eq("org_id", orgId)
-      .single();
-    if (invoiceErr) throw invoiceErr;
-
-    const newPaid = Math.max(0, invoice.amount_paid_cents + balanceCents);
-    const newBalance = Math.max(0, invoice.total_cents - newPaid);
-    const openStatus = invoice.status === "printed" ? "printed" : "sent";
-    const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
-    const wasNewlyPaid = newStatus === "paid" && invoice.status !== "paid";
-
-    const { error: updateErr } = await db
-      .from("crm_invoices")
-      .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
-      .eq("id", invoiceId)
-      .eq("org_id", orgId);
-    if (updateErr) throw updateErr;
-
-    if (wasNewlyPaid) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
-    }
-
-    const { error: allocErr } = await db
-      .from("crm_payment_allocations")
-      .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: balanceCents });
-    if (allocErr) throw allocErr;
-
-    await db.rpc("sync_client_balance", { p_client_id: clientId });
-
-    await db.from("client_activity").insert({
-      org_id: orgId,
-      client_id: clientId,
-      activity_type: "payment",
-      subject: `Payment received: ${method} (online)`,
-      amount_cents: balanceCents,
-      ref_id: inserted.id,
-      ref_table: "crm_payments",
-    });
-  } catch (err) {
-    log.error("recorded payment but failed to apply it", { error: err, paymentId: inserted.id });
-    return "error";
-  }
-
-  return "applied";
+  const result = await recordStripeCharge({ db, supabase, paymentIntent, connectedAccountId: event.account });
+  return result === "already_recorded" ? "skipped" : result;
 }
 
-/** Applies a succeeded crm_invoice_multi PaymentIntent — one charge split across several
- * invoices for the same client — mirrors applyCrmInvoicePayment above but loops the invoice
- * update + allocation insert per invoice under a single crm_payments row, the same way a
- * manually-recorded multi-invoice payment is split via crm_payment_allocations. */
+/** Multi-invoice counterpart — see applyCrmInvoicePayment above. */
 async function applyCrmInvoiceMultiPayment(
-  stripe: Stripe,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -284,127 +494,6 @@ async function applyCrmInvoiceMultiPayment(
     log.error("payment_intent.succeeded with no connected account on event", { paymentIntentId: paymentIntent.id });
     return "error";
   }
-
-  const { org_id: orgId, client_id: clientId, allocations: encodedAllocations } = paymentIntent.metadata;
-  const feeCents = parseInt(paymentIntent.metadata.fee_cents, 10);
-
-  if (!orgId || !clientId || !encodedAllocations || !Number.isFinite(feeCents)) {
-    log.error("missing/invalid metadata on multi-invoice payment intent", { paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  if (!(await eventAccountOwnedByOrg(db, orgId, event.account))) {
-    log.error("payment intent metadata org_id does not own the connected account the event fired on", {
-      paymentIntentId: paymentIntent.id,
-      orgId,
-      eventAccount: event.account,
-    });
-    return "error";
-  }
-
-  const allocations = decodeAllocations(encodedAllocations);
-  const totalCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
-
-  let cardBrand: string | null = null;
-  const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
-  if (!isAch) {
-    try {
-      const charges = await stripe.charges.list(
-        { payment_intent: paymentIntent.id, limit: 1 },
-        { stripeAccount: event.account }
-      );
-      cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
-    } catch {
-      cardBrand = null;
-    }
-  }
-  const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
-
-  const { data: inserted, error: insertErr } = await db
-    .from("crm_payments")
-    .insert({
-      org_id: orgId,
-      invoice_id: allocations.length === 1 ? allocations[0].invoiceId : null,
-      client_id: clientId,
-      amount_cents: totalCents,
-      unused_amount_cents: 0,
-      payment_date: new Date().toISOString().slice(0, 10),
-      method,
-      memo: isAch ? "Paid online via bank transfer" : "Paid online via card",
-      is_prepayment: false,
-      processing_fee_cents: feeCents,
-      stripe_payment_intent_id: paymentIntent.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
-      return "skipped";
-    }
-    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  try {
-    const newlyPaidInvoiceIds: string[] = [];
-
-    for (const alloc of allocations) {
-      // Scoped by client_id as well as org_id/id: metadata.client_id and the encoded
-      // allocation list are two independently-editable metadata keys on a PaymentIntent
-      // a connected account's own owner can forge — this stops a same-org mismatch
-      // between the two from applying one client's charge to another client's invoice.
-      const { data: invoice, error: invoiceErr } = await db
-        .from("crm_invoices")
-        .select("total_cents, amount_paid_cents, status")
-        .eq("id", alloc.invoiceId)
-        .eq("org_id", orgId)
-        .eq("client_id", clientId)
-        .single();
-      if (invoiceErr) throw invoiceErr;
-
-      const newPaid = Math.max(0, invoice.amount_paid_cents + alloc.amountCents);
-      const newBalance = Math.max(0, invoice.total_cents - newPaid);
-      const openStatus = invoice.status === "printed" ? "printed" : "sent";
-      const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
-      const wasNewlyPaid = newStatus === "paid" && invoice.status !== "paid";
-
-      const { error: updateErr } = await db
-        .from("crm_invoices")
-        .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
-        .eq("id", alloc.invoiceId)
-        .eq("org_id", orgId)
-        .eq("client_id", clientId);
-      if (updateErr) throw updateErr;
-
-      if (wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
-
-      const { error: allocErr } = await db
-        .from("crm_payment_allocations")
-        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: alloc.invoiceId, amount_cents: alloc.amountCents });
-      if (allocErr) throw allocErr;
-    }
-
-    for (const invoiceId of newlyPaidInvoiceIds) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
-    }
-
-    await db.rpc("sync_client_balance", { p_client_id: clientId });
-
-    await db.from("client_activity").insert({
-      org_id: orgId,
-      client_id: clientId,
-      activity_type: "payment",
-      subject: `Payment received: ${method} (online) — ${allocations.length} invoices`,
-      amount_cents: totalCents,
-      ref_id: inserted.id,
-      ref_table: "crm_payments",
-    });
-  } catch (err) {
-    log.error("recorded multi-invoice payment but failed to apply it", { error: err, paymentId: inserted.id });
-    return "error";
-  }
-
-  return "applied";
+  const result = await recordStripeCharge({ db, supabase, paymentIntent, connectedAccountId: event.account });
+  return result === "already_recorded" ? "skipped" : result;
 }

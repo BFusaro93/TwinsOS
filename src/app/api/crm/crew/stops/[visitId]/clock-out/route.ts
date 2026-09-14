@@ -5,6 +5,13 @@ import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { allocateStopHours } from "@/lib/utils/visit-hours";
+import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { isoNy } from "@/lib/reports/ny-date";
+import { createServiceClient } from "@/lib/supabase/server";
+import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("crew/stops/clock-out");
 
 const Body = z.object({
   notes: z.string().optional(),
@@ -15,6 +22,7 @@ const Body = z.object({
 
 interface VisitRow {
   id: string;
+  org_id: string;
   job_id: string;
   client_id: string;
   scheduled_date: string;
@@ -24,6 +32,8 @@ interface VisitRow {
   men_count: number | null;
   clocked_in_at: string | null;
   clocked_out_at: string | null;
+  paused_at: string | null;
+  break_minutes: number | null;
   start_time: string | null;
   crm_jobs: {
     property_id: string | null;
@@ -45,8 +55,8 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, job_id, client_id, scheduled_date, crew_id, job_service_id, status,
-  men_count, clocked_in_at, clocked_out_at, start_time,
+  id, org_id, job_id, client_id, scheduled_date, crew_id, job_service_id, status,
+  men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
   crm_jobs(property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
 
@@ -88,6 +98,13 @@ export async function POST(
   if (anchorErr || !anchorRow) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   const anchor = anchorRow as VisitRow;
 
+  // Guard against clocking out another crew's visit — RLS on crm_job_visits
+  // only checks org_id, not crew_id, so a caller who obtains another crew's
+  // visitId could otherwise still act on it. See assertCallerOwnsVisit().
+  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor.crew_id))) {
+    return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: candidateRows, error: candErr } = await (supabase as any)
     .from("crm_job_visits")
@@ -102,10 +119,22 @@ export async function POST(
   // A crew/date reassignment mid-stop changes the stop key for one visit —
   // also catch anything that was clocked in at the exact same instant as the
   // anchor so it isn't orphaned in "in_progress" forever.
+  //
+  // Security: stopKeyForVisit encodes crew_id, so an anchorKey match already
+  // guarantees r.crew_id === anchor.crew_id (whose ownership was verified
+  // above). The clocked_in_at fallback clause does NOT carry that guarantee —
+  // a mid-stop reassignment can leave a row with a different crew_id than the
+  // caller's — so it is intersected with an explicit crew_id check. This
+  // means a visit reassigned away from the caller's crew is no longer swept
+  // into this batch clock-out (it stays "in_progress" for the office to
+  // resolve) rather than letting the caller mutate another crew's visit.
   const allRows = candidateRows as VisitRow[];
   const stopRows = allRows.filter((r) =>
-    stopKeyForVisit(toStopKeyInput(r)) === anchorKey
-    || (anchor.clocked_in_at && r.clocked_in_at === anchor.clocked_in_at)
+    r.crew_id === anchor.crew_id
+    && (
+      stopKeyForVisit(toStopKeyInput(r)) === anchorKey
+      || (anchor.clocked_in_at && r.clocked_in_at === anchor.clocked_in_at)
+    )
   );
 
   // Already-completed siblings (e.g. an office user closed one out manually)
@@ -115,18 +144,45 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
   }
 
-  const startedAt = anchor.clocked_in_at
-    ?? openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
+  // Duration is measured from the OPEN visits' own clock-in. The anchor can
+  // be a sibling that was already completed earlier in the day (the crew home
+  // groups every visit for the client/day into one stop and links the first),
+  // and using its clock-in credited a fresh one-minute visit with 25 minutes.
+  const anchorIsOpen = openRows.some((r) => r.id === anchor.id);
+  const startedAt = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
+    ?? (anchorIsOpen ? anchor.clocked_in_at : null)
     ?? null;
   const menCount = anchor.men_count || 1;
 
+  // Break time (lunch, stopping for the day) doesn't count toward billed/
+  // actual duration. Siblings pause/resume together so break_minutes is
+  // normally in sync across them — take the max in case one didn't update
+  // for some reason — and roll in an in-progress pause (crew clocked out
+  // directly from a break without hitting Resume first) as of right now.
+  const finalBreakMinutes = new Map<string, number>();
+  for (const row of openRows) {
+    let mins = row.break_minutes ?? 0;
+    if (row.paused_at) {
+      mins += Math.max(0, Math.round((new Date(now).getTime() - new Date(row.paused_at).getTime()) / 60_000));
+    }
+    finalBreakMinutes.set(row.id, mins);
+  }
+  const stopBreakMinutes = Math.max(0, ...Array.from(finalBreakMinutes.values()));
+
   let durationHours: number | null = null;
   if (startedAt) {
-    durationHours = (new Date(now).getTime() - new Date(startedAt).getTime()) / 3_600_000;
+    durationHours = (new Date(now).getTime() - new Date(startedAt).getTime()) / 3_600_000 - stopBreakMinutes / 60;
+    if (durationHours < 0) durationHours = 0;
   } else if (anchor.start_time && localTime) {
     const [sh, sm] = anchor.start_time.split(":").map(Number);
     const [eh, em] = localTime.split(":").map(Number);
-    if (![sh, sm, eh, em].some(Number.isNaN)) durationHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
+    if (![sh, sm, eh, em].some(Number.isNaN)) {
+      // Snow/storm shifts routinely cross midnight — a local clock-out time
+      // strictly before the start time means it's the next day.
+      let diffMinutes = eh * 60 + em - (sh * 60 + sm);
+      if (diffMinutes < 0) diffMinutes += 24 * 60;
+      durationHours = diffMinutes / 60;
+    }
   }
 
   const allocation = durationHours != null && durationHours > 0
@@ -158,7 +214,12 @@ export async function POST(
         status: "completed",
         actual_hours: allocation?.get(row.id) ?? undefined,
         men_count: menCount,
-        completion_notes: row.id === anchor.id ? (notes ?? null) : undefined,
+        paused_at: null,
+        break_minutes: finalBreakMinutes.get(row.id) ?? row.break_minutes ?? 0,
+        // Notes belong to the anchor when it's part of this clock-out; when the
+        // anchor was already completed, the crew typed them for the visits
+        // being closed now — don't drop them.
+        completion_notes: (row.id === anchor.id || !anchorIsOpen) ? (notes ?? null) : undefined,
         updated_at: now,
       })
       .eq("id", row.id);
@@ -172,7 +233,7 @@ export async function POST(
   // completed later than its static schedule assumed. Non-fatal.
   for (const row of openRows) {
     try {
-      await recalcNextPackageVisitDate(supabase, row.job_service_id, now.slice(0, 10));
+      await recalcNextPackageVisitDate(supabase, row.job_service_id, isoNy(new Date(now)));
     } catch (err) {
       console.error("[crew/stops/clock-out] package min_days recalc failed:", err);
     }
@@ -238,6 +299,28 @@ export async function POST(
     }
   } catch {
     // Non-fatal — labor cost rollup failure should not block clock-out response
+  }
+
+  // Billing + timeline + automations for every visit closed by this stop —
+  // the same side effects the office "Mark Complete" route and the per-visit
+  // crew clock-out apply. Crew accounts have no RLS access to invoice tables,
+  // so this runs under the service-role client pinned to the visit's org;
+  // ownership was proven by assertCallerOwnsVisit above. Non-fatal.
+  const serviceClient = createServiceClient();
+  for (const row of openRows) {
+    try {
+      const sideEffects = await applyVisitCompletionSideEffects({
+        supabase: serviceClient,
+        orgId: row.org_id,
+        visitId: row.id,
+        userId: user.id,
+      });
+      if (!sideEffects.ok) {
+        log.error("completion side effects failed", { visitId: row.id, error: sideEffects.error });
+      }
+    } catch (err) {
+      log.error("completion side effects threw", { visitId: row.id, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

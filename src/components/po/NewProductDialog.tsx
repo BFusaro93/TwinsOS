@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useVendors } from "@/lib/hooks/use-vendors";
-import { useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-products";
+import { useCreateProduct, useUpdateProduct, useAdjustProductQuantityManual } from "@/lib/hooks/use-products";
 import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { NewVendorDialog } from "@/components/shared/NewVendorDialog";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -74,6 +74,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
 
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
+  const adjustQuantity = useAdjustProductQuantityManual();
 
   useEffect(() => {
     if (open && initialData) {
@@ -183,9 +184,34 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     };
 
     if (isEditing && initialData) {
+      // Don't send quantityOnHand through the plain update() below — it was
+      // captured when the dialog opened, so submitting it unconditionally
+      // (e.g. after just fixing this product's name) would silently stomp
+      // any real change to stock (a goods receipt, a job product usage)
+      // that landed via adjust_product_item_quantity while this dialog sat
+      // open. Only forward an actual, intentional change, and route it
+      // through the same audited RPC the QtyAdjustControl stepper uses
+      // instead of a raw overwrite (mirrors NewPartDialog's edit flow).
+      const { quantityOnHand: newQuantityOnHand, ...editPayload } = payload;
       updateProduct.mutate(
-        { id: initialData.id, ...payload },
-        { onSuccess: () => handleClose() }
+        { id: initialData.id, ...editPayload },
+        {
+          onSuccess: () => {
+            if (newQuantityOnHand !== initialData.quantityOnHand) {
+              adjustQuantity.mutate(
+                {
+                  id: initialData.id,
+                  orgId: initialData.orgId,
+                  quantityOnHand: newQuantityOnHand,
+                  reason: "Edited via product form",
+                },
+                { onSettled: () => handleClose() }
+              );
+            } else {
+              handleClose();
+            }
+          },
+        }
       );
     } else {
       createProduct.mutate(payload, {
@@ -197,7 +223,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     }
   }
 
-  const saving = createProduct.isPending || updateProduct.isPending;
+  const saving = createProduct.isPending || updateProduct.isPending || adjustQuantity.isPending;
   const saveError = createProduct.error ?? updateProduct.error;
 
   return (

@@ -17,6 +17,9 @@ import {
 import { useParts } from "@/lib/hooks/use-parts";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
+import { getCatalogCost } from "@/lib/cost-methods";
+import { useSettingsStore } from "@/stores/settings-store";
+import { NewRequisitionDialog } from "@/components/po/NewRequisitionDialog";
 import {
   useWOParts,
   useAddWOPart,
@@ -35,6 +38,8 @@ import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types";
 
 interface WOCostsTabProps {
   workOrderId: string;
+  workOrderNumber?: string;
+  workOrderTitle?: string;
 }
 
 // ── Shared row action buttons ─────────────────────────────────────────────────
@@ -62,11 +67,12 @@ function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => 
   );
 }
 
-function SectionHeader({ icon, title, count, onAdd }: {
+function SectionHeader({ icon, title, count, onAdd, extraAction }: {
   icon: React.ReactNode;
   title: string;
   count: number;
   onAdd: () => void;
+  extraAction?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between">
@@ -77,25 +83,34 @@ function SectionHeader({ icon, title, count, onAdd }: {
           <span className="ml-1.5 font-normal normal-case text-slate-300">({count})</span>
         </p>
       </div>
-      <Button size="sm" variant="outline" onClick={onAdd}>
-        <Plus className="mr-1.5 h-3.5 w-3.5" />
-        Add
-      </Button>
+      <div className="flex items-center gap-2">
+        {extraAction}
+        <Button size="sm" variant="outline" onClick={onAdd}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Add
+        </Button>
+      </div>
     </div>
   );
 }
 
 // ── Parts section ─────────────────────────────────────────────────────────────
 
-function PartsSection({ workOrderId }: { workOrderId: string }) {
+function PartsSection({ workOrderId, workOrderNumber, workOrderTitle }: {
+  workOrderId: string;
+  workOrderNumber?: string;
+  workOrderTitle?: string;
+}) {
   const { data: items = [] } = useWOParts(workOrderId);
   const { data: allParts = [] } = useParts();
+  const { costMethod } = useSettingsStore();
   const { mutate: addPart, isPending: adding } = useAddWOPart();
   const { mutate: updatePart } = useUpdateWOPart();
   const { mutate: deletePart } = useDeleteWOPart();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [requestPartsOpen, setRequestPartsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [qtyMap, setQtyMap] = useState<Record<string, number>>({});
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
@@ -147,7 +162,7 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
         partName: part.name,
         partNumber: part.partNumber,
         quantity: qtyMap[partId] ?? 1,
-        unitCost: part.unitCost,
+        unitCost: getCatalogCost(part.unitCost, part.costLayers, costMethod),
       },
       {
         onSuccess: () => {
@@ -173,6 +188,20 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
         title="Parts"
         count={items.length}
         onAdd={() => setAddOpen(true)}
+        extraAction={
+          <Button size="sm" variant="outline" onClick={() => setRequestPartsOpen(true)}>
+            Request Parts
+          </Button>
+        }
+      />
+
+      <NewRequisitionDialog
+        open={requestPartsOpen}
+        onOpenChange={setRequestPartsOpen}
+        prefillData={{
+          workOrderId,
+          title: workOrderNumber ? `Parts for ${workOrderNumber}${workOrderTitle ? ` — ${workOrderTitle}` : ""}` : "Parts request",
+        }}
       />
 
       {items.length === 0 ? (
@@ -275,7 +304,7 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
                         <p className="text-sm font-medium text-slate-800">{part.name}</p>
                         <p className="text-xs text-slate-500">
                           {part.partNumber && <>{part.partNumber} · </>}
-                          {formatCurrency(part.unitCost)} each
+                          {formatCurrency(getCatalogCost(part.unitCost, part.costLayers, costMethod))} each
                           {" · "}
                           <span className={
                             part.quantityOnHand === 0
@@ -398,6 +427,15 @@ function LaborSection({ workOrderId }: { workOrderId: string }) {
     // explain why the dialog just did nothing.
     if (!form.technicianName || Number.isNaN(hours) || Number.isNaN(rate)) return;
 
+    // Reject negative hours/rate — e.g. -10 hours * $50/hr would silently
+    // record a -$500 labor line with no validation error to explain why.
+    if (hours < 0 || rate < 0) {
+      toast.error("Invalid labor entry", {
+        description: "Hours and hourly rate cannot be negative.",
+      });
+      return;
+    }
+
     if (isEditing && editingId) {
       updateLabor(
         { id: editingId, workOrderId, technicianName: form.technicianName, description: form.description, hours, hourlyRate: rate },
@@ -411,7 +449,12 @@ function LaborSection({ workOrderId }: { workOrderId: string }) {
     }
   }
 
-  const total = items.reduce((sum, l) => sum + l.hours * l.hourlyRate, 0);
+  // Round each line's cost to the nearest whole cent before summing —
+  // decimal hours times integer-cents hourlyRate can produce fractional
+  // cents (e.g. 1.33 * 7550 = 10041.5), and formatCurrency only rounds at
+  // display time, so an unrounded per-line figure and this total could
+  // disagree by ±1 cent.
+  const total = items.reduce((sum, l) => sum + Math.round(l.hours * l.hourlyRate), 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -447,7 +490,7 @@ function LaborSection({ workOrderId }: { workOrderId: string }) {
                   <td className="px-3 py-2 text-right text-slate-700">{l.hours}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(l.hourlyRate)}</td>
                   <td className="px-3 py-2 text-right font-medium text-slate-900">
-                    {formatCurrency(l.hours * l.hourlyRate)}
+                    {formatCurrency(Math.round(l.hours * l.hourlyRate))}
                   </td>
                   <RowActions
                     onEdit={() => openEdit(l)}
@@ -585,6 +628,15 @@ function VendorSection({ workOrderId }: { workOrderId: string }) {
     // $0 charge (e.g. a warranty repair), with no toast or error to explain
     // why the dialog just did nothing.
     if (!form.vendorName || Number.isNaN(costCents)) return;
+
+    // Reject a negative cost — silently recording a negative vendor charge
+    // would understate the work order's total cost with no validation error.
+    if (costCents < 0) {
+      toast.error("Invalid vendor charge", {
+        description: "Cost cannot be negative.",
+      });
+      return;
+    }
 
     if (isEditing && editingId) {
       updateCharge(
@@ -769,7 +821,9 @@ function CostSummary({
   vendors: WOVendorCharge[];
 }) {
   const partsTotal = parts.reduce((s, p) => s + p.quantity * p.unitCost, 0);
-  const laborTotal = labor.reduce((s, l) => s + l.hours * l.hourlyRate, 0);
+  // See LaborSection's `total` above — round each line before summing so
+  // this total always agrees with the per-line figures shown in the Labor tab.
+  const laborTotal = labor.reduce((s, l) => s + Math.round(l.hours * l.hourlyRate), 0);
   const vendorTotal = vendors.reduce((s, v) => s + v.cost, 0);
   const grandTotal = partsTotal + laborTotal + vendorTotal;
 
@@ -804,7 +858,7 @@ function CostSummary({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function WOCostsTab({ workOrderId }: WOCostsTabProps) {
+export function WOCostsTab({ workOrderId, workOrderNumber, workOrderTitle }: WOCostsTabProps) {
   // Query all three datasets for the summary — sections manage their own queries internally
   const { data: parts = [] } = useWOParts(workOrderId);
   const { data: labor = [] } = useWOLabor(workOrderId);
@@ -812,7 +866,7 @@ export function WOCostsTab({ workOrderId }: WOCostsTabProps) {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <PartsSection workOrderId={workOrderId} />
+      <PartsSection workOrderId={workOrderId} workOrderNumber={workOrderNumber} workOrderTitle={workOrderTitle} />
       <Separator />
       <LaborSection workOrderId={workOrderId} />
       <Separator />

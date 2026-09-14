@@ -3,8 +3,10 @@ import { ADDITIONAL_REPORTS } from "@/lib/reports/definitions/additions";
 import { AUDIT_REPORTS } from "@/lib/reports/definitions/audits";
 import { CHEMICAL_REPORTS } from "@/lib/reports/definitions/chemical-reports";
 import { CLIENT_REPORTS } from "@/lib/reports/definitions/client-reports";
+import { CONTRACT_SERVICE_REPORTS } from "@/lib/reports/definitions/contract-services";
 import { ESTIMATE_REPORTS } from "@/lib/reports/definitions/estimates";
 import { FINANCIAL_REPORTS } from "@/lib/reports/definitions/financial";
+import { HOURS_VARIANCE_REPORTS } from "@/lib/reports/definitions/hours-variance";
 import { JOB_COSTING_REPORTS } from "@/lib/reports/definitions/job-costing";
 import { JOB_HOURS_REPORTS } from "@/lib/reports/definitions/job-hours";
 import { LEAD_REPORTS } from "@/lib/reports/definitions/lead";
@@ -12,13 +14,16 @@ import { RECEIVABLES_REPORTS } from "@/lib/reports/definitions/receivables";
 import { REVENUE_REPORTS } from "@/lib/reports/definitions/revenue";
 import { SCHEDULE_LIST_REPORTS } from "@/lib/reports/definitions/schedule-lists";
 import { SERVICE_REPORTS } from "@/lib/reports/definitions/service-reports";
+import { UPSELL_REPORTS } from "@/lib/reports/definitions/upsells";
 
 export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...AUDIT_REPORTS,
   ...CHEMICAL_REPORTS,
   ...CLIENT_REPORTS,
+  ...CONTRACT_SERVICE_REPORTS,
   ...ESTIMATE_REPORTS,
   ...FINANCIAL_REPORTS,
+  ...HOURS_VARIANCE_REPORTS,
   ...JOB_COSTING_REPORTS,
   ...JOB_HOURS_REPORTS,
   ...LEAD_REPORTS,
@@ -26,6 +31,7 @@ export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...REVENUE_REPORTS,
   ...SCHEDULE_LIST_REPORTS,
   ...SERVICE_REPORTS,
+  ...UPSELL_REPORTS,
   ...ADDITIONAL_REPORTS,
 ];
 

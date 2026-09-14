@@ -401,7 +401,13 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
               Assignment
             </p>
 
-            {/* Parent Asset picker — exclude self when editing */}
+            {/* Parent Asset picker — exclude self when editing. The hierarchy is
+                only ever one level deep (mirrors SubAssetsTab's "Link Existing"
+                filter in AssetDetailPanel.tsx): only top-level assets (no
+                parent of their own) are selectable as a parent, and an asset
+                that already has sub-assets of its own can't also become a
+                child — this also rules out any cycle, since a node can never
+                be both a parent and a child at once. */}
             <div className="grid gap-1.5">
               <Label htmlFor="parent-asset">Parent Asset</Label>
               <Select value={parentAssetId || "none"} onValueChange={(v) => setParentAssetId(v === "none" ? "" : v)}>
@@ -411,7 +417,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
                 <SelectContent>
                   <SelectItem value="none">None (top-level asset)</SelectItem>
                   {(allAssets ?? [])
-                    .filter((a) => a.id !== initialData?.id && a.deletedAt === null)
+                    .filter((a) => a.id !== initialData?.id && a.deletedAt === null && !a.parentAssetId)
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map((a) => (
                       <SelectItem key={a.id} value={a.id}>

@@ -67,7 +67,7 @@ const EMPTY_FORM = { name: "", customerName: "", address: "", city: "", state: "
 
 // ── Full-featured detail pane (list view) ─────────────────────────────────────
 
-function JobDetailPane({ jobId }: { jobId: string }) {
+function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => void }) {
   const router = useRouter();
   const { isCrew: isCrewRole, canAnnotate } = usePhotoAccess();
   const { data: job, isLoading } = usePhotoJob(jobId);
@@ -127,6 +127,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
           toast.success(selectedProjectId ? "Project linked" : "Project link removed");
           setEditingLink(false);
         },
+        onError: () => toast.error("Failed to update project link"),
       },
     );
   }
@@ -139,6 +140,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
           toast.success(selectedClientId ? "Client linked" : "Client link removed");
           setEditingClientLink(false);
         },
+        onError: () => toast.error("Failed to update client link"),
       },
     );
   }
@@ -211,7 +213,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
               size="sm" variant="outline"
               className={cn("gap-1.5 text-xs", job.isArchived ? "border-brand-400 text-brand-600" : "border-slate-300 text-slate-500")}
               disabled={archiving}
-              onClick={() => archiveJob({ id: job.id, archived: !job.isArchived }, { onSuccess: () => toast.success(job.isArchived ? "Job unarchived" : "Job archived") })}
+              onClick={() => archiveJob({ id: job.id, archived: !job.isArchived }, { onSuccess: () => toast.success(job.isArchived ? "Job unarchived" : "Job archived"), onError: () => toast.error("Failed to update job") })}
             >
               {job.isArchived ? <><ArchiveRestore className="h-3.5 w-3.5" /> Unarchive</> : <><Archive className="h-3.5 w-3.5" /> Archive</>}
             </Button>
@@ -221,7 +223,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
               disabled={deleting}
               onClick={() => {
                 if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) {
-                  deleteJob(job.id, { onSuccess: () => { toast.success("Job deleted"); router.back(); } });
+                  deleteJob(job.id, { onSuccess: () => { toast.success("Job deleted"); onDeleted(); }, onError: () => toast.error("Failed to delete job") });
                 }
               }}
             >
@@ -451,6 +453,7 @@ export function JobPhotosPage() {
             router.push(`/photos/jobs/${job.id}`);
           }
         },
+        onError: () => toast.error("Failed to create job"),
       },
     );
   }
@@ -512,7 +515,7 @@ export function JobPhotosPage() {
       <div className="flex h-full flex-col gap-4">
         {/* Header */}
         <PageHeader
-          title="Jobs"
+          title="Job Photos"
           description="Photo documentation by job site"
           action={
             <>
@@ -641,7 +644,7 @@ export function JobPhotosPage() {
           <MasterDetailLayout
             className="min-h-0 flex-1"
             listPanel={listPanel}
-            detailPanel={selectedJobId ? <JobDetailPane jobId={selectedJobId} /> : null}
+            detailPanel={selectedJobId ? <JobDetailPane jobId={selectedJobId} onDeleted={() => setSelectedJobId(null)} /> : null}
             emptyState={
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
                 <Images className="h-10 w-10 text-slate-200" />
@@ -683,7 +686,7 @@ export function JobPhotosPage() {
                       <button
                         className="shrink-0 rounded-md p-1.5 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
                         title="Delete job"
-                        onClick={(e) => { e.stopPropagation(); if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) deleteJob(job.id, { onSuccess: () => toast.success("Job deleted") }); }}
+                        onClick={(e) => { e.stopPropagation(); if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) deleteJob(job.id, { onSuccess: () => toast.success("Job deleted"), onError: () => toast.error("Failed to delete job") }); }}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

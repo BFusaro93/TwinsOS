@@ -1,5 +1,10 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import { buildResult, col } from "@/lib/reports/helpers";
+import {
+  AR_WRITE_OFF_METHOD,
+  ISSUED_INVOICE_STATUSES,
+  buildResult,
+  col,
+} from "@/lib/reports/helpers";
 
 // ============================================================
 // Receivables section — pre-built reports.
@@ -18,8 +23,8 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
         .from("crm_invoices")
         .select("due_date, invoice_date, balance_cents, clients:client_id(display_name)")
         .gt("balance_cents", 0)
-        .neq("status", "void")
         .is("deleted_at", null)
+        .in("status", ISSUED_INVOICE_STATUSES)
         .limit(5000);
       if (error) throw new Error(error.message);
 
@@ -81,7 +86,10 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
           col("total_cents", "Total", "money"),
         ],
         rows,
-        ["Reflects invoices open today — not a point-in-time snapshot."]
+        [
+          "Reflects invoices open today — not a point-in-time snapshot.",
+          "Excludes draft and void invoices — only issued invoices are receivables.",
+        ]
       );
     },
   },
@@ -121,6 +129,7 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
         .from("crm_invoices")
         .select("client_id, invoice_date, total_cents")
         .is("deleted_at", null)
+        .in("status", ISSUED_INVOICE_STATUSES)
         .order("invoice_date", { ascending: false })
         .limit(5000);
       if (invError) throw new Error(invError.message);
@@ -129,6 +138,8 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
         .from("crm_payments")
         .select("client_id, payment_date, amount_cents")
         .is("deleted_at", null)
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD)
         .order("payment_date", { ascending: false })
         .limit(5000);
       if (payError) throw new Error(payError.message);
@@ -181,7 +192,10 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
           col("last_payment_date", "Last Payment Date", "date"),
           col("last_payment_cents", "Last Payment Amount", "money", false),
         ],
-        rows
+        rows,
+        [
+          "Last Invoice excludes draft and void invoices. Last Payment is cash only — excludes account credits and AR write-offs.",
+        ]
       );
     },
   },

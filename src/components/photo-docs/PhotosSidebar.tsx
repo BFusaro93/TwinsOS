@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
 import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -13,16 +14,17 @@ interface PhotoNavItem {
   href: string;
   icon: LucideIcon;
   requiresPoAccess?: boolean;
+  internalOnly?: boolean;
 }
 
-const PHOTOS_NAV: PhotoNavItem[] = [
+export const PHOTOS_NAV: PhotoNavItem[] = [
   { label: "Job Photos", href: "/photos/jobs",     icon: FileImage },
   { label: "Projects",   href: "/photos/projects", icon: Briefcase, requiresPoAccess: true },
 ];
 
-const FIELD_NAV: PhotoNavItem[] = [
-  { label: "Morning Checklist",  href: "/photos/field/crew-checklist",  icon: ClipboardList },
-  { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays },
+export const FIELD_NAV: PhotoNavItem[] = [
+  { label: "Morning Checklist",  href: "/photos/field/crew-checklist",  icon: ClipboardList, internalOnly: true },
+  { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays,  internalOnly: true },
   { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench },
 ];
 
@@ -31,10 +33,11 @@ const PO_ROLES = new Set(["admin", "manager", "purchaser"]);
 
 export function PhotosSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const canSeeProjects = PO_ROLES.has(currentUser.role);
+  const { isInternalOrg } = useIsInternalOrg();
 
   return (
     <aside
@@ -102,7 +105,7 @@ export function PhotosSidebar() {
               Field
             </p>
           )}
-          {FIELD_NAV.map((item) => {
+          {FIELD_NAV.filter((item) => !item.internalOnly || isInternalOrg).map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;
             return (

@@ -69,7 +69,7 @@ export async function POST(
       createdByUserId: ticket.created_by as string | null,
     });
   } else if (body.event === "assigned") {
-    await notifyTicketAssigned(adminClient, { ...base, assignedToName: ticket.assigned_to as string | null });
+    await notifyTicketAssigned(adminClient, { ...base, assignedToName: ticket.assigned_to as string | null, assignedByUserId: user.id });
   } else if (body.event === "comment") {
     const { data: profile } = await supabase.from("profiles").select("name").eq("id", user.id).single();
     await notifyTicketComment(adminClient, {

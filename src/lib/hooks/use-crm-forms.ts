@@ -108,7 +108,7 @@ export function useUpdateForm(id: string) {
 export function useSaveFormFields(formId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (fields: Array<Omit<CRMFormField, "id" | "formId">>) => {
+    mutationFn: async (fields: Array<Omit<CRMFormField, "id" | "formId"> & { id?: string }>) => {
       const res = await fetch(`/api/crm/forms/${formId}/fields`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

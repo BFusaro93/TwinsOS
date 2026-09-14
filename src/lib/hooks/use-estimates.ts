@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
@@ -90,6 +91,7 @@ function mapEstimate(row: any): Estimate {
     stage: row.stage,
     approvalStatus: (row.approval_status as Estimate['approvalStatus']) ?? 'not_required',
     sentAt: row.sent_at ?? null,
+    portalAcceptedAt: row.portal_accepted_at ?? null,
     showDiscounts: row.show_discounts,
     estimateDate: row.estimate_date,
     validUntilDate: row.valid_until_date,
@@ -122,6 +124,13 @@ function mapEstimate(row: any): Estimate {
     depositReference: (row.deposit_reference as string | null) ?? null,
     depositNotes: (row.deposit_notes as string | null) ?? null,
     depositCollectedAt: (row.deposit_collected_at as string | null) ?? null,
+    depositPendingCents: (row.deposit_pending_cents as number | null) ?? null,
+    depositPendingMethod: (row.deposit_pending_method as Estimate['depositPendingMethod']) ?? null,
+    depositPendingAt: (row.deposit_pending_at as string | null) ?? null,
+    depositFailedCents: (row.deposit_failed_cents as number | null) ?? null,
+    depositFailedMethod: (row.deposit_failed_method as Estimate['depositFailedMethod']) ?? null,
+    depositFailedReason: (row.deposit_failed_reason as string | null) ?? null,
+    depositFailedAt: (row.deposit_failed_at as string | null) ?? null,
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     displaySettings: toDisplaySettings(row.display_settings),
@@ -137,7 +146,7 @@ function mapEstimate(row: any): Estimate {
     clientPhone: row.clients?.primary_phone ?? null,
     clientEmail: row.clients?.primary_email ?? null,
     clientSince: row.clients?.client_since ?? null,
-    salesRepName: row.profiles?.name ?? null,
+    salesRepName: (row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || undefined : undefined),
     lineItems: (row.estimate_line_items ?? []).map(mapLineItem),
     directCosts: (row.estimate_direct_costs ?? []).map(mapDirectCost),
   };
@@ -166,7 +175,7 @@ export function useEstimates(clientId?: string) {
       const supabase = createClient() as any;
       let q = supabase
         .from("estimates")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), profiles!estimates_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -190,7 +199,7 @@ export function useEstimate(id: string) {
         .select(`
           *,
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since),
-          profiles!estimates_sales_rep_id_fkey(name),
+          sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name),
           estimate_line_items(*),
           estimate_direct_costs(*)
         `)
@@ -302,7 +311,7 @@ export function useBulkImportEstimates() {
           created_by: user?.id ?? null,
           client_id: clientId,
           description,
-          estimate_date: r.estimateDate?.trim() || new Date().toISOString().split("T")[0],
+          estimate_date: r.estimateDate?.trim() || isoNy(new Date()),
           valid_until_date: r.validUntilDate?.trim() || null,
           po_number: r.poNumber?.trim() || null,
           stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",
@@ -333,10 +342,33 @@ export function useUpdateEstimate() {
       patch: Record<string, any>;
     }) => {
       const supabase = createClient();
+      let finalPatch = patch;
+      if ("client_id" in patch) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: current } = await (supabase as any)
+          .from("estimates")
+          .select("client_id, portal_accepted_at")
+          .eq("id", id)
+          .single();
+        if (current && current.client_id !== patch.client_id && current.portal_accepted_at) {
+          // Re-pointing an already-accepted estimate to a different client
+          // would otherwise keep the stale acceptance/signature attached to
+          // the new client with no new signature required — same class of
+          // bug as the signed-contract client reassignment fix
+          // (CONTRACT_FINANCIAL_FIELDS in use-contracts.ts).
+          finalPatch = {
+            ...patch,
+            stage: "sent",
+            portal_accepted_at: null,
+            portal_signature_name: null,
+            portal_user_id: null,
+          };
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("estimates")
-        .update(patch)
+        .update(finalPatch)
         .eq("id", id);
       if (error) throw error;
     },
@@ -402,18 +434,24 @@ export function useUpdateEstimateStage() {
         });
       }
 
-      return { salesRepId: existing?.sales_rep_id as string | null | undefined };
+      return { salesRepId: existing?.sales_rep_id as string | null | undefined, clientId: resolvedClientId as string | undefined };
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
       const matchValues = data?.salesRepId ? [data.salesRepId] : undefined;
-      if (vars.clientId) {
-        qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      // Neither caller (EstimateDetail's single-accept flow nor EstimatesList's
+      // bulk actions) ever passes clientId into the mutation — it's only
+      // resolved server-side from the estimate row (see resolvedClientId
+      // above). Reading it from the mutation's own result here (not vars)
+      // is what actually makes these two automation triggers fire at all.
+      const clientId = data?.clientId;
+      if (clientId) {
+        qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
         if (vars.stage === "accepted") {
-          fireAutomationTrigger({ triggerType: "estimate_won", clientId: vars.clientId, estimateId: vars.id, matchValues });
+          fireAutomationTrigger({ triggerType: "estimate_won", clientId, estimateId: vars.id, matchValues });
         } else if (vars.stage === "lost") {
-          fireAutomationTrigger({ triggerType: "estimate_lost", clientId: vars.clientId, estimateId: vars.id, matchValues });
+          fireAutomationTrigger({ triggerType: "estimate_lost", clientId, estimateId: vars.id, matchValues });
         }
       }
     },
@@ -754,6 +792,57 @@ export function useEstimateShareTokens(estimateId: string) {
       }));
     },
     enabled: !!estimateId,
+  });
+}
+
+export interface EstimateShareLink {
+  url: string | null;
+  token?: string;
+  expiresAt?: string | null;
+}
+
+/**
+ * The estimate's current LIVE public proposal link (null when nothing has
+ * been sent, or every link has expired / been accepted). Read-only — use
+ * useEnsureEstimateShareLink to mint one on demand.
+ */
+export function useEstimateShareLink(estimateId: string) {
+  return useQuery({
+    queryKey: ["estimate-share-link", estimateId],
+    queryFn: async (): Promise<EstimateShareLink> => {
+      const res = await fetch(`/api/crm/estimates/${estimateId}/share-link`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "Failed to load proposal link");
+      }
+      return res.json() as Promise<EstimateShareLink>;
+    },
+    enabled: !!estimateId,
+  });
+}
+
+/**
+ * Returns the live proposal link, minting a token only when none is live —
+ * the same reuse rule the send-email route applies, so "Copy proposal link"
+ * and a later email hand the client one URL.
+ */
+export function useEnsureEstimateShareLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (estimateId: string): Promise<EstimateShareLink & { url: string }> => {
+      const res = await fetch(`/api/crm/estimates/${estimateId}/share-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = await res.json().catch(() => ({})) as EstimateShareLink & { error?: string };
+      if (!res.ok || !body.url) throw new Error(body.error ?? "Failed to create proposal link");
+      return body as EstimateShareLink & { url: string };
+    },
+    onSuccess: (_data, estimateId) => {
+      qc.invalidateQueries({ queryKey: ["estimate-share-link", estimateId] });
+      qc.invalidateQueries({ queryKey: ["estimate-share-tokens", estimateId] });
+    },
   });
 }
 

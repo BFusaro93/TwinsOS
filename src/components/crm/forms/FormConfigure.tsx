@@ -217,13 +217,13 @@ export function FormConfigure({ form }: Props) {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label className="text-[10px] uppercase tracking-wide text-slate-400">From Name</Label>
                 <Input
                   value={n.fromName}
                   onChange={(e) => updateNotification(n._key, { fromName: e.target.value })}
-                  placeholder="Twins Lawn Service"
+                  placeholder="Your Company Name"
                   className="mt-1 h-7 text-xs"
                 />
               </div>
@@ -278,7 +278,7 @@ export function FormConfigure({ form }: Props) {
             </div>
 
             <p className="text-[10px] text-slate-400">
-              Merge fields available: [formname], [submittedname], [submittedemail], [submittedphone], [submittedmessage], [companyname], [companyphone], or any field label on this form (e.g. a "How can we help?" field → [howcanwehelp]).
+              Merge fields available: [formname], [submittedname], [submittedemail], [submittedphone], [submittedmessage], [companyname], [companyphone], or any field label on this form (e.g. a &quot;How can we help?&quot; field → [howcanwehelp]).
             </p>
           </div>
         ))}

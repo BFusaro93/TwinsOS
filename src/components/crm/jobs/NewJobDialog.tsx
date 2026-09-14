@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
+import { useProducts } from "@/lib/hooks/use-products";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useContracts } from "@/lib/hooks/use-contracts";
@@ -29,8 +30,10 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { computePackageVisitSchedule } from "@/lib/package-schedule";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, roundHours } from "@/lib/utils";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { JobType, BudgetMethod } from "@/types/crm-jobs";
@@ -61,6 +64,35 @@ function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Whole-day difference `b - a` between two YYYY-MM-DD strings (local calendar). */
+function daysBetween(a: string, b: string): number {
+  return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86_400_000);
+}
+
+/** Shift a YYYY-MM-DD string by `n` days (local calendar); empty stays empty. */
+function shiftDateStr(iso: string, n: number): string {
+  if (!iso) return iso;
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return toLocalDateStr(d);
+}
+
+/** Calendar months spanned by [from, to], inclusive of both end months (min 1). */
+function monthsSpanned(from: string, to: string): number {
+  if (!from || !to || to < from) return 1;
+  const a = new Date(from + "T00:00:00"), b = new Date(to + "T00:00:00");
+  return Math.max(1, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1);
+}
+
+const JOB_TYPE_OPTIONS: { value: JobType; label: string }[] = [
+  { value: "one_time",     label: "One Time" },
+  { value: "recurring",    label: "Recurring" },
+  { value: "waiting_list", label: "Waiting List" },
+  { value: "package",      label: "Package" },
+  { value: "snow",         label: "Snow" },
+  { value: "project",      label: "Project" },
+];
+
 interface ServiceRow {
   serviceId: string;
   serviceName: string;
@@ -73,10 +105,25 @@ interface ServiceRow {
   teamSize: number;
   /** Days that must elapse after this service's visit completes before the next package-sequenced service is due. */
   minDays: number | null;
+  /** True once the user has typed a date into this row — the header Start
+   *  Date then stops re-syncing it. */
+  startDateEdited: boolean;
 }
 
 function blankServiceRow(date: string): ServiceRow {
-  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null };
+  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null, startDateEdited: false };
+}
+
+interface ProductRow {
+  productId: string;
+  productName: string;
+  qty: number;
+  unitPriceCents: number;
+  unitCostCents: number | null;
+}
+
+function blankProductRow(): ProductRow {
+  return { productId: "", productName: "", qty: 1, unitPriceCents: 0, unitCostCents: null };
 }
 
 interface Props {
@@ -84,35 +131,50 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   clientId?: string;
   initialJobType?: JobType;
+  /** Show a Job Type selector in the dialog. Defaults to true when no
+   *  `initialJobType` is given (Jobs page "Add Job", Quick Add), so those
+   *  entry points aren't locked to one_time. */
+  allowTypeChange?: boolean;
   onCreated?: (jobId: string) => void;
 }
 
-export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, initialJobType, onCreated }: Props) {
+export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, initialJobType, allowTypeChange, onCreated }: Props) {
+  const showTypeSelector = allowTypeChange ?? initialJobType == null;
   const createJob = useCreateClientJob();
   const { data: clients } = useClients();
   const { data: crmServices } = useCRMServices();
   const { data: crmSchedules } = useCRMSchedules();
   const { data: orgSettings } = useOrgSettings();
   const { data: crmPackages } = usePackages(false);
+  const { data: products } = useProducts();
   const { data: employees } = useSelectableEmployees();
   const { data: crews } = useCRMCrews();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
+  const rf = useRequiredFields("job");
 
   const [selectedClientId, setSelectedClientId] = useState(defaultClientId ?? "");
   const [jobType, setJobType] = useState<JobType>(initialJobType ?? "one_time");
   const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
   const [salesRepId, setSalesRepId] = useState<string | null>(null);
+  /** Date Sold — feeds the Sales by Date Sold / Approved Sales by Sales Rep reports. Defaults to today. */
+  const [dateSold, setDateSold] = useState(todayStr());
   const [crewId, setCrewId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
 
   const [startDate, setStartDate] = useState(todayStr());
   const [completeByDate, setCompleteByDate] = useState("");
+  /** Recurring only — last date visits are generated for (crm_jobs.recurrence_end). */
+  const [recurrenceEnd, setRecurrenceEnd] = useState("");
+  /** Package only — the date the step windows are currently anchored to, so a
+   *  Start Date change can shift every window by the same offset. */
+  const [packageAnchor, setPackageAnchor] = useState<string | null>(null);
   const [schedule, setSchedule] = useState("");
   const [packageId, setPackageId] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const [services, setServices] = useState<ServiceRow[]>([blankServiceRow(todayStr())]);
+  const [productRows, setProductRows] = useState<ProductRow[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
 
@@ -128,14 +190,19 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       const today = todayStr();
       setJobType(initialJobType ?? "one_time");
       setContractId(null);
+      setSalesRepId(null);
+      setDateSold(today);
       setCrewId(null);
       setNotesToCrew("");
       setStartDate(today);
       setCompleteByDate("");
+      setRecurrenceEnd("");
+      setPackageAnchor(null);
       setSchedule("");
       setPackageId("");
       setIsComplete(false);
       setServices([blankServiceRow(today)]);
+      setProductRows([]);
       setProjectId(null);
       setInvoiceType(null);
       setInchTrigger(null);
@@ -164,30 +231,77 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       }, earliest);
       setStartDate(toLocalDateStr(earliest));
       setCompleteByDate(toLocalDateStr(latest));
+      setPackageAnchor(toLocalDateStr(earliest));
+    } else {
+      setPackageAnchor(null);
     }
 
     setServices(
       visitSchedule.length > 0
         ? visitSchedule.map(({ service, scheduledDate }) => {
-            const matchingService = (crmServices ?? []).find((s) => s.id === service.serviceId);
+            // Package steps may reference the service by id OR only carry its
+            // name (older packages) — fall back to a name match so the step
+            // still inherits the service's default rate / production rate.
+            const matchingService = (crmServices ?? []).find((s) => s.id === service.serviceId)
+              ?? (crmServices ?? []).find((s) => s.name.trim().toLowerCase() === service.serviceName.trim().toLowerCase());
             const qty = 1;
             return {
-              serviceId: service.serviceId ?? "",
+              serviceId: service.serviceId ?? matchingService?.id ?? "",
               serviceName: service.serviceName,
               startDate: scheduledDate ? toLocalDateStr(scheduledDate) : "",
               completeByDate: service.endDate ?? "",
               qty,
-              rateCents: service.defaultRateCents ?? matchingService?.defaultRateCents ?? 0,
+              rateCents: (service.defaultRateCents || matchingService?.defaultRateCents) ?? 0,
+              // teamSize is 1 here so the division is a no-op today — routed
+              // through the same helper anyway so this can't silently become
+              // wrong if the seeded crew size ever stops being 1.
               budgetedHours: matchingService
-                ? computeJobServiceBudgetedHours(matchingService, qty)
+                ? autoHoursPerPerson(matchingService, qty, 1)
                 : service.defaultBHrs ?? 0,
               budgetMethod: matchingService?.budgetMethod ?? "manual",
               teamSize: 1,
               minDays: service.minDays ?? null,
+              startDateEdited: false,
             };
           })
         : [blankServiceRow(startDate)]
     );
+  }
+
+  /** Header Start Date changed. Package jobs: shift every step window (and
+   *  Complete By) by the same offset so the program re-anchors to the new
+   *  start instead of staying on the package's template dates. Other types:
+   *  re-sync service-row start dates the user hasn't hand-edited. */
+  function changeStartDate(next: string) {
+    setStartDate(next);
+    if (!next) return;
+    if (jobType === "package" && packageAnchor) {
+      const offset = daysBetween(packageAnchor, next);
+      if (offset !== 0) {
+        setServices((prev) => prev.map((s) => ({
+          ...s,
+          startDate: shiftDateStr(s.startDate, offset),
+          completeByDate: shiftDateStr(s.completeByDate, offset),
+        })));
+        setCompleteByDate((prev) => shiftDateStr(prev, offset));
+      }
+      setPackageAnchor(next);
+      return;
+    }
+    setServices((prev) => prev.map((s) => (s.startDateEdited ? s : { ...s, startDate: next })));
+  }
+
+  function changeJobType(next: JobType) {
+    setJobType(next);
+    // Type-specific inputs don't carry across (a package's step rows make no
+    // sense on a one-time job, a schedule only applies to recurring).
+    setSchedule("");
+    setRecurrenceEnd("");
+    setPackageId("");
+    setPackageAnchor(null);
+    setCompleteByDate("");
+    setIsComplete(false);
+    setServices([blankServiceRow(startDate)]);
   }
 
   function updateService(i: number, updates: Partial<ServiceRow>) {
@@ -206,11 +320,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     const svc = (crmServices ?? []).find((s) => s.id === serviceId);
     if (!svc) return;
     const qty = services[i]?.qty ?? 1;
+    // Only fill the service's default rate into an EMPTY rate — a rate the
+    // user already typed (e.g. Rate 120, then picking "Salt") must survive.
+    const typedRate = services[i]?.rateCents ?? 0;
     updateService(i, {
       serviceId: svc.id,
       serviceName: svc.name,
-      rateCents: svc.defaultRateCents ?? 0,
-      budgetedHours: computeJobServiceBudgetedHours(svc, qty),
+      rateCents: typedRate > 0 ? typedRate : (svc.defaultRateCents ?? 0),
+      budgetedHours: autoHoursPerPerson(svc, qty, services[i]?.teamSize ?? 1),
       budgetMethod: svc.budgetMethod,
     });
   }
@@ -218,7 +335,27 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   // Is this row's budgeted hours auto-calculated from the service's production rate?
   function rowIsAutoHrs(serviceId: string): boolean {
     const svc = (crmServices ?? []).find((s) => s.id === serviceId);
-    return !!svc && svc.budgetMethod === "production_rate" && !!svc.productionRateSqftPerHr && svc.productionRateSqftPerHr > 0 && svc.unit !== "hour";
+    return !!svc && svc.budgetMethod === "production_rate" && !!svc.productionRateSqftPerHr && svc.productionRateSqftPerHr > 0 && svc.unit !== "hr" && svc.unit !== "each";
+  }
+
+  /**
+   * The Hrs column is PER PERSON: the job total below is Σ(hrs × men), and
+   * crm_job_services.budgeted_hours rolls up to the job the same way
+   * (crm_recompute_job_budgeted_hours = Σ(budgeted_hours × team_size)).
+   *
+   * computeJobServiceBudgetedHours returns MAN-hours — a production rate is
+   * sq ft per man-hour, so qty ÷ rate is the total labour, not one person's
+   * shift. Writing that straight into the per-person column multiplied it by
+   * the crew again: 12,000 sq ft at 1,000 sq ft/man-hr with 3 men showed 12
+   * hrs × 3 = 36 man-hours for 12 man-hours of work, inflating the job's
+   * budget and every variance report built on it.
+   */
+  function autoHoursPerPerson(
+    svc: Parameters<typeof computeJobServiceBudgetedHours>[0],
+    qty: number,
+    teamSize: number
+  ): number {
+    return computeJobServiceBudgetedHours(svc, qty) / Math.max(1, teamSize || 1);
   }
 
   // Recompute budgeted hours when qty changes, if this row's service uses production rate
@@ -226,11 +363,57 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     const serviceId = services[i]?.serviceId;
     const svc = (crmServices ?? []).find((s) => s.id === serviceId);
     if (svc && rowIsAutoHrs(serviceId)) {
-      updateService(i, { qty, budgetedHours: computeJobServiceBudgetedHours(svc, qty) });
+      updateService(i, { qty, budgetedHours: autoHoursPerPerson(svc, qty, services[i]?.teamSize ?? 1) });
     } else {
       updateService(i, { qty });
     }
   }
+
+  /**
+   * Crew size feeds the per-person hours, so an auto row has to be recomputed
+   * when it changes — otherwise the figure stays pinned to whatever crew size
+   * was set when the service was picked, and the job's man-hour total moves
+   * with the crew instead of staying fixed at the work involved.
+   *
+   * A manual row keeps the hours the user typed: those are already per-person
+   * by definition, and silently rescaling someone's own number would be worse
+   * than leaving it.
+   */
+  function updateTeamSize(i: number, teamSize: number) {
+    const row = services[i];
+    const svc = (crmServices ?? []).find((s) => s.id === row?.serviceId);
+    if (svc && rowIsAutoHrs(row?.serviceId ?? "")) {
+      updateService(i, { teamSize, budgetedHours: autoHoursPerPerson(svc, row?.qty ?? 1, teamSize) });
+    } else {
+      updateService(i, { teamSize });
+    }
+  }
+
+  function updateProductRow(i: number, updates: Partial<ProductRow>) {
+    setProductRows((prev) => prev.map((p, idx) => idx === i ? { ...p, ...updates } : p));
+  }
+
+  function removeProductRow(i: number) {
+    setProductRows((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function addProductRow() {
+    setProductRows((prev) => [...prev, blankProductRow()]);
+  }
+
+  function pickProduct(i: number, productId: string) {
+    const prod = (products ?? []).find((p) => p.id === productId);
+    if (!prod) return;
+    updateProductRow(i, {
+      productId: prod.id,
+      productName: prod.name,
+      unitPriceCents: prod.price,
+      unitCostCents: prod.unitCost ?? null,
+    });
+  }
+
+  const productCatalog = (products ?? []).filter((p) => p.category === "stocked_material" || p.category === "project_material");
+  const productTotalCents = productRows.reduce((s, p) => s + p.qty * p.unitPriceCents, 0);
 
   const effectiveClientId = defaultClientId ?? selectedClientId;
   const effectiveClientName = (clients ?? []).find((c) => c.id === effectiveClientId)?.displayName ?? "";
@@ -247,12 +430,32 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const marginPct = serviceTotalCents > 0 ? (grossProfitCents / serviceTotalCents) * 100 : 0;
 
   const selectedPackage = (crmPackages ?? []).find((p) => p.id === packageId) ?? null;
+  // Total included visits for the selected package = sum of each service row's
+  // visits_included (defaulting to 1 per row), not the number of service rows —
+  // matches the same aggregation used in PackageDialog when saving visits_per_season.
+  const selectedPackageTotalSteps = selectedPackage
+    ? (selectedPackage.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) || 1)
+    : null;
+  // Package billing summary — the program total is the sum of its step rates;
+  // the monthly installment spreads it over the months the program covers.
+  const packageMonths = monthsSpanned(startDate, completeByDate);
+  const packageMonthlyCents = Math.round(serviceTotalCents / packageMonths);
 
   async function handleSubmit() {
     if (!effectiveClientId) { toast.error("Client is required"); return; }
     if (jobType === "recurring" && !schedule) { toast.error("Schedule is required for recurring jobs"); return; }
     if (jobType === "package" && !packageId) { toast.error("Package is required for package jobs"); return; }
     if (services.some((s) => !s.serviceName)) { toast.error("Select a service for each row"); return; }
+    if (rf.isRequired("crew") && !crewId) { toast.error("Crew is required"); return; }
+    if (rf.isRequired("sales_rep") && !salesRepId) { toast.error("Sales Rep is required"); return; }
+    if (jobType === "waiting_list" && startDate && completeByDate && completeByDate < startDate) {
+      toast.error("End date cannot be before start date");
+      return;
+    }
+    if (jobType === "recurring" && recurrenceEnd && startDate && recurrenceEnd < startDate) {
+      toast.error("End date cannot be before the start date");
+      return;
+    }
 
     setIsPending(true);
     try {
@@ -268,6 +471,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         packageName: jobType === "package" ? (selectedPackage?.name ?? null) : null,
         packageRenewal: null,
         packageDiscount: null,
+        packageTotalSteps: jobType === "package" ? selectedPackageTotalSteps : null,
         conflictDays: [],
         inchTrigger: jobType === "snow" ? inchTrigger : null,
         invoiceType: jobType === "snow" ? invoiceType : null,
@@ -277,7 +481,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         source: null,
         paymentType: null,
         poNumber: null,
-        dateSold: null,
+        dateSold: dateSold || todayStr(),
         whenToInvoice: null,
         invoiceSeparately: false,
         callAhead: false,
@@ -287,6 +491,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         waitingListEnd: (jobType === "waiting_list" || jobType === "package") ? completeByDate || null : null,
         startDateWindow: jobType === "recurring" ? startDate || null : null,
         endDateWindow: null,
+        recurrenceEnd: jobType === "recurring" ? (recurrenceEnd || null) : null,
         isComplete: jobType === "one_time" ? isComplete : false,
         notes: null,
         notesToCrew: notesToCrew || null,
@@ -299,7 +504,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           assignedTo: null,
           qty: s.qty,
           rateCents: s.rateCents,
-          budgetedHours: s.budgetedHours,
+          budgetedHours: roundHours(s.budgetedHours),
           budgetMethod: s.budgetMethod,
           teamSize: s.teamSize,
           daysCount: 1,
@@ -309,6 +514,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           sortOrder: idx,
           minDays: s.minDays,
         })),
+        products: productRows
+          .filter((p) => p.productId)
+          .map((p) => ({
+            productId: p.productId,
+            productName: p.productName,
+            qty: p.qty,
+            unitPriceCents: p.unitPriceCents,
+            unitCostCents: p.unitCostCents,
+          })),
       });
       toast.success("Job created");
       onOpenChange(false);
@@ -336,20 +550,33 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         <div className="flex gap-5 py-2">
           <div className="flex flex-1 flex-col gap-4 min-w-0">
 
+            {showTypeSelector && (
+              <div className="flex flex-col gap-1.5 max-w-xs">
+                <Label>Job Type *</Label>
+                <Select value={jobType} onValueChange={(v) => changeJobType(v as JobType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {JOB_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Client + Contract */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               {!defaultClientId ? (
                 <div className="flex flex-col gap-1.5">
                   <Label>Client *</Label>
-                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                    <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
-                    <SelectContent>
-                      {(clients ?? [])
-                        .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
-                        .sort((a, b) => a.displayName.localeCompare(b.displayName))
-                        .map((c) => <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  {/* Leads and lost leads can't have jobs — convert the lead first.
+                      (crm_jobs also enforces this with a DB trigger.) */}
+                  <ClientCombobox
+                    clients={(clients ?? [])
+                      .filter((c) => c.status !== "inactive" && c.status !== "cancelled" && c.status !== "lead" && c.status !== "lost")
+                      .sort((a, b) => a.displayName.localeCompare(b.displayName))}
+                    value={selectedClientId}
+                    onValueChange={setSelectedClientId}
+                    noneLabel="Select client…"
+                  />
                 </div>
               ) : <div />}
               <div className="flex flex-col gap-1.5">
@@ -363,13 +590,13 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Sales Rep</Label>
+                <Label>Sales Rep{rf.req("sales_rep")}</Label>
                 <Select value={salesRepId ?? "none"} onValueChange={(v) => setSalesRepId(v === "none" ? null : v)}>
                   <SelectTrigger><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Unassigned</SelectItem>
                     {salesReps.map((e) => (
-                      <SelectItem key={e.userId as string} value={e.userId as string}>
+                      <SelectItem key={e.id} value={e.id}>
                         {e.firstName} {e.lastName}
                       </SelectItem>
                     ))}
@@ -377,7 +604,11 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Crew</Label>
+                <Label>Date Sold</Label>
+                <Input type="date" value={dateSold} onChange={(e) => setDateSold(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Crew{rf.req("crew")}</Label>
                 <Select value={crewId ?? "unassigned"} onValueChange={(v) => setCrewId(v === "unassigned" ? null : v)}>
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
@@ -392,7 +623,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
             {/* Type-specific fields */}
             {jobType === "recurring" && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>Schedule *</Label>
                   {(crmSchedules ?? []).length > 0 ? (
@@ -413,7 +644,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Start Recurring</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>End Date <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+                  <Input type="date" value={recurrenceEnd} min={startDate || undefined} onChange={(e) => setRecurrenceEnd(e.target.value)} />
+                  <p className="text-xs text-slate-400">Visits are generated from the start date through this date (or year end if blank).</p>
                 </div>
               </div>
             )}
@@ -447,7 +683,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>Start Date</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Complete By</Label>
@@ -458,14 +694,25 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             {jobType === "package" && (
               <p className="text-xs text-slate-400 -mt-2">
                 Package jobs are scheduled within this date range and go to the Waiting List for opportunistic dispatch, rather than a fixed date.
+                {packageId && " Changing the Start Date shifts every step window by the same number of days."}
               </p>
+            )}
+            {jobType === "package" && packageId && (
+              <div className="flex items-center gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm">
+                <span className="text-slate-500">Monthly</span>
+                <span className="font-semibold text-slate-800">{formatCurrency(packageMonthlyCents)}</span>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-500">Total</span>
+                <span className="font-semibold text-slate-800">{formatCurrency(serviceTotalCents)}</span>
+                <span className="text-xs text-slate-400">({packageMonths} month{packageMonths === 1 ? "" : "s"}, {services.length} step{services.length === 1 ? "" : "s"})</span>
+              </div>
             )}
 
             {(jobType === "one_time" || jobType === "snow" || jobType === "project") && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>{jobType === "one_time" ? "Job Date" : "Start Date"}</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
                 </div>
                 {jobType === "one_time" && (
                   <div className="flex flex-col gap-1.5">
@@ -568,9 +815,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Button>
               </div>
               <div className="rounded border overflow-hidden">
+                <div className="overflow-x-auto">
                 {/* Header — uses org brand color. Recurring jobs: no per-row Start Date (use header "Start Recurring") */}
                 <div
-                  className="grid text-white text-xs font-medium px-3 py-2"
+                  className="grid min-w-[640px] text-white text-xs font-medium px-3 py-2"
                   style={{
                     gridTemplateColumns: showServiceDate
                       ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
@@ -590,7 +838,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 {services.map((svc, i) => (
                   <div
                     key={i}
-                    className="grid items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
+                    className="grid min-w-[640px] items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
                     style={{
                       gridTemplateColumns: showServiceDate
                         ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
@@ -604,7 +852,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       </SelectContent>
                     </Select>
                     {showServiceDate && (
-                      <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value })} className="h-7 px-1.5 text-xs" />
+                      <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value, startDateEdited: true })} className="h-7 px-1.5 text-xs" />
                     )}
                     {showCompleteBy ? (
                       <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 px-1.5 text-xs" />
@@ -631,17 +879,77 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         onCommit={(hrs) => updateService(i, { budgetedHours: hrs })}
                       />
                     )}
-                    <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateService(i, { teamSize: parseInt(e.target.value) || 1 })} className="h-7 text-xs" />
+                    <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateTeamSize(i, parseInt(e.target.value) || 1)} className="h-7 text-xs" />
                     <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>
                     <button type="button" onClick={() => removeService(i)} disabled={services.length === 1} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 disabled:opacity-30">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 ))}
+                </div>
                 <div className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
                   <span>Service Total</span>
                   <span>{formatCurrency(serviceTotalCents)}</span>
                 </div>
+              </div>
+            </div>
+
+            {/* Products table */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <Label>Products</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={addProductRow}>
+                  <Plus className="mr-1 h-3 w-3" /> Add Product
+                </Button>
+              </div>
+              <div className="rounded border overflow-hidden">
+                <div className="overflow-x-auto">
+                <div
+                  className="grid min-w-[480px] text-white text-xs font-medium px-3 py-2"
+                  style={{ gridTemplateColumns: "2fr 1fr 1fr 1.2fr 28px", backgroundColor: brandColor }}
+                >
+                  <span>Product</span>
+                  <span>Qty</span>
+                  <span>Unit Price ($)</span>
+                  <span>Total</span>
+                  <span />
+                </div>
+                {productRows.length === 0 && (
+                  <div className="px-3 py-3 text-center text-xs text-slate-400 bg-white">No products on this job yet.</div>
+                )}
+                {productRows.map((row, i) => (
+                  <div
+                    key={i}
+                    className="grid min-w-[480px] items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
+                    style={{ gridTemplateColumns: "2fr 1fr 1fr 1.2fr 28px" }}
+                  >
+                    <Select value={row.productId || ""} onValueChange={(v) => pickProduct(i, v)}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select product…" /></SelectTrigger>
+                      <SelectContent>
+                        {productCatalog.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" min="0" step="0.01" value={row.qty} onChange={(e) => updateProductRow(i, { qty: parseFloat(e.target.value) || 1 })} className="h-7 text-xs" />
+                    <DecimalInput
+                      min={0}
+                      className="h-7 text-xs"
+                      value={row.unitPriceCents / 100}
+                      selectOnFocus
+                      onCommit={(price) => updateProductRow(i, { unitPriceCents: Math.round(price * 100) })}
+                    />
+                    <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(row.qty * row.unitPriceCents)}</span>
+                    <button type="button" onClick={() => removeProductRow(i)} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                </div>
+                {productRows.length > 0 && (
+                  <div className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+                    <span>Product Total</span>
+                    <span>{formatCurrency(productTotalCents)}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -685,7 +993,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isPending}>
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              isPending ||
+              (rf.isRequired("crew") && !crewId) ||
+              (rf.isRequired("sales_rep") && !salesRepId)
+            }
+          >
             {isPending ? "Creating…" : "Create Job"}
           </Button>
         </DialogFooter>

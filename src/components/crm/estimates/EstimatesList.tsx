@@ -22,6 +22,8 @@ import { DEFAULT_SUBJECT, DEFAULT_TEMPLATE_BODY } from "./SendEstimateDialog";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import {
@@ -106,6 +108,10 @@ const ESTIMATE_TEMPLATE_COLUMNS = [
 
 export function EstimatesList({ clientId }: Props) {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("estimate_add");
+  const canEdit = can("estimate_edit");
+  const canSend = can("estimate_send");
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
@@ -261,6 +267,16 @@ export function EstimatesList({ clientId }: Props) {
 
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
 
+  if (!permissionsLoading && !can("estimate_list")) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="No access"
+        description="You don't have permission to view Estimates."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
 
@@ -270,7 +286,7 @@ export function EstimatesList({ clientId }: Props) {
           title="Estimates"
           description={!isLoading ? `${allEstimates.length} estimates${totalIncome > 0 ? ` · ${formatCurrency(totalIncome)} income · ${bpsToPercent(avgMarginBps)} avg margin` : ""}` : undefined}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Estimates"
                 templateColumns={ESTIMATE_TEMPLATE_COLUMNS}
@@ -298,9 +314,11 @@ export function EstimatesList({ clientId }: Props) {
                   }
                 }}
               />
-              <Button size="sm" onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-1.5 h-4 w-4" /> New Estimate
-              </Button>
+              {canAdd && (
+                <Button size="sm" onClick={() => setDialogOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" /> New Estimate
+                </Button>
+              )}
             </div>
           }
         />
@@ -309,7 +327,7 @@ export function EstimatesList({ clientId }: Props) {
       {/* ── 2. White column filter bar ── */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {FILTER_BUTTONS.map(({ key, label }) => (
             <button
               key={key}
@@ -342,7 +360,7 @@ export function EstimatesList({ clientId }: Props) {
             </>
           )}
         </div>
-        {clientId && (
+        {clientId && canAdd && (
           <div className="ml-auto">
             <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1 h-3 w-3" /> New Estimate
@@ -352,8 +370,8 @@ export function EstimatesList({ clientId }: Props) {
       </div>
 
       {/* ── 3. Dark actions bar with stage tabs + search ── */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -366,44 +384,58 @@ export function EstimatesList({ clientId }: Props) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                disabled={!someSelected || emailingSelected}
-                onSelect={() => void bulkEmailSelected()}
-              >
-                {emailingSelected ? "Emailing…" : "Email Selected"}
-              </DropdownMenuItem>
+              {canSend && (
+                <DropdownMenuItem
+                  disabled={!someSelected || emailingSelected}
+                  onSelect={() => void bulkEmailSelected()}
+                >
+                  {emailingSelected ? "Emailing…" : "Email Selected"}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 disabled={!someSelected}
                 onSelect={() => { toast.info("Opening print view…"); window.print(); }}
               >
                 Print Selected
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("sent")}>
-                Mark as Sent
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("accepted")}>
-                Mark as Accepted
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={selectedIds.size !== 1}
-                onSelect={() => {
-                  const id = Array.from(selectedIds)[0];
-                  const est = filtered.find((e) => e.id === id);
-                  if (est) setDuplicateTarget({ id: est.id, description: est.description ?? "" });
-                }}
-              >
-                <Copy className="mr-2 h-3.5 w-3.5" /> Copy Estimate
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!someSelected}
-                className="text-red-600 focus:text-red-600"
-                onSelect={() => bulkSetStage("lost")}
-              >
-                Mark as Lost
-              </DropdownMenuItem>
+              {canEdit && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("sent")}>
+                    Mark as Sent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("accepted")}>
+                    Mark as Accepted
+                  </DropdownMenuItem>
+                </>
+              )}
+              {canAdd && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={selectedIds.size !== 1}
+                    onSelect={() => {
+                      const id = Array.from(selectedIds)[0];
+                      const est = filtered.find((e) => e.id === id);
+                      if (est) setDuplicateTarget({ id: est.id, description: est.description ?? "" });
+                    }}
+                  >
+                    <Copy className="mr-2 h-3.5 w-3.5" /> Copy Estimate
+                  </DropdownMenuItem>
+                </>
+              )}
+              {canEdit && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!someSelected}
+                    className="text-red-600 focus:text-red-600"
+                    onSelect={() => bulkSetStage("lost")}
+                  >
+                    Mark as Lost
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <button
@@ -413,7 +445,7 @@ export function EstimatesList({ clientId }: Props) {
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="ml-2 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {stageTabs.map(({ value, label }) => {
               const count = counts[value] ?? 0;
               return (
@@ -494,7 +526,7 @@ export function EstimatesList({ clientId }: Props) {
         <EstimatesPipelineView
           estimates={filtered}
           stages={estimateStages}
-          onEstimateClick={(id) => router.push(`/crm/estimates/${id}`)}
+          onEstimateClick={(id) => { if (canEdit) router.push(`/crm/estimates/${id}`); }}
           onStageChange={(id, stage) => updateStage({ id, stage })}
         />
       )}
@@ -545,14 +577,16 @@ export function EstimatesList({ clientId }: Props) {
               </tr>
             ) : (
               filtered.map((e) => {
-                const marginBps = e.revenueCents > 0
-                  ? Math.round((e.grossProfitCents / e.revenueCents) * 10000)
+                const hasRevenue = typeof e.revenueCents === "number" && e.revenueCents > 0;
+                const marginBps = hasRevenue
+                  ? Math.round(((e.grossProfitCents ?? 0) / e.revenueCents) * 10000)
                   : 0;
                 return (
                   <tr key={e.id} className={cn(
-                    "group cursor-pointer border-b hover:bg-slate-50",
+                    "group border-b hover:bg-slate-50",
+                    canEdit && "cursor-pointer",
                     selectedIds.has(e.id) && "bg-brand-50"
-                  )} onClick={() => router.push(`/crm/estimates/${e.id}`)}>
+                  )} onClick={canEdit ? () => router.push(`/crm/estimates/${e.id}`) : undefined}>
 
                     <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                       <input
@@ -606,14 +640,17 @@ export function EstimatesList({ clientId }: Props) {
                           return <td key={col.key} className="px-3 py-2.5 text-xs text-slate-600">{e.salesRepName ?? "—"}</td>;
                         case "prob":
                           return <td key={col.key} className="px-3 py-2.5 text-right text-xs text-slate-500">{e.probabilityBps > 0 ? `${(e.probabilityBps / 100).toFixed(0)}%` : "—"}</td>;
+                        // Income / GP / Margin: "—" only when the estimate has no
+                        // priced revenue yet (truly unknown). Once revenue exists,
+                        // a $0 gross profit or 0% margin is a real figure — show it.
                         case "income":
-                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{e.revenueCents > 0 ? formatCurrency(e.revenueCents) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{hasRevenue ? formatCurrency(e.revenueCents) : "—"}</td>;
                         case "gp":
-                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{e.grossProfitCents > 0 ? formatCurrency(e.grossProfitCents) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{hasRevenue ? formatCurrency(e.grossProfitCents ?? 0) : "—"}</td>;
                         case "margin":
                           return (
                             <td key={col.key} className={cn("px-3 py-2.5 text-right text-xs font-medium", marginBps >= 3000 ? "text-green-600" : marginBps >= 1500 ? "text-yellow-600" : marginBps > 0 ? "text-red-500" : "text-slate-400")}>
-                              {marginBps !== 0 ? bpsToPercent(marginBps) : "—"}
+                              {hasRevenue ? bpsToPercent(marginBps) : "—"}
                             </td>
                           );
                         default: return null;

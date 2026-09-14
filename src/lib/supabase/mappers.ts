@@ -155,6 +155,8 @@ export function mapProject(row: ProjectRow): Project {
     endDate: row.end_date,
     totalCost: row.total_cost,
     contractPrice: row.contract_price ?? 0,
+    originalContractPrice: row.original_contract_price ?? row.contract_price ?? 0,
+    estimatedCostCents: (row as Record<string, unknown>).estimated_cost_cents as number ?? 0,
     laborHours: (row as Record<string, unknown>).labor_hours as number | null ?? null,
     budgetHours: (row as Record<string, unknown>).budget_hours as number | null ?? null,
     laborRateCents: (row as Record<string, unknown>).labor_rate_cents as number | null ?? null,
@@ -230,9 +232,12 @@ export function mapRequisition(
     salesTax: row.sales_tax,
     shippingCost: row.shipping_cost,
     discountCost: row.discount_cost,
+    discountReducesTax: row.discount_reduces_tax,
     grandTotal: row.grand_total,
     notes: row.notes,
     workOrderId: row.work_order_id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    crmJobId: (row as any).crm_job_id ?? null,
     convertedPoId: row.converted_po_id,
   };
 }
@@ -259,6 +264,7 @@ export function mapPurchaseOrder(
     salesTax: row.sales_tax,
     shippingCost: row.shipping_cost,
     discountCost: row.discount_cost,
+    discountReducesTax: row.discount_reduces_tax,
     grandTotal: row.grand_total,
     requisitionId: row.requisition_id,
     paymentSubmittedToAP: row.payment_submitted_to_ap,
@@ -329,6 +335,7 @@ export function mapComment(row: CommentRow): Comment {
     authorId: row.author_id ?? "",
     authorName: row.author_name,
     body: row.body,
+    mentionedUserIds: row.mentioned_user_ids ?? [],
   };
 }
 

@@ -118,13 +118,13 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                   onBlur={(e) => {
                     const caption = e.target.value.trim();
                     if (caption !== (photo.caption ?? "")) {
-                      updateCaption.mutate({ photoId: photo.id, caption });
+                      updateCaption.mutate({ photoId: photo.id, caption }, { onError: () => toast.error("Failed to save caption") });
                     }
                   }}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                 />
                 <button
-                  onClick={() => updateVisibility.mutate({ photoId: photo.id, customerFacing: !photo.customerFacing })}
+                  onClick={() => updateVisibility.mutate({ photoId: photo.id, customerFacing: !photo.customerFacing }, { onError: () => toast.error("Failed to update visibility") })}
                   className={cn(
                     "rounded p-1 transition-colors",
                     photo.customerFacing

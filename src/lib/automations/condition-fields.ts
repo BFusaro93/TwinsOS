@@ -181,6 +181,7 @@ export const BOOLEAN_CONDITION_FIELDS = new Set<ConditionField>([
   "has_credit_card",
   "does_not_have_credit_card",
   "is_opted_in_emails",
+  "opt_in_texts",
   "client_currently_has_recurring_job",
   "client_does_not_have_recurring_job",
   "client_has_ever_had_recurring_job",

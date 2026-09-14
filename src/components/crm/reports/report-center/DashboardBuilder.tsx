@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, ArrowLeft, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, BookmarkPlus, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +32,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getDashboardTemplate } from "@/lib/reports/dashboard-templates";
+import { panelFromGraphic } from "@/lib/reports/panel-from-graphic";
+import { ALL_REPORTS } from "@/lib/reports/registry";
 import {
   aggregateAlias,
   aggregateLabel,
@@ -39,16 +42,26 @@ import {
 } from "@/lib/hooks/use-analysis-config-builder";
 import {
   useCreateDashboard,
+  useCreateSavedGraphic,
   useCustomReport,
   useCustomReports,
   useDashboard,
   useDeleteDashboard,
+  useGraphicLibraryItems,
+  useRunReport,
   useRunVisualQuery,
   useUpdateDashboard,
 } from "@/lib/hooks/use-report-center";
+import { getReport } from "@/lib/reports/registry";
+import { REPORT_SECTIONS } from "@/types/crm-reports";
 import type { CustomReport, DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
+import { defaultFilterValues } from "./ReportFilterBar";
+import { ReportTable } from "./ReportTable";
 import { VisualRenderer } from "./VisualRenderer";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { LayoutDashboard } from "lucide-react";
 
 // ============================================================
 // Dashboard Builder — page-based (no drag-and-drop) editor for
@@ -61,12 +74,30 @@ const SIZE_OPTIONS: { value: DashboardPanel["size"]; label: string }[] = [
   { value: "full", label: "Full" },
 ];
 
+type RelativeDateFilter = NonNullable<VisualSpec["relativeDateFilter"]>;
+
+/** Every relativeDateFilter the VisualSpec schema accepts — the panel
+ *  editor's <Select> offers exactly these, and the save mapping only
+ *  persists one of them (anything else, e.g. "none", becomes undefined). */
+const RELATIVE_DATE_FILTER_OPTIONS: { value: RelativeDateFilter; label: string }[] = [
+  { value: "today", label: "Filter to today" },
+  { value: "yesterday", label: "Filter to yesterday" },
+  { value: "this_month", label: "Month to date" },
+  { value: "this_year", label: "Year to date" },
+];
+
+function isRelativeDateFilter(value: string): value is RelativeDateFilter {
+  return RELATIVE_DATE_FILTER_OPTIONS.some((o) => o.value === value);
+}
+
 const VISUAL_TYPE_OPTIONS: { value: VisualType; label: string }[] = [
   { value: "kpi", label: "KPI" },
   { value: "table", label: "Table" },
   { value: "bar", label: "Bar Chart" },
   { value: "line", label: "Line Chart" },
   { value: "pie", label: "Pie Chart" },
+  { value: "gauge", label: "Gauge" },
+  { value: "crosstab", label: "Crosstab" },
 ];
 
 const SIZE_SPAN_CLASS: Record<DashboardPanel["size"], string> = {
@@ -114,6 +145,27 @@ function panelFromSavedReport(report: CustomReport): DashboardPanel {
       kpiColumn: report.kpiColumn ?? undefined,
       savedReportId: report.id,
       formatRules: report.formatRules,
+      colorSpectrumColumns: report.colorSpectrumColumns,
+    },
+  };
+}
+
+/** Builds a panel that embeds an existing Report Center prebuilt report by
+ *  key — for reports with bespoke `run` logic (e.g. date-bucketed aging
+ *  reports) that can't be expressed as a plain AnalysisConfig/VisualSpec.
+ *  `visual` is an inert placeholder here; DashboardPanelView renders the
+ *  report instead of it whenever `reportKey` is set. */
+function panelFromReport(reportKey: string, name: string): DashboardPanel {
+  return {
+    id: crypto.randomUUID(),
+    title: name,
+    size: "half",
+    reportKey,
+    visual: {
+      type: "table",
+      config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+      useTabDateRange: false,
+      valueColumns: [],
     },
   };
 }
@@ -136,6 +188,7 @@ function previewDateRange(): { from: string; to: string } {
 export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: existing, isLoading: loadingExisting } = useDashboard(dashboardId);
   const createDashboard = useCreateDashboard();
   const updateDashboard = useUpdateDashboard();
@@ -143,6 +196,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
 
   const [name, setName] = useState("Untitled Dashboard");
   const [description, setDescription] = useState("");
+  const [visibleToCrew, setVisibleToCrew] = useState(false);
   const [tabs, setTabs] = useState<DashboardTab[]>(() => defaultTabs());
   const [activeTabId, setActiveTabId] = useState("tab-1");
   const [editingPanel, setEditingPanel] = useState<DashboardPanel | null>(null);
@@ -150,13 +204,31 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const [hydrated, setHydrated] = useState(false);
   const [tabPendingRemoval, setTabPendingRemoval] = useState<DashboardTab | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [graphicPickerOpen, setGraphicPickerOpen] = useState(false);
+  const [reportPickerOpen, setReportPickerOpen] = useState(false);
+  const [reportSearch, setReportSearch] = useState("");
   const { data: savedReports = [] } = useCustomReports();
+  const { items: graphicItems } = useGraphicLibraryItems();
+
+  const reportSections = useMemo(() => {
+    const q = reportSearch.trim().toLowerCase();
+    return REPORT_SECTIONS.map((section) => ({
+      ...section,
+      reports: ALL_REPORTS.filter(
+        (r) =>
+          r.section === section.key &&
+          !r.href && // link-out reports have no data to embed
+          (q === "" || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
+      ),
+    })).filter((section) => section.reports.length > 0);
+  }, [reportSearch]);
 
   // hydrate once when editing an existing dashboard
   useEffect(() => {
     if (!existing || hydrated) return;
     setName(existing.name);
     setDescription(existing.description ?? "");
+    setVisibleToCrew(existing.visibleToCrew);
     const nextTabs = existing.config.tabs.length > 0 ? existing.config.tabs : defaultTabs();
     setTabs(nextTabs);
     setActiveTabId(nextTabs[0].id);
@@ -242,12 +314,14 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
           name: name.trim(),
           description: description.trim() || null,
           config: { tabs },
+          visibleToCrew,
         });
       } else {
         const created = await createDashboard.mutateAsync({
           name: name.trim(),
           description: description.trim() || null,
           config: { tabs },
+          visibleToCrew,
         });
         router.push(`/crm/admin/reports/dashboards/${created.id}`);
       }
@@ -261,6 +335,16 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
     await deleteDashboard.mutateAsync(dashboardId);
     router.push("/crm/admin/reports?tab=dashboards");
   };
+
+  if (!permissionsLoading && !can("manage_report_center")) {
+    return (
+      <EmptyState
+        icon={LayoutDashboard}
+        title="No access"
+        description="You don't have permission to manage dashboards."
+      />
+    );
+  }
 
   if (dashboardId && loadingExisting) {
     return (
@@ -287,15 +371,23 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-9 w-80 text-base font-semibold"
+              className="h-9 w-full sm:w-80 text-base font-semibold"
               placeholder="Untitled Dashboard"
             />
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="h-8 w-80 text-sm"
+              className="h-8 w-full sm:w-80 text-sm"
               placeholder="Description (optional)"
             />
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <Checkbox
+                checked={visibleToCrew}
+                onCheckedChange={(v) => setVisibleToCrew(v === true)}
+              />
+              Show to crew logins
+              <span className="text-slate-400">— crew can open this dashboard from their home page</span>
+            </label>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => void handleSave()} disabled={saving || !name.trim()}>
@@ -434,6 +526,15 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                 />
                 Show a shared date range filter for this tab
               </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <Checkbox
+                  checked={!!activeTab.useRepFilter}
+                  onCheckedChange={(checked) =>
+                    updateActiveTab((tab) => ({ ...tab, useRepFilter: checked === true }))
+                  }
+                />
+                Show a shared Sales Rep filter for this tab
+              </label>
             </CardContent>
           </Card>
 
@@ -464,6 +565,14 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
               <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Add From Saved Analysis
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setGraphicPickerOpen(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add From Graphics Library
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setReportPickerOpen(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add From Report Center
               </Button>
             </div>
           )}
@@ -496,15 +605,101 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
             </DialogContent>
           </Dialog>
 
-          {editingPanel && (
-            <PanelEditor
-              key={editingPanel.id}
-              panel={editingPanel}
-              tabUsesDateFilter={activeTab.useDateFilter}
-              onSave={handleSavePanel}
-              onCancel={() => setEditingPanel(null)}
-            />
-          )}
+          <Dialog open={graphicPickerOpen} onOpenChange={setGraphicPickerOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Panel From Graphics Library</DialogTitle>
+              </DialogHeader>
+              <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+                {graphicItems.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No graphics available yet.
+                  </p>
+                )}
+                {graphicItems.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      setEditingPanel(panelFromGraphic(g.name, g.visual));
+                      setGraphicPickerOpen(false);
+                    }}
+                    className="flex flex-col rounded-md border p-3 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="flex items-center gap-2 font-medium">
+                      {g.name}
+                      <Badge variant="secondary" className="text-[10px]">
+                        {g.isSystem ? "Built-in" : "My Graphics"}
+                      </Badge>
+                    </span>
+                    {g.description && (
+                      <span className="text-xs text-muted-foreground">{g.description}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={reportPickerOpen} onOpenChange={setReportPickerOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Panel From Report Center</DialogTitle>
+              </DialogHeader>
+              <Input
+                value={reportSearch}
+                onChange={(e) => setReportSearch(e.target.value)}
+                placeholder="Search reports…"
+                className="h-9 text-sm"
+              />
+              <div className="flex max-h-96 flex-col gap-3 overflow-y-auto">
+                {reportSections.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No reports match &quot;{reportSearch}&quot;.
+                  </p>
+                )}
+                {reportSections.map((section) => (
+                  <div key={section.key} className="flex flex-col gap-1">
+                    <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {section.label}
+                    </span>
+                    {section.reports.map((r) => (
+                      <button
+                        key={r.key}
+                        onClick={() => {
+                          setEditingPanel(panelFromReport(r.key, r.name));
+                          setReportPickerOpen(false);
+                          setReportSearch("");
+                        }}
+                        className="flex flex-col rounded-md border p-3 text-left text-sm hover:bg-accent"
+                      >
+                        <span className="font-medium">{r.name}</span>
+                        <span className="text-xs text-muted-foreground">{r.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {editingPanel &&
+            (editingPanel.reportKey ? (
+              <ReportPanelEditor
+                key={editingPanel.id}
+                panel={editingPanel}
+                onSave={handleSavePanel}
+                onCancel={() => setEditingPanel(null)}
+              />
+            ) : (
+              <PanelEditor
+                key={editingPanel.id}
+                panel={editingPanel}
+                tabUsesDateFilter={activeTab.useDateFilter}
+                tabUsesRepFilter={!!activeTab.useRepFilter}
+                onSave={handleSavePanel}
+                onCancel={() => setEditingPanel(null)}
+              />
+            ))}
         </>
       )}
     </div>
@@ -520,16 +715,24 @@ function PanelPreviewCard({
   onEdit: () => void;
   onRemove: () => void;
 }) {
-  const { data, isLoading, error } = useRunVisualQuery(
-    panel.visual,
-    panel.visual.useTabDateRange ? previewDateRange() : undefined
-  );
+  const [saveOpen, setSaveOpen] = useState(false);
+  const isReportPanel = !!panel.reportKey;
 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm">{panel.title}</CardTitle>
         <div className="flex items-center gap-1">
+          {!isReportPanel && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Save to Graphics Library"
+              onClick={() => setSaveOpen(true)}
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" aria-label="Edit panel" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -545,37 +748,255 @@ function PanelPreviewCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1">
-        {isLoading && <Skeleton className="h-32 w-full" />}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Failed to load</AlertTitle>
-            <AlertDescription>{error.message}</AlertDescription>
-          </Alert>
+        {isReportPanel ? (
+          <ReportPanelPreview reportKey={panel.reportKey!} params={panel.reportParams} />
+        ) : (
+          <VisualPanelPreview visual={panel.visual} />
         )}
-        {data && !isLoading && !error && <VisualRenderer result={data} visual={panel.visual} />}
       </CardContent>
+      {!isReportPanel && (
+        <SaveToGraphicsLibraryDialog panel={panel} open={saveOpen} onOpenChange={setSaveOpen} />
+      )}
     </Card>
+  );
+}
+
+function VisualPanelPreview({ visual }: { visual: VisualSpec }) {
+  const { data, isLoading, error } = useRunVisualQuery(
+    visual,
+    visual.useTabDateRange ? previewDateRange() : undefined
+  );
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Failed to load</AlertTitle>
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!data) return null;
+  return <VisualRenderer result={data} visual={visual} />;
+}
+
+function ReportPanelPreview({
+  reportKey,
+  params,
+}: {
+  reportKey: string;
+  params?: Record<string, string>;
+}) {
+  const def = getReport(reportKey);
+  const effectiveParams = useMemo(
+    // Shared with ReportViewer so an "all_time" default writes range=all here too.
+    () => ({ ...(def ? defaultFilterValues(def.filters) : {}), ...params }),
+    [def, params]
+  );
+  const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
+
+  if (!def) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>Report &quot;{reportKey}&quot; no longer exists.</AlertDescription>
+      </Alert>
+    );
+  }
+  if (isFetching && !data) return <Skeleton className="h-32 w-full" />;
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Failed to load</AlertTitle>
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!data) return null;
+  return (
+    <div className="max-h-72 overflow-auto">
+      <ReportTable result={data} formatRules={def.formatRules} />
+    </div>
+  );
+}
+
+function SaveToGraphicsLibraryDialog({
+  panel,
+  open,
+  onOpenChange,
+}: {
+  panel: DashboardPanel;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const createSavedGraphic = useCreateSavedGraphic();
+  const [name, setName] = useState(panel.title);
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName(panel.title);
+      setDescription("");
+      setCategory("");
+      setError(null);
+    }
+  }, [open, panel.title]);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setError(null);
+    try {
+      await createSavedGraphic.mutateAsync({
+        name: name.trim(),
+        description: description.trim() || null,
+        category: category.trim() || null,
+        visual: panel.visual,
+      });
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Save to Graphics Library</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name"
+            className="h-9 text-sm"
+          />
+          <Input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description (optional)"
+            className="h-9 text-sm"
+          />
+          <Input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Category (optional)"
+            className="h-9 text-sm"
+          />
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <Button
+            size="sm"
+            onClick={() => void handleSave()}
+            disabled={!name.trim() || createSavedGraphic.isPending}
+          >
+            {createSavedGraphic.isPending ? "Saving…" : "Save Graphic"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Editor for a report-embed panel — deliberately minimal (just title/size)
+ *  since the data comes entirely from the report definition, not a
+ *  user-configured query. */
+function ReportPanelEditor({
+  panel,
+  onSave,
+  onCancel,
+}: {
+  panel: DashboardPanel;
+  onSave: (panel: DashboardPanel) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(panel.title);
+  const [size, setSize] = useState<DashboardPanel["size"]>(panel.size);
+  const def = getReport(panel.reportKey!);
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Panel Settings</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="h-9 w-64 text-sm"
+            placeholder="Panel title"
+          />
+          <Select value={size} onValueChange={(v) => setSize(v as DashboardPanel["size"])}>
+            <SelectTrigger className="h-9 w-32 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SIZE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">
+            Embeds &quot;{def?.name ?? panel.reportKey}&quot; from the Report Center — its filters,
+            exports, and schedule live on the full report page.
+          </span>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-4">
+          <ReportPanelPreview reportKey={panel.reportKey!} params={panel.reportParams} />
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={() => onSave({ ...panel, title, size })}>
+          Save Panel
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }
 
 interface PanelEditorProps {
   panel: DashboardPanel;
   tabUsesDateFilter: boolean;
+  tabUsesRepFilter: boolean;
   onSave: (panel: DashboardPanel) => void;
   onCancel: () => void;
 }
 
-function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditorProps) {
+function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCancel }: PanelEditorProps) {
   const [title, setTitle] = useState(panel.title);
   const [size, setSize] = useState<DashboardPanel["size"]>(panel.size);
   const [visualType, setVisualType] = useState<VisualType>(panel.visual.type);
   const [useTabDateRange, setUseTabDateRange] = useState(panel.visual.useTabDateRange);
+  const [useTabRepFilter, setUseTabRepFilter] = useState(!!panel.visual.useTabRepFilter);
+  const [relativeDateFilter, setRelativeDateFilter] = useState(
+    panel.visual.relativeDateFilter ?? "none"
+  );
   const [labelColumn, setLabelColumn] = useState(panel.visual.labelColumn ?? "");
   const [valueColumns, setValueColumns] = useState<string[]>(panel.visual.valueColumns);
   const [kpiColumn, setKpiColumn] = useState(panel.visual.kpiColumn ?? "");
+  const [gaugeMax, setGaugeMax] = useState(panel.visual.gaugeMax?.toString() ?? "");
+  const [budgetColumn, setBudgetColumn] = useState(panel.visual.budgetColumn ?? "");
+  const [crosstabHeaderColumn, setCrosstabHeaderColumn] = useState(
+    panel.visual.crosstabHeaderColumn ?? ""
+  );
+  const [stacked, setStacked] = useState(panel.visual.stacked ?? false);
+  const [topN, setTopN] = useState(panel.visual.topN?.toString() ?? "");
+  const [showOthers, setShowOthers] = useState(panel.visual.showOthers ?? false);
   const [savedReportId, setSavedReportId] = useState(panel.visual.savedReportId);
   const [formatRules, setFormatRules] = useState(panel.visual.formatRules);
+  const [colorSpectrumColumns, setColorSpectrumColumns] = useState(panel.visual.colorSpectrumColumns);
   const { data: linkedReport } = useCustomReport(savedReportId);
 
   const builder = useAnalysisConfigBuilder(
@@ -599,36 +1020,47 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
     error: previewError,
   } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? previewDateRange() : undefined);
 
-  const { grouped, groupBy, aggregates, columns, numericFields, fields } = builder;
+  const { grouped, groupBy, aggregates, columns, numericFields, fields, formulas } = builder;
+
+  // Formula columns are always numeric, so they belong in both the general
+  // output-column list (label columns, format rules) and the numeric-only
+  // value-column list (chart series, gauge/budget columns, color spectrum).
+  const formulaOptions = useMemo(
+    () =>
+      formulas
+        .filter((f) => f.name && f.left && f.right)
+        .map((f) => ({ value: f.name, label: f.name })),
+    [formulas]
+  );
 
   // "output columns" option set: grouped -> groupBy + aggregate aliases; else plain columns
   const outputOptions = useMemo(() => {
-    if (grouped) {
-      return [
-        ...groupBy.map((key) => ({
+    const base = grouped
+      ? [
+          ...groupBy.map((key) => ({
+            value: key,
+            label: fields.find((f) => f.key === key)?.label ?? key,
+          })),
+          ...aggregates
+            .filter((a) => a.column)
+            .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) })),
+        ]
+      : columns.map((key) => ({
           value: key,
           label: fields.find((f) => f.key === key)?.label ?? key,
-        })),
-        ...aggregates
-          .filter((a) => a.column)
-          .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) })),
-      ];
-    }
-    return columns.map((key) => ({
-      value: key,
-      label: fields.find((f) => f.key === key)?.label ?? key,
-    }));
-  }, [grouped, groupBy, aggregates, columns, fields]);
+        }));
+    return [...base, ...formulaOptions];
+  }, [grouped, groupBy, aggregates, columns, fields, formulaOptions]);
 
   // value-column option set for charts: grouped -> aggregate aliases only; else numeric fields
   const valueOptions = useMemo(() => {
-    if (grouped) {
-      return aggregates
-        .filter((a) => a.column)
-        .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) }));
-    }
-    return numericFields.map((f) => ({ value: f.key, label: f.label }));
-  }, [grouped, aggregates, numericFields, fields]);
+    const base = grouped
+      ? aggregates
+          .filter((a) => a.column)
+          .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) }))
+      : numericFields.map((f) => ({ value: f.key, label: f.label }));
+    return [...base, ...formulaOptions];
+  }, [grouped, aggregates, numericFields, fields, formulaOptions]);
 
   const isChart = visualType === "bar" || visualType === "line" || visualType === "pie";
 
@@ -639,11 +1071,29 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       type: visualType,
       config,
       useTabDateRange,
+      useTabRepFilter: useTabRepFilter || undefined,
+      relativeDateFilter: isRelativeDateFilter(relativeDateFilter) ? relativeDateFilter : undefined,
       labelColumn: labelColumn || undefined,
       valueColumns,
       kpiColumn: kpiColumn || undefined,
+      gaugeMax:
+        visualType === "gauge" && gaugeMax && Number.isFinite(Number(gaugeMax)) && Number(gaugeMax) > 0
+          ? Number(gaugeMax)
+          : undefined,
+      budgetColumn: visualType === "gauge" && budgetColumn ? budgetColumn : undefined,
+      stacked: visualType === "bar" ? stacked : undefined,
+      topN:
+        (visualType === "bar" || visualType === "pie") &&
+        topN &&
+        Number.isFinite(Number(topN)) &&
+        Number(topN) > 0
+          ? Math.floor(Number(topN))
+          : undefined,
+      showOthers: (visualType === "bar" || visualType === "pie") ? showOthers : undefined,
+      crosstabHeaderColumn: visualType === "crosstab" ? crosstabHeaderColumn || undefined : undefined,
       savedReportId,
       formatRules,
+      colorSpectrumColumns,
     };
   };
 
@@ -651,6 +1101,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
     if (!linkedReport) return;
     hydrateBuilder(builder, linkedReport.config);
     setFormatRules(linkedReport.formatRules);
+    setColorSpectrumColumns(linkedReport.colorSpectrumColumns);
     // Also pick up chart-setting changes made in My Reports since this panel
     // was linked/last refreshed — otherwise "refresh" only ever updated the
     // underlying query, silently leaving a stale visualization behind it.
@@ -671,11 +1122,13 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
 
   const canSave =
     builder.canRun &&
-    (visualType === "kpi"
+    (visualType === "kpi" || visualType === "gauge"
       ? !!kpiColumn
-      : isChart
-        ? !!labelColumn && valueColumns.length > 0
-        : true);
+      : visualType === "crosstab"
+        ? !!labelColumn && !!crosstabHeaderColumn && valueColumns.length > 0
+        : isChart
+          ? !!labelColumn && valueColumns.length > 0
+          : true);
 
   const handleSave = () => {
     const visual = buildVisual();
@@ -744,6 +1197,28 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
               Use this tab&apos;s shared date range
             </label>
           )}
+          {tabUsesRepFilter && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <Checkbox
+                checked={useTabRepFilter}
+                onCheckedChange={(checked) => setUseTabRepFilter(checked === true)}
+              />
+              Use this tab&apos;s shared Sales Rep filter
+            </label>
+          )}
+          <Select value={relativeDateFilter} onValueChange={setRelativeDateFilter}>
+            <SelectTrigger className="h-9 w-44 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No relative date filter</SelectItem>
+              {RELATIVE_DATE_FILTER_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </CardContent>
       </Card>
 
@@ -752,13 +1227,13 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       {builder.datasetDef && isChart && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="w-32 text-xs font-medium text-slate-600">Label Column</span>
               <Select value={labelColumn} onValueChange={setLabelColumn}>
-                <SelectTrigger className="h-8 w-64 text-sm">
+                <SelectTrigger className="h-8 w-full sm:w-64 text-sm">
                   <SelectValue placeholder="Choose a label column…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -811,6 +1286,36 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
                 </div>
               )}
             </div>
+            {visualType === "bar" && valueColumns.length > 1 && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <Checkbox
+                  checked={stacked}
+                  onCheckedChange={(checked) => setStacked(checked === true)}
+                />
+                Stack value columns in one bar
+              </label>
+            )}
+            {(visualType === "bar" || visualType === "pie") && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="w-32 text-xs font-medium text-slate-600">Limit To</span>
+                <Input
+                  type="number"
+                  value={topN}
+                  onChange={(e) => setTopN(e.target.value)}
+                  placeholder="e.g. 10 (blank = all)"
+                  className="h-8 w-44 text-sm"
+                />
+                {topN && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                    <Checkbox
+                      checked={showOthers}
+                      onCheckedChange={(checked) => setShowOthers(checked === true)}
+                    />
+                    Group the rest into &quot;Others&quot;
+                  </label>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -818,7 +1323,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       {builder.datasetDef && visualType === "kpi" && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-3">
             <span className="w-32 text-xs font-medium text-slate-600">KPI Value</span>
@@ -834,6 +1339,123 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
                 ))}
               </SelectContent>
             </Select>
+          </CardContent>
+        </Card>
+      )}
+
+      {builder.datasetDef && visualType === "gauge" && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Gauge Value</span>
+              <Select value={kpiColumn} onValueChange={setKpiColumn}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a value…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Budget Column</span>
+              <Select
+                value={budgetColumn || "__none"}
+                onValueChange={(v) => setBudgetColumn(v === "__none" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="None — use a fixed max instead" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">None — use a fixed max instead</SelectItem>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">
+                A column from this same query (e.g. budgeted hours) to use as the scale&apos;s max.
+              </span>
+            </div>
+            {!budgetColumn && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="w-32 text-xs font-medium text-slate-600">Fixed Gauge Max</span>
+                <Input
+                  type="number"
+                  value={gaugeMax}
+                  onChange={(e) => setGaugeMax(e.target.value)}
+                  placeholder="e.g. 100000"
+                  className="h-8 w-40 text-sm"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {builder.datasetDef && visualType === "crosstab" && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Row Label</span>
+              <Select value={labelColumn} onValueChange={setLabelColumn}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a row label column…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Header Column</span>
+              <Select value={crosstabHeaderColumn} onValueChange={setCrosstabHeaderColumn}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a column to pivot into headers…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Value Column</span>
+              <Select value={valueColumns[0] ?? ""} onValueChange={(v) => setValueColumns([v])}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a value to aggregate…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {valueOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Group By must include both the row label and header columns for a meaningful pivot.
+            </p>
           </CardContent>
         </Card>
       )}

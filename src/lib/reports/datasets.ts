@@ -3,10 +3,65 @@ import type { ReportDataset } from "@/types/crm-reports";
 // ============================================================
 // Dataset catalog — one entry per `rpt_*` reporting view.
 // Field keys MUST match the view columns exactly
-// (supabase/migrations/20260706000010_crm_report_center.sql).
+// (supabase/migrations/20260706233504_crm_report_center.sql and the
+// later `rpt_*` view migrations that extend it).
 // ============================================================
 
+/** crm_job_visits.status CHECK values (20260824114246_dispatch_board_columns.sql). */
+const VISIT_STATUS_OPTIONS = [
+  { value: "scheduled", label: "Scheduled" },
+  { value: "dispatched", label: "Dispatched" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "skipped", label: "Skipped" },
+];
+
 export const REPORT_DATASETS: ReportDataset[] = [
+  {
+    key: "rpt_upsells",
+    label: "Field Upsells",
+    description:
+      "Work crews flagged from the field, and whether it turned into a quote and a sale.",
+    defaultDateField: "submitted_at",
+    fields: [
+      { key: "ticket_number", label: "Ticket #", type: "number" },
+      { key: "submitted_at", label: "Submitted", type: "datetime" },
+      { key: "client_name", label: "Client", type: "text" },
+      { key: "service_suggested", label: "Service Suggested", type: "text" },
+      { key: "submitted_by", label: "Submitted By", type: "text" },
+      { key: "crew_name", label: "Crew", type: "text" },
+      {
+        // The ticket's own status — only ever "has the office dealt with it".
+        // Use Outcome for whether it earned anything.
+        key: "ticket_status",
+        label: "Ticket Status",
+        type: "text",
+        options: [
+          { value: "open", label: "Open" },
+          { value: "pending", label: "Pending" },
+          { value: "on_hold", label: "On Hold" },
+          { value: "closed", label: "Closed" },
+        ],
+      },
+      { key: "crew_note", label: "Crew Note", type: "text" },
+      { key: "estimate_number", label: "Estimate #", type: "number" },
+      { key: "estimate_stage", label: "Estimate Stage", type: "text" },
+      { key: "estimate_total_cents", label: "Estimate Total", type: "money" },
+      {
+        key: "outcome",
+        label: "Outcome",
+        type: "text",
+        options: [
+          { value: "Not quoted", label: "Not quoted" },
+          { value: "Quoted", label: "Quoted" },
+          { value: "Won", label: "Won" },
+          { value: "Lost", label: "Lost" },
+        ],
+      },
+      { key: "won_revenue_cents", label: "Won Revenue", type: "money" },
+    ],
+  },
   {
     key: "rpt_clients",
     label: "Clients",
@@ -24,7 +79,18 @@ export const REPORT_DATASETS: ReportDataset[] = [
           { value: "commercial", label: "Commercial" },
         ],
       },
-      { key: "status", label: "Status", type: "text" },
+      {
+        key: "status",
+        label: "Status",
+        type: "text",
+        options: [
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+          { value: "lead", label: "Lead" },
+          { value: "cancelled", label: "Cancelled" },
+          { value: "lost", label: "Lost" },
+        ],
+      },
       { key: "source", label: "Source", type: "text" },
       { key: "referred_by", label: "Referred By", type: "text" },
       { key: "client_since", label: "Client Since", type: "date" },
@@ -68,7 +134,9 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "is_primary", label: "Primary", type: "boolean" },
       { key: "ok_to_email", label: "OK to Email", type: "boolean" },
       { key: "sales_rep", label: "Sales Rep", type: "text" },
-      { key: "balance_outstanding_cents", label: "Account Balance", type: "money" },
+      // One row per contact, so a client with three contacts would count its
+      // balance three times in a totals row — never sum it.
+      { key: "balance_outstanding_cents", label: "Account Balance", type: "money", totalable: false },
       { key: "created_at", label: "Created At", type: "datetime" },
     ],
   },
@@ -100,7 +168,21 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "client_name", label: "Client", type: "text" },
       { key: "client_phone", label: "Client Phone", type: "text" },
       { key: "job_type", label: "Job Type", type: "text" },
-      { key: "status", label: "Status", type: "text" },
+      // crm_jobs.status CHECK values (20260617000003_crm_jobs.sql) — the job
+      // master record, not the per-visit status (see rpt_job_visits).
+      {
+        key: "status",
+        label: "Status",
+        type: "text",
+        options: [
+          { value: "scheduled", label: "Scheduled" },
+          { value: "in_progress", label: "In Progress" },
+          { value: "completed", label: "Completed" },
+          { value: "cancelled", label: "Cancelled" },
+          { value: "skipped", label: "Skipped" },
+          { value: "hold", label: "On Hold" },
+        ],
+      },
       { key: "sub_status", label: "Sub Status", type: "text" },
       { key: "scheduled_date", label: "Scheduled Date", type: "date" },
       { key: "date_sold", label: "Date Sold", type: "date" },
@@ -109,7 +191,9 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "crew_name", label: "Crew", type: "text" },
       { key: "service_names", label: "Services", type: "text" },
       { key: "man_count", label: "# of Men", type: "number" },
-      { key: "rate_cents", label: "Rate", type: "money" },
+      // Per-visit rate — a job's total is total_cents; summing rates across
+      // jobs is meaningless.
+      { key: "rate_cents", label: "Rate (per visit)", type: "money", totalable: false },
       { key: "budgeted_hours", label: "Budgeted Hours", type: "hours" },
       { key: "actual_hours", label: "Actual Hours", type: "hours" },
       { key: "service_total_cents", label: "Service Total", type: "money" },
@@ -134,20 +218,54 @@ export const REPORT_DATASETS: ReportDataset[] = [
     fields: [
       { key: "scheduled_date", label: "Scheduled Date", type: "date" },
       { key: "completed_at", label: "Completed At", type: "datetime" },
-      { key: "status", label: "Status", type: "text" },
+      // The date a completed visit is reported under: completed_at as an
+      // Eastern-time calendar date, else scheduled_date. Costing reports
+      // (Job Cost Summary, the Job Costing page) all date visits by this.
+      { key: "worked_date", label: "Worked Date", type: "date" },
+      // crm_job_visits.status CHECK values ('dispatched' added 2026-08-24).
+      {
+        key: "status",
+        label: "Status",
+        type: "text",
+        options: VISIT_STATUS_OPTIONS,
+      },
       { key: "sub_status", label: "Sub Status", type: "text" },
       { key: "client_name", label: "Client", type: "text" },
       { key: "service_names", label: "Services", type: "text" },
+      { key: "service_code", label: "Service Code", type: "text" },
       { key: "crew_name", label: "Crew", type: "text" },
       { key: "sales_rep", label: "Sales Rep", type: "text" },
       { key: "men_count", label: "# of Men", type: "number" },
-      { key: "budgeted_hours", label: "Budgeted Hours", type: "hours" },
-      { key: "actual_hours", label: "Actual Hours", type: "hours" },
+      { key: "actual_start_time", label: "Actual Start Time", type: "text" },
+      { key: "actual_stop_time", label: "Actual Stop Time", type: "text" },
+      // budgeted_hours is man-hours (service budgeted_hours × team_size).
+      // actual_hours and man_hours are the SAME figure in the view — the
+      // clock/entered duration already multiplied by men_count — so both are
+      // labeled as man-hours; pick one, never both, in a column list.
+      { key: "budgeted_hours", label: "Budgeted Man-Hours", type: "hours" },
+      { key: "actual_hours", label: "Actual Man-Hours", type: "hours" },
       { key: "man_hours", label: "Man Hours", type: "hours" },
-      { key: "rate_cents", label: "Rate", type: "money" },
+      // Rate × qty = revenue_cents; the rate itself is not additive.
+      { key: "rate_cents", label: "Rate", type: "money", totalable: false },
+      // Per-service visit → its own rate; whole-job visit → Σ included service
+      // lines (live, so re-pricing a line is reflected) → job rate.
       { key: "revenue_cents", label: "Revenue", type: "money" },
+      // Crew clock-out actual when recorded; otherwise man-hours × the crew's
+      // (then org's) average labor rate; 0 when no rate is configured anywhere.
+      // labor_cost_source says which: actual / estimated / none.
       { key: "actual_labor_cost_cents", label: "Labor Cost", type: "money" },
+      {
+        key: "labor_cost_source",
+        label: "Labor Cost Source",
+        type: "text",
+        options: [
+          { value: "actual", label: "Actual (crew clock-out)" },
+          { value: "estimated", label: "Estimated (hours × labor rate)" },
+          { value: "none", label: "None (no labor rate configured)" },
+        ],
+      },
       { key: "rev_per_man_hr_cents", label: "Rev / Man Hr", type: "money", totalable: false },
+      { key: "budgeted_rev_per_man_hr_cents", label: "Budgeted Rev / Man Hr", type: "money", totalable: false },
       { key: "variance_hours", label: "Hours Variance", type: "hours" },
       { key: "service_city", label: "Service City", type: "text" },
       { key: "service_zip", label: "Service Zip", type: "text" },
@@ -155,6 +273,11 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "clocked_in_at", label: "Clocked In", type: "datetime" },
       { key: "clocked_out_at", label: "Clocked Out", type: "datetime" },
       { key: "budget_methods", label: "Budget Method(s)", type: "text" },
+      // Not shown in the report builder's column picker (not in a UI list
+      // anywhere) — exists only so a service-role caller (e.g. the
+      // report-schedules cron, which has no user session for RLS to scope
+      // by) can filter to one org explicitly.
+      { key: "org_id", label: "Org", type: "text" },
     ],
   },
   {
@@ -164,6 +287,7 @@ export const REPORT_DATASETS: ReportDataset[] = [
     defaultDateField: "scheduled_date",
     fields: [
       { key: "job_status", label: "Job Status", type: "text" },
+      { key: "visit_status", label: "Visit Status", type: "text", options: VISIT_STATUS_OPTIONS },
       { key: "is_complete", label: "Complete", type: "boolean" },
       { key: "scheduled_date", label: "Scheduled Date", type: "date" },
       { key: "client_name", label: "Client", type: "text" },
@@ -173,8 +297,16 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "budget_method", label: "Budget Method", type: "text" },
       { key: "assumed_production_rate", label: "Assumed Rate (sqft/hr)", type: "number", totalable: false },
       { key: "qty", label: "Qty", type: "number" },
-      { key: "budgeted_hours", label: "Budgeted Hours", type: "hours" },
-      { key: "job_actual_hours", label: "Actual Hours", type: "hours" },
+      // budgeted_hours is man-hours (crm_job_services.budgeted_hours ×
+      // team_size). job_actual_hours and actual_man_hours are the same
+      // per-visit man-hour share (the latter coalesced to 0) — labels say so.
+      { key: "budgeted_hours", label: "Budgeted Man-Hours", type: "hours" },
+      // The line's own price (qty × rate) and its share of the visit — a
+      // whole-job visit's hours are split across its lines by this share
+      // (revenue first, then budgeted hours when every line is $0, then even).
+      { key: "line_revenue_cents", label: "Line Revenue", type: "money" },
+      { key: "revenue_share", label: "Share of Visit", type: "number", totalable: false },
+      { key: "job_actual_hours", label: "Actual Man-Hours (visit)", type: "hours" },
       { key: "man_count", label: "# of Men", type: "number" },
       { key: "actual_man_hours", label: "Actual Man-Hours", type: "hours" },
       { key: "actual_production_rate", label: "Actual Rate (sqft/hr)", type: "number", totalable: false },
@@ -190,7 +322,22 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "invoice_number", label: "Invoice #", type: "number" },
       { key: "invoice_date", label: "Invoice Date", type: "date" },
       { key: "due_date", label: "Due Date", type: "date" },
-      { key: "status", label: "Status", type: "text" },
+      {
+        key: "status",
+        label: "Status",
+        type: "text",
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "printed", label: "Printed" },
+          { value: "sent", label: "Sent" },
+          { value: "viewed", label: "Viewed" },
+          { value: "partial", label: "Partial" },
+          { value: "paid", label: "Paid" },
+          { value: "overdue", label: "Overdue" },
+          { value: "void", label: "Void" },
+        ],
+      },
+      { key: "is_issued", label: "Issued (not draft/void)", type: "boolean" },
       { key: "client_name", label: "Client", type: "text" },
       { key: "sales_rep", label: "Sales Rep", type: "text" },
       { key: "description", label: "Description", type: "text" },
@@ -219,7 +366,22 @@ export const REPORT_DATASETS: ReportDataset[] = [
     fields: [
       { key: "invoice_number", label: "Invoice #", type: "number" },
       { key: "invoice_date", label: "Invoice Date", type: "date" },
-      { key: "invoice_status", label: "Invoice Status", type: "text" },
+      {
+        key: "invoice_status",
+        label: "Invoice Status",
+        type: "text",
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "printed", label: "Printed" },
+          { value: "sent", label: "Sent" },
+          { value: "viewed", label: "Viewed" },
+          { value: "partial", label: "Partial" },
+          { value: "paid", label: "Paid" },
+          { value: "overdue", label: "Overdue" },
+          { value: "void", label: "Void" },
+        ],
+      },
+      { key: "is_issued", label: "Invoice Issued (not draft/void)", type: "boolean" },
       { key: "client_name", label: "Client", type: "text" },
       { key: "name", label: "Item", type: "text" },
       { key: "description", label: "Description", type: "text" },
@@ -247,7 +409,11 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "applied_amount_cents", label: "Applied Amount", type: "money" },
       { key: "unused_amount_cents", label: "Unused Amount", type: "money" },
       { key: "refunded_amount_cents", label: "Refunded", type: "money" },
+      { key: "net_amount_cents", label: "Net Amount (after refunds)", type: "money" },
+      { key: "processing_fee_cents", label: "Processing Fee", type: "money" },
       { key: "is_prepayment", label: "Prepayment", type: "boolean" },
+      { key: "is_credit", label: "Account Credit", type: "boolean" },
+      { key: "is_cash", label: "Cash Received (not credit/write-off)", type: "boolean" },
       { key: "invoice_number", label: "Invoice #", type: "number" },
       { key: "billing_zip", label: "Billing Zip", type: "text" },
       { key: "created_at", label: "Created At", type: "datetime" },
@@ -317,7 +483,10 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "status", label: "Status", type: "text" },
       { key: "start_date", label: "Start Date", type: "date" },
       { key: "end_date", label: "End Date", type: "date" },
-      { key: "monthly_amount_cents", label: "Monthly Amount", type: "money" },
+      // crm_contracts.monthly_amount_cents is the base figure; contracts with
+      // a per-month schedule (monthly_amounts) bill a different amount each
+      // month, so this is not "what bills this month".
+      { key: "monthly_amount_cents", label: "Base Monthly Amount", type: "money" },
       { key: "billing_frequency", label: "Billing Frequency", type: "text" },
       { key: "billing_day_of_month", label: "Billing Day", type: "number", totalable: false },
       { key: "is_active", label: "Active", type: "boolean" },
@@ -346,6 +515,19 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "hours", label: "Hours", type: "hours" },
       { key: "labor_burden_cents_per_hour", label: "Burden / Hr", type: "money", totalable: false },
       { key: "labor_cost_cents", label: "Labor Cost", type: "money" },
+    ],
+  },
+  {
+    key: "rpt_crew_drive_time",
+    label: "Crew Drive Time",
+    description: "Recorded crew drive-time segments (yard to first stop, between stops, last stop to yard).",
+    defaultDateField: "work_date",
+    fields: [
+      { key: "work_date", label: "Date", type: "date" },
+      { key: "crew_name", label: "Crew", type: "text" },
+      { key: "started_at", label: "Started", type: "datetime" },
+      { key: "ended_at", label: "Ended", type: "datetime" },
+      { key: "minutes", label: "Minutes", type: "number" },
     ],
   },
   {
@@ -440,6 +622,8 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "chemical_name", label: "Chemical", type: "text" },
       { key: "epa_registration_number", label: "EPA #", type: "text" },
       { key: "epa_number_snapshot", label: "EPA # (at time of use)", type: "text" },
+      { key: "re_entry_interval", label: "Re-Entry Interval", type: "text" },
+      { key: "restricted_product", label: "Restricted Product", type: "boolean" },
       { key: "chemical_amount", label: "Chemical Amount", type: "number", totalable: false },
       { key: "solution_amount", label: "Solution Amount", type: "number", totalable: false },
       { key: "unit_of_measure", label: "Unit", type: "text" },
@@ -458,6 +642,73 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "application_end_time", label: "Application End", type: "datetime" },
       { key: "budgeted_concentrate_amount", label: "Budgeted Concentrate", type: "number", totalable: false },
       { key: "notes", label: "Notes", type: "text" },
+    ],
+  },
+  {
+    key: "rpt_projects_wip",
+    label: "Projects — WIP Schedule",
+    description: "Work-in-progress schedule for Projects: original and revised contract value, approved change orders, EAC, percent complete, earned revenue, and over/under billing.",
+    defaultDateField: "created_at",
+    fields: [
+      { key: "name", label: "Project", type: "text" },
+      { key: "status", label: "Status", type: "text" },
+      { key: "client_name", label: "Client", type: "text" },
+      { key: "original_contract_cents", label: "Original Contract", type: "money" },
+      { key: "approved_changes_cents", label: "Approved Changes", type: "money" },
+      { key: "change_order_count", label: "Change Orders", type: "number" },
+      { key: "contract_cents", label: "Revised Contract", type: "money" },
+      { key: "eac_cents", label: "EAC", type: "money" },
+      { key: "estimated_gp_cents", label: "Estimated GP", type: "money" },
+      { key: "estimated_gp_pct", label: "Estimated GP %", type: "percent", totalable: false },
+      { key: "cost_to_date_cents", label: "Cost to Date", type: "money" },
+      { key: "pct_complete", label: "% Complete", type: "percent", totalable: false },
+      { key: "earned_revenue_cents", label: "Earned Revenue", type: "money" },
+      { key: "billed_cents", label: "Billed to Date", type: "money" },
+      { key: "over_under_billed_cents", label: "Over / (Under) Billed", type: "money" },
+      { key: "remaining_to_bill_cents", label: "Remaining to Bill", type: "money" },
+      { key: "start_date", label: "Start Date", type: "date" },
+      { key: "end_date", label: "End Date", type: "date" },
+      { key: "created_at", label: "Created At", type: "datetime" },
+    ],
+  },
+  {
+    key: "rpt_sales_rep_month",
+    label: "Sales Rep — Current Month",
+    description: "Each sales rep's invoiced revenue so far this month against their sales goal for the month.",
+    fields: [
+      { key: "sales_rep", label: "Sales Rep", type: "text" },
+      { key: "goal_cents", label: "Goal", type: "money" },
+      { key: "actual_cents", label: "Actual", type: "money" },
+    ],
+  },
+  {
+    key: "rpt_contract_service_usage",
+    label: "Contract Service Usage",
+    description: "Bundled services on active contracts (e.g. 25 mowings included) against actual completed visits.",
+    defaultDateField: "contract_start_date",
+    fields: [
+      { key: "client_name", label: "Client", type: "text" },
+      { key: "contract_title", label: "Contract", type: "text" },
+      {
+        key: "contract_status",
+        label: "Contract Status",
+        type: "text",
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "sent", label: "Sent" },
+          { value: "signed", label: "Signed" },
+          { value: "active", label: "Active" },
+          { value: "expired", label: "Expired" },
+          { value: "cancelled", label: "Cancelled" },
+        ],
+      },
+      { key: "contract_start_date", label: "Contract Start", type: "date" },
+      { key: "contract_end_date", label: "Contract End", type: "date" },
+      { key: "service_name", label: "Service", type: "text" },
+      { key: "visits_included", label: "Included", type: "number" },
+      { key: "visits_used", label: "Used", type: "number" },
+      { key: "visits_remaining", label: "Remaining", type: "number" },
+      { key: "is_over", label: "Over Included Count", type: "boolean" },
     ],
   },
 ];

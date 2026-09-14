@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Leaf, Calculator, PenLine, DollarSign, ShieldAlert, Snowflake } from "lucide-react";
+import { ArrowLeft, Calculator, PenLine, DollarSign, ShieldAlert, Snowflake } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
 import type { LucideIcon } from "lucide-react";
 
 interface ToolsNavItem {
@@ -14,22 +16,24 @@ interface ToolsNavItem {
   icon: LucideIcon;
   description: string;
   hideFromCrew?: boolean;
+  internalOnly?: boolean;
 }
 
-const TOOLS_NAV: ToolsNavItem[] = [
+export const TOOLS_NAV: ToolsNavItem[] = [
   { label: "Estimate Builder",  href: "/tools/estimate-builder", icon: PenLine,      description: "Generate estimate text & language",  hideFromCrew: true },
   { label: "Job Costing",       href: "/tools/job-costing",      icon: DollarSign,   description: "Track per-job material costs",        hideFromCrew: true },
   { label: "Damage Cases",      href: "/tools/damage-cases",     icon: ShieldAlert,  description: "Track property damage & warranty",    hideFromCrew: true },
   { label: "Calculators",       href: "/tools/calculators",      icon: Calculator,   description: "Material quantity calculators" },
-  { label: "Snow Pricing Calculator", href: "/tools/snow-calculator", icon: Snowflake, description: "Season & per-storm snow pricing" },
+  { label: "Snow Pricing Calculator", href: "/tools/snow-calculator", icon: Snowflake, description: "Season & per-storm snow pricing", internalOnly: true },
 ];
 
 export function ToolsSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const isCrew = currentUser.role === "crew";
+  const { isInternalOrg } = useIsInternalOrg();
 
   return (
     <aside
@@ -49,9 +53,7 @@ export function ToolsSidebar() {
             </>
           ) : (
             <>
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500">
-                <Leaf className="h-4 w-4 text-white" />
-              </div>
+              <BrandMark variant="reversed" className="h-7 w-7 shrink-0 rounded-md" />
               {!sidebarCollapsed && <span className="truncate text-lg font-bold text-brand-400">Tools</span>}
             </>
           )}
@@ -67,6 +69,7 @@ export function ToolsSidebar() {
         )}
         {TOOLS_NAV
           .filter((item) => !item.hideFromCrew || !isCrew)
+          .filter((item) => !item.internalOnly || isInternalOrg)
           .map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;

@@ -25,18 +25,23 @@ import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 
+type InitialStatus = "lead" | "active";
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated?: (client: Client) => void;
+  /** Pre-selected lifecycle status: "active" from Clients (default), "lead" when launched from Leads. */
+  initialStatus?: InitialStatus;
 }
 
-export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
+export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus = "active" }: Props) {
   const { mutateAsync: createClient, isPending } = useCreateClient();
   const rf = useRequiredFields("client");
 
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<"residential" | "commercial">("residential");
+  const [status, setStatus] = useState<InitialStatus>(initialStatus);
   const [primaryPhone, setPrimaryPhone] = useState("");
   const [primaryEmail, setPrimaryEmail] = useState("");
 
@@ -61,8 +66,9 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
         billingZip: "",
         source: "",
         salesRepId: "",
+        status,
       });
-      toast.success(`${client.displayName} created — fill in the details below`);
+      toast.success(`${client.displayName} created${status === "lead" ? " as a lead" : ""} — fill in the details below`);
       setCreatedId(client.id);
       // Close quick-create dialog, open full edit dialog
       onOpenChange(false);
@@ -81,6 +87,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
       setPrimaryPhone("");
       setPrimaryEmail("");
       setAccountType("residential");
+      setStatus(initialStatus);
       setCreatedId(null);
     }
   }
@@ -105,15 +112,27 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label>Account Type</Label>
-              <Select value={accountType} onValueChange={(v) => setAccountType(v as "residential" | "commercial")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="residential">Residential</SelectItem>
-                  <SelectItem value="commercial">Commercial</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Account Type</Label>
+                <Select value={accountType} onValueChange={(v) => setAccountType(v as "residential" | "commercial")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="residential">Residential</SelectItem>
+                    <SelectItem value="commercial">Commercial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Status</Label>
+                <Select value={status} onValueChange={(v) => setStatus(v as InitialStatus)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active client</SelectItem>
+                    <SelectItem value="lead">Lead (prospect)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

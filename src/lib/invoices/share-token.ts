@@ -59,6 +59,6 @@ export async function revokeInvoiceShareTokens(
 }
 
 export function buildInvoiceViewUrl(token: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://twins-os.vercel.app";
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
   return `${base}/invoice/${token}`;
 }

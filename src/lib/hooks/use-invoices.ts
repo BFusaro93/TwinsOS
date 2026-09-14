@@ -1,9 +1,90 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
+
+// ── locked-invoice error handling ───────────────────────────────────────────────
+
+// The crm_invoices / crm_invoice_line_items triggers added in
+// 20260901130000_crm_invoice_lock_server_enforcement.sql raise a plain
+// Postgres exception when a financial column or line item is written while
+// the invoice is locked. Postgrest surfaces that RAISE EXCEPTION message
+// verbatim as error.message, so detect it here and re-throw a normalized
+// Error — callers that only show `err.message` (or a generic toast) get a
+// clear, user-facing reason instead of depending on the raw driver text.
+const LOCKED_INVOICE_MESSAGE = "This invoice is locked and cannot be edited. Unlock it first.";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function throwIfLockedInvoiceError(error: any): never {
+  const message: string = error?.message ?? "";
+  if (message.toLowerCase().includes("locked and cannot be edited")) {
+    throw new Error(LOCKED_INVOICE_MESSAGE);
+  }
+  throw error;
+}
+
+// ── void eligibility ──────────────────────────────────────────────────────────
+
+// Voiding an invoice that already has payments applied would orphan those
+// payment allocations (the money stays recorded against a record that no
+// longer counts toward AR). It is blocked in three places so no path can slip
+// through: the UI disables the action, these hooks re-check server-truth
+// before the UPDATE, and a DB trigger
+// (20260907210000_crm_invoice_void_guards.sql) rejects it outright.
+export function voidBlockedMessage(amountPaidCents: number): string {
+  return `Refund or unapply the ${formatCents(amountPaidCents)} in payments before voiding this invoice.`;
+}
+
+function formatCents(cents: number): string {
+  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+/**
+ * Reads the invoice's current locked / amount_paid state straight from the DB
+ * and throws a user-facing Error when it must not be voided. Runs before the
+ * UPDATE so the caller's `catch` can show a real reason instead of a silent
+ * no-op.
+ */
+async function assertVoidable(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  id: string,
+): Promise<{ clientId: string | null }> {
+  const { data, error } = await supabase
+    .from("crm_invoices")
+    .select("client_id, status, locked, amount_paid_cents")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error("Invoice not found.");
+  if (data.status === "void") throw new Error("This invoice is already void.");
+  // `locked` deliberately does NOT block voiding. The lock guards the invoice's
+  // AMOUNTS (see crm_invoice_block_locked_financial_update, which only covers
+  // subtotal/discount/tax/total) and is set the moment an invoice is sent or
+  // printed — voiding an issued-but-unpaid invoice is the normal way to cancel
+  // one, so requiring unlock-then-void would gate the most common case.
+  const paid = Number(data.amount_paid_cents ?? 0);
+  if (paid > 0) throw new Error(voidBlockedMessage(paid));
+  return { clientId: data.client_id ?? null };
+}
+
+/**
+ * The DB-side void guards raise plain Postgres exceptions; Postgrest surfaces
+ * the RAISE message verbatim. Re-throw them as-is (they are already written
+ * for a user) rather than letting a raw driver error reach a generic toast.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function throwIfVoidGuardError(error: any): never {
+  const message: string = error?.message ?? "";
+  if (message.toLowerCase().includes("cannot be voided")) {
+    throw new Error(message);
+  }
+  throw error;
+}
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -54,6 +135,11 @@ function mapPayment(row: any): CRMPayment {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
+    // Only populated when the query joins `clients` (e.g. useInvoice()'s
+    // Payment History embed) — used to detect and label a cross-account
+    // payment (recorded against a parent client_id) shown on a child
+    // sub-account's invoice.
+    clientName: row.clients?.display_name ?? null,
   };
 }
 
@@ -66,6 +152,7 @@ export function mapInvoice(row: any): CRMInvoice {
     clientId: row.client_id,
     estimateId: row.estimate_id,
     crmJobId: row.crm_job_id,
+    projectId: row.project_id ?? null,
     salesRepId: row.sales_rep_id ?? null,
     description: row.description,
     status: row.status,
@@ -105,7 +192,10 @@ export function mapInvoice(row: any): CRMInvoice {
     clientSavedPaymentMethodType: row.clients?.saved_payment_method_type ?? null,
     clientSavedPaymentMethodSummary: row.clients?.saved_payment_method_summary ?? null,
     clientAutopayEnabled: row.clients?.autopay_enabled ?? true,
-    salesRepName: row.profiles?.name ?? null,
+    pendingPaymentCents: row.pending_payment_cents ?? null,
+    pendingPaymentMethod: row.pending_payment_method ?? null,
+    pendingPaymentAt: row.pending_payment_at ?? null,
+    salesRepName: row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null : null,
     clientInvoiceDelivery: row.clients?.invoice_delivery ?? "email",
     lineItems: (row.crm_invoice_line_items ?? []).map(mapLineItem),
     payments: (row.crm_payments ?? []).map(mapPayment),
@@ -114,22 +204,51 @@ export function mapInvoice(row: any): CRMInvoice {
 
 // ── queries ───────────────────────────────────────────────────────────────────
 
-export function useInvoices(clientId?: string) {
+// `clientId` also accepts an array — used by the payment invoice-picker to
+// pull open invoices for a parent client AND its child sub-accounts in one
+// query (a property-manager parent can record one payment allocated across
+// several sub-accounts' invoices).
+/**
+ * Invoices, optionally narrowed. `projectId` is a genuine filter, not a hint:
+ * pass it and you get only that project's invoices, never the rest of the
+ * client's unrelated billing. Passing `projectId: null` explicitly (rather
+ * than undefined) yields nothing, which is what a project with no link should
+ * show -- see the Projects Billing tab.
+ */
+export function useInvoices(
+  clientId?: string | string[],
+  opts?: { projectId?: string | null },
+) {
+  const clientIds = Array.isArray(clientId) ? clientId : clientId ? [clientId] : [];
+  const projectId = opts?.projectId;
+  const projectKey = projectId === undefined ? "any" : projectId ?? "none";
   return useQuery({
-    queryKey: ["crm-invoices", clientId ?? "all"],
+    queryKey: ["crm-invoices", clientIds.length > 0 ? [...clientIds].sort() : "all", { projectId: projectKey }],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
         .is("deleted_at", null)
-        .order("invoice_date", { ascending: false });
-      if (clientId) q = q.eq("client_id", clientId);
+        // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
+        // Without a tiebreaker Postgres returns tied rows in physical heap
+        // order, which changes whenever one of them is UPDATEd — so the same
+        // query returned the same invoices in a DIFFERENT order after any
+        // edit, and the list visibly reshuffled on refetch (F-10). Order by
+        // invoice_number as well so the sequence is stable across fetches.
+        .order("invoice_date", { ascending: false })
+        .order("invoice_number", { ascending: false });
+      if (clientIds.length === 1) q = q.eq("client_id", clientIds[0]);
+      else if (clientIds.length > 1) q = q.in("client_id", clientIds);
+      if (projectId) q = q.eq("project_id", projectId);
       const { data, error } = await q;
       if (error) throw error;
       return data.map(mapInvoice) as CRMInvoice[];
     },
+    // An explicit null project means "this project can't own invoices yet" --
+    // don't fetch the client's whole ledger just to throw it away.
+    enabled: projectId !== null,
   });
 }
 
@@ -141,12 +260,48 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(*), crm_payments(*)")
+        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(*), crm_payments(*, clients(display_name))")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
       if (error) throw error;
-      return mapInvoice(data);
+      const invoice = mapInvoice(data);
+
+      // A payment split across multiple invoices stores crm_payments.invoice_id
+      // = null and records its exact per-invoice share in
+      // crm_payment_allocations instead — the FK-based crm_payments(*) embed
+      // above only ever matches a payment applied to exactly one invoice, so
+      // a split payment silently never showed up in Payment History on
+      // either invoice it was actually applied to. Fetch this invoice's
+      // allocation rows (joined back to the full payment) and merge in any
+      // payment not already present via the direct FK match, displaying the
+      // ALLOCATED amount rather than the payment's full amount.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: allocRows, error: allocErr } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("amount_cents, crm_payments(*, clients(display_name))")
+        .eq("invoice_id", id);
+      if (allocErr) throw allocErr;
+
+      const existingPaymentIds = new Set((invoice.payments ?? []).map((p) => p.id));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allocatedPayments: CRMPayment[] = (allocRows ?? [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((row: any) => row.crm_payments && !existingPaymentIds.has(row.crm_payments.id))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((row: any) => ({
+          ...mapPayment(row.crm_payments),
+          displayAmountCents: row.amount_cents,
+          isSplitAllocation: true,
+        }));
+
+      if (allocatedPayments.length > 0) {
+        invoice.payments = [...(invoice.payments ?? []), ...allocatedPayments].sort(
+          (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+        );
+      }
+
+      return invoice;
     },
     enabled: !!id,
   });
@@ -167,6 +322,9 @@ export function useCreateInvoiceFromEstimate() {
       poNumber,
       lineItems,
       subtotalCents,
+      discountCents,
+      discountType,
+      discountValue,
       taxRateBps,
       taxCents,
       totalCents,
@@ -179,10 +337,19 @@ export function useCreateInvoiceFromEstimate() {
       dueDate?: string;
       poNumber?: string | null;
       lineItems: {
-        description: string; qty: number; rateCents: number; totalCents: number;
+        name?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
         discountCents?: number; discountType?: "percent" | "flat" | null; discountValue?: number | null;
+        isTaxable?: boolean;
       }[];
       subtotalCents: number;
+      // The estimate's header discount. Previously not passed at all, so the
+      // invoice was born with discount_cents = 0 while total_cents already had
+      // the discount taken off it. The first recalc (deleting a line, or any
+      // financial edit) recomputed total as subtotal - 0 + tax and silently
+      // added the discount back onto what the client owed.
+      discountCents?: number;
+      discountType?: "percent" | "flat" | null;
+      discountValue?: number | null;
       taxRateBps: number;
       taxCents: number;
       totalCents: number;
@@ -208,6 +375,9 @@ export function useCreateInvoiceFromEstimate() {
           due_date: dueDate ?? null,
           po_number: poNumber ?? null,
           subtotal_cents: subtotalCents,
+          discount_cents: discountCents ?? 0,
+          discount_type: discountType ?? null,
+          discount_value: discountValue ?? null,
           tax_rate_bps: taxRateBps,
           tax_cents: taxCents,
           total_cents: totalCents,
@@ -224,6 +394,7 @@ export function useCreateInvoiceFromEstimate() {
         const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
           lineItems.map((li, i) => ({
             invoice_id: inv.id,
+            name: li.name ?? null,
             description: li.description,
             qty: li.qty,
             rate_cents: li.rateCents,
@@ -231,6 +402,11 @@ export function useCreateInvoiceFromEstimate() {
             discount_cents: li.discountCents ?? 0,
             discount_type: li.discountType ?? null,
             discount_value: li.discountValue ?? null,
+            // crm_invoice_line_items.is_taxable defaults to false and, unlike
+            // crm_job_services, has no trigger to fill it in. Leaving it unset
+            // made every invoice-from-estimate untaxable, so the first recalc
+            // wiped the tax the client had been quoted.
+            is_taxable: li.isTaxable ?? false,
             sort_order: i,
           }))
         );
@@ -257,6 +433,8 @@ export function useCreateInvoice() {
       description: string;
       invoiceDate: string;
       dueDate?: string;
+      /** Bills this invoice against a Projects row (milestone / progress billing). */
+      projectId?: string | null;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -272,6 +450,7 @@ export function useCreateInvoice() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          project_id: values.projectId ?? null,
           sales_rep_id: values.salesRepId ?? null,
           description: values.description,
           invoice_date: values.invoiceDate,
@@ -328,7 +507,7 @@ export function useBulkImportInvoices() {
             created_by: user?.id ?? null,
             client_id: clientId,
             description: r.description.trim(),
-            invoice_date: r.invoiceDate?.trim() || new Date().toISOString().split("T")[0],
+            invoice_date: r.invoiceDate?.trim() || isoNy(new Date()),
             due_date: r.dueDate?.trim() || null,
             po_number: r.poNumber?.trim() || null,
             status: r.status?.trim().toLowerCase() || "draft",
@@ -401,6 +580,19 @@ export function useDeleteInvoice() {
   return useMutation({
     mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
+      // Line items are otherwise never deleted (soft-delete happens only on
+      // the parent invoice), but a visit-linked line item now carries a
+      // unique constraint on visit_id (crm_invoice_line_items_visit_id_unique)
+      // — leaving this draft's line items dangling would permanently block
+      // those visits from ever being invoiced again, even though discarding
+      // an unsaved draft is exactly the one case meant to free them back up.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineItemsError } = await (supabase as any)
+        .from("crm_invoice_line_items")
+        .delete()
+        .eq("invoice_id", id);
+      if (lineItemsError) throw lineItemsError;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_invoices")
@@ -424,12 +616,13 @@ export function useVoidInvoice() {
   return useMutation({
     mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
+      await assertVoidable(supabase, id);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_invoices")
         .update({ status: "void", balance_cents: 0 })
         .eq("id", id);
-      if (error) throw error;
+      if (error) throwIfVoidGuardError(error);
       // Re-sync the client's outstanding balance now that this invoice is excluded
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
@@ -455,21 +648,16 @@ export function useUpdateInvoiceStatus() {
       // useVoidInvoice — otherwise a voided invoice keeps its old
       // balance_cents and keeps counting toward what the client owes.
       if (status === "void") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: inv } = await (supabase as any)
-          .from("crm_invoices")
-          .select("client_id")
-          .eq("id", id)
-          .single();
+        const inv = await assertVoidable(supabase, id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
           .from("crm_invoices")
           .update({ status, balance_cents: 0 })
           .eq("id", id);
-        if (error) throw error;
-        if (inv?.client_id) {
+        if (error) throwIfVoidGuardError(error);
+        if (inv?.clientId) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.client_id });
+          await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.clientId });
         }
         return;
       }
@@ -480,9 +668,12 @@ export function useUpdateInvoiceStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients"] });
+      if (vars.status === "sent") {
+        fireQuickBooksInvoiceSync(vars.id);
+      }
     },
   });
 }
@@ -540,6 +731,54 @@ async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCent
   return { newStatus: data.new_status, wasNewlyPaid: data.was_newly_paid };
 }
 
+// ── allocation validation ─────────────────────────────────────────────────────
+
+/**
+ * Normalizes a requested payment split before any money moves (D-18 / D-22):
+ *   - drops zero/negative rows
+ *   - rejects invoices that aren't issued (draft / void) — they can't carry
+ *     payments; the DB trigger guard_payment_allocation_limits enforces the
+ *     same rule as the second layer
+ *   - caps each allocation at the invoice's open balance (plus whatever this
+ *     same payment already had applied there, when editing — the invoice's
+ *     stored balance already excludes our own prior allocation)
+ * Whatever gets capped off stays on the payment as unused_amount_cents, which
+ * sync_client_balance already counts as client credit — instead of being
+ * over-applied to the invoice and silently lost.
+ */
+async function resolveAllocations(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  requested: { invoiceId: string; amountCents: number }[] | undefined,
+  priorByInvoiceId: Map<string, number> = new Map(),
+): Promise<{ invoiceId: string; amountCents: number }[]> {
+  const active = (requested ?? []).filter((a) => a.amountCents > 0);
+  if (active.length === 0) return [];
+
+  const { data: invoices, error } = await supabase
+    .from("crm_invoices")
+    .select("id, invoice_number, status, balance_cents")
+    .in("id", active.map((a) => a.invoiceId));
+  if (error) throw error;
+  const byId = new Map(
+    ((invoices ?? []) as { id: string; invoice_number: number | null; status: string; balance_cents: number }[])
+      .map((inv) => [inv.id, inv] as const)
+  );
+
+  const resolved: { invoiceId: string; amountCents: number }[] = [];
+  for (const a of active) {
+    const inv = byId.get(a.invoiceId);
+    if (!inv) throw new Error("One of the selected invoices no longer exists");
+    if (inv.status === "draft" || inv.status === "void") {
+      throw new Error(`Invoice #${inv.invoice_number ?? "—"} is ${inv.status} — payments can only be applied to issued invoices`);
+    }
+    const cap = Math.max(0, (inv.balance_cents ?? 0) + (priorByInvoiceId.get(a.invoiceId) ?? 0));
+    const amountCents = Math.min(a.amountCents, cap);
+    if (amountCents > 0) resolved.push({ invoiceId: a.invoiceId, amountCents });
+  }
+  return resolved;
+}
+
 export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
@@ -566,9 +805,13 @@ export function useRecordPayment() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const activeAllocations = await resolveAllocations(supabase as any, allocations);
       const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
       const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
+      if (allocatedCents > amountCents) {
+        throw new Error("Allocated amount exceeds the payment amount");
+      }
 
       // insert payment row
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -587,14 +830,11 @@ export function useRecordPayment() {
       }).select("id").single();
       if (pmtErr) throw pmtErr;
 
-      // apply to each allocated invoice, and record the exact split so it can
-      // be reconstructed (not guessed) if this payment is edited later
-      const newlyPaidInvoiceIds: string[] = [];
-      for (const alloc of activeAllocations) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
-        if (result.wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
-      }
+      // Record the exact split FIRST (so the DB guard trigger on
+      // crm_payment_allocations can reject an over-allocation or a draft
+      // invoice before any invoice balance has moved), then apply to each
+      // invoice. The split is what lets a later edit reverse precisely
+      // instead of guessing.
       if (activeAllocations.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: allocErr } = await (supabase as any).from("crm_payment_allocations").insert(
@@ -604,7 +844,18 @@ export function useRecordPayment() {
             amount_cents: a.amountCents,
           }))
         );
-        if (allocErr) throw allocErr;
+        if (allocErr) {
+          // Don't leave an orphaned payment row behind a rejected split.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("crm_payments").delete().eq("id", inserted.id);
+          throw allocErr;
+        }
+      }
+      const newlyPaidInvoiceIds: string[] = [];
+      for (const alloc of activeAllocations) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
+        if (result.wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
       }
 
       // sync client balance
@@ -633,7 +884,7 @@ export function useRecordPayment() {
         ref_table: "crm_payments",
       });
 
-      return { newlyPaidInvoiceIds };
+      return { newlyPaidInvoiceIds, paymentId: inserted.id, hasAllocations: activeAllocations.length > 0 };
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -643,6 +894,9 @@ export function useRecordPayment() {
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       for (const invoiceId of data?.newlyPaidInvoiceIds ?? []) {
         fireAutomationTrigger({ triggerType: "invoice_paid", clientId: vars.clientId, invoiceId });
+      }
+      if (data?.hasAllocations) {
+        fireQuickBooksPaymentSync(data.paymentId);
       }
     },
   });
@@ -673,6 +927,26 @@ export function useUpdatePayment() {
       allocations?: { invoiceId: string; amountCents: number }[];
     }) => {
       const supabase = createClient();
+
+      // Validate + cap the NEW split up front, before anything is reversed,
+      // so a rejected edit leaves the payment exactly as it was.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: priorRows, error: priorErr } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("invoice_id, amount_cents")
+        .eq("payment_id", id);
+      if (priorErr) throw priorErr;
+      const priorByInvoiceId = new Map<string, number>();
+      for (const r of (priorRows ?? []) as { invoice_id: string; amount_cents: number }[]) {
+        priorByInvoiceId.set(r.invoice_id, (priorByInvoiceId.get(r.invoice_id) ?? 0) + r.amount_cents);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const activeAllocations = await resolveAllocations(supabase as any, allocations, priorByInvoiceId);
+      const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
+      const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
+      if (allocatedCents > amountCents) {
+        throw new Error("Allocated amount exceeds the payment amount");
+      }
 
       // Reverse the ORIGINAL allocations, not a guess. Historical payments
       // recorded before crm_payment_allocations existed fall back to the
@@ -706,17 +980,8 @@ export function useUpdatePayment() {
         }
       }
 
-      const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
-      const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
-      const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
-
-      // apply new allocations to invoices
-      for (const alloc of activeAllocations) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
-      }
-
-      // update payment row
+      // update payment row (amount first — the allocation guard trigger
+      // checks the split against crm_payments.amount_cents)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_payments").update({
         invoice_id: primaryInvoiceId,
@@ -745,6 +1010,12 @@ export function useUpdatePayment() {
         if (allocErr) throw allocErr;
       }
 
+      // apply new allocations to invoices
+      for (const alloc of activeAllocations) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
     },
@@ -770,72 +1041,28 @@ export function useRefundPayment() {
   return useMutation({
     mutationFn: async ({
       id,
-      clientId,
       refundAmountCents,
-      invoiceId,
     }: {
       id: string;
       clientId: string;
       refundAmountCents: number;
       invoiceId?: string | null;
     }) => {
-      const supabase = createClient();
-
-      // refund_payment() reads + clamps + writes refunded_amount_cents
-      // atomically under a row lock, and rejects a refund that would exceed
-      // the payment's original amount — see the RPC migration for why a
-      // plain read-then-update here was unsafe under concurrent refunds.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.rpc as any)("refund_payment", {
-        p_payment_id: id,
-        p_refund_amount_cents: refundAmountCents,
+      // Routed through a server API instead of writing directly from the
+      // browser: a card/ACH payment's refund has to call Stripe (which
+      // needs the secret key) before the books can say "refunded" — see
+      // src/app/api/crm/payments/[id]/refund/route.ts. A cash/check payment
+      // with no stripe_payment_intent_id skips Stripe there and is
+      // bookkeeping-only, same as this used to be for every payment.
+      const res = await fetch(`/api/crm/payments/${id}/refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refundAmountCents }),
       });
-      if (error) throw error;
-
-      // Reverse the refund across every invoice this payment was actually
-      // allocated to, proportionally — a payment split across multiple
-      // invoices has no single `invoiceId` (that field is only ever set for
-      // single-invoice payments), so reversing just `invoiceId` silently
-      // skipped every invoice for a split payment.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: allocations } = await (supabase as any)
-        .from("crm_payment_allocations")
-        .select("invoice_id, amount_cents")
-        .eq("payment_id", id);
-
-      if (allocations && allocations.length > 0) {
-        const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
-        let remaining = refundAmountCents;
-        for (let i = 0; i < allocations.length; i++) {
-          const a = allocations[i];
-          // Last row absorbs the rounding remainder so the sum always equals refundAmountCents exactly.
-          const share = i === allocations.length - 1
-            ? remaining
-            : Math.round((refundAmountCents * a.amount_cents) / totalAllocated);
-          remaining -= share;
-          if (share > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await applyPaymentToInvoice(supabase as any, a.invoice_id, -share);
-          }
-        }
-      } else if (invoiceId) {
-        // Legacy payment predating crm_payment_allocations.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await applyPaymentToInvoice(supabase as any, invoiceId, -refundAmountCents);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "Failed to issue refund");
       }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("client_activity").insert({
-        client_id: clientId,
-        activity_type: "payment",
-        subject: `Refund issued: ${formatCents(refundAmountCents)}`,
-        ref_id: id,
-        ref_table: "crm_payments",
-        amount_cents: -refundAmountCents,
-      });
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
@@ -847,15 +1074,15 @@ export function useRefundPayment() {
   });
 }
 
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
 // ── upsert line item ──────────────────────────────────────────────────────────
+
+/** Shared by the line-item upsert/delete mutations so InvoiceDetail can wait for in-flight row saves before validating a Save. */
+export const LINE_ITEM_MUTATION_KEY = ["crm-invoice-line-item"] as const;
 
 export function useUpsertInvoiceLineItem() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: LINE_ITEM_MUTATION_KEY,
     mutationFn: async ({
       invoiceId,
       item,
@@ -878,13 +1105,13 @@ export function useUpsertInvoiceLineItem() {
           .from("crm_invoice_line_items")
           .update(patch)
           .eq("id", id);
-        if (error) throw error;
+        if (error) throwIfLockedInvoiceError(error);
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
           .from("crm_invoice_line_items")
           .insert({ invoice_id: invoiceId, ...item });
-        if (error) throw error;
+        if (error) throwIfLockedInvoiceError(error);
       }
     },
     onSuccess: (_d, vars) =>
@@ -901,7 +1128,7 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
     .from("crm_invoice_line_items")
     .delete()
     .eq("id", id);
-  if (error) throw error;
+  if (error) throwIfLockedInvoiceError(error);
 
   // Recalculate invoice totals from remaining line items
   const { data: inv } = await supabase
@@ -923,9 +1150,14 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
   const discountCents = inv?.discount_cents ?? 0;
   const taxRateBps = inv?.tax_rate_bps ?? 0;
   const afterDiscount = subtotalCents - discountCents;
-  // Tax only applies to taxable line items
+  // Tax only applies to taxable line items, net of the document-level
+  // discount (matches the PO module's taxableAfterDiscount pattern) — the
+  // discount must reduce the taxable base before tax is computed, not just
+  // the post-tax total, or the customer is overcharged tax on the
+  // discounted-away amount.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const taxableBase = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
+  const taxableSubtotal = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
+  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
   const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
   const totalCents = afterDiscount + taxCents;
   const paid = inv?.amount_paid_cents ?? 0;
@@ -949,6 +1181,7 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
 export function useDeleteInvoiceLineItem() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: LINE_ITEM_MUTATION_KEY,
     mutationFn: async ({ id, invoiceId }: { id: string; invoiceId: string }) => {
       const supabase = createClient();
       return deleteInvoiceLineItemAndRecalc(supabase, id, invoiceId);
@@ -990,8 +1223,11 @@ export function useUpdateInvoiceFinancials() {
       const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
       const subtotalCents = lineItems.reduce((s, li) => s + netLineCents(li), 0);
       const afterDiscount = subtotalCents - discountCents;
-      // Tax only applies to taxable line items
-      const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+      // Tax only applies to taxable line items, net of the document-level
+      // discount (matches the PO module's taxableAfterDiscount pattern) —
+      // see deleteInvoiceLineItemAndRecalc above for why.
+      const taxableSubtotal = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+      const taxableBase = Math.max(0, taxableSubtotal - discountCents);
       const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
       const totalCents = afterDiscount + taxCents;
       const supabase = createClient();
@@ -1017,7 +1253,7 @@ export function useUpdateInvoiceFinancials() {
       if (terms !== undefined) patch.terms = terms;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_invoices").update(patch).eq("id", id);
-      if (error) throw error;
+      if (error) throwIfLockedInvoiceError(error);
 
       // Sync client's outstanding balance
       if (inv?.client_id) {
@@ -1104,7 +1340,7 @@ export function useBulkImportPayments() {
           invoice_id: invoiceId,
           amount_cents: amountCents,
           unused_amount_cents: invoiceId ? 0 : amountCents,
-          payment_date: r.paymentDate?.trim() || new Date().toISOString().split("T")[0],
+          payment_date: r.paymentDate?.trim() || isoNy(new Date()),
           method,
           reference: r.reference?.trim() || null,
           memo: r.memo?.trim() || null,
@@ -1132,22 +1368,127 @@ export function useBulkImportPayments() {
   });
 }
 
-export function usePayments(clientId?: string) {
-  return useQuery({
-    queryKey: ["crm-payments", clientId ?? "all"],
+/** A client's payments that still have money on them not applied to anything —
+ * proposal deposits, prepayments, overpayments. Narrow and guarded on purpose:
+ * usePayments() with no clientId would pull every payment in the org. */
+export interface UnappliedPayment {
+  id: string;
+  paymentDate: string;
+  method: string;
+  memo: string | null;
+  unusedAmountCents: number;
+  isPrepayment: boolean;
+}
+
+export function useUnappliedPayments(clientId: string | undefined) {
+  return useQuery<UnappliedPayment[]>({
+    queryKey: ["crm-payments", "unapplied", clientId ?? "none"],
+    enabled: !!clientId,
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payments")
+        .select("id, payment_date, method, memo, unused_amount_cents, is_prepayment")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .gt("unused_amount_cents", 0)
+        .order("payment_date", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        paymentDate: r.payment_date as string,
+        method: r.method as string,
+        memo: (r.memo as string) ?? null,
+        unusedAmountCents: (r.unused_amount_cents as number) ?? 0,
+        isPrepayment: (r.is_prepayment as boolean) ?? false,
+      }));
+    },
+  });
+}
+
+/**
+ * Applies money already sitting unapplied on a client's payment (a proposal
+ * deposit, a prepayment, an overpayment) to one invoice.
+ *
+ * Until now the only way to do this was to open the payment and edit its
+ * allocations, which meant staff had to know the money existed at all — a
+ * converted job invoices its full amount with no deposit deducted, so an
+ * unnoticed deposit meant billing a client for money they had already paid.
+ *
+ * Applies the SMALLER of what's unapplied and what the invoice still owes, so
+ * it can never over-allocate; the remainder stays available for the next
+ * invoice. The allocation guard trigger enforces the same rule server-side.
+ */
+export function useApplyCreditToInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      paymentId,
+      invoiceId,
+      amountCents,
+    }: { paymentId: string; invoiceId: string; amountCents: number }) => {
+      const supabase = createClient();
+      // One RPC, one transaction. This used to be four separate statements from
+      // the browser (insert allocation, decrement unused_amount_cents, apply to
+      // the invoice, sync the balance), which had two defects: a failure
+      // part-way left the credit consumed with the invoice untouched, and
+      // unused_amount_cents was written as an absolute value from a stale read,
+      // so two tabs applying the same deposit to different invoices each wrote
+      // the same figure and left phantom credit that no allocation could spend.
+      // crm_apply_credit_to_invoice takes FOR UPDATE on the payment and
+      // recomputes least(requested, unapplied, owing) from the locked rows.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)("crm_apply_credit_to_invoice", {
+        p_payment_id: paymentId,
+        p_invoice_id: invoiceId,
+        p_amount_cents: amountCents,
+      });
+      if (error) throw new Error(error.message ?? "Couldn't apply the credit");
+      return { appliedCents: (data as number) ?? 0 };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["crm-clients"] });
+    },
+  });
+}
+
+/**
+ * Payments, optionally narrowed. Payments have no project_id of their own --
+ * a payment belongs to a project via the invoice it was applied to, so
+ * `projectId` filters on the joined invoice. An unapplied payment (no
+ * invoice_id) therefore belongs to no project, which is correct: it's client
+ * credit, not project revenue.
+ */
+export function usePayments(clientId?: string, opts?: { projectId?: string | null }) {
+  const projectId = opts?.projectId;
+  const projectKey = projectId === undefined ? "any" : projectId ?? "none";
+  return useQuery({
+    queryKey: ["crm-payments", clientId ?? "all", { projectId: projectKey }],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // !inner only when filtering by project: an inner join would drop
+      // unapplied payments (invoice_id null) from the unfiltered list, which
+      // is exactly where they need to show up.
+      const invoiceJoin = projectId
+        ? "crm_invoices!inner(invoice_number, project_id)"
+        : "crm_invoices(invoice_number, project_id)";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_payments")
-        .select("*, clients(display_name, billing_address), crm_invoices(invoice_number)")
+        .select(`*, clients(display_name, billing_address), ${invoiceJoin}`)
         .is("deleted_at", null)
         .order("payment_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
+      if (projectId) q = q.eq("crm_invoices.project_id", projectId);
       const { data, error } = await q;
       if (error) throw error;
       return data.map(mapPaymentFull) as CRMPayment[];
     },
+    enabled: projectId !== null,
   });
 }
 
@@ -1175,6 +1516,42 @@ export function usePayment(id: string | undefined) {
  * created before crm_payment_allocations existed — callers should fall back
  * to the payment's single invoiceId (if any) in that case, not guess further.
  */
+/**
+ * Payments recorded on a DIFFERENT client (a parent account — e.g. one check
+ * from a property manager) but allocated to one of THIS client's invoices.
+ * The sub-account's own usePayments() never sees them (crm_payments.client_id
+ * is the parent), so without this the money shows nowhere on the sub-account
+ * except inside the invoice's Payment History. Read-only; one query, same
+ * allocation join useInvoice() uses. `displayAmountCents` is the share
+ * allocated to this client's invoice (not the payment's full amount).
+ */
+export function useAllocatedPaymentsFromOtherClients(clientId: string | undefined) {
+  return useQuery({
+    queryKey: ["crm-payments", "allocated-from-parent", clientId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("amount_cents, invoice_id, crm_invoices!inner(client_id, invoice_number), crm_payments!inner(*, clients(display_name))")
+        .eq("crm_invoices.client_id", clientId)
+        .neq("crm_payments.client_id", clientId)
+        .is("crm_payments.deleted_at", null);
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[])
+        .filter((row) => row.crm_payments)
+        .map((row): CRMPayment & { displayAmountCents: number; allocatedInvoiceNumber: number | null } => ({
+          ...mapPayment(row.crm_payments),
+          displayAmountCents: row.amount_cents as number,
+          isSplitAllocation: true,
+          allocatedInvoiceNumber: (row.crm_invoices?.invoice_number as number | undefined) ?? null,
+        }));
+    },
+    enabled: !!clientId,
+  });
+}
+
 export function usePaymentAllocations(paymentId: string | undefined) {
   return useQuery({
     queryKey: ["crm-payment-allocations", paymentId],
@@ -1326,7 +1703,7 @@ export function useCreateInvoiceFromJob() {
       await (supabase as any).from("client_activity").insert({
         client_id: clientId,
         activity_type: "invoice",
-        subject: `Invoice #${data.invoice_number}`,
+        subject: data.invoice_number != null ? `Invoice #${data.invoice_number}` : "Draft Invoice",
         amount_cents: data.total_cents ?? 0,
         ref_id: invoiceId,
         ref_table: "crm_invoices",
@@ -1358,7 +1735,12 @@ export function useSetInvoiceLock() {
         .from("crm_invoices")
         .update({ locked, locked_at: locked ? new Date().toISOString() : null })
         .eq("id", id);
-      if (error) throw error;
+      // Toggling `locked` is always allowed by the trigger — this can only
+      // fail here if a concurrent request changed a financial column
+      // between this mutation reading invoice state and this write landing.
+      // Surfacing the same clear message keeps the UI honest about why the
+      // lock/unlock didn't take instead of showing a raw driver error.
+      if (error) throwIfLockedInvoiceError(error);
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });

@@ -38,7 +38,9 @@ export function useServiceJobCosting(serviceId: string) {
           .from("rpt_job_services")
           .select("*")
           .eq("service_id", serviceId)
-          .eq("job_status", "completed")
+          // Per-visit status: a recurring job's master status stays
+          // 'scheduled' while its visits complete one by one.
+          .eq("visit_status", "completed")
           .order("scheduled_date", { ascending: false })
           .limit(1000),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,7 +60,9 @@ export function useServiceJobCosting(serviceId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (viewRes.data ?? []).map((r: any) => {
         const qty = Number(r.qty) || 0;
-        const rateCents = rateCentsById.get(r.id) ?? 0;
+        // r.id is the view's composite "visitId-jobServiceId" key — the rate
+        // lookup keys off crm_job_services.id, which is r.job_service_id.
+        const rateCents = rateCentsById.get(r.job_service_id) ?? 0;
         return {
           id: r.id,
           jobId: r.job_id,
@@ -66,8 +70,16 @@ export function useServiceJobCosting(serviceId: string) {
           clientName: r.client_name,
           budgetMethod: r.budget_method,
           qty,
+          // budgeted_hours is already man-hours (service hours × team size).
           budgetedHours: Number(r.budgeted_hours) || 0,
-          actualHours: r.job_actual_hours != null ? Number(r.job_actual_hours) : null,
+          // actual_man_hours is this visit's man-hour share of the service;
+          // it's the same expression as job_actual_hours in the view but
+          // coalesced to 0 — null it out when the visit has no hours so the
+          // UI can show a blank rather than a fake 0.
+          actualHours:
+            r.actual_man_hours != null && Number(r.actual_man_hours) > 0
+              ? Number(r.actual_man_hours)
+              : null,
           manCount: r.man_count ?? 1,
           actualManHours: Number(r.actual_man_hours) || 0,
           assumedProductionRate: r.assumed_production_rate != null ? Number(r.assumed_production_rate) : null,

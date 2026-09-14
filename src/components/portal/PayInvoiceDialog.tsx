@@ -5,6 +5,7 @@ import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-
 import { Loader2, CreditCard, Check, X } from "lucide-react";
 import { useCreatePortalPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-portal-payments";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
+import { STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -38,7 +39,10 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement />
+      {/* Fixed floor so Stripe's accordion can't resize the dialog under the pointer (F-07). */}
+      <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
+        <PaymentElement />
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         onClick={handleConfirm}
@@ -70,7 +74,7 @@ export function PayInvoiceDialog({
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createIntent = useCreatePortalPaymentIntent();
-  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId, intent.livemode) : null;
 
   if (!open) return null;
 

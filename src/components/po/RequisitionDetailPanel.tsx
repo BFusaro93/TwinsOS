@@ -20,6 +20,7 @@ import { ProductDetailSheet } from "./ProductDetailSheet";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { useUpdateRequisitionStatus, useAddRequisitionLineItem, useUpdateRequisitionLineItem, useDeleteRequisitionLineItem, useDeleteRequisition } from "@/lib/hooks/use-requisitions";
 import { useCurrentUserStore } from "@/stores";
 import type { Requisition, LineItem, ApprovalStatus, PurchaseOrder } from "@/types";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 interface RequisitionDetailPanelProps {
   requisition: Requisition;
@@ -118,11 +120,15 @@ function DetailsTab({
   }
 
   /** Compute updated requisition totals from a new subtotal. Sales tax applies
-   *  to the full subtotal (requisitions have no per-line taxable flag), after
-   *  subtracting the manual discount from the taxable base. */
+   *  to the full subtotal (requisitions have no per-line taxable flag); whether
+   *  the discount comes off that base first is the requisition's own flag. */
   function totals(newSubtotal: number) {
-    const taxableAfterDiscount = Math.max(0, newSubtotal - req.discountCost);
-    const salesTax = Math.round((taxableAfterDiscount * req.taxRatePercent) / 100);
+    const salesTax = computeSalesTax({
+      taxableSubtotal: newSubtotal,
+      taxRatePercent: req.taxRatePercent,
+      discountCost: req.discountCost,
+      discountReducesTax: req.discountReducesTax,
+    });
     const grandTotal = newSubtotal - req.discountCost + salesTax + req.shippingCost;
     return { subtotal: newSubtotal, salesTax, grandTotal };
   }
@@ -283,6 +289,16 @@ function DetailsTab({
             value={
               <Badge variant="outline" className="border-brand-200 bg-brand-50 text-brand-700">
                 {req.workOrderId}
+              </Badge>
+            }
+          />
+        )}
+        {req.crmJobId && (
+          <MetaRow
+            label="CRM Job"
+            value={
+              <Badge variant="outline" className="border-brand-200 bg-brand-50 text-brand-700">
+                {req.crmJobId}
               </Badge>
             }
           />
@@ -500,6 +516,11 @@ function FilesTab({ req }: { req: Requisition }) {
 }
 
 export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelProps) {
+  // Shared with Equipt — only restrict users who actually have a Landscapt CRM role.
+  const { can, isAdmin, roleId } = usePermissions();
+  const hasCrmRole = !isAdmin && !!roleId;
+  const canEditRequisitions = !hasCrmRole || can("requisition_edit");
+  const canDeleteRequisitions = !hasCrmRole || can("requisition_delete");
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [poSheetOpen, setPoSheetOpen] = useState(false);
@@ -591,15 +612,17 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge variant={status} label={APPROVAL_STATUS_LABELS[status]} />
-          <EditButton onClick={() => setEditOpen(true)} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
-            onClick={() => setDeleteConfirmOpen(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {canEditRequisitions && <EditButton onClick={() => setEditOpen(true)} />}
+          {canDeleteRequisitions && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 
