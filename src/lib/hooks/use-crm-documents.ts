@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import type { Database, Json } from "@/types/supabase";
 import type {
   DocumentTemplate,
   DocumentBlock,
@@ -12,19 +13,22 @@ import type {
 } from "@/types/crm-documents";
 
 const supabase = createClient();
-const db = supabase as any;
+
+type TemplateRow = Database["public"]["Tables"]["crm_document_templates"]["Row"];
+type TemplateUpdate = Database["public"]["Tables"]["crm_document_templates"]["Update"];
+type BlockRow = Database["public"]["Tables"]["crm_document_blocks"]["Row"];
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
 
-function mapTemplate(row: any): DocumentTemplate {
+function mapTemplate(row: TemplateRow): DocumentTemplate {
   return {
     id:          row.id,
     orgId:       row.org_id,
     name:        row.name,
-    docType:     row.doc_type,
+    docType:     row.doc_type as DocType,
     description: row.description ?? null,
     subject:     row.subject ?? null,
-    status:      row.status,
+    status:      row.status as DocStatus,
     isDefault:   row.is_default,
     includePdf:  row.include_pdf,
     createdAt:   row.created_at,
@@ -32,15 +36,15 @@ function mapTemplate(row: any): DocumentTemplate {
   };
 }
 
-function mapBlock(row: any): DocumentBlock {
+function mapBlock(row: BlockRow): DocumentBlock {
   return {
     id:          row.id,
     templateId:  row.template_id,
     orgId:       row.org_id,
-    blockType:   row.block_type,
+    blockType:   row.block_type as BlockType,
     orderIndex:  row.order_index,
     content:     row.content ?? null,
-    settings:    row.settings ?? {},
+    settings:    (row.settings ?? {}) as Record<string, unknown>,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };
@@ -52,13 +56,13 @@ export function useDocumentTemplates() {
   return useQuery({
     queryKey: ["crm-document-templates"],
     queryFn: async () => {
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from("crm_document_templates")
         .select("*")
         .is("deleted_at", null)
         .order("name", { ascending: true });
       if (error) throw error;
-      return (data as any[]).map(mapTemplate);
+      return data.map(mapTemplate);
     },
   });
 }
@@ -71,8 +75,8 @@ export function useDocumentTemplate(id: string) {
     queryFn: async () => {
       const [{ data: tpl, error: tplErr }, { data: blocks, error: blkErr }] =
         await Promise.all([
-          db.from("crm_document_templates").select("*").eq("id", id).single(),
-          db
+          supabase.from("crm_document_templates").select("*").eq("id", id).single(),
+          supabase
             .from("crm_document_blocks")
             .select("*")
             .eq("template_id", id)
@@ -82,7 +86,7 @@ export function useDocumentTemplate(id: string) {
       if (blkErr) throw blkErr;
       return {
         ...mapTemplate(tpl),
-        blocks: (blocks as any[]).map(mapBlock),
+        blocks: (blocks ?? []).map(mapBlock),
       } as DocumentTemplateWithBlocks;
     },
     enabled: !!id,
@@ -107,7 +111,7 @@ export function useCreateDocumentTemplate() {
         .eq("id", user!.id)
         .single();
 
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from("crm_document_templates")
         .insert({
           org_id:      profile!.org_id,
@@ -140,7 +144,7 @@ export function useUpdateDocumentTemplate(id: string) {
       isDefault: boolean;
       includePdf: boolean;
     }>) => {
-      const payload: any = {};
+      const payload: TemplateUpdate = {};
       if (updates.name        !== undefined) payload.name        = updates.name;
       if (updates.docType     !== undefined) payload.doc_type    = updates.docType;
       if (updates.description !== undefined) payload.description = updates.description;
@@ -149,7 +153,7 @@ export function useUpdateDocumentTemplate(id: string) {
       if (updates.isDefault   !== undefined) payload.is_default  = updates.isDefault;
       if (updates.includePdf  !== undefined) payload.include_pdf = updates.includePdf;
 
-      const { error } = await db
+      const { error } = await supabase
         .from("crm_document_templates")
         .update(payload)
         .eq("id", id);
@@ -168,7 +172,7 @@ export function useDeleteDocumentTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await db
+      const { error } = await supabase
         .from("crm_document_templates")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
@@ -199,21 +203,23 @@ export function useSaveDocumentBlocks(templateId: string) {
         .single();
 
       // Delete existing blocks then re-insert
-      await db
+      await supabase
         .from("crm_document_blocks")
         .delete()
         .eq("template_id", templateId);
 
       if (blocks.length === 0) return;
 
-      const { error } = await db.from("crm_document_blocks").insert(
+      const { error } = await supabase.from("crm_document_blocks").insert(
         blocks.map((b) => ({
           template_id:  templateId,
           org_id:       profile!.org_id,
           block_type:   b.blockType,
           order_index:  b.orderIndex,
           content:      b.content,
-          settings:     b.settings,
+          // The editor hands back a plain object; the column is jsonb, and
+          // Json won't accept Record<string, unknown> without being told.
+          settings:     b.settings as Json,
         }))
       );
       if (error) throw error;

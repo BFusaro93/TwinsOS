@@ -38,7 +38,7 @@ export async function renderEstimatePDF(
       amountCents: (m.amount_cents as number) ?? 0,
     }));
 
-  const { data: photoRows } = await (supabase as any)
+  const { data: photoRows } = await supabase
     .from("estimate_photos")
     .select("storage_path, caption, created_at")
     .eq("estimate_id", estimateId)
@@ -48,7 +48,7 @@ export async function renderEstimatePDF(
 
   const photos: EstimatePDFPhoto[] = [];
   for (const p of (photoRows ?? []) as Record<string, unknown>[]) {
-    const { data: signed } = await (supabase as any).storage
+    const { data: signed } = await supabase.storage
       .from("attachments")
       .createSignedUrl(p.storage_path as string, 3600);
     if (!signed?.signedUrl) continue;
@@ -63,7 +63,7 @@ export async function renderEstimatePDF(
     }
   }
 
-  const { data: org } = await (supabase as any)
+  const { data: org } = await supabase
     .from("organizations")
     .select("name, brand_color, address, customizations")
     .eq("id", est.org_id)

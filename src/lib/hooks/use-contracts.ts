@@ -709,8 +709,8 @@ export function useUpsertContractService() {
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = id
-        ? await (supabase as any).from("crm_contract_services").update(row).eq("id", id)
-        : await (supabase as any).from("crm_contract_services").insert(row);
+        ? await supabase.from("crm_contract_services").update(row).eq("id", id)
+        : await supabase.from("crm_contract_services").insert(row);
       if (error) throw error;
     },
     onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["crm-contracts", vars.contractId, "services"] }),

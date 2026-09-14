@@ -208,7 +208,7 @@ export function useUpdateGoodsReceipt() {
           : { data: [] as { id: string; quantity: number }[] };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: otherLines } = poLineItemIds.length > 0
-          ? await (supabase as any)
+          ? await supabase
               .from("goods_receipt_lines")
               .select("po_line_item_id, quantity_received")
               .in("po_line_item_id", poLineItemIds)

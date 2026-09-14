@@ -1293,7 +1293,7 @@ function PrintDialog({
                 <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
                 <td className="border border-slate-200 px-2 py-1 text-center">{computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{(v as any).notesToCrew ?? ""}</td>
+                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{v.notesToCrew ?? ""}</td>
               </tr>
             );
           })}
@@ -3293,7 +3293,7 @@ export function DispatchBoard() {
         v.endTime ?? "",
         computeBudgetedHours(v)?.toFixed(2) ?? "",
         computeActualHours(v)?.toFixed(2) ?? "",
-        (v as any).menCount ?? "",
+        v.menCount ?? "",
         (rateCents / 100).toFixed(2),
         (rateCents / 100).toFixed(2),
       ];

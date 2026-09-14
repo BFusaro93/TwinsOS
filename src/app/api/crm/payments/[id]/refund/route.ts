@@ -54,10 +54,9 @@ export async function POST(
   // Granular per-role permission — admins always pass. Any of the three
   // card/ACH/refund-void keys grants access; the catalog doesn't split this
   // one action by payment method in practice.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const permissionChecks = await Promise.all(
     ["acct_process_cc_refunds_voids", "acct_delete_card_payments", "acct_delete_ach_payments"].map((key) =>
-      (supabase.rpc as any)("has_settings_permission", { p_key: key })
+      supabase.rpc("has_settings_permission", { p_key: key })
     )
   );
   const allowed = permissionChecks.some((r) => r.data === true);

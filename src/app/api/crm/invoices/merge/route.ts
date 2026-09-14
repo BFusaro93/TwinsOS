@@ -29,15 +29,12 @@ export async function POST(request: Request) {
 
   const allIds = [parentId, ...childIds];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profile } = await (supabase as any).from("profiles").select("org_id, name").eq("id", user.id).single();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orgId: string | null = (profile as any)?.org_id ?? null;
-  const actorName: string = (profile as any)?.name ?? user.email ?? "System";
+  const { data: profile } = await supabase.from("profiles").select("org_id, name").eq("id", user.id).single();
+  const orgId: string | null = profile?.org_id ?? null;
+  const actorName: string = profile?.name ?? user.email ?? "System";
 
   // Load all invoices to validate same client and not voided
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: invoices, error: fetchErr } = await (supabase as any)
+  const { data: invoices, error: fetchErr } = await supabase
     .from("crm_invoices")
     .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents, locked")
     .in("id", allIds)

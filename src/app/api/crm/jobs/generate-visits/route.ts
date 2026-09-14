@@ -152,9 +152,8 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();
-  const sessionOrgId: string | null = (profile as any)?.org_id ?? null;
+  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  const sessionOrgId: string | null = profile?.org_id ?? null;
 
   const body = await request.json() as { jobId: string; lookaheadDays?: number };
   const { jobId, lookaheadDays = LOOKAHEAD_DAYS } = body;

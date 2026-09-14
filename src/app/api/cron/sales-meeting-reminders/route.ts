@@ -74,7 +74,7 @@ export async function GET(request: Request) {
     // (this fires every 15 min and isn't guaranteed exactly-once) can't also
     // pick it up and send a duplicate reminder. Same pattern as the campaign
     // send cron's claim-before-send guard.
-    const { data: claimed } = await (supabase as any)
+    const { data: claimed } = await supabase
       .from("crm_sales_meetings")
       .update({ reminder_sent_at: now.toISOString() })
       .eq("id", meeting.id)
@@ -112,7 +112,7 @@ export async function GET(request: Request) {
       // still gets the email via crm_employees.email, just no in-app row.
       let prefs: Record<string, unknown> = {};
       if (rep.user_id) {
-        const { data: profile } = await (supabase as any)
+        const { data: profile } = await supabase
           .from("profiles")
           .select("notification_prefs")
           .eq("id", rep.user_id)
@@ -122,7 +122,7 @@ export async function GET(request: Request) {
       const repName = `${rep.first_name} ${rep.last_name}`.trim();
 
       if (rep.user_id && prefs.inAppMeetingReminder !== false) {
-        await (supabase as any)
+        await supabase
           .from("notifications")
           .insert({
             org_id: meeting.org_id,

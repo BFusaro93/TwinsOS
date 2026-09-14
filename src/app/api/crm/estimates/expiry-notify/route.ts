@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
         html,
       });
       notified++;
-      await (supabase as any)
+      await supabase
         .from("estimates")
         .update({ expiry_notified_at: new Date().toISOString() })
         .eq("id", est.id as string);
