@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const STATUS_FLOW: [string, string][] = [
   ["Draft", "Just created. Nothing has been sent or agreed to yet — safe to edit freely."],
@@ -248,23 +249,23 @@ export function ContractsGuide() {
       <Section id="see-also" title="See also">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <a href="/settings/support/jobs-packages-guide" className="text-[#60ab45] hover:underline">
+            <GuideLink href="/settings/support/jobs-packages-guide" className="text-[#60ab45] hover:underline">
               Jobs &amp; Packages
-            </a>{" "}
+            </GuideLink>{" "}
             — a package defines the recurring service cadence and visit counts; a contract defines
             the ongoing billing terms on top of it.
           </li>
           <li>
-            <a href="/settings/support/invoicing-guide" className="text-[#60ab45] hover:underline">
+            <GuideLink href="/settings/support/invoicing-guide" className="text-[#60ab45] hover:underline">
               Invoicing
-            </a>{" "}
+            </GuideLink>{" "}
             — what a contract actually produces: the draft invoices created by the cron or the
             manual &quot;Create Invoices&quot; action.
           </li>
           <li>
-            <a href="/settings/support/clients-guide" className="text-[#60ab45] hover:underline">
+            <GuideLink href="/settings/support/clients-guide" className="text-[#60ab45] hover:underline">
               Clients
-            </a>{" "}
+            </GuideLink>{" "}
             — adding properties to a client, and when to use the parent/child (sub-account)
             hierarchy instead.
           </li>

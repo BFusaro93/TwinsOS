@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const STATUSES: [string, string, string][] = [
   ["Open", "open", "Default status on every new ticket — including every ticket a public form creates."],
@@ -362,9 +363,9 @@ export function TicketsGuide() {
           <strong>Ticket Closed</strong> — and Zapier can also create tickets via the{" "}
           <strong>Create Ticket</strong> action (requires Client + Subject; accepts Body, Priority,
           Category, Type, and Due Date). See the{" "}
-          <a href="/settings/support/zapier-guide" className="text-[#60ab45] hover:underline">
+          <GuideLink href="/settings/support/zapier-guide" className="text-[#60ab45] hover:underline">
             Zapier guide
-          </a>{" "}
+          </GuideLink>{" "}
           for the full trigger/action reference.
         </p>
         <p>Three notification preferences exist per user, each with separate email and in-app toggles:</p>

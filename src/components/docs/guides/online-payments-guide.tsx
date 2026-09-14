@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const PAYMENT_ENTRY_POINTS: [string, string][] = [
   ["Client Portal", "A logged-in client picks Card or Bank Transfer and pays in-page — no redirect."],
@@ -168,9 +169,9 @@ export function OnlinePaymentsGuide() {
             balance. The invoice screen prompts you to apply it, with a one-click{" "}
             <strong>Apply to this invoice</strong> button whenever a client has unapplied money. See
             the{" "}
-            <a href="/settings/support/estimating-guide#deposits" className="text-[#60ab45] hover:underline">
+            <GuideLink href="/settings/support/estimating-guide#deposits" className="text-[#60ab45] hover:underline">
               Estimating guide
-            </a>
+            </GuideLink>
             . The other deposit methods on that page charge nothing.
           </li>
           <li>

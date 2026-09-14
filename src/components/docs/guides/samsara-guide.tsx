@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 export function SamsaraGuide() {
   return (
@@ -245,19 +246,19 @@ export function SamsaraGuide() {
           <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">source: &quot;samsara&quot;</code>{" "}
           instead of a person&apos;s name. That means any meter-threshold automation configured on
           that meter fires exactly the same way it would from a manual entry — see{" "}
-          <a
+          <GuideLink
             href="/settings/support/meters-guide#building-an-automation"
             className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
           >
             Building a meter-threshold automation
-          </a>{" "}
+          </GuideLink>{" "}
           and{" "}
-          <a
+          <GuideLink
             href="/settings/support/meters-guide#pending-reset"
             className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
           >
             Pending Reset, explained
-          </a>{" "}
+          </GuideLink>{" "}
           in the Meters guide for how that firing, Pending Reset, and Service Interval logic works
           — none of it is re-explained here since it doesn&apos;t change based on where the reading
           came from.

@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const STAFF_ROLES: [string, string][] = [
   ["Admin", "Full access to everything — all modules, all records, settings, approval flows, and user management."],
@@ -153,9 +154,9 @@ export function UsersRolesGuide() {
           &quot;None by default&quot; for CRM access means the organization role alone doesn&apos;t
           grant it — an admin has to separately link the user to a CRM role via CRM Settings →
           Employees. Client portal accounts are a different login entirely — see{" "}
-          <a href="/settings/support/client-portal-guide" className="text-[#60ab45] hover:underline">
+          <GuideLink href="/settings/support/client-portal-guide" className="text-[#60ab45] hover:underline">
             the Client Portal guide
-          </a>.
+          </GuideLink>.
         </p>
       </Section>
 
@@ -301,9 +302,9 @@ export function UsersRolesGuide() {
             Landscapt&apos;s customers (not staff), separate from everything on this page. A client
             portal login can only ever see that client&apos;s own account — billing, services,
             estimates, tickets, and documents — never any staff surface. See{" "}
-            <a href="/settings/support/client-portal-guide" className="text-[#60ab45] hover:underline">
+            <GuideLink href="/settings/support/client-portal-guide" className="text-[#60ab45] hover:underline">
               the Client Portal guide
-            </a>{" "}
+            </GuideLink>{" "}
             for how portal access is granted and what a client can do with it.
           </li>
         </ul>

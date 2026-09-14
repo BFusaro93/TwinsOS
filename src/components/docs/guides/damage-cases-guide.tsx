@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const NEW_CASE_FIELDS: [string, string, string][] = [
   ["Case Type", "Required", "“Damage” or “Warranty” — a two-value select, defaults to Damage."],
@@ -197,9 +198,9 @@ export function DamageCasesGuide() {
           <li>
             <strong>Zapier</strong> — listed as the &quot;New Damage Case&quot; trigger, delivered
             instantly like the rest of Landscapt&apos;s triggers. See the{" "}
-            <a href="/settings/support/zapier-guide" className="text-[#60ab45] underline">
+            <GuideLink href="/settings/support/zapier-guide" className="text-[#60ab45] underline">
               Zapier guide
-            </a>{" "}
+            </GuideLink>{" "}
             for connection details.
           </li>
         </ul>

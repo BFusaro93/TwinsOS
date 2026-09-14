@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const RESOURCES: [string, string][] = [
   ["Clients", "Read, Write"],
@@ -61,9 +62,9 @@ export function ApiMcpGuide() {
         <p>
           A <strong>Public API Key</strong> is a scoped credential your org issues itself, separate
           from the single all-or-nothing key used for the Zapier connection (see{" "}
-          <a href="/settings/support/zapier-guide" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+          <GuideLink href="/settings/support/zapier-guide" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
             the Zapier guide
-          </a>{" "}
+          </GuideLink>{" "}
           for that one). You can issue as many of these as you need — one per integration, one per
           script, one per AI agent — each with only the scopes that integration actually requires.
         </p>
@@ -77,9 +78,9 @@ export function ApiMcpGuide() {
           This page explains the concepts and walks through a real setup. For the exhaustive,
           endpoint-by-endpoint reference — every route, request/response shape, required scope, and
           the exact MCP tool name it maps to — see{" "}
-          <a href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+          <GuideLink href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
             the full endpoint reference
-          </a>
+          </GuideLink>
           .
         </p>
       </Section>
@@ -152,9 +153,9 @@ export function ApiMcpGuide() {
         </p>
         <p>
           For the full mapping of REST verb → required scope → MCP tool name, per endpoint, see{" "}
-          <a href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+          <GuideLink href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
             the full endpoint reference
-          </a>
+          </GuideLink>
           .
         </p>
       </Section>

@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const INVOICE_TYPES: [string, string, string][] = [
   [
@@ -244,9 +245,9 @@ export function SnowGuide() {
       <Section id="see-also" title="See also">
         <p>
           Day-to-day, non-snow visit dispatch uses a different screen entirely — see the{" "}
-          <a href="/settings/support/dispatch-board-guide" className="text-[#60ab45] hover:underline">
+          <GuideLink href="/settings/support/dispatch-board-guide" className="text-[#60ab45] hover:underline">
             Dispatch Board guide
-          </a>{" "}
+          </GuideLink>{" "}
           for how the daily list-view board assigns and dispatches ordinary jobs. Snow storm
           dispatch is intentionally its own storm-event-centric flow rather than a daily board,
           since a storm doesn&apos;t respect calendar days the way a regular route does.

@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const FIELD_TYPES: [string, string][] = [
   ["text", "Single-line text"],
@@ -267,9 +268,9 @@ export function FormsGuide() {
           <li>
             Fires the <code>form_submitted</code> automation trigger — the same event that feeds
             Communication Automations sequences. See{" "}
-            <a href="/settings/support/automations-guide" className="text-[#60ab45] hover:underline">
+            <GuideLink href="/settings/support/automations-guide" className="text-[#60ab45] hover:underline">
               the Automations guide
-            </a>{" "}
+            </GuideLink>{" "}
             for what you can chain off of it.
           </li>
         </ol>

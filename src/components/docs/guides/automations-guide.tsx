@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const TRIGGER_GROUPS: [string, string][] = [
   [
@@ -111,9 +112,9 @@ export function AutomationsGuide() {
         <p>
           This is Landscapt&apos;s own internal automations engine — distinct from Equipt CMMS&apos;s
           meter-threshold and PM-schedule automations, and distinct from Zapier (see{" "}
-          <a href="/settings/support/zapier-guide" className="text-[#60ab45] hover:underline">
+          <GuideLink href="/settings/support/zapier-guide" className="text-[#60ab45] hover:underline">
             the Zapier guide
-          </a>
+          </GuideLink>
           ).
         </p>
       </Section>
@@ -144,9 +145,9 @@ export function AutomationsGuide() {
         <p>
           Form submissions route into automations through the <strong>Form submitted</strong> trigger —
           see the dedicated{" "}
-          <a href="/settings/support/forms-guide" className="text-[#60ab45] hover:underline">
+          <GuideLink href="/settings/support/forms-guide" className="text-[#60ab45] hover:underline">
             Forms guide
-          </a>{" "}
+          </GuideLink>{" "}
           for how forms are built and published; this page doesn&apos;t re-cover that.
         </p>
       </Section>
@@ -312,9 +313,9 @@ export function AutomationsGuide() {
         <Callout>
           CRM Zapier triggers and CRM automation triggers fire off the same underlying internal event
           dispatch — see{" "}
-          <a href="/settings/support/zapier-guide#crm-triggers" className="text-[#60ab45] hover:underline">
+          <GuideLink href="/settings/support/zapier-guide#crm-triggers" className="text-[#60ab45] hover:underline">
             the Zapier guide&apos;s CRM triggers section
-          </a>{" "}
+          </GuideLink>{" "}
           if you&apos;re also wiring up Zapier alongside an internal automation on the same event.
         </Callout>
       </Section>

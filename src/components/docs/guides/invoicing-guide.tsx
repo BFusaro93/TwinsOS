@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const PAYMENT_METHODS: [string, string][] = [
   ["Cash", "Paid in person, no processor involved."],
@@ -90,7 +91,7 @@ export function InvoicingGuide() {
         <Callout>
           <strong>Snow jobs are excluded</strong> from the completed-visit auto-invoice entirely.
           Snow billing runs storm-by-storm on per-inch/hourly rates a flat auto-invoice can&apos;t
-          compute — see <a className="underline" href="/settings/support/snow-guide">Snow Invoicing</a>.
+          compute — see <GuideLink className="underline" href="/settings/support/snow-guide">Snow Invoicing</GuideLink>.
         </Callout>
       </Section>
 
@@ -368,7 +369,7 @@ export function InvoicingGuide() {
           of flat job/service pricing.
         </p>
         <p>
-          See the <a className="underline" href="/settings/support/snow-guide">Snow Invoicing guide</a>{" "}
+          See the <GuideLink className="underline" href="/settings/support/snow-guide">Snow Invoicing guide</GuideLink>{" "}
           for the full walkthrough — this page won&apos;t re-cover it.
         </p>
       </Section>

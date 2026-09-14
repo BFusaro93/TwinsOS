@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   DocsFontScope,
   DocsHero,
@@ -8,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const STATE_TRANSITIONS: [string, string, string][] = [
   ["draft", "pending_approval", "Requester submits the requisition or PO for approval."],
@@ -216,9 +216,9 @@ export function ApprovalFlowsGuide() {
         </p>
         <p>
           See{" "}
-          <Link href="/settings/support/estimating-guide" className="text-[#60ab45] hover:underline">
+          <GuideLink href="/settings/support/estimating-guide" className="text-[#60ab45] hover:underline">
             the Estimating guide
-          </Link>{" "}
+          </GuideLink>{" "}
           for how Estimate Approval fits into the budget engine and estimate lifecycle.
         </p>
       </Section>

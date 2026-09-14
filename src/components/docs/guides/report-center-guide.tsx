@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const SECTIONS: [string, number, string][] = [
   ["Service Reports", 13, "Visits Report, Backlog Services, Client Count by Service, Client Services Report, Package Summary Report, Skipped Visits Report"],
@@ -74,9 +75,9 @@ export function ReportCenterGuide() {
       <Callout>
         Looking for what a specific report actually measures, rather than how the Report Center
         works? See the{" "}
-        <a href="/settings/support/reports-reference-guide" className="font-semibold underline">
+        <GuideLink href="/settings/support/reports-reference-guide" className="font-semibold underline">
           Reports Reference guide
-        </a>{" "}
+        </GuideLink>{" "}
         for a description, filters, and known gotchas for every report.
       </Callout>
 
@@ -283,9 +284,9 @@ export function ReportCenterGuide() {
         <p>
           A few dataset columns exist specifically so a custom analysis can apply the same rules
           the pre-built reports do (see the{" "}
-          <a href="/settings/support/reports-reference-guide" className="font-semibold underline">
+          <GuideLink href="/settings/support/reports-reference-guide" className="font-semibold underline">
             Reports Reference guide
-          </a>{" "}
+          </GuideLink>{" "}
           for the rules themselves):
         </p>
         <ul className="list-disc space-y-2 pl-5">

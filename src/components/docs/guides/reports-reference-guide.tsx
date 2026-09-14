@@ -6,6 +6,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 interface ReportRow {
   name: string;
@@ -655,9 +656,9 @@ export function ReportsReferenceGuide() {
       <Callout>
         This is a reference, not a how-to — for how the Report Center itself works (running a
         report, saving a custom analysis, building a dashboard), see the{" "}
-        <a href="/settings/support/report-center-guide" className="font-semibold underline">
+        <GuideLink href="/settings/support/report-center-guide" className="font-semibold underline">
           Report Center &amp; Dashboards guide
-        </a>
+        </GuideLink>
         . A row marked <strong>Full page</strong> below opens as its own dedicated report page
         rather than the generic filter-and-table view every other report uses.
       </Callout>

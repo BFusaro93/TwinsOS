@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const TRIGGER_TYPES: [string, string][] = [
   ["Meter Threshold", "A meter's current value crosses a number you choose (see below for the full walkthrough)."],
@@ -267,24 +268,24 @@ export function MetersGuide() {
           <li>
             <strong>PM Schedules</strong> are calendar-based, not usage-based — they fire on a
             recurring date regardless of how much an asset has actually been used. See{" "}
-            <a
+            <GuideLink
               href="/settings/support/pm-schedules-guide"
               className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
             >
               the PM Schedules guide
-            </a>{" "}
+            </GuideLink>{" "}
             for how those work.
           </li>
           <li>
             <strong>Zapier&apos;s &quot;Meter Threshold&quot; trigger</strong> is a separate,
             per-Zap configuration that lives outside Equipt entirely — it doesn&apos;t use, share,
             or affect the Pending Reset state of any automation configured here. See{" "}
-            <a
+            <GuideLink
               href="/settings/support/zapier-guide#meter-threshold"
               className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
             >
               Meter Threshold, in detail
-            </a>{" "}
+            </GuideLink>{" "}
             in the Zapier guide.
           </li>
           <li>
