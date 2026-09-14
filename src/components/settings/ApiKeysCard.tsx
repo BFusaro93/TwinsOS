@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from "@/lib/hooks/use-api-keys";
 import { API_SCOPE_RESOURCES, isKnownScope, scopeString, tierLabel } from "@/lib/api/scopes";
@@ -27,6 +26,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 /**
  * Public API key management — lives in Master Account Settings > Integrations,
@@ -102,13 +102,13 @@ export function ApiKeysCard() {
       </div>
 
       <div className="border-b bg-slate-50 px-6 py-3">
-        <Link
+        <GuideLink
           href="/settings/support/api-docs"
           className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
         >
           View the public API + MCP docs — every endpoint, tool, scope, and request shape
           <ArrowRight className="h-3 w-3" />
-        </Link>
+        </GuideLink>
       </div>
 
       <div className="border-b px-6 py-4">

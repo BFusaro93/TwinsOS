@@ -9,8 +9,8 @@ import { localizeGuideHref } from "@/lib/docs-guides";
  * canonical "/settings/support/<slug>" href, but the same guide bodies render
  * in all three shells — so resolve the link against whichever shell the reader
  * is in, or a cross-link would bounce them out of Equipt/Landscapt and into the
- * Settings nav. Non-guide targets (e.g. /settings/support/api-docs, which only
- * exists in the Settings shell) are passed through unchanged.
+ * Settings nav. Targets with no per-shell mount (e.g. the guide library) are
+ * passed through unchanged.
  */
 export function GuideLink({
   href,

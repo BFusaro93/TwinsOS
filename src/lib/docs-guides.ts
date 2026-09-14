@@ -356,12 +356,19 @@ export function guideBasePath(pathname: string | null | undefined): string {
 }
 
 /**
- * Rewrites a hard-coded "/settings/support/<slug>" guide link (docs-content.ts
- * stores them that way) to the equivalent link in the reader's current shell.
- * Anything that isn't a known guide slug is returned untouched.
+ * Docs pages mounted in every shell: the guides, plus the public API + MCP
+ * endpoint reference. "library" is deliberately absent — it exists only under
+ * Settings, so a link to it must not be rewritten.
+ */
+const SHELL_MOUNTED_DOC_SLUGS = new Set([...DOC_GUIDE_SLUGS, "api-docs"]);
+
+/**
+ * Rewrites a hard-coded "/settings/support/<slug>" docs link (docs-content.ts
+ * and the guide bodies store them that way) to the equivalent link in the
+ * reader's current shell. Anything not mounted per-shell is returned untouched.
  */
 export function localizeGuideHref(href: string, pathname: string | null | undefined): string {
   const match = /^\/settings\/support\/([^/#?]+)(.*)$/.exec(href);
-  if (!match || !DOC_GUIDE_SLUGS.has(match[1])) return href;
+  if (!match || !SHELL_MOUNTED_DOC_SLUGS.has(match[1])) return href;
   return `${guideBasePath(pathname)}/${match[1]}${match[2]}`;
 }
