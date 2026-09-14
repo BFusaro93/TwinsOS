@@ -203,10 +203,13 @@ export function MyDay() {
 
       {showRevenueSnapshot && <RevenueSnapshot />}
 
-      {/* Two-column content */}
+      {/* Two-column content. min-w-0 on both columns is load-bearing: an fr
+          track won't shrink below its content's min-content width, so one long
+          ticket subject or client name in the left column widens that track and
+          shoves the right column off the right edge. */}
       <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 flex-1">
         {/* Left column */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {/* Open Tickets */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <SectionHeader title="Open Tickets" href="/crm/tickets?status=open" />
@@ -243,7 +246,7 @@ export function MyDay() {
                       </span>
                     )}
                     {t.category && (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
+                      <span className="max-w-[140px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
                         {t.category}
                       </span>
                     )}
@@ -350,7 +353,7 @@ export function MyDay() {
         </div>
 
         {/* Right column */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {/* Outstanding Invoices */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices" />

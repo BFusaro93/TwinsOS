@@ -3333,8 +3333,10 @@ export function DispatchBoard() {
         description="Schedule and dispatch daily job visits"
       />
 
-      {/* Week strip + date range + actions */}
-      <div className="flex items-center gap-3 px-4 shrink-0 overflow-x-auto flex-nowrap">
+      {/* Week strip + date range + actions. Wraps rather than scrolling: this
+          row is ~1600px wide, so on a tablet the right-hand controls were half
+          a screen off to the side with no hint they were there. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
         <div className="flex items-center gap-2 text-xs text-slate-500 ml-2 shrink-0">
@@ -3426,11 +3428,11 @@ export function DispatchBoard() {
         </div>
       )}
 
-      {/* Select a Filter bar — ABOVE dark bar. Scrolls sideways rather than
-          clipping: the full row of actions doesn't fit a tablet's width. */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2 shrink-0 overflow-x-auto">
+      {/* Select a Filter bar — ABOVE dark bar. Wraps on a narrow screen so the
+          action buttons drop to their own line instead of running off it. */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-white px-4 py-2 shrink-0">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-1">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
             const label = key === "client" ? "Client" : key === "service" ? "Service" : key === "date" ? "Date" : key === "city" ? "City" : key === "zip" ? "Zip" : "Crew";
             return (
@@ -3589,7 +3591,10 @@ export function DispatchBoard() {
       </div>
 
       {/* Dark action bar */}
-      <div className="bg-[#4a4a4a] px-4 py-2 flex items-center gap-3 shrink-0 overflow-x-auto">
+      {/* Wraps below xl. At desktop widths this bar already fits by letting the
+          search box shrink, so keep it on one line there rather than wrapping
+          Columns onto a second row. */}
+      <div className="bg-[#4a4a4a] px-4 py-2 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 shrink-0">
         {/* Refresh — far left */}
         <button
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}

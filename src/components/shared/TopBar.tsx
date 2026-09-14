@@ -93,6 +93,7 @@ function useBreadcrumbs() {
     support: "Support",
     photos: "Photo Docs",
     jobs: "Job Photos",
+    "job-photos": "Job Photos",
     dashboards: "Dashboards",
     home: "Home",
     crm: "Landscapt",

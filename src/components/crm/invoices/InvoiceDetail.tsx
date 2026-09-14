@@ -1224,7 +1224,10 @@ export function InvoiceDetail({
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium align-top">Discount</td>
                     <td className="py-2">
-                      <div className="flex items-center gap-1.5">
+                      {/* Wraps, and the saved-discount picker is capped to the
+                          cell: side by side these two overflow the details card
+                          on a narrow screen. */}
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-slate-500 font-medium">$</span>
                         <Input
                           type="number" step="0.01" min="0"
@@ -1236,7 +1239,7 @@ export function InvoiceDetail({
                         />
                         {activeDiscounts.length > 0 && (
                           <Select onValueChange={applyNamedDiscount} disabled={invoice.locked}>
-                            <SelectTrigger className="h-7 w-48 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
+                            <SelectTrigger className="h-7 w-48 max-w-full min-w-0 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
                               <SelectValue placeholder="Apply a saved discount…" />
                             </SelectTrigger>
                             <SelectContent>
