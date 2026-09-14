@@ -26,6 +26,7 @@ import { useChargeAutopayInvoice, DuplicateChargeError } from "@/lib/hooks/use-a
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
 import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
+import { BulkEmailInvoicesDialog } from "./BulkEmailInvoicesDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
@@ -274,7 +275,7 @@ export function InvoicesList({ clientId }: Props) {
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [emailingSelected, setEmailingSelected] = useState(false);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [sortKey, setSortKey] = useState<string>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -447,37 +448,12 @@ export function InvoicesList({ clientId }: Props) {
     await bulkUpdateStatus("void");
   }
 
-  // Actually sends an email per selected invoice (via the same endpoint the
-  // single-invoice "Email" button uses) — this used to just flip status to
-  // "sent" with a fake success toast and never email anyone.
-  async function bulkEmailSelected() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    setEmailingSelected(true);
-    try {
-      const results = await Promise.allSettled(
-        ids.map((invoiceId) =>
-          fetch("/api/crm/invoices/email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ invoiceId }),
-          }).then(async (res) => {
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              throw new Error(data.error ?? "Failed to email invoice");
-            }
-          })
-        )
-      );
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - succeeded;
-      if (succeeded > 0) toast.success(`Emailed ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
-      if (failed > 0) toast.error(`Failed to email ${failed} invoice${failed !== 1 ? "s" : ""} — check they have a client email on file`);
-      setSelectedIds(new Set());
-      refetchInvoices();
-    } finally {
-      setEmailingSelected(false);
-    }
+  // Opens BulkEmailInvoicesDialog (template/PDF-layout/subject/body picker,
+  // same as the single-invoice "Email" button) instead of blind-sending with
+  // no chance to review what's about to go out to every selected client.
+  function bulkEmailSelected() {
+    if (selectedIds.size === 0) return;
+    setBulkEmailOpen(true);
   }
 
   const chargeInvoice = useChargeAutopayInvoice();
@@ -737,10 +713,10 @@ export function InvoicesList({ clientId }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
-                disabled={!someSelected || emailingSelected}
-                onSelect={() => void bulkEmailSelected()}
+                disabled={!someSelected}
+                onSelect={bulkEmailSelected}
               >
-                {emailingSelected ? "Emailing…" : "Email Selected"}
+                Email Selected
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!someSelected}
@@ -1116,6 +1092,13 @@ export function InvoicesList({ clientId }: Props) {
           onClose={() => { setMergeOpen(false); setSelectedIds(new Set()); }}
         />
       )}
+
+      <BulkEmailInvoicesDialog
+        invoiceIds={Array.from(selectedIds)}
+        open={bulkEmailOpen}
+        onClose={() => setBulkEmailOpen(false)}
+        onSent={() => { setSelectedIds(new Set()); refetchInvoices(); }}
+      />
     </div>
   );
 }

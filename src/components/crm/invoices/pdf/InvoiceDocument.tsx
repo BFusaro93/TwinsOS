@@ -4,6 +4,7 @@ import {
   View,
   Text,
   Image,
+  Link,
   StyleSheet,
 } from "@react-pdf/renderer";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
@@ -326,7 +327,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {invoice.viewOnlineUrl ? (
         <View style={S.notesSection}>
           <Text style={S.notesLabel}>View &amp; Pay Online</Text>
-          <Text style={S.notesText}>{invoice.viewOnlineUrl}</Text>
+          <Link src={invoice.viewOnlineUrl} style={[S.notesText, { color: accentColor }]}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}
 
@@ -498,7 +499,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {invoice.viewOnlineUrl ? (
         <View style={SC.notes}>
           <Text style={SC.notesLabel}>View &amp; Pay Online</Text>
-          <Text>{invoice.viewOnlineUrl}</Text>
+          <Link src={invoice.viewOnlineUrl} style={{ color: accentColor }}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}
 
@@ -515,8 +516,15 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
 // and a payment stub — modeled after the org's existing paper statement
 // format rather than a single-invoice line-item sheet.
 
+/** A LETTER page is 792pt tall — used to size the payment stub to a true
+ *  bottom third (264pt) and to anchor the "view online"/notes block at the
+ *  boundary between the middle and bottom thirds, regardless of how much
+ *  activity is listed above it. */
+const PAGE_HEIGHT = 792;
+const BOTTOM_THIRD = PAGE_HEIGHT / 3;
+
 const SS = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 8.5, color: "#1e293b", padding: 32, paddingBottom: 170, backgroundColor: "#ffffff" },
+  page: { fontFamily: "Helvetica", fontSize: 8.5, color: "#1e293b", padding: 32, backgroundColor: "#ffffff" },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
   fromBlock: { flexDirection: "column" },
   fromLabel: { fontSize: 7, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 2 },
@@ -545,7 +553,7 @@ const SS = StyleSheet.create({
   activityHeaderRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6 },
   activityHeaderText: { fontSize: 7, fontFamily: "Helvetica-Bold", color: "#ffffff", textTransform: "uppercase" },
   activityRow: { flexDirection: "row", paddingVertical: 3, paddingHorizontal: 6, borderBottom: "1 solid #f1f5f9" },
-  activityDividerRow: { flexDirection: "row", paddingVertical: 3, borderTop: "1 solid #cbd5e1", borderBottom: "1 solid #cbd5e1", backgroundColor: "#f8fafc" },
+  activityDividerRow: { flexDirection: "row", paddingVertical: 3, marginTop: 16, borderTop: "1 solid #cbd5e1", borderBottom: "1 solid #cbd5e1", backgroundColor: "#f8fafc" },
   activityDividerText: { fontSize: 7, fontFamily: "Helvetica-Bold", textAlign: "center", color: "#475569" },
   cellDate: { flex: 1 },
   cellDesc: { flex: 3.5 },
@@ -557,16 +565,35 @@ const SS = StyleSheet.create({
   onlineBox: { marginTop: 14, backgroundColor: "#f8fafc", padding: 8, borderRadius: 2 },
   onlineBoxLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", marginBottom: 2 },
   onlineBoxText: { fontSize: 7 },
+  /** Pins the "view online" box + advertisement + notes to the boundary
+   *  between the middle and bottom thirds of the page (its bottom edge
+   *  sits at BOTTOM_THIRD from the page bottom) instead of letting it flow
+   *  wherever the activity table happens to end. Only used when a payment
+   *  stub reserves the bottom third — otherwise this content flows normally. */
+  onlineNotesAnchor: { position: "absolute", left: 32, right: 32, bottom: BOTTOM_THIRD },
 
   termsSection: { marginTop: 14 },
   termsText: { fontSize: 7, color: "#b91c1c", lineHeight: 1.5 },
 
-  stub: { position: "absolute", bottom: 46, left: 32, right: 32, paddingTop: 10, flexDirection: "row", justifyContent: "space-between", backgroundColor: "#ffffff" },
+  /** Occupies the full bottom third of the page — a tear-off mail-in stub,
+   *  not just a compact box sitting in a large blank margin. */
+  stub: {
+    position: "absolute",
+    bottom: 0,
+    left: 32,
+    right: 32,
+    height: BOTTOM_THIRD,
+    paddingTop: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
+  },
   stubLeft: { flexDirection: "column" },
-  stubRow: { flexDirection: "row", marginBottom: 2 },
-  stubLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", width: 70 },
-  stubValue: { fontSize: 7.5 },
-  stubTitle: { fontSize: 13, fontFamily: "Helvetica-Bold" },
+  stubRow: { flexDirection: "row", marginBottom: 4 },
+  stubLabel: { fontSize: 8.5, fontFamily: "Helvetica-Bold", width: 80 },
+  stubValue: { fontSize: 8.5 },
+  stubTitle: { fontSize: 16, fontFamily: "Helvetica-Bold" },
   stubRight: { flexDirection: "column", alignItems: "flex-end" },
 
   footer: { position: "absolute", bottom: 16, left: 32, right: 32, flexDirection: "row", justifyContent: "space-between", fontSize: 6.5, color: "#9ca3af" },
@@ -581,21 +608,53 @@ function StatementInvoiceLayout({
   invoice,
   org,
   showAccountBalance = true,
+  showPaymentStub = true,
 }: {
   invoice: InvoicePDFData;
   org: OrgPDFData;
   /** false = highlight this invoice's own total/balance instead of the
    *  running account balance across all the client's other invoices. */
   showAccountBalance?: boolean;
+  /** false = no tear-off mail-in stub — reclaims the bottom third of the
+   *  page instead of reserving it. */
+  showPaymentStub?: boolean;
 }) {
   const accentColor = org.brandColor || "#60ab45";
   const st = invoice.statement;
   const clientAddressLine2 = [invoice.clientCity, invoice.clientState, invoice.clientZip].filter(Boolean).join(", ");
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
   const invoiceLabel = `#${String(invoice.invoiceNumber).padStart(5, "0")}`;
+  const onlineAndNotes = (
+    <>
+      <View style={SS.onlineBox}>
+        <Text style={[SS.onlineBoxLabel, { color: accentColor }]}>To View Your Invoice Online</Text>
+        {invoice.viewOnlineUrl ? (
+          <Link src={invoice.viewOnlineUrl} style={[SS.onlineBoxText, { color: accentColor }]}>
+            Go to {invoice.viewOnlineUrl}
+          </Link>
+        ) : (
+          <Text style={[SS.onlineBoxText, { color: accentColor }]}>
+            Log in to your client portal to view this invoice and payment history.
+          </Text>
+        )}
+      </View>
+
+      {invoice.advertisementText ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
+        </View>
+      ) : null}
+
+      {invoice.notes ? (
+        <View style={SS.termsSection}>
+          <Text style={SS.termsText}>{invoice.notes?.replace(/<[^>]+>/g, "")}</Text>
+        </View>
+      ) : null}
+    </>
+  );
 
   return (
-    <Page size="LETTER" style={SS.page}>
+    <Page size="LETTER" style={[SS.page, { paddingBottom: showPaymentStub ? BOTTOM_THIRD + 16 : 50 }]}>
       <View style={SS.header}>
         <View style={SS.fromBlock}>
           <Text style={SS.fromLabel}>From</Text>
@@ -730,46 +789,38 @@ function StatementInvoiceLayout({
         </View>
       ))}
 
-      <View style={SS.onlineBox}>
-        <Text style={[SS.onlineBoxLabel, { color: accentColor }]}>To View Your Invoice Online</Text>
-        <Text style={[SS.onlineBoxText, { color: accentColor }]}>
-          {invoice.viewOnlineUrl
-            ? `Go to ${invoice.viewOnlineUrl}`
-            : "Log in to your client portal to view this invoice and payment history."}
-        </Text>
-      </View>
+      {showPaymentStub ? (
+        <View style={SS.onlineNotesAnchor}>{onlineAndNotes}</View>
+      ) : (
+        onlineAndNotes
+      )}
 
-      {invoice.advertisementText ? (
-        <View style={{ marginTop: 10 }}>
-          <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
+      {showPaymentStub ? (
+        <View fixed style={[SS.stub, { borderTop: `2 solid ${accentColor}` }]}>
+          <View style={SS.stubLeft}>
+            <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
+            <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
+            <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
+            <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+          </View>
+          <View style={SS.stubRight}>
+            <Text style={[SS.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
+            <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
+            <Text style={SS.companyMeta}>{org.street}</Text>
+            {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
+            {org.phone ? <Text style={SS.companyMeta}>{org.phone}</Text> : null}
+            <Text
+              style={[SS.companyMeta, { marginTop: 6 }]}
+              render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+            />
+          </View>
         </View>
-      ) : null}
-
-      {invoice.notes ? (
-        <View style={SS.termsSection}>
-          <Text style={SS.termsText}>{invoice.notes?.replace(/<[^>]+>/g, "")}</Text>
+      ) : (
+        <View style={SS.footer} fixed>
+          <Text>{org.name} · {org.phone}</Text>
+          <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
-      ) : null}
-
-      <View fixed style={[SS.stub, { borderTop: `2 solid ${accentColor}` }]}>
-        <View style={SS.stubLeft}>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
-        </View>
-        <View style={SS.stubRight}>
-          <Text style={[SS.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
-          <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
-          <Text style={SS.companyMeta}>{org.street}</Text>
-          {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
-        </View>
-      </View>
-
-      <View style={SS.footer} fixed>
-        <Text>{org.name} · {org.phone}</Text>
-        <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
-      </View>
+      )}
     </Page>
   );
 }
@@ -784,8 +835,12 @@ function renderLayout(layoutKey: InvoicePDFLayoutKey, invoice: InvoicePDFData, o
       return <CompactInvoiceLayout invoice={invoice} org={org} />;
     case "statement":
       return <StatementInvoiceLayout invoice={invoice} org={org} />;
+    case "statement_no_stub":
+      return <StatementInvoiceLayout invoice={invoice} org={org} showPaymentStub={false} />;
     case "statement_invoice_only":
       return <StatementInvoiceLayout invoice={invoice} org={org} showAccountBalance={false} />;
+    case "statement_invoice_only_no_stub":
+      return <StatementInvoiceLayout invoice={invoice} org={org} showAccountBalance={false} showPaymentStub={false} />;
     case "default":
     default:
       return <DefaultInvoiceLayout invoice={invoice} org={org} />;
