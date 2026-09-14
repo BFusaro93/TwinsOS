@@ -63,8 +63,8 @@ export function TicketsGuide() {
           <TOCLink href="#assignment">Assignment</TOCLink>
           <TOCLink href="#lifecycle">Worked example: a form-to-close lifecycle</TOCLink>
           <TOCLink href="#detail-sheet">The ticket detail sheet</TOCLink>
-          <TOCLink href="#client-link">Client link &amp; activity timeline</TOCLink>          <TOCLink href="#field-upsells">Field upsells from crews</TOCLink>
-
+          <TOCLink href="#client-link">Client link &amp; activity timeline</TOCLink>
+          <TOCLink href="#field-upsells">Field upsells from crews</TOCLink>
           <TOCLink href="#automations-integrations">Automations, Zapier &amp; notifications</TOCLink>
         </div>
       </div>
@@ -316,15 +316,28 @@ export function TicketsGuide() {
           ticking <strong>Show in field upsells</strong> on it under Services &amp; Pricing, and give
           it a short prompt so crews know what to look for. With no services ticked, the Suggest work
           button doesn&apos;t appear in the crew app at all — that is how the feature is switched on
-          and off, so there is no separate permission to manage.
+          and off for crews, with no permission to manage on their side.
         </Callout>
         <p>
           To take one forward, click <strong>Create estimate</strong> on the ticket. That makes a draft
           estimate for the client, puts the suggested service on it at your catalog rate, links the two
           together and opens the estimate ready to price — so there&apos;s nothing to retype and nothing
-          to remember to link afterwards. The button disappears once an estimate is linked, so the same
-          work doesn&apos;t get quoted twice. (You can still link an existing estimate by hand from
-          Linked Records if you quoted it before the suggestion came in.)
+          to remember to link afterwards. The button needs the <strong>Add Estimate</strong> permission,
+          the same one every other way of creating an estimate requires, and it disappears once the
+          ticket has been converted.
+        </p>
+        <Callout>
+          <strong>One ticket can only be converted once</strong>, even if two people click at the same
+          moment or a conversion is interrupted half-way. The estimate itself claims the ticket, so a
+          second attempt can&apos;t create a duplicate — it reopens the estimate that already exists,
+          finishing any step the first attempt missed. If you convert a ticket by mistake, delete the
+          estimate and the ticket becomes convertible again.
+        </Callout>
+        <p>
+          Re-quoting is still fine. You can link additional estimates by hand from{" "}
+          <strong>Linked Records</strong> — useful if you quoted the work before the suggestion came
+          in, or the client asked for a revised price. The reports read the most recent estimate
+          linked to the ticket.
         </p>
         <p>
           That link is what turns the suggestion into a number you can report on: the estimate carries
