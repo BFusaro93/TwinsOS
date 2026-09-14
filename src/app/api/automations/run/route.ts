@@ -381,7 +381,7 @@ async function handleRun(request: Request) {
         if (po) await notifyZapierSubscribers(adminClient, callerOrgId, "po_approved", config.map(po));
       }
 
-      let autoQuery = (adminClient as AdminClient)
+      const autoQuery = (adminClient as AdminClient)
         .from("automations")
         .select("*")
         .eq("trigger_type", eventTrigger)
