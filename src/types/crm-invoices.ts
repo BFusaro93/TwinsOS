@@ -81,6 +81,8 @@ export interface CRMInvoice {
   clientId: string;
   estimateId: string | null;
   crmJobId: string | null;
+  /** Project this invoice bills against — derived from crmJobId by a DB trigger when unset. */
+  projectId: string | null;
   salesRepId: string | null;
   description: string;
   status: InvoiceStatus;

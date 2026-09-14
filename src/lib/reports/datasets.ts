@@ -647,13 +647,16 @@ export const REPORT_DATASETS: ReportDataset[] = [
   {
     key: "rpt_projects_wip",
     label: "Projects — WIP Schedule",
-    description: "Work-in-progress schedule for Projects: contract value, EAC, percent complete, earned revenue, and over/under billing.",
+    description: "Work-in-progress schedule for Projects: original and revised contract value, approved change orders, EAC, percent complete, earned revenue, and over/under billing.",
     defaultDateField: "created_at",
     fields: [
       { key: "name", label: "Project", type: "text" },
       { key: "status", label: "Status", type: "text" },
       { key: "client_name", label: "Client", type: "text" },
-      { key: "contract_cents", label: "Contract", type: "money" },
+      { key: "original_contract_cents", label: "Original Contract", type: "money" },
+      { key: "approved_changes_cents", label: "Approved Changes", type: "money" },
+      { key: "change_order_count", label: "Change Orders", type: "number" },
+      { key: "contract_cents", label: "Revised Contract", type: "money" },
       { key: "eac_cents", label: "EAC", type: "money" },
       { key: "estimated_gp_cents", label: "Estimated GP", type: "money" },
       { key: "estimated_gp_pct", label: "Estimated GP %", type: "percent", totalable: false },

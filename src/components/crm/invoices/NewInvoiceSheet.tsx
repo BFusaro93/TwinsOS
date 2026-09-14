@@ -13,11 +13,13 @@ interface Props {
   open: boolean;
   onClose: () => void;
   defaultClientId?: string;
+  /** Bills the new invoice against a project (milestone / progress billing). */
+  defaultProjectId?: string | null;
 }
 
 const MIN_WIDTH = 480;
 
-export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
+export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProjectId }: Props) {
   // Lazy-initialized on mount (not at module scope) so it reflects the
   // actual viewport instead of whatever window.innerWidth was when this
   // chunk first happened to be evaluated.
@@ -55,7 +57,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
       setCreating(true);
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      createInvoice({ clientId: defaultClientId, description: "", invoiceDate: today })
+      createInvoice({ clientId: defaultClientId, description: "", invoiceDate: today, projectId: defaultProjectId ?? null })
         .then((inv) => { setInvoiceId(inv.id); setDraftClientId(defaultClientId); })
         .catch(() => toast.error("Failed to create invoice"))
         .finally(() => { setCreating(false); creatingRef.current = false; });

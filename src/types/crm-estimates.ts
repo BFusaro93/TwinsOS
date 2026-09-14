@@ -82,7 +82,10 @@ export interface EstimateDirectCost {
 export interface EstimateMilestone {
   id: string;
   orgId: string;
-  estimateId: string;
+  /** Null for a milestone added straight onto a project that had no estimate. */
+  estimateId: string | null;
+  /** Set once the estimate is converted, or immediately for a project-authored milestone. */
+  projectId: string | null;
   name: string;
   milestoneType: 'flat' | 'percent';
   /** Cents if milestoneType is 'flat', basis points (0-10000) if 'percent'. */
@@ -90,6 +93,8 @@ export interface EstimateMilestone {
   /** Snapshotted dollar amount actually billed — the source of truth for invoicing. */
   amountCents: number;
   sortOrder: number;
+  /** Optional planned billing date — milestones are triggered by progress, not dates. */
+  targetDate: string | null;
   status: 'pending' | 'invoiced';
   invoiceId: string | null;
   createdAt: string;

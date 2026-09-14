@@ -2043,15 +2043,33 @@ export function useCreateJobsFromEstimate() {
           .eq("estimated_cost_cents", 0);
       }
 
-      return { jobId, clientId, jobType, projectId };
+      // Carry the estimate's milestone billing schedule onto the project. The
+      // rows aren't copied — stamping project_id makes the same milestones
+      // reachable (and invoiceable) from the project, so an 'invoiced' flag
+      // can never disagree between the two surfaces. Only untouched
+      // milestones move: one already billed from the estimate keeps whatever
+      // project it was billed against.
+      if (projectId && jobType === "project") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("estimate_milestones")
+          .update({ project_id: projectId })
+          .eq("estimate_id", estimateId)
+          .is("project_id", null)
+          .is("deleted_at", null);
+      }
+
+      return { jobId, clientId, jobType, projectId, estimateId };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
       qc.invalidateQueries({ queryKey: ["clients", data.clientId, "activity"] });
+      qc.invalidateQueries({ queryKey: ["estimate-milestones", data.estimateId] });
       if (data.projectId) {
         qc.invalidateQueries({ queryKey: ["projects"] });
         qc.invalidateQueries({ queryKey: ["client-projects"] });
+        qc.invalidateQueries({ queryKey: ["project-milestones", data.projectId] });
       }
       fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType] });
       if (data.jobType === "package") {

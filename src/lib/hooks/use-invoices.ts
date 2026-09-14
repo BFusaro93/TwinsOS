@@ -152,6 +152,7 @@ export function mapInvoice(row: any): CRMInvoice {
     clientId: row.client_id,
     estimateId: row.estimate_id,
     crmJobId: row.crm_job_id,
+    projectId: row.project_id ?? null,
     salesRepId: row.sales_rep_id ?? null,
     description: row.description,
     status: row.status,
@@ -207,10 +208,22 @@ export function mapInvoice(row: any): CRMInvoice {
 // pull open invoices for a parent client AND its child sub-accounts in one
 // query (a property-manager parent can record one payment allocated across
 // several sub-accounts' invoices).
-export function useInvoices(clientId?: string | string[]) {
+/**
+ * Invoices, optionally narrowed. `projectId` is a genuine filter, not a hint:
+ * pass it and you get only that project's invoices, never the rest of the
+ * client's unrelated billing. Passing `projectId: null` explicitly (rather
+ * than undefined) yields nothing, which is what a project with no link should
+ * show -- see the Projects Billing tab.
+ */
+export function useInvoices(
+  clientId?: string | string[],
+  opts?: { projectId?: string | null },
+) {
   const clientIds = Array.isArray(clientId) ? clientId : clientId ? [clientId] : [];
+  const projectId = opts?.projectId;
+  const projectKey = projectId === undefined ? "any" : projectId ?? "none";
   return useQuery({
-    queryKey: ["crm-invoices", clientIds.length > 0 ? [...clientIds].sort() : "all"],
+    queryKey: ["crm-invoices", clientIds.length > 0 ? [...clientIds].sort() : "all", { projectId: projectKey }],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -228,10 +241,14 @@ export function useInvoices(clientId?: string | string[]) {
         .order("invoice_number", { ascending: false });
       if (clientIds.length === 1) q = q.eq("client_id", clientIds[0]);
       else if (clientIds.length > 1) q = q.in("client_id", clientIds);
+      if (projectId) q = q.eq("project_id", projectId);
       const { data, error } = await q;
       if (error) throw error;
       return data.map(mapInvoice) as CRMInvoice[];
     },
+    // An explicit null project means "this project can't own invoices yet" --
+    // don't fetch the client's whole ledger just to throw it away.
+    enabled: projectId !== null,
   });
 }
 
@@ -416,6 +433,8 @@ export function useCreateInvoice() {
       description: string;
       invoiceDate: string;
       dueDate?: string;
+      /** Bills this invoice against a Projects row (milestone / progress billing). */
+      projectId?: string | null;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -431,6 +450,7 @@ export function useCreateInvoice() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          project_id: values.projectId ?? null,
           sales_rep_id: values.salesRepId ?? null,
           description: values.description,
           invoice_date: values.invoiceDate,
@@ -1435,22 +1455,40 @@ export function useApplyCreditToInvoice() {
   });
 }
 
-export function usePayments(clientId?: string) {
+/**
+ * Payments, optionally narrowed. Payments have no project_id of their own --
+ * a payment belongs to a project via the invoice it was applied to, so
+ * `projectId` filters on the joined invoice. An unapplied payment (no
+ * invoice_id) therefore belongs to no project, which is correct: it's client
+ * credit, not project revenue.
+ */
+export function usePayments(clientId?: string, opts?: { projectId?: string | null }) {
+  const projectId = opts?.projectId;
+  const projectKey = projectId === undefined ? "any" : projectId ?? "none";
   return useQuery({
-    queryKey: ["crm-payments", clientId ?? "all"],
+    queryKey: ["crm-payments", clientId ?? "all", { projectId: projectKey }],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // !inner only when filtering by project: an inner join would drop
+      // unapplied payments (invoice_id null) from the unfiltered list, which
+      // is exactly where they need to show up.
+      const invoiceJoin = projectId
+        ? "crm_invoices!inner(invoice_number, project_id)"
+        : "crm_invoices(invoice_number, project_id)";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_payments")
-        .select("*, clients(display_name, billing_address), crm_invoices(invoice_number)")
+        .select(`*, clients(display_name, billing_address), ${invoiceJoin}`)
         .is("deleted_at", null)
         .order("payment_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
+      if (projectId) q = q.eq("crm_invoices.project_id", projectId);
       const { data, error } = await q;
       if (error) throw error;
       return data.map(mapPaymentFull) as CRMPayment[];
     },
+    enabled: projectId !== null,
   });
 }
 
