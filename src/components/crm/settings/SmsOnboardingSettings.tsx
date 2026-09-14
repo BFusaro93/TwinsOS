@@ -24,6 +24,7 @@ import {
   type SmsRegistrationStatus,
 } from "@/lib/hooks/use-sms-onboarding";
 import { TWILIO_BUSINESS_INDUSTRIES, industryLabel } from "@/lib/twilio/industries";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 // Mirrors the API route's LOCKED_STATUSES (a blocklist, not an allowlist) —
 // editing is allowed any time nothing is actually in flight at Twilio right
@@ -144,9 +145,9 @@ export function SmsOnboardingSettings() {
           Register your own business with carriers so appointment reminders and updates come from your own phone
           number instead of a shared one. This is a one-time setup that Twilio reviews — approval can take anywhere
           from a few hours to a few days.{" "}
-          <a href="/settings/support/sms-onboarding-guide" className="text-green-700 underline hover:text-green-800">
+          <GuideLink href="/settings/support/sms-onboarding-guide" className="text-green-700 underline hover:text-green-800">
             See the full guide
-          </a>{" "}
+          </GuideLink>{" "}
           for wording that gets approved on the first try.
         </p>
       </div>

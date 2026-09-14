@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useIntegration } from "@/lib/hooks/use-integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 /**
  * Zapier connection card — lives in Master Account Settings > Integrations
@@ -68,13 +68,13 @@ export function ZapierIntegrationCard() {
       </div>
 
       <div className="border-b bg-slate-50 px-6 py-3">
-        <Link
+        <GuideLink
           href="/settings/support/zapier-guide"
           className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
         >
           View the full Zapier guide — every trigger and action, explained
           <ArrowRight className="h-3 w-3" />
-        </Link>
+        </GuideLink>
       </div>
 
       <div className="space-y-5 px-6 py-5">
