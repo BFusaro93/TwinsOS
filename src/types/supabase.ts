@@ -4130,6 +4130,13 @@ export type Database = {
             foreignKeyName: "crm_form_responses_related_ticket_id_fkey"
             columns: ["related_ticket_id"]
             isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_form_responses_related_ticket_id_fkey"
+            columns: ["related_ticket_id"]
+            isOneToOne: false
             referencedRelation: "rpt_upsells"
             referencedColumns: ["id"]
           },
@@ -6586,6 +6593,13 @@ export type Database = {
             foreignKeyName: "crm_sales_meetings_ticket_id_fkey"
             columns: ["ticket_id"]
             isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
             referencedRelation: "rpt_upsells"
             referencedColumns: ["id"]
           },
@@ -6830,6 +6844,13 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "crm_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
             referencedColumns: ["id"]
           },
           {
@@ -7810,6 +7831,13 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "crm_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ticket_links_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
             referencedColumns: ["id"]
           },
           {
@@ -9453,6 +9481,13 @@ export type Database = {
             columns: ["upsell_ticket_id"]
             isOneToOne: false
             referencedRelation: "crm_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_upsell_ticket_id_fkey"
+            columns: ["upsell_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
             referencedColumns: ["id"]
           },
           {
@@ -12805,6 +12840,13 @@ export type Database = {
             foreignKeyName: "ticket_contributors_ticket_id_fkey"
             columns: ["ticket_id"]
             isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_contributors_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
             referencedRelation: "rpt_upsells"
             referencedColumns: ["id"]
           },
@@ -14095,6 +14137,23 @@ export type Database = {
           target_rate_cents_per_hr?: number | null
           target_rate_with_drive_cents_per_hr?: number | null
           unit?: string | null
+        }
+        Relationships: []
+      }
+      rpt_tickets: {
+        Row: {
+          assigned_to: string | null
+          category: string | null
+          client_name: string | null
+          closed_at: string | null
+          created_at: string | null
+          due_date: string | null
+          id: string | null
+          priority: string | null
+          status: string | null
+          subject: string | null
+          ticket_number: number | null
+          type: string | null
         }
         Relationships: []
       }
