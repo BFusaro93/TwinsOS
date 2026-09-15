@@ -1,8 +1,10 @@
--- Reconstructed from supabase_migrations.schema_migrations (statements
--- column) on production — this version was applied directly with no
--- matching local file, discovered during the 2026-09-14 migration drift
--- reconciliation (see migration-drift-check.yml).
-
+-- crm_document_templates.include_pdf has defaulted to false since the table
+-- was created, so every invoice/estimate email template anyone has ever
+-- created had "Attach PDF" silently unchecked — nobody deliberately opted
+-- out of attaching the PDF, the checkbox just started off wrong. The
+-- sibling legacy table (crm_email_templates) already got this same fix.
+-- Flip the default going forward and backfill existing templates that
+-- still have the never-intentionally-chosen false value.
 ALTER TABLE crm_document_templates
   ALTER COLUMN include_pdf SET DEFAULT true;
 

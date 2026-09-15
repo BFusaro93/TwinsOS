@@ -25,10 +25,12 @@ import type { InvoicePDFLayoutKey, InvoicePDFTemplate } from "@/types/crm-invoic
 // Add an entry here when a new layoutKey is implemented in InvoiceDocument.tsx
 // (e.g. after importing a customer's own Service Autopilot-style template).
 const LAYOUT_OPTIONS: { value: InvoicePDFLayoutKey; label: string }[] = [
-  { value: "default", label: "Default" },
+  { value: "default", label: "Standard Invoice" },
   { value: "compact", label: "Compact" },
-  { value: "statement", label: "Statement (running account balance + payment stub)" },
-  { value: "statement_invoice_only", label: "Statement (this invoice's balance only + payment stub)" },
+  { value: "statement", label: "Statement — Running Balance (with payment stub)" },
+  { value: "statement_no_stub", label: "Statement — Running Balance (no payment stub)" },
+  { value: "statement_invoice_only", label: "Statement — This Invoice Only (with payment stub)" },
+  { value: "statement_invoice_only_no_stub", label: "Statement — This Invoice Only (no payment stub)" },
 ];
 
 function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate; onClose: () => void }) {

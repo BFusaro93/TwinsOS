@@ -37,6 +37,7 @@ import {
   FIXED_MULTI_CONDITION_FIELDS,
   EMPLOYEE_CONDITION_FIELDS,
   BOOLEAN_CONDITION_FIELDS,
+  DAY_COUNT_CONDITION_FIELDS,
 } from "@/lib/automations/condition-fields";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 import type { MultiSelectOption } from "@/components/shared/MultiSelectDropdown";
@@ -180,7 +181,12 @@ export function ConditionListEditor({
                 />
               ) : (
                 <Input
-                  placeholder="Value"
+                  placeholder={DAY_COUNT_CONDITION_FIELDS.has(c.field) ? "Number of days" : "Value"}
+                  title={
+                    DAY_COUNT_CONDITION_FIELDS.has(c.field)
+                      ? "A whole number of days. Counted from the invoice's due date, or from the date it was paid."
+                      : undefined
+                  }
                   className="flex-1 min-w-0"
                   value={c.value}
                   onChange={(e) => updateCondition(i, { value: e.target.value })}

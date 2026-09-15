@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -467,47 +467,30 @@ function ProjectDetailDialog({
           </div>
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="milestone" className="flex flex-1 flex-col overflow-hidden">
-          <TabsList className="shrink-0 border-b bg-slate-100 rounded-none justify-start px-4 py-0 h-10 gap-0">
-            {[
-              { value: "milestone", label: "Milestone" },
-              { value: "changeorders", label: "Change Orders" },
-              { value: "billing", label: "Billing" },
-              { value: "analysis", label: "Analysis" },
-              { value: "notes", label: "Notes & Attachments" },
-              { value: "audit", label: "Audit Trail" },
-            ].map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-slate-700 data-[state=active]:bg-white data-[state=active]:shadow-none"
-              >
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="milestone" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
-            <MilestoneTab project={project} />
-          </TabsContent>
-          <TabsContent value="changeorders" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
-            <ChangeOrdersTab project={project} />
-          </TabsContent>
-          <TabsContent value="billing" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
-            <BillingTab project={project} />
-          </TabsContent>
-          <TabsContent value="analysis" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
-            <AnalysisTab project={project} />
-          </TabsContent>
-          <TabsContent value="notes" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
-            <NotesTab project={project} />
-          </TabsContent>
-          <TabsContent value="audit" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
-            <div className="rounded-lg border bg-slate-50 p-6 text-center text-sm text-slate-400">
-              Audit trail coming soon
-            </div>
-          </TabsContent>
-        </Tabs>
+        {/* Shared RecordDetailTabs — the grey filled-pill strip this used to
+            hand-roll was the only detail panel in the app not using the
+            standard green-underline tab bar. */}
+        <RecordDetailTabs
+          className="overflow-hidden"
+          tabs={[
+            { value: "milestone", label: "Milestone", content: <div className="p-6"><MilestoneTab project={project} /></div> },
+            { value: "changeorders", label: "Change Orders", content: <div className="p-6"><ChangeOrdersTab project={project} /></div> },
+            { value: "billing", label: "Billing", content: <div className="p-6"><BillingTab project={project} /></div> },
+            { value: "analysis", label: "Analysis", content: <div className="p-6"><AnalysisTab project={project} /></div> },
+            { value: "notes", label: "Notes & Attachments", content: <div className="p-6"><NotesTab project={project} /></div> },
+            {
+              value: "audit",
+              label: "Audit Trail",
+              content: (
+                <div className="p-6">
+                  <div className="rounded-lg border bg-slate-50 p-6 text-center text-sm text-slate-400">
+                    Audit trail coming soon
+                  </div>
+                </div>
+              ),
+            },
+          ]}
+        />
       </DialogContent>
 
       <NewProjectDialog open={editMode} onOpenChange={setEditMode} project={project} />

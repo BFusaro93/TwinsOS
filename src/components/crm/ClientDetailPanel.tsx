@@ -80,6 +80,7 @@ import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
+import { AccountStatementDialog } from "./clients/AccountStatementDialog";
 import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
   useQuickBooksClientLink,
@@ -99,6 +100,7 @@ import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import {
   Phone,
   Mail,
@@ -1247,14 +1249,16 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Tax Rate (%)</Label>
-                <Input
-                  type="number"
-                  step="0.25"
-                  min="0"
-                  max="30"
+                {/* Basis points are hundredths just like cents, so
+                    CurrencyInput's raw-text-while-focused handling applies
+                    verbatim — a toFixed(2)-formatted controlled input turned
+                    "6.25" into 6.03 by re-formatting mid-keystroke (D-19). */}
+                <CurrencyInput
+                  blankWhenZero
                   placeholder={orgSettings ? `Org default (${orgSettings.taxRatePercent}%)` : "Org default"}
-                  value={form.defaultTaxRateBps > 0 ? (form.defaultTaxRateBps / 100).toFixed(2) : ""}
-                  onChange={(e) => patch("defaultTaxRateBps", Math.round(parseFloat(e.target.value || "0") * 100))}
+                  cents={form.defaultTaxRateBps}
+                  onChange={(bps) => patch("defaultTaxRateBps", bps)}
+                  aria-label="Default tax rate percent"
                 />
                 <p className="text-xs text-slate-400">Leave blank to use the organization default tax rate.</p>
               </div>
@@ -3177,6 +3181,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [accountStatementOpen, setAccountStatementOpen] = useState(false);
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
   const { mutateAsync: activate } = useActivateClient();
@@ -3442,7 +3447,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => setActiveTab("audit")}>
                       <History className="mr-2 h-3.5 w-3.5" /> View Audit Trail
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setActiveTab("details")}>
+                    <DropdownMenuItem onClick={() => setAccountStatementOpen(true)}>
                       <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -3953,6 +3958,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         property={editProperty}
       />
       <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
+      <AccountStatementDialog
+        clientId={clientId}
+        clientName={client.displayName}
+        clientEmail={client.primaryEmail}
+        open={accountStatementOpen}
+        onClose={() => setAccountStatementOpen(false)}
+      />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog
         clientId={clientId}

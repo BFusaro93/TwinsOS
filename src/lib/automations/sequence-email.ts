@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
+import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { computeWaitFireAt } from "./sequence-enrollment";
 
@@ -172,21 +173,6 @@ export async function resolveEmailStepContent(
     subject: resolve(params.subjectTemplate || "(no subject)"),
     bodyHtml: plainTextToHtml(resolve(params.bodyTemplate || "")),
   };
-}
-
-/** The automation email step's body field is a plain `<textarea>` (no rich
- *  text), unlike every other send path in the app (invoices, estimates,
- *  form notifications) which already convert blank-line-separated text into
- *  paragraphs before sending as HTML. Without this, a hand-typed multi-
- *  paragraph email arrived as one run-on paragraph — blank lines and single
- *  line breaks both collapse in HTML unless converted. Left alone if the
- *  text already contains markup (defensive, in case a legacy body was HTML). */
-function plainTextToHtml(text: string): string {
-  if (/<[a-z][\s\S]*>/i.test(text)) return text;
-  return text
-    .split(/\n{2,}/)
-    .map((para) => `<p style="margin:0 0 12px 0">${para.replace(/\n/g, "<br>")}</p>`)
-    .join("");
 }
 
 /**

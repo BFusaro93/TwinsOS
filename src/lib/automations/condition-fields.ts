@@ -53,8 +53,8 @@ export const CONDITION_GROUPS: { label: string; items: { value: ConditionField; 
     items: [
       { value: "invoice_has_product", label: "Invoice has product" },
       { value: "invoice_has_service", label: "Invoice has service" },
-      { value: "invoice_past_due_days", label: "Invoice past due (days)" },
-      { value: "invoice_was_paid_days", label: "Invoice was paid (days)" },
+      { value: "invoice_past_due_days", label: "Days invoice is past due" },
+      { value: "invoice_was_paid_days", label: "Days since invoice was paid" },
     ],
   },
   {
@@ -85,7 +85,7 @@ export const CONDITION_GROUPS: { label: string; items: { value: ConditionField; 
     label: "Ticket",
     items: [
       { value: "ticket_category", label: "Ticket category" },
-      { value: "ticket_past_due_days", label: "Ticket past due (days)" },
+      { value: "ticket_past_due_days", label: "Days ticket is past due" },
     ],
   },
 ];
@@ -105,6 +105,17 @@ export const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] 
   { value: "is_set", label: "is set" },
   { value: "is_not_set", label: "is not set" },
 ];
+
+/**
+ * Fields whose value is a whole number of days, not a date or a name — the
+ * label alone left people guessing what to type in the value box. The day
+ * count is floored server-side so an `equals 3` rule can actually match.
+ */
+export const DAY_COUNT_CONDITION_FIELDS = new Set<ConditionField>([
+  "invoice_past_due_days",
+  "invoice_was_paid_days",
+  "ticket_past_due_days",
+]);
 
 /** Fields whose value is a tag name — rendered as a Select of org-defined tags instead of free text. */
 export const TAG_CONDITION_FIELDS = new Set<ConditionField>(["has_tag", "does_not_have_tag"]);
