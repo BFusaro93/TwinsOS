@@ -546,7 +546,7 @@ const SS = StyleSheet.create({
   infoHeaderCell: { flex: 1, backgroundColor: "#f8fafc", padding: 4, fontSize: 7, fontFamily: "Helvetica-Bold", textAlign: "center", borderRight: "1 solid #cbd5e1" },
   infoValueRow: { flexDirection: "row" },
   infoValueCell: { flex: 1, padding: 4, fontSize: 7.5, textAlign: "center", borderRight: "1 solid #cbd5e1" },
-  miniTable: { borderTop: "1 solid #cbd5e1", borderLeft: "1 solid #cbd5e1", borderRight: "1 solid #cbd5e1" },
+  miniTable: { border: "1 solid #cbd5e1" },
   miniRow: { flexDirection: "row", borderBottom: "1 solid #cbd5e1" },
   miniCellLabel: { flex: 1.4, backgroundColor: "#f8fafc", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold" },
   miniCellValue: { flex: 1, padding: 4, fontSize: 7.5, textAlign: "right" },
@@ -583,7 +583,9 @@ const SS = StyleSheet.create({
   termsText: { fontSize: 7, color: "#b91c1c", lineHeight: 1.5 },
 
   /** Occupies the full bottom third of the page — a tear-off mail-in stub,
-   *  not just a compact box sitting in a large blank margin. */
+   *  not just a compact box sitting in a large blank margin. Column layout
+   *  so the ad/terms text (adsAndNotes) can sit below the payment rows,
+   *  filling the space that would otherwise go blank. */
   stub: {
     position: "absolute",
     bottom: 0,
@@ -591,11 +593,10 @@ const SS = StyleSheet.create({
     right: 32,
     height: BOTTOM_THIRD,
     paddingTop: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: "column",
     backgroundColor: "#ffffff",
   },
+  stubTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
   stubLeft: { flexDirection: "column" },
   stubRow: { flexDirection: "row", marginBottom: 4, alignItems: "flex-end" },
   stubLabel: { fontSize: 8.5, fontFamily: "Helvetica-Bold", width: 80 },
@@ -634,21 +635,23 @@ function StatementInvoiceLayout({
   const clientAddressLine2 = [invoice.clientCity, invoice.clientState, invoice.clientZip].filter(Boolean).join(", ");
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
   const invoiceLabel = `#${String(invoice.invoiceNumber).padStart(5, "0")}`;
-  const onlineAndNotes = (
-    <>
-      <View style={SS.onlineBox}>
-        <Text style={[SS.onlineBoxLabel, { color: accentColor }]}>To View Your Invoice Online</Text>
-        {invoice.viewOnlineUrl ? (
-          <Link src={invoice.viewOnlineUrl} style={[SS.onlineBoxText, { color: accentColor }]}>
-            Go to {invoice.viewOnlineUrl}
-          </Link>
-        ) : (
-          <Text style={[SS.onlineBoxText, { color: accentColor }]}>
-            Log in to your client portal to view this invoice and payment history.
-          </Text>
-        )}
-      </View>
+  const onlineBox = (
+    <View style={SS.onlineBox}>
+      <Text style={[SS.onlineBoxLabel, { color: accentColor }]}>To View Your Invoice Online</Text>
+      {invoice.viewOnlineUrl ? (
+        <Link src={invoice.viewOnlineUrl} style={[SS.onlineBoxText, { color: accentColor }]}>
+          Go to {invoice.viewOnlineUrl}
+        </Link>
+      ) : (
+        <Text style={[SS.onlineBoxText, { color: accentColor }]}>
+          Log in to your client portal to view this invoice and payment history.
+        </Text>
+      )}
+    </View>
+  );
 
+  const adsAndNotes = (
+    <>
       {invoice.advertisementText ? (
         <View style={{ marginTop: 10 }}>
           <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
@@ -808,31 +811,41 @@ function StatementInvoiceLayout({
       ))}
 
       {showPaymentStub ? (
-        <View style={SS.onlineNotesAnchor}>{onlineAndNotes}</View>
+        <View style={SS.onlineNotesAnchor}>{onlineBox}</View>
       ) : (
-        onlineAndNotes
+        <>
+          {onlineBox}
+          {adsAndNotes}
+        </>
       )}
 
       {showPaymentStub ? (
         <View fixed style={[SS.stub, { borderTop: `2 solid ${accentColor}` }]}>
-          <View style={SS.stubLeft}>
-            <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
-            <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
-            <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
-            <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
-            <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Enclosed</Text><View style={SS.stubBlankLine} /></View>
+          <View style={SS.stubTopRow}>
+            <View style={SS.stubLeft}>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Enclosed</Text><View style={SS.stubBlankLine} /></View>
+            </View>
+            <View style={SS.stubRight}>
+              <Text style={[SS.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
+              <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
+              <Text style={SS.companyMeta}>{org.street}</Text>
+              {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
+              {org.phone ? <Text style={SS.companyMeta}>{org.phone}</Text> : null}
+              <Text
+                style={[SS.companyMeta, { marginTop: 6 }]}
+                render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+              />
+            </View>
           </View>
-          <View style={SS.stubRight}>
-            <Text style={[SS.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
-            <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
-            <Text style={SS.companyMeta}>{org.street}</Text>
-            {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
-            {org.phone ? <Text style={SS.companyMeta}>{org.phone}</Text> : null}
-            <Text
-              style={[SS.companyMeta, { marginTop: 6 }]}
-              render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
-            />
-          </View>
+
+          {/* Fills the otherwise-blank space below the payment rows — matches
+              the SA sample, which places the service update and terms text
+              inside the stub rather than leaving it empty. */}
+          <View style={{ marginTop: 12 }}>{adsAndNotes}</View>
         </View>
       ) : (
         <View style={SS.footer} fixed>
