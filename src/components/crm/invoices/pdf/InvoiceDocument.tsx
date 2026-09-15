@@ -65,7 +65,9 @@ export interface InvoicePDFStatementData {
   /** previousBalanceCents + this invoice's own outstanding balance. */
   accountBalanceCents: number;
   lastPayment: { amountCents: number; date: string; reference: string | null } | null;
-  priorInvoice: { invoiceNumber: number; amountCents: number; date: string; daysPastDue: number } | null;
+  /** Every OTHER still-open (outstanding balance) invoice for this client,
+   *  newest first — not just the single most recent one. */
+  priorInvoices: { invoiceNumber: number; amountCents: number; date: string; daysPastDue: number }[];
 }
 
 export interface OrgPDFData {
@@ -765,19 +767,19 @@ function StatementInvoiceLayout({
         <View style={SS.cellTotal}><Text style={SS.activityHeaderText}>Total</Text></View>
       </View>
 
-      {st?.priorInvoice && (
-        <View style={SS.activityRow}>
-          <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(st.priorInvoice.date)}</Text></View>
+      {(st?.priorInvoices ?? []).map((pi) => (
+        <View key={pi.invoiceNumber} style={SS.activityRow}>
+          <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(pi.date)}</Text></View>
           <View style={SS.cellDesc}>
             <Text style={SS.activityText}>
-              Invoice #{st.priorInvoice.invoiceNumber}{daysPastDueLabel(st.priorInvoice.daysPastDue)}
+              Invoice #{pi.invoiceNumber}{daysPastDueLabel(pi.daysPastDue)}
             </Text>
           </View>
           <View style={SS.cellQty} />
           <View style={SS.cellPrice} />
-          <View style={SS.cellTotal}><Text style={SS.activityText}>{cents(st.priorInvoice.amountCents)}</Text></View>
+          <View style={SS.cellTotal}><Text style={SS.activityText}>{cents(pi.amountCents)}</Text></View>
         </View>
-      )}
+      ))}
       {st?.lastPayment && (
         <View style={SS.activityRow}>
           <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(st.lastPayment.date)}</Text></View>
@@ -792,7 +794,7 @@ function StatementInvoiceLayout({
         </View>
       )}
 
-      {(st?.priorInvoice || st?.lastPayment) && (
+      {((st?.priorInvoices ?? []).length > 0 || st?.lastPayment) && (
         <View style={SS.activityDividerRow}>
           <Text style={SS.activityDividerText}>********* NEW ACCOUNT ACTIVITY *********</Text>
         </View>
