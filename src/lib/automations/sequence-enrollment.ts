@@ -244,16 +244,27 @@ const ESTIMATE_FIELD_GETTERS: Partial<Record<ConditionField, (estimate: Record<s
 // Multi-select "any of" fields needing the same `estimates` row fetched.
 const SPECIAL_ESTIMATE_CONDITION_FIELDS = new Set<ConditionField>(["estimate_sales_rep", "estimate_status", "estimate_stage"]);
 
+/** Whole days elapsed since `date`, or null if there isn't one. Floored, not
+ *  fractional: these back the "Days … past due / since paid" conditions, whose
+ *  value box takes an integer. A raw 3.47 never equals a typed 3, so an
+ *  `equals 3` rule silently never fired. */
+function daysSince(date: unknown): number | null {
+  if (!date) return null;
+  const ms = new Date(String(date)).getTime();
+  if (Number.isNaN(ms)) return null;
+  return Math.floor((Date.now() - ms) / 86400000);
+}
+
 const TICKET_FIELD_GETTERS: Partial<Record<ConditionField, (ticket: Record<string, unknown>) => unknown>> = {
-  ticket_past_due_days: (t) => (t.due_date ? (Date.now() - new Date(String(t.due_date)).getTime()) / 86400000 : null),
+  ticket_past_due_days: (t) => daysSince(t.due_date),
 };
 const SPECIAL_TICKET_CONDITION_FIELDS = new Set<ConditionField>(["ticket_category"]);
 
 const INVOICE_FIELD_GETTERS: Partial<Record<ConditionField, (invoice: Record<string, unknown>) => unknown>> = {
-  invoice_past_due_days: (i) => (i.due_date ? (Date.now() - new Date(String(i.due_date)).getTime()) / 86400000 : null),
+  invoice_past_due_days: (i) => daysSince(i.due_date),
   // last_payment_date isn't a real crm_invoices column — it's merged onto
   // this object from a separate crm_payments query below.
-  invoice_was_paid_days: (i) => (i.last_payment_date ? (Date.now() - new Date(String(i.last_payment_date)).getTime()) / 86400000 : null),
+  invoice_was_paid_days: (i) => daysSince(i.last_payment_date),
 };
 
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
