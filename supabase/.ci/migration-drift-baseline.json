@@ -1,5 +1,5 @@
 {
-  "_comment": "Known, already-reconciled migration history gaps between supabase/migrations/ and production as of 2026-08-24 (see PR #68). The drift-check workflow ignores exactly these versions so CI stays green without requiring us to reverse-engineer decades-old ad-hoc schema changes. Any NEW drift beyond this baseline fails the build. Do not add to this list to silence a check on migrations you're actively adding — that's what the check is for. Only add here if you've done the same live-schema verification PR #68 did and are documenting a deliberately-accepted historical gap.",
+  "_comment": "Known, already-reconciled migration history gaps between supabase/migrations/ and production. knownRemoteOnly entries are as of 2026-08-24 (see PR #68) — decades-old ad-hoc schema changes never captured as migration files. knownLocalOnly entries as of 2026-09-14 (see the 2026-09-14 migration drift reconciliation) are local files that were superseded before ever being applied to production: each recreates a report view with `create or replace view`, and a later, already-applied migration (different, correctly-recorded version) went on to further modify that same view. Re-running these now would silently roll back that later work, so they're intentionally left un-applied rather than pushed. The drift-check workflow ignores exactly these versions so CI stays green without requiring us to reverse-engineer decades-old ad-hoc schema changes or unsafely replay stale drafts. Any NEW drift beyond this baseline fails the build. Do not add to this list to silence a check on migrations you're actively adding — that's what the check is for. Only add here if you've done the same live-schema verification this file's own history describes and are documenting a deliberately-accepted gap.",
   "knownRemoteOnly": [
     "20260623024109",
     "20260623025056",
@@ -33,6 +33,11 @@
   ],
   "knownLocalOnly": [
     "20260619000010",
-    "20260710000005"
+    "20260710000005",
+    "20260906110000",
+    "20260906180000",
+    "20260906180100",
+    "20260906180200",
+    "20260906180500"
   ]
 }
