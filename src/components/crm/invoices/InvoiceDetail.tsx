@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
-import { parseCurrencyToCents } from "@/components/shared/CurrencyInput";
+import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
 import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
@@ -1206,12 +1206,17 @@ export function InvoiceDetail({
                         </button>
                         {hasTax ? (
                           <div className="flex items-center gap-1.5">
-                            <Input
-                              type="number" step="0.25" min="0" max="30"
-                              value={(taxRateBps / 100).toFixed(2)}
-                              onChange={(e) => setTaxRateBps(Math.round(parseFloat(e.target.value || "0") * 100))}
+                            {/* Basis points are hundredths just like cents, so
+                                CurrencyInput's raw-text-while-focused handling
+                                applies verbatim — a toFixed(2)-formatted
+                                controlled input turned "6.25" into 6.03 by
+                                re-formatting mid-keystroke (D-19). */}
+                            <CurrencyInput
+                              cents={taxRateBps}
+                              onChange={setTaxRateBps}
                               className="h-7 w-24 text-right text-xs"
                               disabled={invoice.locked}
+                              aria-label="Tax rate percent"
                             />
                             <span className="text-slate-500 font-medium">%</span>
                           </div>

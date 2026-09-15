@@ -100,6 +100,7 @@ import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import {
   Phone,
   Mail,
@@ -1248,14 +1249,16 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Tax Rate (%)</Label>
-                <Input
-                  type="number"
-                  step="0.25"
-                  min="0"
-                  max="30"
+                {/* Basis points are hundredths just like cents, so
+                    CurrencyInput's raw-text-while-focused handling applies
+                    verbatim — a toFixed(2)-formatted controlled input turned
+                    "6.25" into 6.03 by re-formatting mid-keystroke (D-19). */}
+                <CurrencyInput
+                  blankWhenZero
                   placeholder={orgSettings ? `Org default (${orgSettings.taxRatePercent}%)` : "Org default"}
-                  value={form.defaultTaxRateBps > 0 ? (form.defaultTaxRateBps / 100).toFixed(2) : ""}
-                  onChange={(e) => patch("defaultTaxRateBps", Math.round(parseFloat(e.target.value || "0") * 100))}
+                  cents={form.defaultTaxRateBps}
+                  onChange={(bps) => patch("defaultTaxRateBps", bps)}
+                  aria-label="Default tax rate percent"
                 />
                 <p className="text-xs text-slate-400">Leave blank to use the organization default tax rate.</p>
               </div>

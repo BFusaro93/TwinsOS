@@ -21,7 +21,7 @@ const IP_LIMIT = 15;
 const WINDOW_SECONDS = 15 * 60;
 
 export async function POST(request: Request) {
-  let body: { email?: string };
+  let body: { email?: string; portal?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -29,6 +29,10 @@ export async function POST(request: Request) {
   }
 
   const { email } = body;
+  // Only changes the wording of the email. Where the reset link SENDS someone
+  // is worked out in /reset-password from their own account, so a portal user
+  // who used the staff page (or the reverse) still lands in the right place.
+  const isPortal = body.portal === true;
   if (!email) {
     return NextResponse.json({ error: "email is required" }, { status: 400 });
   }
@@ -71,11 +75,11 @@ export async function POST(request: Request) {
   await resend.emails.send({
     from: EMAIL_FROM,
     to: email,
-    subject: "Reset your Equipt password",
+    subject: isPortal ? "Reset your client portal password" : "Reset your Equipt password",
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
         <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Reset your password</h2>
-        <p style="margin:0 0 24px;color:#475569">Click the button below to set a new password for your Equipt account.</p>
+        <p style="margin:0 0 24px;color:#475569">Click the button below to set a new password for your ${isPortal ? "client portal" : "Equipt"} account.</p>
         <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Reset Password</a>
         <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
       </div>

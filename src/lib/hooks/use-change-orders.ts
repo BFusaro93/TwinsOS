@@ -2,7 +2,11 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import type { ProjectChangeOrder, ChangeOrderStatus, ChangeOrderTreatment } from "@/types/project";
+import type {
+  ProjectChangeOrder,
+  ChangeOrderEditableStatus,
+  ChangeOrderTreatment,
+} from "@/types/project";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapChangeOrder(row: any): ProjectChangeOrder {
@@ -116,7 +120,7 @@ export function useUpdateChangeOrder() {
         amountCents: number;
         costImpactCents: number;
         billingTreatment: ChangeOrderTreatment;
-        status: ChangeOrderStatus;
+        status: ChangeOrderEditableStatus;
         requestedDate: string;
         clientReference: string | null;
       }>;
@@ -139,6 +143,13 @@ export function useUpdateChangeOrder() {
   });
 }
 
+/**
+ * Soft-deletes a change order that was never approved. An APPROVED one has to
+ * go through useReverseChangeOrder instead: deleting it only drops the derived
+ * contract price and leaves the milestones billing the raised amount, which
+ * over-bills the client by the whole change order. The database refuses it
+ * either way; this is here so the caller picks the right one.
+ */
 export function useDeleteChangeOrder() {
   const qc = useQueryClient();
   return useMutation({
@@ -150,6 +161,33 @@ export function useDeleteChangeOrder() {
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
+    },
+    onSuccess: (_d, vars) => invalidateProjectBilling(qc, vars.projectId),
+  });
+}
+
+/**
+ * Reverses an approved change order. The RPC subtracts exactly what the
+ * approval added — it recorded the per-milestone split in billing_allocation —
+ * so the contract price and the schedule come back down together.
+ *
+ * It refuses when an affected milestone has already been invoiced, because
+ * that part of the change order is money the client has been billed; the
+ * invoice has to be voided or credited first. The error says so, so surface
+ * its message rather than a generic one.
+ */
+export function useReverseChangeOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; projectId: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabase = createClient() as any;
+      const { data, error } = await supabase.rpc("reverse_change_order", {
+        p_change_order_id: id,
+        p_delete: true,
+      });
+      if (error) throw error;
+      return (data?.[0]?.new_contract_cents ?? 0) as number;
     },
     onSuccess: (_d, vars) => invalidateProjectBilling(qc, vars.projectId),
   });

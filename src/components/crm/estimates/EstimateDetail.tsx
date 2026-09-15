@@ -62,6 +62,7 @@ import { stripHtml } from "@/lib/utils/strip-html";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { EstimatePhotosTab } from "./EstimatePhotosTab";
 import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
@@ -1588,23 +1589,25 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 )}
                 <FieldRow label="Deposit Required" title="Upfront amount due before work begins, subtracted from the total before splitting into installments">
                   <div className="flex flex-col gap-1">
+                    {/* CurrencyInput, not a raw controlled <Input> formatted
+                        with toFixed(2): that re-formats after every keystroke,
+                        so typing "2000" landed each digit after the inserted
+                        ".00" and saved $2.01. Same D-19 bug that mangled
+                        contract amounts. */}
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-slate-400">$</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={
+                      <CurrencyInput
+                        cents={
                           headerEdits.deposit_required_cents !== undefined
-                            ? ((headerEdits.deposit_required_cents as number) / 100).toFixed(2)
-                            : (estimate.depositRequiredCents / 100).toFixed(2)
+                            ? (headerEdits.deposit_required_cents as number)
+                            : estimate.depositRequiredCents
                         }
-                        onChange={(e) =>
-                          patchHeader("deposit_required_cents", Math.round(Number(e.target.value) * 100))
+                        onChange={(cents) => patchHeader("deposit_required_cents", cents)}
+                        onCommit={(cents) =>
+                          saveHeader({ ...headerEdits, deposit_required_cents: cents })
                         }
-                        onBlur={() => saveHeader()}
                         className="h-8 w-28"
-                        placeholder="0"
+                        placeholder="0.00"
                       />
                     </div>
                     {estimate.depositCollectedCents > 0 && (

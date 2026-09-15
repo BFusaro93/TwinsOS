@@ -54,6 +54,15 @@ export interface ProjectSubcontractCost extends BaseRecord {
 
 export type ChangeOrderStatus = "draft" | "pending_approval" | "approved" | "rejected";
 
+/**
+ * The statuses a plain UPDATE may set. Crossing the 'approved' boundary moves
+ * the contract price and has to reshape the billing schedule with it, so it
+ * belongs to approve_change_order / reverse_change_order — a BEFORE trigger on
+ * project_change_orders refuses it from anywhere else. Excluding it here means
+ * the mistake doesn't compile rather than failing at the database.
+ */
+export type ChangeOrderEditableStatus = Exclude<ChangeOrderStatus, "approved">;
+
 /** How an approved change order lands on the project's billing schedule. */
 export type ChangeOrderTreatment =
   /** Spread pro-rata across the milestones not yet invoiced. */
