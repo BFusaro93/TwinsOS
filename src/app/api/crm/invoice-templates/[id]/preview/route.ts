@@ -38,12 +38,20 @@ const SAMPLE_INVOICE: Omit<InvoicePDFData, "invoiceNumber" | "invoiceDate"> = {
     previousBalanceCents: 47813,
     accountBalanceCents: 95626,
     lastPayment: { amountCents: 47813, date: isoNy(new Date()), reference: "7219443587" },
-    priorInvoice: {
-      invoiceNumber: 1000,
-      amountCents: 47813,
-      date: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10),
-      daysPastDue: 1,
-    },
+    priorInvoices: [
+      {
+        invoiceNumber: 1000,
+        amountCents: 47813,
+        date: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10),
+        daysPastDue: 1,
+      },
+      {
+        invoiceNumber: 998,
+        amountCents: 12500,
+        date: new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10),
+        daysPastDue: 31,
+      },
+    ],
   },
 };
 
