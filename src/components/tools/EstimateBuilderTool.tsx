@@ -54,16 +54,11 @@ export function EstimateBuilderTool() {
 
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-2 flex items-center gap-3">
-        <div className="rounded-md bg-brand-500 px-3 py-1.5">
-          <span className="text-sm font-extrabold tracking-wide text-white">TWINS</span>
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-brand-600">Estimate Text/Language Generator</h1>
-          <p className="text-sm text-slate-500">
-            Upload or paste a site visit transcript to get SA-ready proposal text
-          </p>
-        </div>
+      <div className="mb-2">
+        <h1 className="text-xl font-bold text-brand-600">Estimate Text/Language Generator</h1>
+        <p className="text-sm text-slate-500">
+          Upload or paste a site visit transcript to get proposal-ready line item text
+        </p>
       </div>
 
       <hr className="my-4 border-slate-200" />
@@ -77,20 +72,20 @@ export function EstimateBuilderTool() {
               text directly into the box below.
             </li>
             <li>
-              Click <strong>&ldquo;Generate Proposal&rdquo;</strong> to generate SA-ready line item
+              Click <strong>&ldquo;Generate Proposal&rdquo;</strong> to generate ready-to-use line item
               text.
             </li>
             <li>
-              Review the output carefully before pasting into SA — always verify scope, quantities,
-              and pricing.
+              Review the output carefully before pasting it into the estimate — always verify scope,
+              quantities, and pricing.
             </li>
             <li>
-              Click <strong>&ldquo;Copy to Clipboard&rdquo;</strong> and paste into the appropriate SA
+              Click <strong>&ldquo;Copy to Clipboard&rdquo;</strong> and paste into the appropriate
               estimate line item.
             </li>
           </ol>
           <p className="mb-1 mt-3 font-semibold text-slate-800">
-            Review Checklist Before Pasting into SA:
+            Review Checklist Before Pasting into the Estimate:
           </p>
           <ul className="list-disc space-y-1 pl-5 text-slate-600">
             <li>All service areas and locations are accurately described</li>
@@ -101,7 +96,7 @@ export function EstimateBuilderTool() {
             <li>Any &ldquo;Additional Opportunity&rdquo; items have been flagged for follow-up</li>
           </ul>
           <p className="mt-3 italic text-slate-400">
-            Note: This tool does not set pricing, submit to SA, or replace the estimator&rsquo;s
+            Note: This tool does not set pricing, submit the estimate, or replace the estimator&rsquo;s
             review.
           </p>
         </CardContent>
@@ -179,7 +174,7 @@ export function EstimateBuilderTool() {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <label className="text-sm font-bold text-slate-700">
-              Generated Proposal — Ready to paste into SA
+              Generated Proposal — Ready to paste into the estimate
             </label>
             <Button
               size="sm"
@@ -202,8 +197,8 @@ export function EstimateBuilderTool() {
             {generateProposal.data}
           </div>
           <p className="mt-2 text-xs italic text-slate-400">
-            Always review before pasting into SA. Verify scope, quantities, and pricing with the
-            estimator.
+            Always review before pasting into the estimate. Verify scope, quantities, and pricing
+            with the estimator.
           </p>
         </div>
       )}
