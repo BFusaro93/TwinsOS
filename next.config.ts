@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
   eslint: {
@@ -32,4 +33,16 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  // Only upload source maps / annotate builds when an auth token is present
+  // (CI/Vercel) — leave both env vars unset for a normal local `next build`.
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  webpack: {
+    treeshake: { removeDebugLogging: true },
+    // Vercel Cron/monitors integration — off unless you wire up cron jobs.
+    automaticVercelMonitors: false,
+  },
+});

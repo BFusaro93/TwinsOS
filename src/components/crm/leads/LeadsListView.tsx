@@ -68,10 +68,17 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
   const { data: leads, isLoading } = useLeads();
   const [search, setSearch] = useState("");
   const [internalSelected, setInternalSelected] = useState<Client | null>(null);
+  // Leads are shown in the same ClientDetailPanel as clients, which only
+  // renders its expand-to-full-page button when handed onExpandChange. The
+  // Clients page wires this up; without it the button was simply missing here.
+  const [expanded, setExpanded] = useState(false);
 
   const controlled = selectedId !== undefined;
   const selected = controlled ? (leads ?? []).find((l) => l.id === selectedId) ?? null : internalSelected;
   function selectLead(lead: Client) {
+    // Picking a different lead collapses back to the split view, as on Clients
+    // — otherwise the list stays hidden and there is no way back to it.
+    setExpanded(false);
     if (onSelect) onSelect(lead);
     else setInternalSelected(lead);
   }
@@ -133,9 +140,18 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
   return (
     <MasterDetailLayout
       hasSelection={!!selected}
-      onBack={() => (controlled ? onBack?.() : setInternalSelected(null))}
+      expanded={expanded}
+      onBack={() => {
+        setExpanded(false);
+        if (controlled) onBack?.();
+        else setInternalSelected(null);
+      }}
       listPanel={listPanel}
-      detailPanel={selected ? <ClientDetailPanel clientId={selected.id} /> : null}
+      detailPanel={
+        selected ? (
+          <ClientDetailPanel clientId={selected.id} expanded={expanded} onExpandChange={setExpanded} />
+        ) : null
+      }
       emptyState={
         <EmptyState
           icon={UserPlus}

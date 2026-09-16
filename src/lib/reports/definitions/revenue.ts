@@ -544,4 +544,178 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       );
     },
   },
+  {
+    key: "sales-comparison-chart",
+    section: "revenue",
+    name: "Sales Comparison Chart",
+    description: "Compares invoiced revenue this year to last year, month by month.",
+    filters: [],
+    chartVisual: {
+      type: "line",
+      useTabDateRange: false,
+      labelColumn: "month",
+      valueColumns: ["current_year_total", "last_year_total"],
+      config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+    },
+    run: async ({ supabase }) => {
+      const now = new Date();
+      const thisYear = now.getFullYear();
+      const lastYear = thisYear - 1;
+
+      const { data, error } = await supabase
+        .from("crm_invoices")
+        .select("invoice_date, total_cents")
+        .in("status", ISSUED_INVOICE_STATUSES)
+        .is("deleted_at", null)
+        .gte("invoice_date", `${lastYear}-01-01`)
+        .lte("invoice_date", `${thisYear}-12-31`)
+        .limit(20000);
+      if (error) throw new Error(error.message);
+
+      const curTotals = new Array<number>(12).fill(0);
+      const prevTotals = new Array<number>(12).fill(0);
+      for (const r of (data ?? []) as { invoice_date: string | null; total_cents: number | null }[]) {
+        if (!r.invoice_date) continue;
+        const year = parseInt(r.invoice_date.slice(0, 4), 10);
+        const monthIndex = parseInt(r.invoice_date.slice(5, 7), 10) - 1;
+        if (monthIndex < 0 || monthIndex > 11) continue;
+        if (year === thisYear) curTotals[monthIndex] += r.total_cents ?? 0;
+        else if (year === lastYear) prevTotals[monthIndex] += r.total_cents ?? 0;
+      }
+
+      const rows = MONTH_KEYS.map((_, i) => ({
+        month: MONTH_LABELS[i],
+        current_year_total: curTotals[i],
+        last_year_total: prevTotals[i],
+      }));
+
+      return buildResult(
+        [
+          col("month", "Month"),
+          col("current_year_total", `${thisYear} Total`, "money"),
+          col("last_year_total", `${lastYear} Total`, "money"),
+        ],
+        rows,
+        ["Reflects the invoice date. Excludes draft and void invoices."]
+      );
+    },
+  },
+  {
+    key: "sales-comparison-chart-paid",
+    section: "revenue",
+    name: "Sales Comparison Chart (Paid)",
+    description: "Compares cash collected this year to last year, month by month.",
+    filters: [],
+    chartVisual: {
+      type: "line",
+      useTabDateRange: false,
+      labelColumn: "month",
+      valueColumns: ["current_year_paid", "last_year_paid"],
+      config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+    },
+    run: async ({ supabase }) => {
+      const now = new Date();
+      const thisYear = now.getFullYear();
+      const lastYear = thisYear - 1;
+
+      const { data, error } = await supabase
+        .from("crm_payments")
+        .select("payment_date, amount_cents, refunded_amount_cents")
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD)
+        .is("deleted_at", null)
+        .gte("payment_date", `${lastYear}-01-01`)
+        .lte("payment_date", `${thisYear}-12-31`)
+        .limit(20000);
+      if (error) throw new Error(error.message);
+
+      const curTotals = new Array<number>(12).fill(0);
+      const prevTotals = new Array<number>(12).fill(0);
+      for (const r of (data ?? []) as {
+        payment_date: string | null;
+        amount_cents: number | null;
+        refunded_amount_cents: number | null;
+      }[]) {
+        if (!r.payment_date) continue;
+        const year = parseInt(r.payment_date.slice(0, 4), 10);
+        const monthIndex = parseInt(r.payment_date.slice(5, 7), 10) - 1;
+        if (monthIndex < 0 || monthIndex > 11) continue;
+        const net = netPaymentCents(r);
+        if (year === thisYear) curTotals[monthIndex] += net;
+        else if (year === lastYear) prevTotals[monthIndex] += net;
+      }
+
+      const rows = MONTH_KEYS.map((_, i) => ({
+        month: MONTH_LABELS[i],
+        current_year_paid: curTotals[i],
+        last_year_paid: prevTotals[i],
+      }));
+
+      return buildResult(
+        [
+          col("month", "Month"),
+          col("current_year_paid", `${thisYear} Paid`, "money"),
+          col("last_year_paid", `${lastYear} Paid`, "money"),
+        ],
+        rows,
+        ["Cash only: excludes account credits and AR write-offs; net of refunds."]
+      );
+    },
+  },
+  {
+    key: "avg-gross-revenue-per-client",
+    section: "revenue",
+    name: "Avg. Gross Revenue per Year per Client",
+    description: "Trends average invoiced revenue per client, year over year.",
+    filters: [],
+    chartVisual: {
+      type: "line",
+      useTabDateRange: false,
+      labelColumn: "year",
+      valueColumns: ["avg_revenue_per_client_cents"],
+      config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+    },
+    run: async ({ supabase }) => {
+      const { data, error } = await supabase
+        .from("crm_invoices")
+        .select("invoice_date, total_cents, client_id")
+        .in("status", ISSUED_INVOICE_STATUSES)
+        .is("deleted_at", null)
+        .limit(50000);
+      if (error) throw new Error(error.message);
+
+      type Row = { invoice_date: string | null; total_cents: number | null; client_id: string | null };
+      const rows = (data ?? []) as unknown as Row[];
+
+      const revenueByYear = new Map<number, number>();
+      const clientsByYear = new Map<number, Set<string>>();
+      for (const r of rows) {
+        if (!r.invoice_date || !r.client_id) continue;
+        const year = parseInt(r.invoice_date.slice(0, 4), 10);
+        revenueByYear.set(year, (revenueByYear.get(year) ?? 0) + (r.total_cents ?? 0));
+        const clients = clientsByYear.get(year) ?? new Set<string>();
+        clients.add(r.client_id);
+        clientsByYear.set(year, clients);
+      }
+
+      const years = [...revenueByYear.keys()].sort((a, b) => a - b);
+      const resultRows = years.map((year) => {
+        const revenue = revenueByYear.get(year) ?? 0;
+        const clientCount = clientsByYear.get(year)?.size ?? 0;
+        return {
+          year: String(year),
+          avg_revenue_per_client_cents: clientCount > 0 ? Math.round(revenue / clientCount) : 0,
+        };
+      });
+
+      return buildResult(
+        [col("year", "Year"), col("avg_revenue_per_client_cents", "Avg Gross Revenue per Client", "money")],
+        resultRows,
+        [
+          "Reflects the invoice date. Excludes draft and void invoices.",
+          "Avg = total invoiced revenue that year ÷ distinct clients invoiced that year.",
+        ]
+      );
+    },
+  },
 ];

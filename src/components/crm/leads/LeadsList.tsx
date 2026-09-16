@@ -41,7 +41,7 @@ import { matchesAllFilterRows, parseMultiValue, type FilterRow } from "@/lib/cli
 import { useLeadFilterFields } from "@/lib/hooks/use-lead-filter-fields";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, UserCheck, Search, XCircle, Building2, Home, ChevronDown, X } from "lucide-react";
+import { Plus, UserCheck, Search, XCircle, Building2, Home, ChevronDown, X, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -331,6 +331,7 @@ interface LeadsListProps {
 }
 
 export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: LeadsListProps = {}) {
+  const router = useRouter();
   const { data: leads, isLoading } = useLeads();
   const { mutateAsync: bulkClose } = useBulkCloseLeadsAsLost();
   const { can } = usePermissions();
@@ -572,6 +573,16 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                             <XCircle className="h-3 w-3" /> Close
                           </Button>
                         )}
+                        {/* Same full-screen escape the clients table gives every
+                            row. Leads live in the clients table, so they share
+                            the /crm/clients/:id detail page. */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); router.push(`/crm/clients/${lead.id}`); }}
+                          className="rounded p-1 hover:bg-slate-200"
+                          title="Open full screen"
+                        >
+                          <Maximize2 className="h-3.5 w-3.5 text-slate-400" />
+                        </button>
                       </div>
                     </td>
                   </tr>
