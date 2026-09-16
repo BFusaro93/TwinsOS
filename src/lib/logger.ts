@@ -21,6 +21,7 @@ function emit(level: LogLevel, scope: string | undefined, message: string, field
     case "error":
       // eslint-disable-next-line no-console
       console.error(line);
+      reportToSentry(scope, message, fields);
       break;
     case "warn":
       // eslint-disable-next-line no-console
@@ -29,6 +30,23 @@ function emit(level: LogLevel, scope: string | undefined, message: string, field
     default:
       // eslint-disable-next-line no-console
       console.log(line);
+  }
+}
+
+// Deferred require — avoids pulling @sentry/nextjs into every bundle that
+// only needs console output (e.g. scripts run outside the Next.js runtime).
+function reportToSentry(scope: string | undefined, message: string, fields?: LogFields) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Sentry = require("@sentry/nextjs") as typeof import("@sentry/nextjs");
+    const errorField = fields && Object.values(fields).find((v) => v instanceof Error);
+    Sentry.withScope((s) => {
+      s.setTag("logger_scope", scope ?? "unscoped");
+      if (fields) s.setContext("log_fields", serializeFields(fields));
+      Sentry.captureException(errorField ?? new Error(message));
+    });
+  } catch {
+    // Sentry not configured/available (e.g. local script) — console output above still happened.
   }
 }
 
