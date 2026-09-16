@@ -46,6 +46,14 @@ export interface PrebuiltReportDef {
    *  bar chart of the same data grouped a different way. Built from `params`
    *  so date-window filters can match whatever the table itself is showing. */
   headerVisuals?: (params: ReportParams) => ReportHeaderVisual[];
+  /** Render this report's OWN result as a chart instead of a table when
+   *  embedded on a dashboard (via reportKey) — for bespoke `run` reports
+   *  whose shape a chart communicates better than a table (e.g. a
+   *  year-over-year comparison line). Unlike `headerVisuals`, this reuses
+   *  the report's already-fetched rows rather than issuing a second
+   *  AnalysisConfig-driven query — only `type`/`labelColumn`/`valueColumns`
+   *  (and friends) are read; `config` is a placeholder, never queried. */
+  chartVisual?: VisualSpec;
   analysis?: (params: ReportParams) => AnalysisConfig;
   run?: (ctx: ReportContext) => Promise<ReportResult>;
   href?: string;

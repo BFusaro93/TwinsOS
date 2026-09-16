@@ -126,7 +126,11 @@ function ReportPanelView({
 
   return (
     <div className="flex flex-col gap-2">
-      <ReportTable result={data} formatRules={def.formatRules} />
+      {def.chartVisual ? (
+        <VisualRenderer result={data} visual={def.chartVisual} />
+      ) : (
+        <ReportTable result={data} formatRules={def.formatRules} />
+      )}
       <Link
         href={`/crm/admin/reports/r/${reportKey}`}
         className="self-start text-xs text-blue-600 hover:underline"

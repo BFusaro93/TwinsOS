@@ -1306,6 +1306,42 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               },
             },
             {
+              id: "sales-comparison-chart",
+              title: "Sales Comparison Chart",
+              size: "half",
+              reportKey: "sales-comparison-chart",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "sales-comparison-chart-paid",
+              title: "Sales Comparison Chart (Paid)",
+              size: "half",
+              reportKey: "sales-comparison-chart-paid",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
+              id: "avg-gross-revenue-per-client",
+              title: "Avg. Gross Revenue per Year per Client",
+              size: "full",
+              reportKey: "avg-gross-revenue-per-client",
+              visual: {
+                type: "table",
+                useTabDateRange: false,
+                valueColumns: [],
+                config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+              },
+            },
+            {
               id: "clients-leads-monthly",
               title: "Clients/Leads",
               size: "full",
