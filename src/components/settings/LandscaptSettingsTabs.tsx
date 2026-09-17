@@ -1781,20 +1781,19 @@ function GoogleMapsCard() {
     if (!apiKey.trim()) return;
     setTesting(true);
     try {
-      const res = await fetch("/api/crm/route-optimize", {
+      const res = await fetch("/api/crm/route-optimize?test=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitIds: ["test-ping"] }),
       });
-      const data = await res.json() as { error?: string };
-      // A 422 with "Not enough visits" means the key was found — good
-      // A 422 with "not configured" means key was not saved yet
-      if (data.error?.includes("not configured")) {
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (data.ok) {
+        toast.success("API key is valid and reachable");
+      } else if (data.error?.includes("not configured")) {
         toast.error("Save the key first, then test.");
       } else if (data.error?.includes("Google Maps API error")) {
         toast.error(`Key rejected by Google: ${data.error}`);
       } else {
-        toast.success("API key is valid and reachable");
+        toast.error(data.error ?? "Test failed");
       }
     } catch {
       toast.error("Could not reach the route-optimize endpoint");
