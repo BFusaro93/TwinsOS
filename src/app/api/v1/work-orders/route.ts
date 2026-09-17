@@ -40,10 +40,17 @@ export async function POST(request: Request) {
     assetName = asset.name as string;
   }
 
+  // Atomic per-org/year counter, not Date.now() — see next_work_order_number().
+  const { data: workOrderNumber, error: woNumErr } = await db.rpc("next_work_order_number", {
+    p_org_id_override: auth.orgId,
+  });
+  if (woNumErr || !workOrderNumber) return jsonServerError("POST /api/v1/work-orders (next_work_order_number)", woNumErr);
+
   const { data, error } = await db
     .from("work_orders")
     .insert({
       org_id: auth.orgId,
+      work_order_number: workOrderNumber,
       title: body.title,
       asset_id: body.assetId ?? null,
       asset_name: assetName,
