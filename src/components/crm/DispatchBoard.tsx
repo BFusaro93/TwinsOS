@@ -3439,9 +3439,11 @@ export function DispatchBoard() {
       {/* Week strip + date range + actions. Wraps rather than scrolling: this
           row is ~1600px wide, so on a tablet the right-hand controls were half
           a screen off to the side with no hint they were there. Trimmed to be
-          as narrow as it can (short labels, tight gaps, w-28 date inputs) so
-          it stays on one line at more common laptop viewport widths — it was
-          wrapping around 1600-1700px of available content width. */}
+          as narrow as it can (short labels, tight gaps) so it stays on one
+          line at more common laptop viewport widths — it was wrapping around
+          1600-1700px of available content width. The From/To date inputs
+          need w-32, not narrower — anything tighter clips the native
+          calendar-picker icon off the right edge. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
@@ -3451,14 +3453,14 @@ export function DispatchBoard() {
             type="date"
             value={selectedDate}
             onChange={(e) => { setSelectedDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-28 text-xs"
+            className="h-7 w-32 text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-28 text-xs"
+            className="h-7 w-32 text-xs"
           />
           {endDate && (
             <button
