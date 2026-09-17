@@ -24,7 +24,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "Only chemicals marked as applied (Used) are included — planned applications that were never made are excluded. Service Date is the visit date when the application is tied to a visit.",
       "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
-      "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied.",
+      "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied. The two can be in different units (e.g. Chemical Amount in ounces, Solution Amount in gallons) — see Unit of Measure vs. Solution Unit of Measure.",
     ],
     analysis: (params) => ({
       dataset: "rpt_chemical_applications",
@@ -40,6 +40,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         "chemical_amount",
         "solution_amount",
         "unit_of_measure",
+        "solution_unit_of_measure",
         "targets",
         "areas_treated",
         "application_method",
@@ -174,5 +175,19 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Job products already marked Invoiced or Used are excluded — their quantity has already come out of on-hand.",
     ],
     href: "/crm/reports/materials-needed",
+  },
+  {
+    key: "daily-load-list-report",
+    section: "service",
+    name: "Daily Load List",
+    description:
+      "What each crew needs to load on the truck for a given day — chemicals (concentrate amount and finished spray-mix volume) and general materials, grouped by crew.",
+    filters: [],
+    notes: [
+      "Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate x an Area Custom Field on the property (same estimate as Materials Needed).",
+      "Mix volume is the total finished spray solution (e.g. gallons of mix), computed from the product's default rate's dilution settings — it only appears when that rate has a Mixed with Water/Product ratio configured with convertible units.",
+      "Crew is the visit's crew override if set, otherwise the job's default crew. Visits/jobs with no crew assigned appear under Unassigned.",
+    ],
+    href: "/crm/reports/daily-load-list",
   },
 ];

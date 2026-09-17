@@ -11,7 +11,7 @@ import {
   retryQueueItem,
 } from './db';
 import { drainQueue, startSyncEngine, subscribeQueueChanges } from './sync-engine';
-import type { QueueItem } from './types';
+import { DRIVE_QUEUE_VISIT_ID, type QueueItem } from './types';
 
 interface OfflineQueueContextValue {
   /** True once the SQLite table has been created and the initial queue read has completed. */
@@ -26,8 +26,14 @@ interface OfflineQueueContextValue {
   pendingCount: number;
   /** Items the sync engine gave up on (conflict, or exhausted retries) — need user attention. */
   failedItems: QueueItem[];
+  /** `visitId` here is the stop's anchor visit id (see CrewStop.anchorVisitId) — clock actions target the whole stop, not one underlying crm_job_visits row. */
   enqueueClockIn: (visitId: string, localTime: string) => Promise<void>;
   enqueueClockOut: (visitId: string, localTime: string, notes?: string) => Promise<void>;
+  enqueuePause: (anchorVisitId: string) => Promise<void>;
+  enqueueResume: (anchorVisitId: string) => Promise<void>;
+  /** Day-level — not tied to any one stop. See DRIVE_QUEUE_VISIT_ID. */
+  enqueueStartDrive: () => Promise<void>;
+  enqueueEndDrive: () => Promise<void>;
   enqueueAddPhoto: (
     visitId: string,
     localUri: string,
@@ -127,6 +133,70 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     [refresh, userId]
   );
 
+  const enqueuePause = useCallback(
+    async (anchorVisitId: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'pause',
+        visitId: anchorVisitId,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueResume = useCallback(
+    async (anchorVisitId: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'resume',
+        visitId: anchorVisitId,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueStartDrive = useCallback(
+    async () => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'drive_start',
+        visitId: DRIVE_QUEUE_VISIT_ID,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueEndDrive = useCallback(
+    async () => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'drive_end',
+        visitId: DRIVE_QUEUE_VISIT_ID,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
   const enqueueAddPhoto = useCallback(
     async (visitId: string, localUri: string, mimeType: string, fileName: string, caption?: string) => {
       if (!userId) throw new Error('Not signed in');
@@ -191,6 +261,10 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       failedItems,
       enqueueClockIn,
       enqueueClockOut,
+      enqueuePause,
+      enqueueResume,
+      enqueueStartDrive,
+      enqueueEndDrive,
       enqueueAddPhoto,
       enqueueRequestMaterials,
       retry,
@@ -202,6 +276,10 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     isReady,
     enqueueClockIn,
     enqueueClockOut,
+    enqueuePause,
+    enqueueResume,
+    enqueueStartDrive,
+    enqueueEndDrive,
     enqueueAddPhoto,
     enqueueRequestMaterials,
     retry,

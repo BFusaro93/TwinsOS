@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
-import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 
 interface VisitRow {
   id: string;
@@ -38,19 +36,15 @@ const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, cl
  * system the visit was "in_progress" the whole time, it just wasn't
  * accruing billable/actual time while paused (see the stop clock-out route,
  * which subtracts break_minutes from the measured duration).
+ *
+ * Accepts either the web app's cookie session or crew-app's bearer token —
+ * see getRouteAuth().
  */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ visitId: string }> }
 ) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getRouteAuth(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { visitId: anchorVisitId } = await params;

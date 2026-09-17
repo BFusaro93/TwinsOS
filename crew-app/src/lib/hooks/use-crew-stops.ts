@@ -1,27 +1,33 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { fetchCrewVisits } from '@/lib/api';
-import type { CrewVisit } from '@/lib/types';
+import type { CrewDriveInfo, CrewStop } from '@/lib/types';
 
-interface UseCrewVisitsResult {
-  visits: CrewVisit[];
+interface UseCrewStopsResult {
+  stops: CrewStop[];
   crewName: string | null;
+  drive: CrewDriveInfo;
   isLoading: boolean;
   isRefetching: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
 
+const EMPTY_DRIVE: CrewDriveInfo = { openSegment: null, totalMinutes: 0 };
+
 /**
- * Loads the signed-in crew's visits for `date` via GET
- * /api/crm/crew/visits. Deliberately plain fetch + local state rather than
- * TanStack Query — Phase 2 has no caching/background-refetch requirements
- * (that arrives with Phase 3's offline queue), so a query library would add
- * ceremony without buying anything yet.
+ * Loads the signed-in crew's stop-grouped schedule for `date` via GET
+ * /api/crm/crew/visits, which returns `stops` (grouped the same way the web
+ * crew page's useMyCrewStops() groups them — see
+ * src/lib/utils/visit-stops.ts) alongside the day-level drive-time segments.
+ * Renamed from use-crew-visits.ts's useCrewVisits() when crew-app moved from
+ * a flat per-visit list to the stop model; deliberately still plain fetch +
+ * local state rather than TanStack Query, matching that hook's own note.
  */
-export function useCrewVisits(date: string): UseCrewVisitsResult {
-  const [visits, setVisits] = useState<CrewVisit[]>([]);
+export function useCrewStops(date: string): UseCrewStopsResult {
+  const [stops, setStops] = useState<CrewStop[]>([]);
   const [crewName, setCrewName] = useState<string | null>(null);
+  const [drive, setDrive] = useState<CrewDriveInfo>(EMPTY_DRIVE);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +38,9 @@ export function useCrewVisits(date: string): UseCrewVisitsResult {
     setError(null);
     try {
       const data = await fetchCrewVisits(date);
-      setVisits(data.visits);
+      setStops(data.stops);
       setCrewName(data.crewName);
+      setDrive(data.drive ?? EMPTY_DRIVE);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load schedule');
     } finally {
@@ -48,5 +55,5 @@ export function useCrewVisits(date: string): UseCrewVisitsResult {
 
   const refetch = useCallback(() => load(false), [load]);
 
-  return { visits, crewName, isLoading, isRefetching, error, refetch };
+  return { stops, crewName, drive, isLoading, isRefetching, error, refetch };
 }

@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
-import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
 
 const Body = z.object({
@@ -43,19 +41,15 @@ const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, cl
  * one crm_job_visits row per service so office-side reporting stays
  * per-service accurate. Derives the sibling set itself from the anchor
  * rather than trusting a client-supplied list.
+ *
+ * Accepts either the web app's cookie session or crew-app's bearer token —
+ * see getRouteAuth().
  */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ visitId: string }> }
 ) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getRouteAuth(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { visitId: anchorVisitId } = await params;

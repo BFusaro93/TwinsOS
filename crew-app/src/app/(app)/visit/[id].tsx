@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -13,24 +14,51 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { useTheme } from '@/hooks/use-theme';
-import { fetchVisitPhotos, fetchVisitRequisitions, todayLocalDate } from '@/lib/api';
-import { useCrewVisits } from '@/lib/hooks/use-crew-visits';
+import { fetchVisitChemicals, fetchVisitPhotos, fetchVisitRequisitions, todayLocalDate } from '@/lib/api';
+import { useCrewStops } from '@/lib/hooks/use-crew-stops';
 import {
   elapsedSince,
-  formatAddress,
-  formatTimeWindow,
-  PROGRESS_COLOR,
-  PROGRESS_LABEL,
+  formatStopAddress,
+  formatStopTimeWindow,
   STATUS_LABEL,
-  visitProgress,
+  stopProgress,
+  STOP_PROGRESS_COLOR,
+  STOP_PROGRESS_LABEL,
 } from '@/lib/format';
-import { applyQueueOverlay } from '@/lib/offline/overlay';
+import { applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { captureVisitPhoto } from '@/lib/offline/photos';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
 import type { AddPhotoPayload, RequestMaterialsPayload } from '@/lib/offline/types';
-import type { VisitPhoto, VisitRequisition } from '@/lib/types';
+import type { CrewStopVisit, VisitChemicalApplication, VisitPhoto, VisitRequisition } from '@/lib/types';
+
+// Matches the web crew stop page's actual Tailwind palette (src/app/(crm)/crm/
+// crew/stops/[visitId]/page.tsx) — kept in sync by hand, same as the login
+// screen's brand colors, since this app has no shared Tailwind config.
+const C = {
+  bg: '#f8fafc',
+  card: '#ffffff',
+  border: '#e2e8f0',
+  headerBorder: '#f1f5f9',
+  text: '#1e293b',
+  textMuted: '#64748b',
+  textFaint: '#94a3b8',
+  green: '#16a34a',
+  greenBg: '#f0fdf4',
+  greenBorder: '#bbf7d0',
+  greenText: '#166534',
+  amberBg: '#fffbeb',
+  amberBorder: '#fde68a',
+  amberText: '#92400e',
+  amberTextStrong: '#b45309',
+  blue: '#2563eb',
+  blueBg: '#eff6ff',
+  blueBorder: '#bfdbfe',
+  blueText: '#1d4ed8',
+  red: '#dc2626',
+  redBg: '#fef2f2',
+  redBorder: '#fecaca',
+  redText: '#b91c1c',
+};
 
 const REQUISITION_STATUS_LABEL: Record<VisitRequisition['status'], string> = {
   draft: 'Submitted',
@@ -42,11 +70,11 @@ const REQUISITION_STATUS_LABEL: Record<VisitRequisition['status'], string> = {
 };
 
 const REQUISITION_STATUS_COLOR: Record<VisitRequisition['status'], string> = {
-  draft: '#c98a1f',
-  pending_approval: '#c98a1f',
-  approved: '#2fa84f',
-  rejected: '#d9342b',
-  ordered: '#2fa84f',
+  draft: C.amberTextStrong,
+  pending_approval: C.amberTextStrong,
+  approved: C.green,
+  rejected: C.red,
+  ordered: C.green,
   closed: '#8a8a8a',
 };
 
@@ -57,38 +85,59 @@ function localTimeNow(): string {
   return new Date().toTimeString().slice(0, 5);
 }
 
-export default function VisitDetailScreen() {
+/**
+ * Stop detail screen — clock in/out, pause/resume, notes, photos, materials
+ * for one "stop" (everything the crew does at one client/address today,
+ * possibly spanning several crm_job_visits rows — see
+ * src/lib/utils/visit-stops.ts). The route param is still named `id` (kept
+ * for minimal churn from the previous per-visit screen) but it's now the
+ * stop's anchorVisitId. Photos and materials requests are still filed
+ * against this one anchor visit id, matching the web stop page.
+ */
+export default function StopDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const theme = useTheme();
   // Today's schedule is the only data source this phase has — there's no
-  // single-visit GET route yet, so this screen shares useCrewVisits() with
-  // home.tsx and looks its visit up by id.
-  const { visits, isLoading, error, refetch } = useCrewVisits(TODAY);
-  const { itemsForVisit, enqueueClockIn, enqueueClockOut, enqueueAddPhoto, retry, discard } =
-    useOfflineQueue();
+  // single-stop GET route yet, so this screen shares useCrewStops() with
+  // home.tsx and looks its stop up by anchorVisitId.
+  const { stops, isLoading, error, refetch } = useCrewStops(TODAY);
+  const {
+    itemsForVisit,
+    enqueueClockIn,
+    enqueueClockOut,
+    enqueuePause,
+    enqueueResume,
+    enqueueAddPhoto,
+    retry,
+    discard,
+  } = useOfflineQueue();
   const [notes, setNotes] = useState('');
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [confirmedPhotos, setConfirmedPhotos] = useState<VisitPhoto[]>([]);
   const [requisitions, setRequisitions] = useState<VisitRequisition[]>([]);
+  const [chemicals, setChemicals] = useState<VisitChemicalApplication[]>([]);
   const [, forceTick] = useState(0);
 
-  const serverVisit = useMemo(() => visits.find((v) => v.id === id), [visits, id]);
+  const serverStop = useMemo(() => stops.find((s) => s.anchorVisitId === id), [stops, id]);
   const queueItems = useMemo(() => (id ? itemsForVisit(id) : []), [id, itemsForVisit]);
-  const visit = useMemo(
-    () => (serverVisit ? applyQueueOverlay(serverVisit, queueItems) : undefined),
-    [serverVisit, queueItems]
+  const stop = useMemo(
+    () => (serverStop ? applyStopQueueOverlay(serverStop, queueItems) : undefined),
+    [serverStop, queueItems]
   );
-  const progress = visit ? visitProgress(visit) : null;
+  const progress = stop ? stopProgress(stop) : null;
 
   const clockQueueItems = queueItems.filter((i) => i.type === 'clock_in' || i.type === 'clock_out');
   const failedClockItem = clockQueueItems.find((i) => i.status === 'failed');
   const isClockActionPending = clockQueueItems.some((i) => i.status === 'pending' || i.status === 'syncing');
 
+  const pauseQueueItems = queueItems.filter((i) => i.type === 'pause' || i.type === 'resume');
+  const failedPauseItem = pauseQueueItems.find((i) => i.status === 'failed');
+  const isPauseActionPending = pauseQueueItems.some((i) => i.status === 'pending' || i.status === 'syncing');
+
   const photoQueueItems = queueItems.filter((i) => i.type === 'add_photo');
   const materialsQueueItems = queueItems.filter((i) => i.type === 'request_materials');
 
-  // Once every queue item for this visit clears (synced), pull fresh server
+  // Once every queue item for this stop clears (synced), pull fresh server
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
   // created requisition's real status.
   const prevActiveCountRef = useRef(0);
@@ -98,6 +147,7 @@ export default function VisitDetailScreen() {
       void refetch();
       void loadPhotos();
       void loadRequisitions();
+      void loadChemicals();
     }
     prevActiveCountRef.current = activeCount;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,40 +175,63 @@ export default function VisitDetailScreen() {
     }
   }
 
+  async function loadChemicals() {
+    if (!id) return;
+    try {
+      const data = await fetchVisitChemicals(id);
+      setChemicals(data);
+    } catch {
+      // Same tolerance as loadPhotos()/loadRequisitions() above — a stale
+      // (or empty) chemical list while offline is acceptable; this is
+      // read-only reference info, not something crew acts on here.
+    }
+  }
+
   useEffect(() => {
     void loadPhotos();
     void loadRequisitions();
+    void loadChemicals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Re-render every 30s so the "clocked in for Xh Ym" readout stays live.
+  // Re-render every 30s so the "clocked in for Xh Ym"/"on break for Xh Ym" readout stays live.
   useEffect(() => {
-    if (progress !== 'clocked_in') return;
+    if (progress !== 'clocked_in' && progress !== 'on_break') return;
     const interval = setInterval(() => forceTick((n) => n + 1), 30_000);
     return () => clearInterval(interval);
   }, [progress]);
 
   const handleClockIn = () => {
-    if (!visit) return;
+    if (!stop) return;
     // Written to the local queue immediately — this resolves synchronously
     // from the UI's perspective (no network wait), which is what makes the
     // "Clocked In" state below reflect the tap right away.
-    void enqueueClockIn(visit.id, localTimeNow());
+    void enqueueClockIn(stop.anchorVisitId, localTimeNow());
   };
 
   const handleClockOut = () => {
-    if (!visit) return;
-    void enqueueClockOut(visit.id, localTimeNow(), notes.trim() || undefined);
+    if (!stop) return;
+    void enqueueClockOut(stop.anchorVisitId, localTimeNow(), notes.trim() || undefined);
+  };
+
+  const handlePause = () => {
+    if (!stop) return;
+    void enqueuePause(stop.anchorVisitId);
+  };
+
+  const handleResume = () => {
+    if (!stop) return;
+    void enqueueResume(stop.anchorVisitId);
   };
 
   const handleAddPhoto = async (source: 'camera' | 'library') => {
-    if (!visit) return;
+    if (!stop) return;
     setPhotoError(null);
     setIsCapturing(true);
     try {
-      const captured = await captureVisitPhoto(visit.id, source);
+      const captured = await captureVisitPhoto(stop.anchorVisitId, source);
       if (!captured) return; // user canceled
-      await enqueueAddPhoto(visit.id, captured.localUri, captured.mimeType, captured.fileName);
+      await enqueueAddPhoto(stop.anchorVisitId, captured.localUri, captured.mimeType, captured.fileName);
     } catch (err) {
       setPhotoError(err instanceof Error ? err.message : 'Failed to add photo');
     } finally {
@@ -167,8 +240,8 @@ export default function VisitDetailScreen() {
   };
 
   const handleRequestMaterials = () => {
-    if (!visit) return;
-    router.push({ pathname: '/visit/request-materials', params: { visitId: visit.id } });
+    if (!stop) return;
+    router.push({ pathname: '/visit/request-materials', params: { visitId: stop.anchorVisitId } });
   };
 
   const confirmDiscard = (queueItemId: string, description: string) => {
@@ -180,113 +253,134 @@ export default function VisitDetailScreen() {
 
   if (isLoading) {
     return (
-      <ThemedView style={styles.centered}>
+      <View style={[styles.centered, styles.screenBg]}>
         <ActivityIndicator />
-      </ThemedView>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <ThemedView style={styles.centered}>
-        <ThemedText style={styles.errorText}>{error}</ThemedText>
+      <View style={[styles.centered, styles.screenBg]}>
+        <Text style={styles.errorText}>{error}</Text>
         <Pressable style={styles.retryButton} onPress={() => void refetch()}>
-          <ThemedText style={styles.retryButtonText}>Try again</ThemedText>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </Pressable>
-      </ThemedView>
+      </View>
     );
   }
 
-  if (!visit) {
+  if (!stop) {
     return (
-      <ThemedView style={styles.centered}>
+      <View style={[styles.centered, styles.screenBg]}>
         <ThemedText type="subtitle" style={styles.emptyTitle}>
-          Visit not found
+          Job not found
         </ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.emptyBody}>
-          This visit isn&apos;t in today&apos;s schedule anymore.
-        </ThemedText>
-      </ThemedView>
+        <Text style={styles.emptyBody}>This job isn&apos;t in today&apos;s schedule anymore.</Text>
+      </View>
     );
   }
+
+  const totalActualHours = stop.visits.reduce((sum, v) => sum + (v.actualHours ?? 0), 0);
+  const completionNotes = stop.visits.map((v) => v.completionNotes).find(Boolean) ?? null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: visit.clientName ?? 'Visit' }} />
+      <Stack.Screen options={{ title: stop.clientName ?? 'Job' }} />
 
       <SyncStatusChip />
 
-      <View style={styles.headerRow}>
-        <ThemedText type="subtitle" style={styles.clientName}>
-          {visit.clientName ?? 'Unknown client'}
-        </ThemedText>
-        <View style={[styles.statusPill, { backgroundColor: PROGRESS_COLOR[progress!] }]}>
-          <ThemedText style={styles.statusPillText}>{PROGRESS_LABEL[progress!]}</ThemedText>
+      <View style={styles.card}>
+        <View style={styles.headerRow}>
+          <Text style={styles.clientName}>{stop.clientName ?? 'Unknown client'}</Text>
+          <View style={[styles.statusPill, { backgroundColor: STOP_PROGRESS_COLOR[progress!] }]}>
+            <Text style={styles.statusPillText}>{STOP_PROGRESS_LABEL[progress!]}</Text>
+          </View>
+        </View>
+
+        <View style={styles.infoStack}>
+          <InfoRow label="Time window" value={formatStopTimeWindow(stop)} />
+          {formatStopAddress(stop) ? <InfoRow label="Address" value={formatStopAddress(stop)!} /> : null}
+          {stop.clientPhone ? <InfoRow label="Phone" value={stop.clientPhone} /> : null}
         </View>
       </View>
 
-      <InfoRow label="Time window" value={formatTimeWindow(visit)} />
-      {formatAddress(visit) ? <InfoRow label="Address" value={formatAddress(visit)!} /> : null}
-      {visit.clientPhone ? <InfoRow label="Phone" value={visit.clientPhone} /> : null}
-      <InfoRow label="Status" value={STATUS_LABEL[visit.status]} />
-
-      {visit.notesToCrew ? (
-        <View style={[styles.notesBox, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="smallBold">Notes from the office</ThemedText>
-          <ThemedText style={styles.notesText}>{visit.notesToCrew}</ThemedText>
+      {stop.notesToCrew ? (
+        <View style={styles.amberBox}>
+          <Text style={styles.amberBoxTitle}>Notes from the office</Text>
+          <Text style={styles.amberBoxText}>{stop.notesToCrew}</Text>
         </View>
       ) : null}
 
-      {progress === 'clocked_in' && visit.clockedInAt ? (
-        <ThemedText themeColor="textSecondary" style={styles.elapsed}>
-          Clocked in for {elapsedSince(visit.clockedInAt)}
-          {isClockActionPending ? ' · not yet synced' : ''}
-        </ThemedText>
+      <ServicesSection visits={stop.visits} />
+
+      <ChemicalsSection chemicals={chemicals} />
+
+      {progress === 'on_break' && stop.pausedAt ? (
+        <View style={styles.blueBanner}>
+          <View>
+            <Text style={styles.blueBannerTitle}>On Break</Text>
+            <Text style={styles.blueBannerSubtitle}>
+              {isPauseActionPending ? 'Not yet synced' : 'On break'}
+            </Text>
+          </View>
+          <Text style={styles.bannerTimer}>{elapsedSince(stop.pausedAt)}</Text>
+        </View>
+      ) : progress === 'clocked_in' && stop.clockedInAt ? (
+        <View style={styles.amberBanner}>
+          <View>
+            <Text style={styles.amberBannerTitle}>Job Running</Text>
+            <Text style={styles.amberBannerSubtitle}>
+              {isClockActionPending ? 'Not yet synced' : 'In progress'}
+            </Text>
+          </View>
+          <Text style={[styles.bannerTimer, { color: C.amberTextStrong }]}>
+            {elapsedSince(stop.clockedInAt)}
+          </Text>
+        </View>
       ) : null}
 
       {progress === 'completed' ? (
-        <View style={styles.completedSummary}>
-          {visit.actualHours != null ? (
-            <InfoRow label="Actual hours" value={visit.actualHours.toFixed(2)} />
+        <View style={styles.greenBox}>
+          <Text style={styles.greenBoxTitle}>Job Complete</Text>
+          {totalActualHours > 0 ? (
+            <Text style={styles.greenBoxSubtitle}>Actual hours: {totalActualHours.toFixed(2)}</Text>
           ) : null}
-          {visit.completionNotes ? (
-            <InfoRow label="Completion notes" value={visit.completionNotes} />
-          ) : null}
+          {completionNotes ? <Text style={styles.greenBoxSubtitle}>{completionNotes}</Text> : null}
           {isClockActionPending ? (
-            <ThemedText themeColor="textSecondary" type="small">
-              Not yet synced — will confirm once back online.
-            </ThemedText>
+            <Text style={styles.greenBoxSubtitle}>Not yet synced — will confirm once back online.</Text>
           ) : null}
         </View>
       ) : null}
 
       {failedClockItem ? (
-        <View style={styles.conflictBox}>
-          <ThemedText style={styles.conflictText}>{failedClockItem.lastError}</ThemedText>
-          <View style={styles.conflictActions}>
-            <Pressable style={styles.conflictButton} onPress={() => void retry(failedClockItem.id)}>
-              <ThemedText style={styles.conflictButtonText}>Retry</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.conflictButton, styles.conflictButtonSecondary]}
-              onPress={() =>
-                confirmDiscard(
-                  failedClockItem.id,
-                  'This will drop the unsynced action. Pull to refresh afterwards to see the current state.'
-                )
-              }
-            >
-              <ThemedText style={styles.conflictButtonText}>Discard</ThemedText>
-            </Pressable>
-          </View>
-        </View>
+        <ConflictBox
+          message={failedClockItem.lastError ?? 'This action failed to sync.'}
+          onRetry={() => void retry(failedClockItem.id)}
+          onDiscard={() =>
+            confirmDiscard(
+              failedClockItem.id,
+              'This will drop the unsynced action. Pull to refresh afterwards to see the current state.'
+            )
+          }
+        />
       ) : null}
 
-      {progress === 'clocked_in' ? (
+      {failedPauseItem ? (
+        <ConflictBox
+          message={failedPauseItem.lastError ?? "This didn't sync."}
+          onRetry={() => void retry(failedPauseItem.id)}
+          onDiscard={() =>
+            confirmDiscard(failedPauseItem.id, 'This will drop the unsynced break action.')
+          }
+        />
+      ) : null}
+
+      {progress === 'clocked_in' || progress === 'on_break' ? (
         <TextInput
-          style={[styles.notesInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
+          style={styles.notesInput}
           placeholder="Completion notes (optional)"
-          placeholderTextColor="#8a8a8a"
+          placeholderTextColor="#94a3b8"
           value={notes}
           onChangeText={setNotes}
           multiline
@@ -294,23 +388,23 @@ export default function VisitDetailScreen() {
       ) : null}
 
       {progress === 'not_started' ? (
-        <ActionButton label="Clock In" color="#208AEF" onPress={handleClockIn} />
+        <ActionButton label="Clock In" variant="solidGreen" onPress={handleClockIn} />
       ) : null}
 
-      {progress === 'clocked_in' ? (
-        <ActionButton label="Clock Out" color="#d9342b" onPress={handleClockOut} />
+      {progress === 'on_break' ? (
+        <ActionButton label="Resume Job" variant="solidGreen" onPress={handleResume} />
+      ) : progress === 'clocked_in' ? (
+        <ActionButton label="Take a Break" variant="outlineBlue" onPress={handlePause} />
       ) : null}
 
-      {progress === 'completed' ? (
-        <ThemedText themeColor="textSecondary" style={styles.doneText}>
-          This visit is complete.
-        </ThemedText>
+      {progress === 'clocked_in' || progress === 'on_break' ? (
+        <ActionButton label="Clock Out" variant="solidRed" onPress={handleClockOut} />
       ) : null}
 
       {progress === 'skipped' ? (
-        <ThemedText themeColor="textSecondary" style={styles.doneText}>
-          This visit was skipped or cancelled.
-        </ThemedText>
+        <View style={styles.card}>
+          <Text style={styles.doneText}>This job was skipped or cancelled.</Text>
+        </View>
       ) : null}
 
       <PhotosSection
@@ -323,7 +417,6 @@ export default function VisitDetailScreen() {
         onDiscard={(itemId) =>
           confirmDiscard(itemId, 'This photo will not be uploaded. It stays saved on this device.')
         }
-        theme={theme}
       />
 
       <MaterialsSection
@@ -334,7 +427,6 @@ export default function VisitDetailScreen() {
         onDiscard={(itemId) =>
           confirmDiscard(itemId, 'This materials request will not be submitted.')
         }
-        theme={theme}
       />
     </ScrollView>
   );
@@ -343,27 +435,151 @@ export default function VisitDetailScreen() {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
-      <ThemedText themeColor="textSecondary" type="small" style={styles.infoLabel}>
-        {label}
-      </ThemedText>
-      <ThemedText style={styles.infoValue}>{value}</ThemedText>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
 }
 
 function ActionButton({
   label,
-  color,
+  variant,
   onPress,
 }: {
   label: string;
-  color: string;
+  variant: 'solidGreen' | 'solidRed' | 'outlineBlue';
   onPress: () => void;
 }) {
   return (
-    <Pressable style={[styles.actionButton, { backgroundColor: color }]} onPress={onPress}>
-      <ThemedText style={styles.actionButtonText}>{label}</ThemedText>
+    <Pressable
+      style={({ pressed }) => [
+        styles.actionButton,
+        variant === 'solidGreen' && styles.actionButtonGreen,
+        variant === 'solidRed' && styles.actionButtonRed,
+        variant === 'outlineBlue' && styles.actionButtonOutlineBlue,
+        pressed && styles.actionButtonPressed,
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.actionButtonText,
+          variant === 'outlineBlue' && styles.actionButtonTextBlue,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
+  );
+}
+
+function ConflictBox({
+  message,
+  onRetry,
+  onDiscard,
+}: {
+  message: string;
+  onRetry: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <View style={styles.conflictBox}>
+      <Text style={styles.conflictText}>{message}</Text>
+      <View style={styles.conflictActions}>
+        <Pressable style={styles.conflictButton} onPress={onRetry}>
+          <Text style={styles.conflictButtonText}>Retry</Text>
+        </Pressable>
+        <Pressable style={[styles.conflictButton, styles.conflictButtonSecondary]} onPress={onDiscard}>
+          <Text style={styles.conflictButtonText}>Discard</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/** One row per underlying visit in the stop — mirrors the web stop page's services checklist. */
+function ServicesSection({ visits }: { visits: CrewStopVisit[] }) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>
+          Services {visits.length > 1 ? `(${visits.length})` : ''}
+        </Text>
+      </View>
+      {visits.length === 0 ? (
+        <Text style={styles.mutedRowText}>No services listed</Text>
+      ) : (
+        visits.map((v, index) => (
+          <View
+            key={v.id}
+            style={[styles.serviceRow, index === visits.length - 1 && styles.lastRow]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.serviceRowTitle}>{v.serviceName ?? 'Service'}</Text>
+              {v.budgetedHours != null ? (
+                <Text style={styles.serviceRowSubtitle}>Budgeted: {v.budgetedHours}h</Text>
+              ) : null}
+            </View>
+            <Text
+              style={[
+                styles.serviceStatus,
+                v.status === 'skipped'
+                  ? styles.serviceStatusSkipped
+                  : v.status === 'completed'
+                    ? styles.serviceStatusDone
+                    : undefined,
+              ]}
+            >
+              {STATUS_LABEL[v.status]}
+            </Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+/**
+ * What to use and how much finished-mix solution to prepare, computed from
+ * the product's application rate + dilution ratio when the office has it
+ * configured. Mirrors the web crew stop page's "Chemical Mix" card. Renders
+ * nothing when there's nothing marked used for this visit — most visits
+ * have no chemical tracking at all.
+ */
+function ChemicalsSection({ chemicals }: { chemicals: VisitChemicalApplication[] }) {
+  const used = chemicals.filter((c) => c.used);
+  if (used.length === 0) return null;
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>Chemical Mix</Text>
+      </View>
+      <View style={styles.cardBody}>
+        {used.map((a) => (
+          <View key={a.id} style={styles.chemicalRow}>
+            <Text style={styles.chemicalProductName}>{a.productName ?? 'Chemical'}</Text>
+            {a.solutionAmount != null ? (
+              <Text style={styles.chemicalAmountText}>
+                Use{' '}
+                <Text style={styles.chemicalAmountStrong}>
+                  {a.solutionAmount} {a.solutionUnitName ?? ''}
+                </Text>{' '}
+                of finished mix
+                {a.chemicalAmount != null ? ` (${a.chemicalAmount} ${a.unitName ?? ''} active)` : ''}
+              </Text>
+            ) : a.chemicalAmount != null ? (
+              <Text style={styles.chemicalAmountText}>
+                {a.chemicalAmount} {a.unitName ?? ''}
+              </Text>
+            ) : null}
+            {a.applicationRateLabel ? (
+              <Text style={styles.chemicalRateLabel}>{a.applicationRateLabel}</Text>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -375,7 +591,6 @@ function PhotosSection({
   onAdd,
   onRetry,
   onDiscard,
-  theme,
 }: {
   confirmedPhotos: VisitPhoto[];
   photoQueueItems: ReturnType<typeof useOfflineQueue>['items'];
@@ -384,82 +599,83 @@ function PhotosSection({
   onAdd: (source: 'camera' | 'library') => void;
   onRetry: (itemId: string) => void;
   onDiscard: (itemId: string) => void;
-  theme: ReturnType<typeof useTheme>;
 }) {
   return (
-    <View style={styles.photosSection}>
-      <ThemedText type="smallBold">Job photos</ThemedText>
-
-      <View style={styles.photoButtonRow}>
-        <Pressable
-          style={[styles.photoButton, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => onAdd('camera')}
-          disabled={isCapturing}
-        >
-          <ThemedText type="small">Take Photo</ThemedText>
-        </Pressable>
-        <Pressable
-          style={[styles.photoButton, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => onAdd('library')}
-          disabled={isCapturing}
-        >
-          <ThemedText type="small">Choose from Library</ThemedText>
-        </Pressable>
-        {isCapturing ? <ActivityIndicator size="small" /> : null}
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>
+          Photos {confirmedPhotos.length + photoQueueItems.length > 0
+            ? `(${confirmedPhotos.length + photoQueueItems.length})`
+            : ''}
+        </Text>
       </View>
 
-      {photoError ? <ThemedText style={styles.errorText}>{photoError}</ThemedText> : null}
-
-      {confirmedPhotos.length === 0 && photoQueueItems.length === 0 ? (
-        <ThemedText themeColor="textSecondary" type="small">
-          No photos yet.
-        </ThemedText>
-      ) : (
-        <View style={styles.photoGrid}>
-          {confirmedPhotos.map((photo) => (
-            <View key={photo.id} style={styles.photoTile}>
-              {photo.signedUrl ? (
-                <Image source={{ uri: photo.signedUrl }} style={styles.photoImage} />
-              ) : (
-                <View style={[styles.photoImage, styles.photoPlaceholder]} />
-              )}
-            </View>
-          ))}
-
-          {photoQueueItems.map((item) => {
-            const payload = item.payload as AddPhotoPayload;
-            return (
-              <View key={item.id} style={styles.photoTile}>
-                <Image source={{ uri: payload.localUri }} style={[styles.photoImage, styles.photoDimmed]} />
-                <View
-                  style={[
-                    styles.photoBadge,
-                    { backgroundColor: item.status === 'failed' ? '#d9342b' : '#c98a1f' },
-                  ]}
-                >
-                  <ThemedText style={styles.photoBadgeText}>
-                    {item.status === 'failed' ? 'Failed' : item.status === 'syncing' ? 'Uploading…' : 'Queued'}
-                  </ThemedText>
-                </View>
-                {item.status === 'failed' ? (
-                  <View style={styles.photoFailedActions}>
-                    <Pressable onPress={() => onRetry(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Retry
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable onPress={() => onDiscard(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Discard
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
+      <View style={styles.cardBody}>
+        <View style={styles.photoButtonRow}>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            onPress={() => onAdd('camera')}
+            disabled={isCapturing}
+          >
+            <Text style={styles.secondaryButtonText}>Take Photo</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            onPress={() => onAdd('library')}
+            disabled={isCapturing}
+          >
+            <Text style={styles.secondaryButtonText}>Choose from Library</Text>
+          </Pressable>
+          {isCapturing ? <ActivityIndicator size="small" /> : null}
         </View>
-      )}
+
+        {photoError ? <Text style={styles.errorText}>{photoError}</Text> : null}
+
+        {confirmedPhotos.length === 0 && photoQueueItems.length === 0 ? (
+          <Text style={styles.mutedCentered}>No photos yet</Text>
+        ) : (
+          <View style={styles.photoGrid}>
+            {confirmedPhotos.map((photo) => (
+              <View key={photo.id} style={styles.photoTile}>
+                {photo.signedUrl ? (
+                  <Image source={{ uri: photo.signedUrl }} style={styles.photoImage} />
+                ) : (
+                  <View style={[styles.photoImage, styles.photoPlaceholder]} />
+                )}
+              </View>
+            ))}
+
+            {photoQueueItems.map((item) => {
+              const payload = item.payload as AddPhotoPayload;
+              return (
+                <View key={item.id} style={styles.photoTile}>
+                  <Image source={{ uri: payload.localUri }} style={[styles.photoImage, styles.photoDimmed]} />
+                  <View
+                    style={[
+                      styles.photoBadge,
+                      { backgroundColor: item.status === 'failed' ? C.red : C.amberTextStrong },
+                    ]}
+                  >
+                    <Text style={styles.photoBadgeText}>
+                      {item.status === 'failed' ? 'Failed' : item.status === 'syncing' ? 'Uploading…' : 'Queued'}
+                    </Text>
+                  </View>
+                  {item.status === 'failed' ? (
+                    <View style={styles.photoFailedActions}>
+                      <Pressable onPress={() => onRetry(item.id)}>
+                        <Text style={styles.linkText}>Retry</Text>
+                      </Pressable>
+                      <Pressable onPress={() => onDiscard(item.id)}>
+                        <Text style={styles.linkText}>Discard</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -470,10 +686,10 @@ function PhotosSection({
  * request (materialsQueueItems, status 'pending'/'syncing'/'failed') renders
  * alongside server-confirmed ones (requisitions, from GET
  * /api/crm/crew/visits/:id/requisitions) rather than merging into a single
- * list — unlike clock state (see src/lib/offline/overlay.ts) a materials
- * request has no server "current value" to optimistically overwrite; it's
- * purely additive, so there's nothing to merge, only two lists to show
- * together.
+ * list — unlike clock/pause state (see src/lib/offline/overlay.ts) a
+ * materials request has no server "current value" to optimistically
+ * overwrite; it's purely additive, so there's nothing to merge, only two
+ * lists to show together.
  */
 function MaterialsSection({
   requisitions,
@@ -481,107 +697,93 @@ function MaterialsSection({
   onRequest,
   onRetry,
   onDiscard,
-  theme,
 }: {
   requisitions: VisitRequisition[];
   materialsQueueItems: ReturnType<typeof useOfflineQueue>['items'];
   onRequest: () => void;
   onRetry: (itemId: string) => void;
   onDiscard: (itemId: string) => void;
-  theme: ReturnType<typeof useTheme>;
 }) {
   return (
-    <View style={styles.materialsSection}>
-      <View style={styles.materialsHeaderRow}>
-        <ThemedText type="smallBold">Materials requests</ThemedText>
+    <View style={styles.card}>
+      <View style={[styles.cardHeaderRow, styles.materialsHeaderRow]}>
+        <Text style={styles.cardHeaderTitle}>Materials requests</Text>
         <Pressable
-          style={[styles.materialsRequestButton, { backgroundColor: theme.backgroundElement }]}
+          style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
           onPress={onRequest}
         >
-          <ThemedText type="small">Request Materials</ThemedText>
+          <Text style={styles.secondaryButtonText}>Request Materials</Text>
         </Pressable>
       </View>
 
-      {requisitions.length === 0 && materialsQueueItems.length === 0 ? (
-        <ThemedText themeColor="textSecondary" type="small">
-          No materials requested for this visit.
-        </ThemedText>
-      ) : (
-        <View style={styles.materialsList}>
-          {materialsQueueItems.map((item) => {
-            const payload = item.payload as RequestMaterialsPayload;
-            return (
-              <View
-                key={item.id}
-                style={[styles.materialsRow, { backgroundColor: theme.backgroundElement }]}
-              >
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.materialsItemName}>
-                    {payload.quantity} × {payload.productItemName}
-                  </ThemedText>
+      <View style={styles.cardBody}>
+        {requisitions.length === 0 && materialsQueueItems.length === 0 ? (
+          <Text style={styles.mutedRowText}>No materials requested for this job.</Text>
+        ) : (
+          <View style={styles.materialsList}>
+            {materialsQueueItems.map((item) => {
+              const payload = item.payload as RequestMaterialsPayload;
+              return (
+                <View key={item.id} style={styles.materialsRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.materialsItemName}>
+                      {payload.quantity} × {payload.productItemName}
+                    </Text>
+                    {item.status === 'failed' ? (
+                      <Text style={[styles.errorText, styles.materialsErrorText]}>{item.lastError}</Text>
+                    ) : null}
+                  </View>
                   {item.status === 'failed' ? (
-                    <ThemedText type="small" style={styles.errorText}>
-                      {item.lastError}
-                    </ThemedText>
-                  ) : null}
+                    <View style={styles.materialsFailedActions}>
+                      <Pressable onPress={() => onRetry(item.id)}>
+                        <Text style={styles.linkText}>Retry</Text>
+                      </Pressable>
+                      <Pressable onPress={() => onDiscard(item.id)}>
+                        <Text style={styles.linkText}>Discard</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View style={[styles.materialsStatusPill, { backgroundColor: C.amberTextStrong }]}>
+                      <Text style={styles.materialsStatusPillText}>
+                        {item.status === 'syncing' ? 'Sending…' : 'Queued'}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                {item.status === 'failed' ? (
-                  <View style={styles.materialsFailedActions}>
-                    <Pressable onPress={() => onRetry(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Retry
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable onPress={() => onDiscard(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Discard
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={[styles.materialsStatusPill, { backgroundColor: '#c98a1f' }]}>
-                    <ThemedText style={styles.materialsStatusPillText}>
-                      {item.status === 'syncing' ? 'Sending…' : 'Queued'}
-                    </ThemedText>
-                  </View>
-                )}
-              </View>
-            );
-          })}
+              );
+            })}
 
-          {requisitions.map((req) => (
-            <View key={req.id} style={[styles.materialsRow, { backgroundColor: theme.backgroundElement }]}>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.materialsItemName}>{req.title}</ThemedText>
-                <ThemedText themeColor="textSecondary" type="small">
-                  {req.requisitionNumber}
-                </ThemedText>
+            {requisitions.map((req) => (
+              <View key={req.id} style={styles.materialsRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.materialsItemName}>{req.title}</Text>
+                  <Text style={styles.serviceRowSubtitle}>{req.requisitionNumber}</Text>
+                </View>
+                <View
+                  style={[styles.materialsStatusPill, { backgroundColor: REQUISITION_STATUS_COLOR[req.status] }]}
+                >
+                  <Text style={styles.materialsStatusPillText}>{REQUISITION_STATUS_LABEL[req.status]}</Text>
+                </View>
               </View>
-              <View
-                style={[
-                  styles.materialsStatusPill,
-                  { backgroundColor: REQUISITION_STATUS_COLOR[req.status] },
-                ]}
-              >
-                <ThemedText style={styles.materialsStatusPillText}>
-                  {REQUISITION_STATUS_LABEL[req.status]}
-                </ThemedText>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenBg: {
+    backgroundColor: C.bg,
+  },
   container: {
     flex: 1,
+    backgroundColor: C.bg,
   },
   content: {
-    padding: 20,
-    gap: 16,
+    padding: 16,
+    gap: 14,
     paddingBottom: 60,
   },
   centered: {
@@ -591,15 +793,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     gap: 12,
   },
+
+  // Generic white card, matching the web page's `bg-white rounded-xl border`
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+  },
+  cardHeaderRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.headerBorder,
+  },
+  cardHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.text,
+  },
+  cardBody: {
+    padding: 16,
+    gap: 12,
+  },
+
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
+    padding: 16,
   },
   clientName: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 20,
+    fontWeight: '700',
+    color: C.text,
     flex: 1,
   },
   statusPill: {
@@ -610,42 +839,124 @@ const styles = StyleSheet.create({
   statusPillText: {
     color: '#ffffff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  infoStack: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 10,
   },
   infoRow: {
     gap: 2,
   },
   infoLabel: {
+    fontSize: 11,
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    color: C.textFaint,
   },
   infoValue: {
-    fontSize: 16,
+    fontSize: 15,
+    color: C.text,
   },
-  notesBox: {
+
+  amberBox: {
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberBg,
     padding: 14,
     gap: 4,
   },
-  notesText: {
+  amberBoxTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.amberText,
+  },
+  amberBoxText: {
     fontSize: 14,
+    color: C.text,
   },
-  elapsed: {
-    fontSize: 14,
-  },
-  completedSummary: {
-    gap: 12,
-  },
-  conflictBox: {
-    borderRadius: 10,
+
+  amberBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#d9342b',
-    backgroundColor: '#d9342b18',
-    padding: 12,
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberBg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  amberBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.amberText,
+  },
+  amberBannerSubtitle: {
+    fontSize: 12,
+    color: C.amberTextStrong,
+    marginTop: 2,
+  },
+  blueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    backgroundColor: C.blueBg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  blueBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.blueText,
+  },
+  blueBannerSubtitle: {
+    fontSize: 12,
+    color: C.blue,
+    marginTop: 2,
+  },
+  bannerTimer: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.blueText,
+    fontVariant: ['tabular-nums'],
+  },
+
+  greenBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.greenBorder,
+    backgroundColor: C.greenBg,
+    padding: 16,
+    alignItems: 'center',
+    gap: 2,
+  },
+  greenBoxTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.greenText,
+  },
+  greenBoxSubtitle: {
+    fontSize: 12,
+    color: C.green,
+  },
+
+  conflictBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.redBorder,
+    backgroundColor: C.redBg,
+    padding: 14,
     gap: 10,
   },
   conflictText: {
-    color: '#d9342b',
+    color: C.redText,
     fontSize: 14,
   },
   conflictActions: {
@@ -656,7 +967,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    backgroundColor: '#d9342b',
+    backgroundColor: C.red,
   },
   conflictButtonSecondary: {
     backgroundColor: '#8a8a8a',
@@ -666,35 +977,67 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+
   notesInput: {
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderRadius: 8,
+    borderColor: C.border,
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 15,
+    color: C.text,
     minHeight: 80,
     textAlignVertical: 'top',
   },
+
+  // Primary full-width actions — bold, tall, high-contrast, matching the
+  // web page's h-14 buttons so it's unambiguous what to tap next.
   actionButton: {
-    borderRadius: 10,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  actionButtonGreen: {
+    backgroundColor: C.green,
+  },
+  actionButtonRed: {
+    backgroundColor: C.red,
+  },
+  actionButtonOutlineBlue: {
+    backgroundColor: C.card,
+    borderWidth: 1.5,
+    borderColor: C.blue,
+  },
+  actionButtonPressed: {
+    opacity: 0.85,
   },
   actionButtonText: {
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 16,
   },
+  actionButtonTextBlue: {
+    color: C.blue,
+  },
+
   doneText: {
     textAlign: 'center',
+    color: C.textMuted,
+    padding: 16,
   },
   errorText: {
-    color: '#d9342b',
+    color: C.redText,
     textAlign: 'center',
+    fontSize: 13,
+  },
+  materialsErrorText: {
+    textAlign: 'left',
+    marginTop: 2,
   },
   retryButton: {
-    backgroundColor: '#208AEF',
+    backgroundColor: C.blue,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,
@@ -710,19 +1053,109 @@ const styles = StyleSheet.create({
   },
   emptyBody: {
     textAlign: 'center',
+    color: C.textMuted,
   },
-  photosSection: {
-    gap: 10,
+
+  // Secondary actions inside a card (Take Photo, Choose from Library, Request
+  // Materials) — a clearly-bordered pill so it doesn't blend into the card
+  // background the way an unstyled flat Pressable would.
+  secondaryButton: {
+    borderWidth: 1.5,
+    borderColor: C.blue,
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: C.blueBg,
   },
+  secondaryButtonPressed: {
+    backgroundColor: C.blueBorder,
+  },
+  secondaryButtonText: {
+    color: C.blueText,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  linkText: {
+    color: C.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  mutedRowText: {
+    color: C.textFaint,
+    fontSize: 14,
+    padding: 16,
+  },
+  mutedCentered: {
+    color: C.textFaint,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+
+  serviceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.headerBorder,
+  },
+  lastRow: {
+    borderBottomWidth: 0,
+  },
+  serviceRowTitle: {
+    fontSize: 14,
+    color: C.text,
+  },
+  serviceRowSubtitle: {
+    fontSize: 12,
+    color: C.textFaint,
+    marginTop: 2,
+  },
+  serviceStatus: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.textMuted,
+  },
+  serviceStatusDone: {
+    color: C.green,
+  },
+  serviceStatusSkipped: {
+    color: C.amberTextStrong,
+  },
+
+  chemicalRow: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.greenBorder,
+    backgroundColor: C.greenBg,
+    padding: 12,
+    gap: 2,
+  },
+  chemicalProductName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.greenText,
+  },
+  chemicalAmountText: {
+    fontSize: 13,
+    color: C.greenText,
+  },
+  chemicalAmountStrong: {
+    fontWeight: '700',
+  },
+  chemicalRateLabel: {
+    fontSize: 12,
+    color: C.green,
+  },
+
   photoButtonRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     alignItems: 'center',
-  },
-  photoButton: {
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
   },
   photoGrid: {
     flexDirection: 'row',
@@ -739,7 +1172,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   photoPlaceholder: {
-    backgroundColor: '#8a8a8a44',
+    backgroundColor: '#e2e8f0',
   },
   photoDimmed: {
     opacity: 0.55,
@@ -762,31 +1195,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  materialsSection: {
-    gap: 10,
-  },
+
   materialsHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  materialsRequestButton: {
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    gap: 10,
   },
   materialsList: {
-    gap: 8,
+    gap: 10,
   },
   materialsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.headerBorder,
     borderRadius: 10,
     padding: 12,
     gap: 10,
   },
   materialsItemName: {
-    fontSize: 15,
+    fontSize: 14,
+    color: C.text,
   },
   materialsFailedActions: {
     flexDirection: 'row',

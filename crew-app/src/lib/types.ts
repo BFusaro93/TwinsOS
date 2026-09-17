@@ -49,11 +49,72 @@ export interface CrewVisit {
   budgetedHours: number | null;
 }
 
+// Mirrors one row of GET /api/crm/crew/visits' `stops` array — the
+// crew-tablet grouping of "everything at one client/address today" into a
+// single card with one clock-in/out, computed server-side by the SAME
+// groupVisitsIntoStops() the web crew page uses
+// (src/lib/utils/visit-stops.ts, via src/app/api/crm/crew/visits/route.ts).
+// This is what home.tsx and visit/[id].tsx render — CrewVisit above is kept
+// only because `visits` is still returned alongside `stops` for anything
+// that hasn't moved over.
+export interface CrewStopVisit {
+  id: string;
+  jobServiceId: string | null;
+  serviceName: string | null;
+  budgetedHours: number | null;
+  teamSize: number | null;
+  status: VisitStatus;
+  startTime: string | null;
+  endTime: string | null;
+  actualHours: number | null;
+  completionNotes: string | null;
+  acknowledgedNotesAt: string | null;
+  skipReason: string | null;
+  jobComments: unknown[];
+}
+
+export interface CrewStop {
+  /** Stable grouping key (client/day/crew/address) — use as the list key, not anchorVisitId (see below). */
+  key: string;
+  /** The visit whose id is the target for clock-in/out/pause/resume and photos/materials — same visit the web stop page anchors on. */
+  anchorVisitId: string;
+  clientName: string | null;
+  clientPhone: string | null;
+  /** Pre-joined "line1, city" — already a display string server-side, unlike CrewVisit.address. */
+  address: string | null;
+  propertyId: string | null;
+  derivedStatus: VisitStatus;
+  clockedInAt: string | null;
+  clockedOutAt: string | null;
+  /** Set while the stop is on a break — see crm_job_visits.paused_at. */
+  pausedAt: string | null;
+  breakMinutes: number;
+  notesToCrew: string | null;
+  scheduledDate: string;
+  visits: CrewStopVisit[];
+}
+
+// Mirrors one row of crm_crew_drive_segments as returned by the `drive` field
+// of GET /api/crm/crew/visits — day-level, not tied to any one visit/stop.
+export interface DriveSegment {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  minutes: number | null;
+}
+
+export interface CrewDriveInfo {
+  openSegment: DriveSegment | null;
+  totalMinutes: number;
+}
+
 export interface CrewVisitsResponse {
   date: string;
   crewId: string | null;
   crewName: string | null;
   visits: CrewVisit[];
+  stops: CrewStop[];
+  drive: CrewDriveInfo;
 }
 
 // Mirrors GET /api/crm/crew/visits/:id/photos — a confirmed (already-uploaded)
@@ -78,6 +139,22 @@ export interface PickerProduct {
   partNumber: string;
   unitCostCents: number;
   category: 'stocked_material' | 'project_material';
+}
+
+// Mirrors GET /api/crm/crew/visits/:id/chemicals — read-only chemical mix
+// info (see src/app/api/crm/crew/visits/[visitId]/chemicals/route.ts).
+// solutionAmount/solutionUnitName are only populated when the office has
+// auto-calc on and the rate's units were convertible; null means "ask the
+// office for the mix ratio" rather than a wrong guess.
+export interface VisitChemicalApplication {
+  id: string;
+  productName: string | null;
+  used: boolean;
+  chemicalAmount: number | null;
+  unitName: string | null;
+  solutionAmount: number | null;
+  solutionUnitName: string | null;
+  applicationRateLabel: string | null;
 }
 
 export type RequisitionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'ordered' | 'closed';

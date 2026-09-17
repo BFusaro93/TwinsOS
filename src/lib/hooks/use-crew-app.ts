@@ -335,6 +335,60 @@ export function useVisitPhotos(visitId: string) {
   });
 }
 
+// ── useVisitChemicals ────────────────────────────────────────────────────────
+// Read-only chemical mix info for the crew stop page — what to use, how much
+// active ingredient, and (when computed) the finished-mix solution volume
+// the tech should actually prepare. Crew never writes here.
+
+export interface VisitChemicalApplication {
+  id: string;
+  visitId: string;
+  productName: string | null;
+  used: boolean;
+  chemicalAmount: number | null;
+  unitName: string | null;
+  solutionAmount: number | null;
+  solutionUnitName: string | null;
+  applicationRateLabel: string | null;
+}
+
+/** Batched by visit id (a stop can bundle several same-day visits) so the
+ * whole "Chemical Mix" card can decide up front whether it has anything to
+ * show, rather than each visit's row silently hiding itself. */
+export function useVisitChemicals(visitIds: string[]) {
+  return useQuery<VisitChemicalApplication[]>({
+    queryKey: ["crew-app-chemicals", [...visitIds].sort()],
+    queryFn: async () => {
+      const { supabase } = await getAuthContext();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_chemical_applications")
+        .select(
+          "id, visit_id, chemical_amount, solution_amount, used, application_rate_label, " +
+          "product:product_id(name), unit:unit_of_measure_id(name), " +
+          "solution_unit:solution_unit_of_measure_id(name)"
+        )
+        .in("visit_id", visitIds)
+        .is("deleted_at", null)
+        .order("created_at");
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data as any[]).map((row) => ({
+        id: row.id,
+        visitId: row.visit_id,
+        productName: row.product?.name ?? null,
+        used: row.used ?? true,
+        chemicalAmount: row.chemical_amount,
+        unitName: row.unit?.name ?? null,
+        solutionAmount: row.solution_amount,
+        solutionUnitName: row.solution_unit?.name ?? null,
+        applicationRateLabel: row.application_rate_label,
+      }));
+    },
+    enabled: visitIds.length > 0,
+  });
+}
+
 // ── useCrewMemberTimesForDate ─────────────────────────────────────────────────
 // Batched by scheduled_date instead of one useCrewMemberTimes(visitId) call per
 // row — the Dispatch Board needs every visible visit's member times at once

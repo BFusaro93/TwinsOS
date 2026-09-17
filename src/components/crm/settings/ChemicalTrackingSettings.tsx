@@ -31,7 +31,7 @@ import {
 } from "@/lib/hooks/use-email-templates";
 import { CHEMICAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import type { CRMEmailTemplate } from "@/types/crm-proposals";
-import type { ChemicalConditionsDisplay, ChemicalLookupType } from "@/types/chemical-tracking";
+import type { ChemicalConditionsDisplay, ChemicalLookupType, ChemicalUnitClass } from "@/types/chemical-tracking";
 
 function Section({
   title,
@@ -171,12 +171,29 @@ function GeneralChemicalSettings() {
 // empty list. Other lookup types (e.g. Areas Treated) are site-specific and
 // have no universal defaults, so they're left for the user to define.
 // Matches Service Autopilot's Units of Measure list (liquid + weight + metric).
+// unitClass/baseFactor let the mix-volume calc (calcMixVolume) convert
+// between these units — a factor to a canonical base unit (fluid ounce for
+// volume, gram for mass). Keep in sync with the backfill in migration
+// 20260918030000_chemical_mix_volume_calc.sql, which tags these same names
+// for orgs that seeded their list before this factor data existed.
+const DEFAULT_VOLUME_UNITS: { name: string; unitClass: ChemicalUnitClass; baseFactor: number }[] = [
+  { name: "Cups", unitClass: "volume", baseFactor: 8 },
+  { name: "Gallons", unitClass: "volume", baseFactor: 128 },
+  { name: "Grams", unitClass: "mass", baseFactor: 1 },
+  { name: "Kilograms", unitClass: "mass", baseFactor: 1000 },
+  { name: "Liters", unitClass: "volume", baseFactor: 33.814 },
+  { name: "Milliliters", unitClass: "volume", baseFactor: 0.033814 },
+  { name: "Ounces - Liquid", unitClass: "volume", baseFactor: 1 },
+  { name: "Ounces - Weight", unitClass: "mass", baseFactor: 28.3495 },
+  { name: "Pints", unitClass: "volume", baseFactor: 16 },
+  { name: "Pounds", unitClass: "mass", baseFactor: 453.592 },
+  { name: "Quarts", unitClass: "volume", baseFactor: 32 },
+  { name: "Tablespoons", unitClass: "volume", baseFactor: 0.5 },
+  { name: "Teaspoons", unitClass: "volume", baseFactor: 1 / 6 },
+];
+
 const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
-  volume_unit: [
-    "Cups", "Gallons", "Grams", "Kilograms", "Liters", "Milliliters",
-    "Ounces - Liquid", "Ounces - Weight", "Pints", "Pounds", "Quarts",
-    "Tablespoons", "Teaspoons",
-  ],
+  volume_unit: DEFAULT_VOLUME_UNITS.map((u) => u.name),
   // Square Foot and 1,000 Sq Ft kept adjacent (a lawn-chemical rate is almost
   // always expressed as one or the other) with Acre last, rather than
   // alphabetical order which splits them apart.
@@ -209,7 +226,15 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
     seededRef.current = true;
     (async () => {
       for (let i = 0; i < defaults.length; i++) {
-        const created = await create.mutateAsync({ listType, name: defaults[i] });
+        const volumeUnitMeta =
+          listType === "volume_unit"
+            ? DEFAULT_VOLUME_UNITS.find((u) => u.name === defaults[i])
+            : undefined;
+        const created = await create.mutateAsync({
+          listType,
+          name: defaults[i],
+          ...(volumeUnitMeta && { unitClass: volumeUnitMeta.unitClass, baseFactor: volumeUnitMeta.baseFactor }),
+        });
         await update.mutateAsync({ id: created.id, sortOrder: i });
       }
     })();

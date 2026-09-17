@@ -2,7 +2,17 @@ import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { File } from 'expo-file-system';
 
-import { ApiError, clockInVisit, clockOutVisit, requestMaterials, uploadVisitPhoto } from '@/lib/api';
+import {
+  ApiError,
+  clockInStop,
+  clockOutStop,
+  endDrive,
+  pauseStop,
+  requestMaterials,
+  resumeStop,
+  startDrive,
+  uploadVisitPhoto,
+} from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 import {
@@ -56,12 +66,30 @@ async function processItem(item: QueueItem): Promise<void> {
     switch (item.type) {
       case 'clock_in': {
         const payload = item.payload as ClockInPayload;
-        await clockInVisit(item.visitId, payload.localTime, item.id);
+        // item.visitId is the stop's anchor visit id — see enqueueClockIn().
+        await clockInStop(item.visitId, payload.localTime, item.id);
         break;
       }
       case 'clock_out': {
         const payload = item.payload as ClockOutPayload;
-        await clockOutVisit(item.visitId, payload.localTime, item.id, payload.notes);
+        await clockOutStop(item.visitId, payload.localTime, item.id, payload.notes);
+        break;
+      }
+      case 'pause': {
+        await pauseStop(item.visitId, item.id);
+        break;
+      }
+      case 'resume': {
+        await resumeStop(item.visitId, item.id);
+        break;
+      }
+      case 'drive_start': {
+        // Day-level, not tied to item.visitId (which is the DRIVE_QUEUE_VISIT_ID sentinel) — see startDrive().
+        await startDrive(item.id);
+        break;
+      }
+      case 'drive_end': {
+        await endDrive(item.id);
         break;
       }
       case 'add_photo': {

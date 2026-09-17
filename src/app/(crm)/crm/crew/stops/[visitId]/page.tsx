@@ -6,11 +6,12 @@ import { format, parseISO, differenceInMinutes } from "date-fns";
 import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
-  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles,
+  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles, FlaskConical,
 } from "lucide-react";
 import {
   useStopDetail,
   useVisitPhotos,
+  useVisitChemicals,
   useStopClockIn,
   useStopClockOut,
   useStopPause,
@@ -55,6 +56,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const router = useRouter();
   const { data: stop, isLoading } = useStopDetail(anchorVisitId);
   const { data: photos = [] } = useVisitPhotos(anchorVisitId);
+  const stopVisitIds = stop?.visits.map((v) => v.id) ?? [];
+  const { data: chemicals = [] } = useVisitChemicals(stopVisitIds);
+  const usedChemicals = chemicals.filter((c) => c.used);
   const { data: orgSettings } = useOrgSettings();
   const hidePricing = orgSettings?.crewHidePricing ?? false;
 
@@ -296,6 +300,56 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             })}
           </div>
         </div>
+
+        {/* Chemical mix — what to use and how much finished-mix solution to
+            prepare, computed from the product's application rate + dilution
+            ratio when the office has it configured. Only shown when this
+            stop actually has chemicals logged. */}
+        {usedChemicals.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" />
+                Chemical Mix
+              </h2>
+            </div>
+            <div className="p-3 space-y-2">
+              {usedChemicals.map((a) => {
+                const visit = stop.visits.find((v) => v.id === a.visitId);
+                const serviceName =
+                  stop.visits.length > 1 && visit ? visitServices(visit)[0]?.serviceName : undefined;
+                return (
+                  <div key={a.id} className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2">
+                    {serviceName && <p className="text-xs font-medium text-emerald-700 mb-0.5">{serviceName}</p>}
+                    <p className="text-sm font-medium text-emerald-900">{a.productName ?? "Chemical"}</p>
+                    {a.solutionAmount != null ? (
+                      <p className="text-sm text-emerald-800 mt-0.5">
+                        Use{" "}
+                        <span className="font-semibold">
+                          {a.solutionAmount} {a.solutionUnitName ?? ""}
+                        </span>{" "}
+                        of finished mix
+                        {a.chemicalAmount != null && (
+                          <span className="text-emerald-600">
+                            {" "}
+                            ({a.chemicalAmount} {a.unitName ?? ""} active)
+                          </span>
+                        )}
+                      </p>
+                    ) : a.chemicalAmount != null ? (
+                      <p className="text-sm text-emerald-800 mt-0.5">
+                        {a.chemicalAmount} {a.unitName ?? ""}
+                      </p>
+                    ) : null}
+                    {a.applicationRateLabel && (
+                      <p className="text-xs text-emerald-600 mt-0.5">{a.applicationRateLabel}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Notes acknowledgment gate */}
         {hasNotes && (
