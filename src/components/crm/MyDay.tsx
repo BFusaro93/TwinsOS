@@ -108,10 +108,16 @@ export function MyDay() {
       {/* Greeting bar */}
       <div className="flex items-center justify-between rounded-lg border bg-white px-5 py-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
+          {/* getGreeting()/getTodayLong() read the local clock, which can
+              legitimately differ between the server that rendered this page
+              and the browser hydrating it (different timezone, or a request
+              that straddles the hour/day boundary) — that mismatch is
+              expected, not a bug, so it's suppressed rather than "fixed" by
+              forcing a spurious re-render. */}
+          <h1 className="text-xl font-semibold text-slate-900" suppressHydrationWarning>
             {getGreeting()}, {firstName}
           </h1>
-          <p className="text-sm text-slate-400 mt-0.5">{getTodayLong()}</p>
+          <p className="text-sm text-slate-400 mt-0.5" suppressHydrationWarning>{getTodayLong()}</p>
         </div>
         <Link
           href="/crm/tickets"
