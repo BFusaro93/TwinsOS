@@ -93,7 +93,6 @@ export function EstimateBuilderTool() {
             <li>Any exclusions are clearly noted</li>
             <li>Pricing matches what was calculated</li>
             <li>Any clarification flags in the output have been resolved</li>
-            <li>Any &ldquo;Additional Opportunity&rdquo; items have been flagged for follow-up</li>
           </ul>
           <p className="mt-3 italic text-slate-400">
             Note: This tool does not set pricing, submit the estimate, or replace the estimator&rsquo;s
