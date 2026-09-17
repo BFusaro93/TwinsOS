@@ -208,7 +208,7 @@ export async function GET(request: Request) {
   const { data: jobs, error: jobsErr } = await (supabase as any)
     .from("crm_jobs")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .select("id, org_id, client_id, crew_id, schedule, schedule_days, recurrence_end, package_total_steps, priority, notes_to_crew" as any)
+    .select("id, org_id, client_id, crew_id, schedule, schedule_days, recurrence_end, package_total_steps, priority, notes_to_crew, man_count" as any)
     .in("job_type", ["recurring", "package"])
     .not("status", "in", '("cancelled","completed","hold")')
     .is("deleted_at", null);
@@ -291,6 +291,7 @@ export async function GET(request: Request) {
     scheduled_date: string;
     priority: number;
     notes_to_crew: string | null;
+    men_count: number;
   }[] = [];
 
   let skippedPastEnd = 0;
@@ -300,7 +301,7 @@ export async function GET(request: Request) {
     id: string; org_id: string; client_id: string; crew_id: string | null;
     schedule: string | null; schedule_days: string[];
     recurrence_end: string | null; package_total_steps: number | null;
-    priority: number; notes_to_crew: string | null;
+    priority: number; notes_to_crew: string | null; man_count: number | null;
   }[]) {
 
     // Respect recurrence_end if set
@@ -339,6 +340,7 @@ export async function GET(request: Request) {
           scheduled_date: dateStr,
           priority:       job.priority ?? 1,
           notes_to_crew:  job.notes_to_crew ?? null,
+          men_count:      Math.max(1, Number(job.man_count ?? 1) || 1),
         });
         // Mark as pending so parallel rules on the same job don't duplicate
         existingSet.add(key);

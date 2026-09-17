@@ -683,7 +683,7 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[900px] md:w-[900px] p-0 flex flex-col gap-0"
+        className="w-full sm:max-w-[800px] md:w-[800px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 px-5 py-4 pr-14">
@@ -1166,7 +1166,7 @@ function JobDetailSheet({
           </div>
 
           {/* Right: costing panel */}
-          <div className="w-44 shrink-0 border-l bg-slate-50 flex flex-col">
+          <div className="w-56 shrink-0 border-l bg-slate-50 flex flex-col">
             <div className="px-4 pt-4 pb-3 border-b">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
                 Job Costing
@@ -2805,7 +2805,8 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
 ];
 
 const PRIORITY_FILTER_JOB_OPTIONS = [
-  { value: "job_high", label: "High priority" },
+  { value: "job_high",   label: "High priority" },
+  { value: "job_normal", label: "Normal priority" },
 ];
 
 const PRIORITY_FILTER_CLIENT_OPTIONS = [
@@ -2884,6 +2885,9 @@ export function DispatchBoard() {
   const [bulkOutcomePending, setBulkOutcomePending] = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
+  // Service filter is multi-select (unlike the other Select-a-Filter text
+  // filters), so it gets its own array instead of sharing colFilterValue.
+  const [serviceFilters,  setServiceFilters]  = useState<string[]>([]);
   const [dragId,          setDragId]          = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [manualOrder,     setManualOrder]     = useState<string[] | null>(null);
@@ -3110,10 +3114,15 @@ export function DispatchBoard() {
     if (priorityFilters.length > 0) {
       const matches =
         (priorityFilters.includes("job_high") && v.effectiveHighPriority) ||
+        (priorityFilters.includes("job_normal") && !v.effectiveHighPriority) ||
         (priorityFilters.includes("client_high") && v.clientPriority === "high") ||
         (priorityFilters.includes("client_normal") && v.clientPriority === "normal") ||
         (priorityFilters.includes("client_low") && v.clientPriority === "low");
       if (!matches) return false;
+    }
+    if (serviceFilters.length > 0) {
+      const names = (v.job?.services ?? []).map((s) => s.serviceName);
+      if (!serviceFilters.some((sv) => names.includes(sv))) return false;
     }
     if (search) {
       const q   = search.toLowerCase();
@@ -3126,8 +3135,7 @@ export function DispatchBoard() {
       const q = colFilterValue.toLowerCase();
       switch (colFilterKey) {
         case "client":  if (!(v.clientName ?? "").toLowerCase().includes(q)) return false; break;
-        case "service": if (!(v.job?.services ?? []).map((s) => s.serviceName).join(" ").toLowerCase().includes(q)) return false; break;
-        case "date":    if (!(v.scheduledDate ?? "").includes(q)) return false; break;
+        case "date":    if ((v.scheduledDate ?? "") !== colFilterValue) return false; break;
         case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
         case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
         case "crew": {
@@ -3544,18 +3552,22 @@ export function DispatchBoard() {
                 )}
               >
                 {label}
-                {colFilterKey === key && colFilterValue && (
+                {key === "service" && serviceFilters.length > 0 && (
+                  <span className="ml-1 text-brand-500">· {serviceFilters.length}</span>
+                )}
+                {key !== "service" && colFilterKey === key && colFilterValue && (
                   <span className="ml-1 text-brand-500">· {colFilterValue}</span>
                 )}
               </button>
             );
           })}
 
-          {/* Service: popover with list */}
+          {/* Service: popover with a multi-select checklist (can filter to
+              more than one service at once, unlike the other text filters). */}
           {colFilterKey === "service" && (
-            <Popover defaultOpen>
+            <Popover defaultOpen onOpenChange={(o) => { if (!o) setColFilterKey(null); }}>
               <PopoverTrigger className="sr-only" />
-              <PopoverContent className="w-56 p-1" align="start" onInteractOutside={() => { if (!colFilterValue) { setColFilterKey(null); } }}>
+              <PopoverContent className="w-56 p-1" align="start">
                 <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Services</p>
                 {(allServices ?? []).length === 0 && (
                   <p className="px-2 py-2 text-xs text-slate-400 italic">No services found</p>
@@ -3565,17 +3577,20 @@ export function DispatchBoard() {
                     key={svc.id}
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100",
-                      colFilterValue === svc.name && "bg-brand-50 text-brand-700 font-medium"
+                      serviceFilters.includes(svc.name) && "bg-brand-50 text-brand-700 font-medium"
                     )}
-                    onClick={() => setColFilterValue(colFilterValue === svc.name ? "" : svc.name)}
+                    onClick={() => setServiceFilters((prev) =>
+                      prev.includes(svc.name) ? prev.filter((x) => x !== svc.name) : [...prev, svc.name]
+                    )}
                   >
+                    <Checkbox checked={serviceFilters.includes(svc.name)} className="h-3.5 w-3.5" />
                     {svc.name}
                   </button>
                 ))}
                 <div className="border-t mt-1 pt-1">
                   <button
                     className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100"
-                    onClick={() => { setColFilterKey(null); setColFilterValue(""); }}
+                    onClick={() => { setServiceFilters([]); setColFilterKey(null); }}
                   >
                     <XIcon className="h-3 w-3" /> Clear filter
                   </button>
@@ -3584,8 +3599,26 @@ export function DispatchBoard() {
             </Popover>
           )}
 
+          {/* Date: a real date picker instead of freeform text — the stored
+              value is already an ISO date (YYYY-MM-DD), same format a native
+              date input produces, so an exact match is correct here. */}
+          {colFilterKey === "date" && (
+            <>
+              <Input
+                autoFocus
+                type="date"
+                value={colFilterValue}
+                onChange={(e) => setColFilterValue(e.target.value)}
+                className="ml-2 h-6 w-36 text-xs"
+              />
+              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+
           {/* Other filters: text input */}
-          {colFilterKey && colFilterKey !== "service" && (
+          {colFilterKey && colFilterKey !== "service" && colFilterKey !== "date" && (
             <>
               <Input
                 autoFocus
@@ -3831,7 +3864,7 @@ export function DispatchBoard() {
                 )}
               >
                 <Checkbox checked={priorityFilters.includes(o.value)} className="h-3.5 w-3.5" />
-                <Flame className="h-3 w-3 text-red-500" />
+                {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500" />}
                 {o.label}
               </button>
             ))}
