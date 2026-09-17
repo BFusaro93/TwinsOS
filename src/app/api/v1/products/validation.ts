@@ -9,6 +9,10 @@ export const createProductSchema = z.object({
   priceCents: z.number().int().nonnegative().optional(),
   vendorId: z.string().uuid().optional(),
   isInventory: z.boolean().optional(),
+  // Only meaningful when category is "maintenance_part" — mirrored into the
+  // linked `parts` row (see route.ts). Ignored for other categories.
+  quantityOnHand: z.number().int().nonnegative().optional(),
+  minimumStock: z.number().int().nonnegative().optional(),
 });
 
 export const updateProductSchema = z.object({

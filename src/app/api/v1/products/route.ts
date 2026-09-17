@@ -58,5 +58,30 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) return jsonServerError("POST /api/v1/products", error);
+
+  // Mirror into the CMMS parts inventory, same as the app's own "New
+  // Product" form (useCreateProduct in src/lib/hooks/use-products.ts) —
+  // without this, a maintenance_part created here would be invisible on
+  // the CMMS Parts tab and goods-receiving it would silently skip
+  // incrementing parts.quantity_on_hand (receive_part_quantity requires an
+  // existing linked row and never creates one).
+  if (body.category === "maintenance_part") {
+    const { error: partError } = await db.from("parts").insert({
+      org_id: auth.orgId,
+      name: body.name,
+      part_number: body.partNumber ?? "",
+      description: body.description ?? "",
+      category: "maintenance_part",
+      unit_cost: body.unitCostCents ?? 0,
+      quantity_on_hand: body.quantityOnHand ?? 0,
+      minimum_stock: body.minimumStock ?? 0,
+      vendor_id: body.vendorId ?? null,
+      vendor_name: vendorName,
+      product_item_id: data.id,
+      is_inventory: body.isInventory ?? false,
+    });
+    if (partError) return jsonServerError("POST /api/v1/products (parts mirror)", partError);
+  }
+
   return NextResponse.json(shapeProduct(data), { status: 201 });
 }
