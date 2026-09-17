@@ -1,5 +1,52 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
+import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRateRow(row: any): ChemicalApplicationRate {
+  return {
+    id: row.id ?? "",
+    orgId: "",
+    productId: row.product_id,
+    applicationMethodId: null,
+    rateQty: row.rate_qty !== null ? Number(row.rate_qty) : null,
+    unitOfMeasureId: row.unit_of_measure_id,
+    areaQty: row.area_qty !== null ? Number(row.area_qty) : null,
+    areaUnitId: row.area_unit_id,
+    productCostCents: 0,
+    isDefault: true,
+    mixType: row.mix_type ?? "none",
+    dilutionChemicalQty: row.dilution_chemical_qty !== null ? Number(row.dilution_chemical_qty) : null,
+    dilutionChemicalUnitId: row.dilution_chemical_unit_id,
+    dilutionWaterQty: row.dilution_water_qty !== null ? Number(row.dilution_water_qty) : null,
+    dilutionWaterUnitId: row.dilution_water_unit_id,
+    mixProductId: row.mix_product_id,
+    mixProductAmountQty: row.mix_product_amount_qty !== null ? Number(row.mix_product_amount_qty) : null,
+    mixProductAmountUnitId: row.mix_product_amount_unit_id,
+    mixProductTotalQty: row.mix_product_total_qty !== null ? Number(row.mix_product_total_qty) : null,
+    mixProductTotalUnitId: row.mix_product_total_unit_id,
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapLookupItem(row: any): ChemicalLookupItem {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    listType: row.list_type,
+    name: row.name,
+    isActive: row.is_active,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    unitClass: row.unit_class ?? null,
+    baseFactor: row.base_factor !== null && row.base_factor !== undefined ? Number(row.base_factor) : null,
+  };
+}
 
 // ============================================================
 // Materials Needed for Upcoming Jobs
@@ -208,16 +255,26 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     }
   }
 
-  const defaultRateByProduct = new Map<string, { rateQty: number | null; areaQty: number | null }>();
+  const defaultRateByProduct = new Map<string, ChemicalApplicationRate>();
   if (chemicalProductIds.size > 0) {
     const { data: rates } = await supabase
       .from("crm_chemical_application_rates")
-      .select("product_id, rate_qty, area_qty, is_default")
+      .select(
+        "id, product_id, rate_qty, unit_of_measure_id, area_qty, area_unit_id, mix_type, dilution_chemical_qty, dilution_chemical_unit_id, dilution_water_qty, dilution_water_unit_id, mix_product_id, mix_product_amount_qty, mix_product_amount_unit_id, mix_product_total_qty, mix_product_total_unit_id, is_default"
+      )
       .in("product_id", [...chemicalProductIds])
       .eq("is_default", true);
-    for (const r of rates ?? []) {
-      defaultRateByProduct.set(r.product_id, { rateQty: r.rate_qty, areaQty: r.area_qty });
-    }
+    for (const r of rates ?? []) defaultRateByProduct.set(r.product_id, mapRateRow(r));
+  }
+
+  // unitsById is needed by calcChemicalAndSolution to resolve which side of a
+  // dilution/mix ratio the rate's own unit represents — see that function's
+  // doc comment for why "Applied X per area" isn't always the concentrate
+  // amount.
+  const unitsById = new Map<string, ChemicalLookupItem>();
+  if (chemicalProductIds.size > 0) {
+    const { data: unitRows } = await supabase.from("crm_chemical_lookup_items").select("*").is("deleted_at", null);
+    for (const row of unitRows ?? []) unitsById.set(row.id, mapLookupItem(row));
   }
 
   // ── general (non-chemical) material demand: explicit qty on crm_job_products ─
@@ -374,9 +431,11 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     let nextNeededBy: string | null = null;
     for (const d of demand) {
       const areaValue = d.propertyId ? areaValueByProperty.get(d.propertyId) : undefined;
-      const portion = rate?.areaQty && rate.rateQty != null && areaValue != null
-        ? (areaValue / rate.areaQty) * rate.rateQty
-        : 0;
+      // chemicalAmount (not the raw "Applied X per area" number) is the
+      // right quantity for "how much of the catalog product will this job
+      // consume" — calcChemicalAndSolution resolves it correctly whether the
+      // rate's own unit represents concentrate or a finished-mix volume.
+      const portion = rate && areaValue != null ? calcChemicalAndSolution(rate, areaValue, unitsById)?.chemicalAmount ?? 0 : 0;
       neededQty += portion;
       perJobQty.set(d.jobId, (perJobQty.get(d.jobId) ?? 0) + portion);
       perJobMeta.set(d.jobId, { jobName: d.jobName, neededBy: d.neededBy });
