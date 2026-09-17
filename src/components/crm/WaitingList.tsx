@@ -38,7 +38,8 @@ import {
 } from "@/components/ui/select";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Plus, ListOrdered, ChevronDown, RotateCcw, Search, Send, X } from "lucide-react";
+import { Plus, ListOrdered, ChevronDown, RotateCcw, Search, Send, X, Mail } from "lucide-react";
+import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -46,7 +47,7 @@ import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { CustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgTags } from "@/lib/hooks/use-clients";
-import { Flame, Tag } from "lucide-react";
+import { Flame, Tag, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
@@ -120,12 +121,13 @@ function extraColCellText(key: string, job: CRMJob): string {
   }
 }
 
-type ColFilterKey = "client" | "city" | "zip";
+type ColFilterKey = "client" | "city" | "zip" | "crew";
 
 const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
   { key: "client", label: "Client" },
   { key: "city", label: "City" },
   { key: "zip", label: "Zip" },
+  { key: "crew", label: "Crew" },
 ];
 
 const PRIORITY_FILTER_JOB_OPTIONS = [
@@ -385,6 +387,7 @@ export function WaitingList() {
     WAITING_LIST_COLUMNS.map((c) => c.key)
   );
   const [dispatchItems, setDispatchItems] = useState<DispatchItem[] | null>(null);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
@@ -402,7 +405,10 @@ export function WaitingList() {
   );
   // The Crew column shows the crew's abbreviated team code when it has one,
   // same as the Dispatch Board's Assigned column.
-  const crewCodeById = new Map((crews ?? []).map((c) => [c.id, c.code]).filter((e): e is [string, string] => !!e[1]));
+  const crewCodeById = useMemo(
+    () => new Map((crews ?? []).map((c) => [c.id, c.code]).filter((e): e is [string, string] => !!e[1])),
+    [crews]
+  );
 
   const all = jobs ?? [];
 
@@ -443,6 +449,13 @@ export function WaitingList() {
           case "client":  return (job.clientName ?? "").toLowerCase().includes(v);
           case "city":    return (job.serviceCity ?? "").toLowerCase().includes(v);
           case "zip":     return (job.serviceZip ?? "").toLowerCase().includes(v);
+          case "crew": {
+            // Match on either the full crew name or its abbreviated team code,
+            // same as the Dispatch Board's Crew text filter.
+            const code = job.crewId ? crewCodeById.get(job.crewId) ?? "" : "";
+            const name = job.crewName ?? "";
+            return name.toLowerCase().includes(v) || code.toLowerCase().includes(v);
+          }
           default:        return true;
         }
       });
@@ -457,7 +470,7 @@ export function WaitingList() {
     }
 
     return list;
-  }, [all, activeColFilter, colFilterValue, search, crewFilters, tagFilters, priorityFilters, serviceFilters]);
+  }, [all, activeColFilter, colFilterValue, search, crewFilters, tagFilters, priorityFilters, serviceFilters, crewCodeById]);
 
   // Package jobs carry one crm_job_services row per visit, each with its own
   // date window — expand those into one row per visit so each can be scheduled
@@ -644,39 +657,6 @@ export function WaitingList() {
               )}
             </PopoverContent>
           </Popover>
-
-          {/* Crew: multi-select popover, matched by crew id (avoids the old
-              text-filter's name-vs-code mismatch entirely) */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                  crewFilters.length > 0 ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
-                )}
-              >
-                Crew{crewFilters.length > 0 && ` · ${crewFilters.length}`}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-52 p-1" align="start">
-              <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Crews</p>
-              {(crews ?? []).length === 0 && (
-                <p className="px-2 py-2 text-xs text-slate-400 italic">No crews found</p>
-              )}
-              {(crews ?? []).map((c) => (
-                <FilterOptionRow
-                  key={c.id}
-                  checked={crewFilters.includes(c.id)}
-                  onToggle={() => setCrewFilters((prev) =>
-                    prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
-                  )}
-                  className={crewFilters.includes(c.id) ? "bg-brand-50 text-brand-700 font-medium" : undefined}
-                >
-                  {c.name}
-                </FilterOptionRow>
-              ))}
-            </PopoverContent>
-          </Popover>
         </div>
       </div>
 
@@ -708,6 +688,13 @@ export function WaitingList() {
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Dispatch Selected…
               </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!someSelected}
+                onSelect={() => setBulkEmailOpen(true)}
+              >
+                <Mail className="mr-2 h-3.5 w-3.5" />
+                Email Selected Clients
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -730,6 +717,35 @@ export function WaitingList() {
               className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
             />
           </div>
+
+          {/* Crew: multi-select popover, matched by crew id — same placement
+              and style as the Dispatch Board's "All Crews" filter (dark bar,
+              not the white "Select a Filter" text-search row). */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+                <Users className="h-3 w-3" />
+                {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
+                <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1" align="start">
+              <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
+                All Crews
+              </FilterOptionRow>
+              {(crews ?? []).map((c) => (
+                <FilterOptionRow
+                  key={c.id}
+                  checked={crewFilters.includes(c.id)}
+                  onToggle={() => setCrewFilters((prev) =>
+                    prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                  )}
+                >
+                  {c.name}
+                </FilterOptionRow>
+              ))}
+            </PopoverContent>
+          </Popover>
 
           {/* Tag filter — client tags, "is any of" (OR) */}
           <Popover>
@@ -886,6 +902,12 @@ export function WaitingList() {
           onDone={() => { setSelectedKeys(new Set()); refetch(); }}
         />
       )}
+
+      <BulkEmailClientsDialog
+        open={bulkEmailOpen}
+        onClose={() => setBulkEmailOpen(false)}
+        clientIds={[...new Set(visitRows.filter((r) => selectedKeys.has(r.key)).map((r) => r.job.clientId))]}
+      />
 
       <JobDetailSheet
         jobId={selectedJobId}

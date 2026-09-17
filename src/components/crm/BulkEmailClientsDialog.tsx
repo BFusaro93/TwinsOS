@@ -1,16 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
+import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
 import { toast } from "sonner";
 
-const MERGE_TAG_HINT = "[clientfirstname] [clientfullname] [companyname] [companyphonenumber] [accountbalance]";
+// The tags the send-email route actually resolves for a plain client email
+// (see buildClientMergeVars) — a picked template may contain other tags
+// (e.g. [quotelink] from an Estimate template) which just resolve blank.
+const BULK_EMAIL_MERGE_TAGS = [
+  { tag: "[clientfirstname]",    label: "Client First Name" },
+  { tag: "[clientlastname]",     label: "Client Last Name" },
+  { tag: "[clientfullname]",     label: "Client Full Name" },
+  { tag: "[companyname]",        label: "Company Name" },
+  { tag: "[companyphonenumber]", label: "Company Phone" },
+  { tag: "[accountbalance]",     label: "Account Balance" },
+] as const;
 
 type Recipient = { id: string; name: string; email: string | null };
 
@@ -24,11 +36,20 @@ export function BulkEmailClientsDialog({
   clientIds: string[];
 }) {
   const qc = useQueryClient();
+  const { data: templates = [] } = useEmailTemplates();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [bodyHtml, setBodyHtml] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const richTextRef = useRef<RichTextEditorHandle>(null);
+
+  useEffect(() => {
+    if (!selectedTemplateId) return;
+    const tpl = templates.find((t) => t.id === selectedTemplateId);
+    if (tpl) { setSubject(tpl.subject); setBodyHtml(tpl.bodyHtml); }
+  }, [selectedTemplateId, templates]);
 
   useEffect(() => {
     if (!open || clientIds.length === 0) return;
@@ -59,14 +80,15 @@ export function BulkEmailClientsDialog({
   function handleOpenChange(o: boolean) {
     if (!o) {
       onClose();
+      setSelectedTemplateId("");
       setSubject("");
-      setBody("");
+      setBodyHtml("");
       setRecipients([]);
     }
   }
 
   async function handleSend() {
-    if (!subject.trim() || !body.trim()) {
+    if (!subject.trim() || !bodyHtml.trim()) {
       toast.error("Subject and message are required");
       return;
     }
@@ -76,10 +98,6 @@ export function BulkEmailClientsDialog({
     }
     setSending(true);
     try {
-      const bodyHtml = body
-        .split("\n\n")
-        .map((para) => `<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#0f172a">${para.replace(/\n/g, "<br>")}</p>`)
-        .join("");
       const results = await Promise.allSettled(
         withEmail.map((r) =>
           fetch(`/api/crm/clients/${r.id}/send-email`, {
@@ -134,19 +152,47 @@ export function BulkEmailClientsDialog({
               </>
             )}
           </div>
+          {templates.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Template</Label>
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Choose a template… (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}{t.isDefault ? " (default)" : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Subject</Label>
             <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject line…" />
           </div>
           <div className="space-y-1.5">
             <Label>Message</Label>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
+            <RichTextEditor
+              ref={richTextRef}
+              value={bodyHtml}
+              onChange={setBodyHtml}
               placeholder="Write your message…"
-              rows={7}
+              minHeight={160}
             />
-            <p className="text-[11px] text-slate-400">Merge tags: {MERGE_TAG_HINT}</p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {BULK_EMAIL_MERGE_TAGS.map((mt) => (
+                <button
+                  key={mt.tag}
+                  type="button"
+                  title={mt.label}
+                  onClick={() => richTextRef.current?.insertContent(mt.tag)}
+                  className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                >
+                  {mt.tag}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <DialogFooter>
