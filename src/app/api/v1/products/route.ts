@@ -80,7 +80,40 @@ export async function POST(request: Request) {
       product_item_id: data.id,
       is_inventory: body.isInventory ?? false,
     });
-    if (partError) return jsonServerError("POST /api/v1/products (parts mirror)", partError);
+
+    if (partError) {
+      // uq_parts_org_part_number (org_id, part_number) — a parts row with
+      // this exact part number already exists (e.g. earlier CSV import or
+      // manual CMMS entry) and just isn't linked to a product_items row
+      // yet. Link it instead of failing outright and leaving the
+      // product_items row we already committed orphaned with no parts
+      // counterpart. Only attempted for a real (non-empty) part number —
+      // matching on an empty string can't reliably identify "the same
+      // physical part" the way a real part number can.
+      if (partError.code === "23505" && body.partNumber) {
+        const { data: existingPart } = await db
+          .from("parts")
+          .select("id, product_item_id")
+          .eq("org_id", auth.orgId)
+          .eq("part_number", body.partNumber)
+          .is("deleted_at", null)
+          .maybeSingle();
+
+        if (existingPart && !existingPart.product_item_id) {
+          const { error: linkError } = await db
+            .from("parts")
+            .update({ product_item_id: data.id, vendor_id: body.vendorId ?? null, vendor_name: vendorName })
+            .eq("id", existingPart.id);
+          if (linkError) return jsonServerError("POST /api/v1/products (parts link)", linkError);
+        } else if (existingPart) {
+          return jsonError(`Part number "${body.partNumber}" is already linked to a different product`, 409);
+        } else {
+          return jsonServerError("POST /api/v1/products (parts mirror)", partError);
+        }
+      } else {
+        return jsonServerError("POST /api/v1/products (parts mirror)", partError);
+      }
+    }
   }
 
   return NextResponse.json(shapeProduct(data), { status: 201 });
