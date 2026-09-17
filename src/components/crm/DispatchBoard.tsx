@@ -3051,14 +3051,19 @@ export function DispatchBoard() {
       const q   = search.toLowerCase();
       const cli = (v.clientName ?? "").toLowerCase();
       const cty = (v.job?.serviceCity ?? "").toLowerCase();
-      const svc = (v.job?.services ?? []).map((s) => s.serviceName).join(" ").toLowerCase();
+      const svc = (v.job?.services ?? [])
+        .map((s) => `${(s.serviceId && serviceCodeById.get(s.serviceId)) || ""} ${s.serviceName}`)
+        .join(" ")
+        .toLowerCase();
       if (!cli.includes(q) && !cty.includes(q) && !svc.includes(q)) return false;
     }
     if (colFilterKey && colFilterValue) {
       const q = colFilterValue.toLowerCase();
       switch (colFilterKey) {
         case "client":  if (!(v.clientName ?? "").toLowerCase().includes(q)) return false; break;
-        case "service": if (!(v.job?.services ?? []).map((s) => s.serviceName).join(" ").toLowerCase().includes(q)) return false; break;
+        case "service": if (!(v.job?.services ?? [])
+          .map((s) => `${(s.serviceId && serviceCodeById.get(s.serviceId)) || ""} ${s.serviceName}`)
+          .join(" ").toLowerCase().includes(q)) return false; break;
         case "date":    if (!(v.scheduledDate ?? "").includes(q)) return false; break;
         case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
         case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
