@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import type { Database } from "@/types/supabase";
 import { logger } from "@/lib/logger";
+import { planIncludesAddon } from "@/lib/stripe/plans";
 
 interface DistanceMatrixRow {
   elements: { status: string; duration?: { value: number } }[];
@@ -145,14 +146,38 @@ export async function POST(request: Request) {
 
   const { data: org } = await sb
     .from("organizations")
-    .select("customizations")
+    .select("customizations, plan")
     .eq("id", profile.org_id)
     .single();
 
-  const apiKey = (org?.customizations as Record<string, unknown>)?.google_maps_api_key as string | undefined;
+  // Orgs on a plan that bundles Route Optimization (currently Enterprise) or
+  // that bought the standalone $15/mo add-on get routed through our own
+  // platform Google Maps key — they shouldn't have to bring their own. Every
+  // other org still falls back to its own key from Settings → Integrations,
+  // same as before this add-on existed.
+  let entitled = planIncludesAddon(org?.plan ?? "", "route_optimization");
+  if (!entitled) {
+    const { data: addon } = await sb
+      .from("organization_addons")
+      .select("enabled")
+      .eq("org_id", profile.org_id)
+      .eq("addon_key", "route_optimization")
+      .eq("enabled", true)
+      .maybeSingle();
+    entitled = !!addon;
+  }
+
+  const orgApiKey = (org?.customizations as Record<string, unknown>)?.google_maps_api_key as string | undefined;
+  // Prefer the platform key for entitled orgs, but don't block them on it if
+  // it hasn't been provisioned yet and they happen to also have their own key set.
+  const apiKey = entitled ? (process.env.GOOGLE_MAPS_PLATFORM_API_KEY ?? orgApiKey) : orgApiKey;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Google Maps API key not configured. Add it in Settings → Integrations." },
+      {
+        error: entitled
+          ? "Route Optimization is enabled for this org, but the platform Google Maps key isn't configured. Contact support."
+          : "Google Maps API key not configured. Add your own in Settings → Integrations, or purchase the Route Optimization add-on ($15/mo) to use ours.",
+      },
       { status: 422 }
     );
   }
