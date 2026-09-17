@@ -385,9 +385,12 @@ export function useAddClientProperty() {
     mutationFn: async ({
       clientId,
       property,
+      isMaster = false,
     }: {
       clientId: string;
       property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string };
+      /** True only for the auto-created property backed by the client's own address (see AerialMeasurementDialog) — every manual "Add Property" stays a non-master satellite property. */
+      isMaster?: boolean;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -400,7 +403,7 @@ export function useAddClientProperty() {
         zip: property.zip,
         gate_lock_code: property.gateCode,
         notes_to_crew: property.notesToCrew,
-        is_master: false,
+        is_master: isMaster,
       });
       if (error) throw error;
       const label = [property.name, property.address].filter((s) => s && s.trim()).join(" — ");

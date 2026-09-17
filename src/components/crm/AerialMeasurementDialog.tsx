@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-import { useClientProperties, useUpdateClientPropertyZones } from "@/lib/hooks/use-clients";
+import { useClient, useClientProperties, useAddClientProperty, useUpdateClientPropertyZones } from "@/lib/hooks/use-clients";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import type { PropertyZone } from "@/types/crm";
@@ -115,6 +115,8 @@ export function AerialMeasurementDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { data: properties } = useClientProperties(clientId);
+  const { data: client } = useClient(clientId);
+  const addProperty = useAddClientProperty();
   const { data: orgSettings } = useOrgSettings();
   const updateZones = useUpdateClientPropertyZones();
   const { data: customFieldDefs } = useCustomFieldDefs();
@@ -137,6 +139,7 @@ export function AerialMeasurementDialog({
   const isDrawingRef = useRef(false);
   const draftPathRef = useRef<google.maps.LatLngLiteral[]>([]);
   const draftPolygonRef = useRef<google.maps.Polygon | null>(null);
+  const autoCreatedPropertyRef = useRef(false);
 
   const property = useMemo(
     () => properties?.find((p) => p.id === propertyId) ?? null,
@@ -163,8 +166,40 @@ export function AerialMeasurementDialog({
       setIsDrawing(false);
       setDraftPointCount(0);
       setFieldMappings({});
+      autoCreatedPropertyRef.current = false;
     }
   }, [open, properties, propertyId]);
+
+  // Most clients never get a separate Property record added — they just use
+  // the client's own service/billing address — so this used to dead-end here
+  // with "Add a property to this client before taking measurements" for
+  // almost everyone. Silently create a master property from the client's own
+  // address instead, once per time the dialog is opened, so the tool just
+  // works without an extra manual step.
+  useEffect(() => {
+    if (!open || !client || !properties || properties.length > 0) return;
+    if (autoCreatedPropertyRef.current || addProperty.isPending) return;
+    const address = client.serviceAddress ?? client.billingAddress;
+    if (!address) return;
+    autoCreatedPropertyRef.current = true;
+    addProperty.mutate({
+      clientId,
+      isMaster: true,
+      property: {
+        address,
+        city: client.serviceAddress ? client.serviceCity ?? undefined : client.billingCity ?? undefined,
+        state: client.serviceAddress ? client.serviceState ?? undefined : client.billingState ?? undefined,
+        zip: client.serviceAddress ? client.serviceZip ?? undefined : client.billingZip ?? undefined,
+        gateCode: client.gateCode ?? undefined,
+        notesToCrew: client.notesToCrew ?? undefined,
+      },
+    }, {
+      onError: () => {
+        autoCreatedPropertyRef.current = false;
+        toast.error("Couldn't set up this client's property automatically — try adding one manually.");
+      },
+    });
+  }, [open, client, properties, clientId, addProperty]);
 
   // Default-suggest a mapping for each number-type custom field the first time it's seen this session
   useEffect(() => {
@@ -439,7 +474,11 @@ export function AerialMeasurementDialog({
 
         {!properties || properties.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
-            Add a property to this client before taking measurements.
+            {addProperty.isPending
+              ? "Setting up this client's property…"
+              : client && !client.serviceAddress && !client.billingAddress
+                ? "This client has no address on file yet — add one under Details, or add a property manually, before taking measurements."
+                : "Add a property to this client before taking measurements."}
           </p>
         ) : !orgSettings?.googleMapsApiKey ? (
           <p className="py-8 text-center text-sm text-slate-500">
