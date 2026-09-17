@@ -19,6 +19,7 @@ import { useOrgTags } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { CustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
+import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -3665,19 +3666,16 @@ export function DispatchBoard() {
                   <p className="px-2 py-2 text-xs text-slate-400 italic">No services found</p>
                 )}
                 {(allServices ?? []).map((svc) => (
-                  <button
+                  <FilterOptionRow
                     key={svc.id}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100",
-                      serviceFilters.includes(svc.name) && "bg-brand-50 text-brand-700 font-medium"
-                    )}
-                    onClick={() => setServiceFilters((prev) =>
+                    checked={serviceFilters.includes(svc.name)}
+                    onToggle={() => setServiceFilters((prev) =>
                       prev.includes(svc.name) ? prev.filter((x) => x !== svc.name) : [...prev, svc.name]
                     )}
+                    className={serviceFilters.includes(svc.name) ? "bg-brand-50 text-brand-700 font-medium" : undefined}
                   >
-                    <Checkbox checked={serviceFilters.includes(svc.name)} className="h-3.5 w-3.5" />
                     {svc.name}
-                  </button>
+                  </FilterOptionRow>
                 ))}
                 <div className="border-t mt-1 pt-1">
                   <button
@@ -3870,24 +3868,19 @@ export function DispatchBoard() {
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-48 p-1" align="start">
-            <button
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-              onClick={() => setCrewFilters([])}
-            >
-              <Checkbox checked={crewFilters.length === 0} className="h-3.5 w-3.5" />
+            <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
               All Crews
-            </button>
+            </FilterOptionRow>
             {(crews ?? []).map((c) => (
-              <button
+              <FilterOptionRow
                 key={c.id}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-                onClick={() => setCrewFilters((prev) =>
+                checked={crewFilters.includes(c.id)}
+                onToggle={() => setCrewFilters((prev) =>
                   prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
                 )}
               >
-                <Checkbox checked={crewFilters.includes(c.id)} className="h-3.5 w-3.5" />
                 {c.name}
-              </button>
+              </FilterOptionRow>
             ))}
           </PopoverContent>
         </Popover>
@@ -3902,27 +3895,22 @@ export function DispatchBoard() {
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-48 p-1 max-h-72 overflow-y-auto" align="start">
-            <button
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-              onClick={() => setTagFilters([])}
-            >
-              <Checkbox checked={tagFilters.length === 0} className="h-3.5 w-3.5" />
+            <FilterOptionRow checked={tagFilters.length === 0} onToggle={() => setTagFilters([])}>
               All Tags
-            </button>
+            </FilterOptionRow>
             {orgTags.length === 0 && (
               <p className="px-2 py-1.5 text-[11px] text-slate-400">No client tags yet</p>
             )}
             {orgTags.map((tag) => (
-              <button
+              <FilterOptionRow
                 key={tag}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-                onClick={() => setTagFilters((prev) =>
+                checked={tagFilters.includes(tag)}
+                onToggle={() => setTagFilters((prev) =>
                   prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
                 )}
               >
-                <Checkbox checked={tagFilters.includes(tag)} className="h-3.5 w-3.5" />
                 <span className="truncate">{tag}</span>
-              </button>
+              </FilterOptionRow>
             ))}
           </PopoverContent>
         </Popover>
@@ -3938,41 +3926,35 @@ export function DispatchBoard() {
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-52 p-1" align="start">
-            <button
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-              onClick={() => setPriorityFilters([])}
-            >
-              <Checkbox checked={priorityFilters.length === 0} className="h-3.5 w-3.5" />
+            <FilterOptionRow checked={priorityFilters.length === 0} onToggle={() => setPriorityFilters([])}>
               All Priorities
-            </button>
+            </FilterOptionRow>
             <div className="my-1 border-t" />
             <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Job</p>
             {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
-              <button
+              <FilterOptionRow
                 key={o.value}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-                onClick={() => setPriorityFilters((prev) =>
+                checked={priorityFilters.includes(o.value)}
+                onToggle={() => setPriorityFilters((prev) =>
                   prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
                 )}
               >
-                <Checkbox checked={priorityFilters.includes(o.value)} className="h-3.5 w-3.5" />
                 {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500" />}
                 {o.label}
-              </button>
+              </FilterOptionRow>
             ))}
             <div className="my-1 border-t" />
             <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Client</p>
             {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
-              <button
+              <FilterOptionRow
                 key={o.value}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-                onClick={() => setPriorityFilters((prev) =>
+                checked={priorityFilters.includes(o.value)}
+                onToggle={() => setPriorityFilters((prev) =>
                   prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
                 )}
               >
-                <Checkbox checked={priorityFilters.includes(o.value)} className="h-3.5 w-3.5" />
                 {o.label}
-              </button>
+              </FilterOptionRow>
             ))}
           </PopoverContent>
         </Popover>
