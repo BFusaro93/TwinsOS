@@ -38,8 +38,9 @@ import { GET as listRequisitions, POST as createRequisition } from "@/app/api/v1
 import { GET as getRequisition } from "@/app/api/v1/requisitions/[id]/route";
 import { createRequisitionSchema } from "@/app/api/v1/requisitions/validation";
 
-import { GET as listPurchaseOrders } from "@/app/api/v1/purchase-orders/route";
+import { GET as listPurchaseOrders, POST as createPurchaseOrder } from "@/app/api/v1/purchase-orders/route";
 import { GET as getPurchaseOrder } from "@/app/api/v1/purchase-orders/[id]/route";
+import { createPurchaseOrderSchema } from "@/app/api/v1/purchase-orders/validation";
 
 import { GET as listJobs, POST as createJob } from "@/app/api/v1/jobs/route";
 import { GET as getJob, PATCH as updateJob } from "@/app/api/v1/jobs/[id]/route";
@@ -52,8 +53,9 @@ import { createEstimateSchema } from "@/app/api/v1/estimates/validation";
 import { GET as listInvoices } from "@/app/api/v1/invoices/route";
 import { GET as getInvoice } from "@/app/api/v1/invoices/[id]/route";
 
-import { GET as listContracts } from "@/app/api/v1/contracts/route";
+import { GET as listContracts, POST as createContract } from "@/app/api/v1/contracts/route";
 import { GET as getContract } from "@/app/api/v1/contracts/[id]/route";
+import { createContractSchema } from "@/app/api/v1/contracts/validation";
 
 /**
  * MCP tool set for the public API, generated from a resource registry
@@ -68,16 +70,25 @@ import { GET as getContract } from "@/app/api/v1/contracts/[id]/route";
  * why the MCP route's own connection-level auth doesn't also charge it).
  *
  * Per src/lib/api/scopes.ts's write:sensitive tier, no tool here ever
- * performs a create/update that the REST API itself doesn't expose —
- * invoices, contracts, and purchase orders are read-only, and requisitions
- * have no update tool (status transitions go through the app's approval
- * flow only). estimates is the one exception: create_estimates exists, but
- * only as the narrow one-line-from-a-catalog-service path in
- * src/app/api/v1/estimates/route.ts — every dollar figure is still computed
- * by the app's own budget-engine functions, never caller-supplied. See the
- * "public API / MCP: estimate creation stays read-only" entry in TASKS.md
- * for the fuller reasoning and what's still out of scope (multi-line
- * estimates, discounts, tiers, milestones).
+ * performs a create/update that the REST API itself doesn't expose. Invoices
+ * are read-only, and requisitions/purchase_orders have no update tool
+ * (status transitions — approval, rejection, ordering — go through the
+ * app's approval flow only; see guard_procurement_approval_status() in
+ * supabase/migrations/20260806203310_guard_procurement_approval_status.sql).
+ * create_purchase_orders always lands at status "requested" — the same
+ * starting point the app's own "New PO" dialog produces — so it can create
+ * a PO but never approve or advance one. estimates is a narrower exception
+ * still: create_estimates exists, but only as the one-line-from-a-
+ * catalog-service path in src/app/api/v1/estimates/route.ts — every dollar
+ * figure is still computed by the app's own budget-engine functions, never
+ * caller-supplied. See the "public API / MCP: estimate creation stays
+ * read-only" entry in TASKS.md for that reasoning.
+ *
+ * create_contracts is the one resource here that legitimately differs from
+ * the app's own creation flow: it accepts a historical signedAt/signedBy and
+ * a non-"draft" initial status, meant for recording a contract already
+ * executed outside the app (e.g. signed via DocuSign) for billing purposes —
+ * not fabricating a new agreement. See src/app/api/v1/contracts/validation.ts.
  */
 
 type ListHandler = (request: Request) => Promise<Response>;
@@ -218,6 +229,9 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
     listScope: "purchase_orders:read",
     get: getPurchaseOrder,
     getScope: "purchase_orders:read",
+    create: createPurchaseOrder,
+    createScope: "purchase_orders:write:safe",
+    createSchema: createPurchaseOrderSchema,
   },
   {
     resource: "jobs",
@@ -255,6 +269,9 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
     listScope: "contracts:read",
     get: getContract,
     getScope: "contracts:read",
+    create: createContract,
+    createScope: "contracts:write:safe",
+    createSchema: createContractSchema,
   },
 ];
 

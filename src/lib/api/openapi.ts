@@ -9,6 +9,8 @@ import { createProjectSchema, updateProjectSchema } from "@/app/api/v1/projects/
 import { createPmScheduleSchema, updatePmScheduleSchema } from "@/app/api/v1/pm-schedules/validation";
 import { createPartSchema, updatePartSchema } from "@/app/api/v1/parts/validation";
 import { createRequisitionSchema } from "@/app/api/v1/requisitions/validation";
+import { createPurchaseOrderSchema } from "@/app/api/v1/purchase-orders/validation";
+import { createContractSchema } from "@/app/api/v1/contracts/validation";
 import { createJobSchema, updateJobSchema } from "@/app/api/v1/jobs/validation";
 import { createEstimateSchema } from "@/app/api/v1/estimates/validation";
 import type { ApiScopeTier } from "@/lib/api/scopes";
@@ -296,6 +298,14 @@ const ENDPOINTS: EndpointDef[] = [
     agentTier: "read",
     hasIdParam: true,
   },
+  {
+    method: "post",
+    path: "/purchase-orders",
+    summary: "Create a PO with line items (always status \"requested\" — approval happens in the app, never via this API)",
+    scope: "purchase_orders:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createPurchaseOrderSchema,
+  },
 
   { method: "get", path: "/jobs", summary: "List Landscapt jobs", scope: "jobs:read", agentTier: "read" },
   {
@@ -366,6 +376,14 @@ const ENDPOINTS: EndpointDef[] = [
     scope: "contracts:read",
     agentTier: "read",
     hasIdParam: true,
+  },
+  {
+    method: "post",
+    path: "/contracts",
+    summary: "Record one or more already-executed contracts for billing (accepts historical signedAt/signedBy; supports bulk via `contracts`)",
+    scope: "contracts:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createContractSchema,
   },
 ];
 
