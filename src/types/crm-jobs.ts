@@ -133,6 +133,8 @@ export interface CRMJob {
   invoiceDescription: string | null;
   projectId: string | null;
   priority: number;
+  /** Dispatcher-set "high priority" flag shown as a stand-out icon on the dispatch board. Distinct from `priority` above (route order). */
+  isHighPriority: boolean;
   contractId: string | null;
   schedule: string | null;
   scheduleDays: string[];
@@ -169,6 +171,7 @@ export interface CRMJob {
   clientName?: string;
   clientPhone?: string;
   clientPriority?: string | null;
+  clientTags?: string[];
   crewName?: string;
   salesRepName?: string | null;
   services?: CRMJobService[];
@@ -272,6 +275,8 @@ export interface CRMJobVisit {
   materialsUsed: SnowVisitMaterial[]
   clientName?: string | null
   clientPhone?: string | null
+  clientPriority?: string | null
+  clientTags?: string[]
   crewId: string | null
   crewName?: string | null
   scheduledDate: string
@@ -285,6 +290,10 @@ export interface CRMJobVisit {
   budgetedHours: number | null
   completedAt: string | null
   priority: number
+  /** Per-visit override of the job's high-priority flag. Null inherits the job's `isHighPriority`. */
+  isHighPriority: boolean | null
+  /** Resolved value — `isHighPriority` if set, otherwise the parent job's flag. Use this to decide whether to show the stand-out icon. */
+  effectiveHighPriority: boolean
   notesToCrew: string | null
   notesToClient: string | null
   invoiceDescription: string | null

@@ -81,6 +81,7 @@ export function mapJob(row: any): CRMJob {
     projectId: row.project_id,
     estimateId: row.estimate_id ?? null,
     priority: row.priority ?? 1,
+    isHighPriority: row.is_high_priority ?? false,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -609,6 +610,11 @@ export function mapVisit(row: any): CRMJobVisit {
       : [],
     clientName: row.clients?.display_name ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
+    clientPriority: row.clients?.priority ?? null,
+    clientTags: Array.isArray(row.clients?.client_tags)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? row.clients.client_tags.map((t: any) => t.tag)
+      : [],
     crewId: row.crew_id ?? null,
     crewName: row.crm_crews?.name ?? null,
     scheduledDate: row.scheduled_date,
@@ -622,6 +628,8 @@ export function mapVisit(row: any): CRMJobVisit {
     budgetedHours: row.budgeted_hours ?? null,
     completedAt: row.completed_at ?? null,
     priority: row.priority ?? 1,
+    isHighPriority: row.is_high_priority ?? null,
+    effectiveHighPriority: row.is_high_priority ?? row.crm_jobs?.is_high_priority ?? false,
     notesToCrew: row.notes_to_crew ?? null,
     notesToClient: row.notes_to_client ?? null,
     invoiceDescription: row.invoice_description ?? null,
@@ -665,7 +673,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         .from('crm_job_visits')
         .select(`
           *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag)),
           crm_crews(name),
           crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)))
         `)
@@ -1009,6 +1017,7 @@ export function useUpdateVisit() {
         skip_reason: string | null;
         job_comments: unknown;
         priority: number;
+        is_high_priority: boolean | null;
         assigned_employee_id: string | null;
         dispatched_at: string | null;
         completed_at: string | null;
@@ -2187,6 +2196,10 @@ export function useUpdateJob() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', vars.id] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      // Job-level fields (e.g. is_high_priority) are denormalized onto the
+      // dispatch board's visit query via the crm_jobs join — that lives
+      // under a different key prefix and isn't covered by 'crm-jobs' above.
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
     },
   });
 }

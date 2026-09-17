@@ -732,7 +732,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
+      <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <DialogTitle>
             {activeService ? `Edit Service: ${activeService.name}` : "Add Service"}

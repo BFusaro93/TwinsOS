@@ -153,6 +153,8 @@ function mapVisit(row: Record<string, unknown>): CRMJobVisit {
     budgetedHours:        (job?.budgeted_hours as number) ?? null,
     completedAt:          row.completed_at as string | null,
     priority:             (row.priority as number) ?? 1,
+    isHighPriority:       (row.is_high_priority as boolean | null) ?? null,
+    effectiveHighPriority: (row.is_high_priority as boolean | null) ?? (job?.is_high_priority as boolean | undefined) ?? false,
     notesToCrew:          row.notes_to_crew as string | null,
     notesToClient:        row.notes_to_client as string | null,
     invoiceDescription:   row.invoice_description as string | null,

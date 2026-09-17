@@ -78,6 +78,7 @@ import {
   Send,
   ChevronDown,
   FolderKanban,
+  Flame,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { useProject } from "@/lib/hooks/use-projects";
@@ -671,7 +672,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             Back
           </Button>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold text-slate-900 truncate">
+            <h1 className="flex items-center gap-1.5 text-base font-semibold text-slate-900 truncate">
+              {((edits.is_high_priority as boolean | undefined) ?? job.isHighPriority) && (
+                <span title="High priority"><Flame className="h-4 w-4 shrink-0 text-red-500" /></span>
+              )}
               {job.clientName ?? "Job"}
             </h1>
             <p className="text-xs text-slate-400 flex items-center gap-2">
@@ -1095,6 +1099,30 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         />
                       </button>
                     </div>
+                    {/* High Priority toggle — a dispatcher flag distinct from
+                        the route-order `priority` field; shows a Flame icon
+                        on this job's visits on the dispatch board. */}
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-slate-500 flex items-center gap-1">
+                        <Flame className="h-3 w-3 text-red-500" />
+                        High Priority
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => patch("is_high_priority", !(edits.is_high_priority ?? job.isHighPriority))}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                          (edits.is_high_priority ?? job.isHighPriority) ? "bg-red-500" : "bg-slate-200"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform",
+                            (edits.is_high_priority ?? job.isHighPriority) ? "translate-x-4" : "translate-x-0"
+                          )}
+                        />
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <dl className="flex flex-col gap-2 text-sm">
@@ -1183,6 +1211,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         <dd className="text-xs font-medium text-amber-600 flex items-center gap-1">
                           <Phone className="h-3 w-3" />
                           Required
+                        </dd>
+                      </div>
+                    )}
+                    {job.isHighPriority && (
+                      <div className="flex justify-between">
+                        <dt className="text-xs text-slate-500">Priority</dt>
+                        <dd className="text-xs font-medium text-red-600 flex items-center gap-1">
+                          <Flame className="h-3 w-3" />
+                          High
                         </dd>
                       </div>
                     )}

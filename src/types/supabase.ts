@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       api_key_rate_limits: {
@@ -5076,6 +5051,7 @@ export type Database = {
           end_time: string | null
           id: string
           invoice_description: string | null
+          is_high_priority: boolean | null
           job_comments: Json
           job_id: string
           job_service_id: string | null
@@ -5120,6 +5096,7 @@ export type Database = {
           end_time?: string | null
           id?: string
           invoice_description?: string | null
+          is_high_priority?: boolean | null
           job_comments?: Json
           job_id: string
           job_service_id?: string | null
@@ -5164,6 +5141,7 @@ export type Database = {
           end_time?: string | null
           id?: string
           invoice_description?: string | null
+          is_high_priority?: boolean | null
           job_comments?: Json
           job_id?: string
           job_service_id?: string | null
@@ -5301,6 +5279,7 @@ export type Database = {
           invoice_separately: boolean | null
           invoice_type: string | null
           is_complete: boolean | null
+          is_high_priority: boolean
           job_number: number
           job_type: string
           last_service_date: string | null
@@ -5376,6 +5355,7 @@ export type Database = {
           invoice_separately?: boolean | null
           invoice_type?: string | null
           is_complete?: boolean | null
+          is_high_priority?: boolean
           job_number?: number
           job_type?: string
           last_service_date?: string | null
@@ -5451,6 +5431,7 @@ export type Database = {
           invoice_separately?: boolean | null
           invoice_type?: string | null
           is_complete?: boolean | null
+          is_high_priority?: boolean
           job_number?: number
           job_type?: string
           last_service_date?: string | null
@@ -6300,7 +6281,7 @@ export type Database = {
         Insert: {
           field_def_id: string
           id?: string
-          org_id: string
+          org_id?: string
           property_id: string
           updated_at?: string
           value_number?: number | null
@@ -7348,43 +7329,68 @@ export type Database = {
         Row: {
           budgeted_cost_cents: number
           budgeted_hours: number
+          calc_type: number
           created_at: string
-          from_qty: number
+          custom_field_id: string
+          deleted_at: string | null
+          from_val: number
           id: string
+          is_tail_row: boolean
           org_id: string
           rate_cents: number
           service_id: string
           sort_order: number
-          to_qty: number
+          tail_every_qty: number | null
+          tail_over_qty: number | null
+          to_val: number | null
           updated_at: string
         }
         Insert: {
           budgeted_cost_cents?: number
           budgeted_hours?: number
+          calc_type?: number
           created_at?: string
-          from_qty: number
+          custom_field_id: string
+          deleted_at?: string | null
+          from_val?: number
           id?: string
-          org_id: string
+          is_tail_row?: boolean
+          org_id?: string
           rate_cents?: number
           service_id: string
           sort_order?: number
-          to_qty: number
+          tail_every_qty?: number | null
+          tail_over_qty?: number | null
+          to_val?: number | null
           updated_at?: string
         }
         Update: {
           budgeted_cost_cents?: number
           budgeted_hours?: number
+          calc_type?: number
           created_at?: string
-          from_qty?: number
+          custom_field_id?: string
+          deleted_at?: string | null
+          from_val?: number
           id?: string
+          is_tail_row?: boolean
           org_id?: string
           rate_cents?: number
           service_id?: string
           sort_order?: number
-          to_qty?: number
+          tail_every_qty?: number | null
+          tail_over_qty?: number | null
+          to_val?: number | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_service_rate_matrix_custom_field_id_fkey"
+            columns: ["custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "crm_rate_matrix_field_defs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_service_rate_matrix_org_id_fkey"
             columns: ["org_id"]
@@ -14715,9 +14721,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

@@ -15,6 +15,7 @@ import {
   useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
+import { useOrgTags } from "@/lib/hooks/use-clients";
 import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,8 @@ import {
   Clock,
   Undo2,
   Car,
+  Flame,
+  Tag,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import {
@@ -420,6 +423,10 @@ function JobDetailSheet({
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
   const [budgetedHoursInput, setBudgetedHoursInput] = useState(hoursInputValue(computeBudgetedHours(visit)));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
+  // null = inherit the job's High Priority flag (the common case); true/false
+  // explicitly overrides it for just this one visit.
+  const [highPriorityOverride, setHighPriorityOverride] = useState<boolean | null>(visit.isHighPriority);
+  useEffect(() => { setHighPriorityOverride(visit.isHighPriority); }, [visit.id, visit.isHighPriority]);
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
          : rateFallbackCents != null ? rateFallbackCents / 100
@@ -592,6 +599,7 @@ function JobDetailSheet({
       rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null,
       notes_to_client: notesToClient || null,
       invoice_description: invoiceDesc || null,
+      is_high_priority: highPriorityOverride,
     };
     if (status === "completed" && visit.status !== "completed") {
       updates.completed_at = new Date().toISOString();
@@ -675,13 +683,16 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[680px] md:w-[680px] p-0 flex flex-col gap-0"
+        className="w-full sm:max-w-[900px] md:w-[900px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 px-5 py-4 pr-14">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <SheetTitle className="text-base font-bold text-slate-900 leading-tight truncate">
+              <SheetTitle className="flex items-center gap-1.5 text-base font-bold text-slate-900 leading-tight truncate">
+                {(highPriorityOverride ?? job?.isHighPriority) && (
+                  <span title="High priority"><Flame className="h-4 w-4 shrink-0 text-red-500" /></span>
+                )}
                 {serviceName}
               </SheetTitle>
               {visit.clientName && (
@@ -824,6 +835,30 @@ function JobDetailSheet({
                       {SUB_STATUS_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Priority — per-visit override of the job's High Priority
+                    flag. "Job default" clears the override so the visit goes
+                    back to inheriting whatever the job is set to. */}
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                    Priority
+                  </label>
+                  <Select
+                    value={highPriorityOverride === null ? "default" : highPriorityOverride ? "high" : "normal"}
+                    onValueChange={(v) => setHighPriorityOverride(v === "default" ? null : v === "high")}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default" className="text-xs">
+                        Job default ({job?.isHighPriority ? "High" : "Normal"})
+                      </SelectItem>
+                      <SelectItem value="high" className="text-xs">High priority</SelectItem>
+                      <SelectItem value="normal" className="text-xs">Normal priority</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2386,12 +2421,17 @@ function VisitRow({
       {/* Client (+ address below, like the Jobs screen — City/Zip stay in
           their own columns since they're used for routing) */}
       <td className="min-w-[140px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
-        <Link
-          href={`/crm/clients/${visit.clientId}`}
-          className="block truncate max-w-[140px] font-medium text-brand-600 hover:underline"
-        >
-          {visit.clientName ?? "—"}
-        </Link>
+        <div className="flex items-center gap-1">
+          {visit.effectiveHighPriority && (
+            <span title="High priority" className="shrink-0"><Flame className="h-3 w-3 text-red-500" /></span>
+          )}
+          <Link
+            href={`/crm/clients/${visit.clientId}`}
+            className="block truncate max-w-[140px] font-medium text-brand-600 hover:underline"
+          >
+            {visit.clientName ?? "—"}
+          </Link>
+        </div>
         {job?.serviceAddress && (
           <p className="truncate max-w-[140px] text-[10px] text-slate-400">{job.serviceAddress}</p>
         )}
@@ -2764,6 +2804,16 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "skipped",    label: "Skipped" },
 ];
 
+const PRIORITY_FILTER_JOB_OPTIONS = [
+  { value: "job_high", label: "High priority" },
+];
+
+const PRIORITY_FILTER_CLIENT_OPTIONS = [
+  { value: "client_high",   label: "High" },
+  { value: "client_normal", label: "Normal" },
+  { value: "client_low",    label: "Low" },
+];
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function toLocalDateString(date: Date): string {
@@ -2812,6 +2862,11 @@ export function DispatchBoard() {
   }, [selectedDate, searchParams, pathname, urlRouter]);
   const [endDate,         setEndDate]         = useState("");
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
+  const [tagFilters,      setTagFilters]       = useState<string[]>([]);
+  // Values are "job_high" (the new high-priority job/visit flag) plus the
+  // existing client priority levels — one control covering both "priority"
+  // concepts, same as the crew filter's multi-select checklist.
+  const [priorityFilters, setPriorityFilters]  = useState<string[]>([]);
   const [statusFilter,    setStatusFilter]    = useState<FilterTab>("all");
   const [search,          setSearch]          = useState("");
   // IDs, not the visit objects themselves — looked up fresh from `visits` on
@@ -2865,6 +2920,7 @@ export function DispatchBoard() {
   const { data: visits, isLoading, refetch } = useVisitsForDate(selectedDate, effectiveEnd);
   const { data: crews }             = useCRMCrews();
   const { data: allServices }       = useCRMServices();
+  const orgTags                    = useOrgTags();
   // Batched by date, not per-row — every VisitRow needs its own visit's member
   // times to detect per-member time divergence, and firing one query per
   // visible row would be its own N+1 problem.
@@ -3047,6 +3103,18 @@ export function DispatchBoard() {
   const filtered = allVisits.filter((v) => {
     if (crewFilters.length > 0 && !crewFilters.includes(v.crewId ?? "")) return false;
     if (statusFilter !== "all" && v.status !== statusFilter) return false;
+    if (tagFilters.length > 0) {
+      const tags = v.clientTags ?? [];
+      if (!tagFilters.some((t) => tags.includes(t))) return false;
+    }
+    if (priorityFilters.length > 0) {
+      const matches =
+        (priorityFilters.includes("job_high") && v.effectiveHighPriority) ||
+        (priorityFilters.includes("client_high") && v.clientPriority === "high") ||
+        (priorityFilters.includes("client_normal") && v.clientPriority === "normal") ||
+        (priorityFilters.includes("client_low") && v.clientPriority === "low");
+      if (!matches) return false;
+    }
     if (search) {
       const q   = search.toLowerCase();
       const cli = (v.clientName ?? "").toLowerCase();
@@ -3062,7 +3130,17 @@ export function DispatchBoard() {
         case "date":    if (!(v.scheduledDate ?? "").includes(q)) return false; break;
         case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
         case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
-        case "crew":    if (!(v.crewName ?? "").toLowerCase().includes(q)) return false; break;
+        case "crew": {
+          // Match on either the full crew name or its abbreviated team code
+          // (Settings > Team) — the Assigned column shows the code, so typing
+          // what's actually on screen (e.g. "MAINT1") must match too, not
+          // just the underlying full name ("Maintenance 1").
+          const effId = effectiveCrewIdOf(v);
+          const code = effId ? crewCodeById.get(effId) ?? "" : "";
+          const name = v.crewName ?? v.job?.crewName ?? "";
+          if (!name.toLowerCase().includes(q) && !code.toLowerCase().includes(q)) return false;
+          break;
+        }
       }
     }
     return true;
@@ -3352,24 +3430,27 @@ export function DispatchBoard() {
 
       {/* Week strip + date range + actions. Wraps rather than scrolling: this
           row is ~1600px wide, so on a tablet the right-hand controls were half
-          a screen off to the side with no hint they were there. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 shrink-0">
+          a screen off to the side with no hint they were there. Trimmed to be
+          as narrow as it can (short labels, tight gaps, w-28 date inputs) so
+          it stays on one line at more common laptop viewport widths — it was
+          wrapping around 1600-1700px of available content width. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
-        <div className="flex items-center gap-2 text-xs text-slate-500 ml-2 shrink-0">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-1 shrink-0">
           <span className="font-medium">From</span>
           <Input
             type="date"
             value={selectedDate}
             onChange={(e) => { setSelectedDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-36 text-xs"
+            className="h-7 w-28 text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-36 text-xs"
+            className="h-7 w-28 text-xs"
           />
           {endDate && (
             <button
@@ -3382,8 +3463,8 @@ export function DispatchBoard() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <Button size="sm" variant="outline" className="h-9 text-sm gap-1 px-2.5"
             onClick={() => setTeamAssignOpen(true)}
           >
             <Users className="h-4 w-4" />
@@ -3391,7 +3472,7 @@ export function DispatchBoard() {
           </Button>
           <div className="flex items-center shrink-0">
             <Button size="sm" variant="outline"
-              className={cn("h-9 rounded-r-none border-r-0 text-sm gap-1.5 px-3", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
+              className={cn("h-9 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
               onClick={handleOptimizeRoute}
               disabled={optimizing}
             >
@@ -3405,20 +3486,21 @@ export function DispatchBoard() {
               value={routeStrategy}
               onValueChange={(v) => { setRouteStrategy(v as "nearest_first" | "furthest_first"); clearOptimization(); }}
             >
-              <SelectTrigger className={cn("h-9 w-[150px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
+              <SelectTrigger className={cn("h-9 w-[112px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="nearest_first" className="text-xs">Nearest first</SelectItem>
-                <SelectItem value="furthest_first" className="text-xs">Furthest first</SelectItem>
+                <SelectItem value="nearest_first" className="text-xs">Nearest</SelectItem>
+                <SelectItem value="furthest_first" className="text-xs">Furthest</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
+          <Button size="sm" variant="outline" className="h-9 text-sm gap-1 px-2.5"
             onClick={() => { setNearbyOpen(true); findNearby(allVisits); }}
+            title="Nearby Waiting List"
           >
             <MapPin className="h-4 w-4" />
-            Nearby Waiting List
+            Nearby Jobs
           </Button>
         </div>
       </div>
@@ -3680,6 +3762,91 @@ export function DispatchBoard() {
               >
                 <Checkbox checked={crewFilters.includes(c.id)} className="h-3.5 w-3.5" />
                 {c.name}
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Tag filter — client tags, "is any of" (OR) */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <Tag className="h-3 w-3" />
+              {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1 max-h-72 overflow-y-auto" align="start">
+            <button
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+              onClick={() => setTagFilters([])}
+            >
+              <Checkbox checked={tagFilters.length === 0} className="h-3.5 w-3.5" />
+              All Tags
+            </button>
+            {orgTags.length === 0 && (
+              <p className="px-2 py-1.5 text-[11px] text-slate-400">No client tags yet</p>
+            )}
+            {orgTags.map((tag) => (
+              <button
+                key={tag}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                onClick={() => setTagFilters((prev) =>
+                  prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
+                )}
+              >
+                <Checkbox checked={tagFilters.includes(tag)} className="h-3.5 w-3.5" />
+                <span className="truncate">{tag}</span>
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Priority filter — covers both the new high-priority job/visit flag
+            and the existing client priority (Low/Normal/High); any match shows. */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <Flame className="h-3 w-3" />
+              {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-52 p-1" align="start">
+            <button
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+              onClick={() => setPriorityFilters([])}
+            >
+              <Checkbox checked={priorityFilters.length === 0} className="h-3.5 w-3.5" />
+              All Priorities
+            </button>
+            <div className="my-1 border-t" />
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Job</p>
+            {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                onClick={() => setPriorityFilters((prev) =>
+                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                )}
+              >
+                <Checkbox checked={priorityFilters.includes(o.value)} className="h-3.5 w-3.5" />
+                <Flame className="h-3 w-3 text-red-500" />
+                {o.label}
+              </button>
+            ))}
+            <div className="my-1 border-t" />
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Client</p>
+            {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                onClick={() => setPriorityFilters((prev) =>
+                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                )}
+              >
+                <Checkbox checked={priorityFilters.includes(o.value)} className="h-3.5 w-3.5" />
+                {o.label}
               </button>
             ))}
           </PopoverContent>
