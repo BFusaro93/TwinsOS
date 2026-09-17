@@ -435,12 +435,16 @@ export function DispatchBoardGuide() {
           <strong> Save Order</strong>.
         </p>
         <Callout>
-          Optimize Route needs a Google Maps Platform API key with the Distance Matrix API enabled,
-          entered under <strong>Landscapt Settings → Integrations</strong> on the Google Maps card.
-          Type or paste the key and click <strong>Save Key</strong> — until you do, the card reads
-          &quot;Unsaved — click Save Key to connect&quot; and the board can&apos;t use it. If the save
-          comes back with &quot;you don&apos;t have permission to change organization settings,&quot;
-          your role lacks the settings permission and an admin needs to enter the key instead.
+          Optimize Route needs a Google Maps Platform API key, entered under{" "}
+          <strong>Landscapt Settings → Integrations</strong> on the Google Maps card — see that
+          card for exactly which Google APIs to enable (the same key also powers Nearby Waiting
+          List and Aerial Measurement, so it needs more than just route optimization&apos;s own
+          API). Type or paste the key and click <strong>Save Key</strong> — until you do, the card
+          reads &quot;Unsaved — click Save Key to connect&quot; and the board can&apos;t use it. If
+          the save comes back with &quot;you don&apos;t have permission to change organization
+          settings,&quot; your role lacks the settings permission and an admin needs to enter the
+          key instead. Orgs on a plan that bundles Route Optimization, or that bought the add-on,
+          don&apos;t need their own key at all — the platform&apos;s own key is used automatically.
         </Callout>
       </Section>
 

@@ -1805,8 +1805,8 @@ function GoogleMapsCard() {
 
   return (
     <IntegrationCard
-      title="Google Maps — Route Optimization"
-      description="Optimize crew routes on the Dispatch Board using the Distance Matrix API. Requires a Google Maps Platform API key with Distance Matrix enabled."
+      title="Google Maps"
+      description="Powers route optimization on the Dispatch Board, the Nearby Waiting List lookup, and the Aerial Measurement tool. Requires a Google Maps Platform API key with Distance Matrix, Geocoding, and Maps JavaScript enabled."
       status={isConfigured ? "connected" : "not_connected"}
     >
       <div className="space-y-4">
@@ -1814,8 +1814,8 @@ function GoogleMapsCard() {
           <p className="font-semibold mb-1">Setup instructions</p>
           <ol className="list-decimal ml-4 space-y-0.5">
             <li>Go to <span className="font-mono">console.cloud.google.com</span> → APIs &amp; Services</li>
-            <li>Enable <strong>Distance Matrix API</strong> and <strong>Directions API</strong></li>
-            <li>Create an API key and restrict it to those two APIs</li>
+            <li>Enable <strong>Distance Matrix API</strong>, <strong>Geocoding API</strong>, and <strong>Maps JavaScript API</strong></li>
+            <li>Create an API key and restrict it to those three APIs</li>
             <li>Paste the key below and click Save</li>
           </ol>
         </div>
