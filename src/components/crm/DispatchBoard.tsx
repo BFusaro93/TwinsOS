@@ -3445,8 +3445,11 @@ export function DispatchBoard() {
           as narrow as it can (short labels, tight gaps) so it stays on one
           line at more common laptop viewport widths — it was wrapping around
           1600-1700px of available content width. The From/To date inputs
-          need w-32, not narrower — anything tighter clips the native
-          calendar-picker icon off the right edge. */}
+          need w-36 with an explicit md:text-xs — Input's base classes end
+          in md:text-sm, which tailwind-merge won't dedupe against a bare
+          text-xs (different responsive variant), so without the md:
+          override the box renders at 14px text and clips the native
+          calendar-picker icon off the right edge at desktop widths. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
@@ -3456,14 +3459,14 @@ export function DispatchBoard() {
             type="date"
             value={selectedDate}
             onChange={(e) => { setSelectedDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-32 text-xs"
+            className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-32 text-xs"
+            className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           {endDate && (
             <button
