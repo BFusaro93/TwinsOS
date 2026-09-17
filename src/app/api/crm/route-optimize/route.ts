@@ -113,6 +113,59 @@ async function fetchMatrix(
   return { matrix };
 }
 
+/**
+ * Resolves the Google Maps API key an org would actually use, honoring the
+ * same plan/add-on entitlement routing as the live optimize call — so the
+ * Settings "Test Connection" button (see ?test=1 below) reports on the key
+ * that's really in effect, not whatever the org happens to have saved.
+ */
+async function resolveApiKeyForOrg(
+  sb: ReturnType<typeof createClient<Database>>,
+  orgId: string
+): Promise<{ apiKey: string } | { error: string; status: number }> {
+  const { data: org } = await sb
+    .from("organizations")
+    .select("customizations, plan")
+    .eq("id", orgId)
+    .single();
+
+  // Orgs on a plan that bundles Route Optimization (currently Enterprise) or
+  // that bought the standalone $15/mo add-on get routed through our own
+  // platform Google Maps key — they shouldn't have to bring their own. Every
+  // other org still falls back to its own key from Settings → Integrations,
+  // same as before this add-on existed.
+  let entitled = planIncludesAddon(org?.plan ?? "", "route_optimization");
+  if (!entitled) {
+    const { data: addon } = await sb
+      .from("organization_addons")
+      .select("enabled")
+      .eq("org_id", orgId)
+      .eq("addon_key", "route_optimization")
+      .eq("enabled", true)
+      .maybeSingle();
+    entitled = !!addon;
+  }
+
+  const orgApiKey = (org?.customizations as Record<string, unknown>)?.google_maps_api_key as string | undefined;
+  // Prefer the platform key for entitled orgs, but don't block them on it if
+  // it hasn't been provisioned yet and they happen to also have their own key set.
+  const apiKey = entitled ? (process.env.GOOGLE_MAPS_PLATFORM_API_KEY ?? orgApiKey) : orgApiKey;
+  if (!apiKey) {
+    return {
+      error: entitled
+        ? "Route Optimization is enabled for this org, but the platform Google Maps key isn't configured. Contact support."
+        : "Google Maps API key not configured. Add your own in Settings → Integrations, or purchase the Route Optimization add-on ($15/mo) to use ours.",
+      status: 422,
+    };
+  }
+  return { apiKey };
+}
+
+// Two well-known, always-geocodable public coordinates used solely to prove
+// the resolved key can actually reach the Distance Matrix API. No visit or
+// org address data is involved, so this works even for orgs with no visits.
+const TEST_COORDS = ["38.8977,-77.0365", "38.8895,-77.0353"];
+
 export async function POST(request: Request) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
@@ -122,15 +175,6 @@ export async function POST(request: Request) {
   );
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const parsed = BodySchema.safeParse(await request.json());
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Need at least 2 visits to optimize" },
-      { status: 400 }
-    );
-  }
-  const { visitIds, strategy, crewId } = parsed.data;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -144,43 +188,36 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data: org } = await sb
-    .from("organizations")
-    .select("customizations, plan")
-    .eq("id", profile.org_id)
-    .single();
-
-  // Orgs on a plan that bundles Route Optimization (currently Enterprise) or
-  // that bought the standalone $15/mo add-on get routed through our own
-  // platform Google Maps key — they shouldn't have to bring their own. Every
-  // other org still falls back to its own key from Settings → Integrations,
-  // same as before this add-on existed.
-  let entitled = planIncludesAddon(org?.plan ?? "", "route_optimization");
-  if (!entitled) {
-    const { data: addon } = await sb
-      .from("organization_addons")
-      .select("enabled")
-      .eq("org_id", profile.org_id)
-      .eq("addon_key", "route_optimization")
-      .eq("enabled", true)
-      .maybeSingle();
-    entitled = !!addon;
+  // Lightweight health check for Settings → Integrations "Test Connection".
+  // Skips the visit lookups entirely (an org may have zero visits) and just
+  // proves the resolved key can reach Google.
+  const isTest = new URL(request.url).searchParams.get("test") === "1";
+  if (isTest) {
+    const keyResult = await resolveApiKeyForOrg(sb, profile.org_id);
+    if ("error" in keyResult) {
+      return NextResponse.json({ error: keyResult.error }, { status: keyResult.status });
+    }
+    const result = await fetchMatrix(TEST_COORDS, keyResult.apiKey);
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    return NextResponse.json({ ok: true });
   }
 
-  const orgApiKey = (org?.customizations as Record<string, unknown>)?.google_maps_api_key as string | undefined;
-  // Prefer the platform key for entitled orgs, but don't block them on it if
-  // it hasn't been provisioned yet and they happen to also have their own key set.
-  const apiKey = entitled ? (process.env.GOOGLE_MAPS_PLATFORM_API_KEY ?? orgApiKey) : orgApiKey;
-  if (!apiKey) {
+  const parsed = BodySchema.safeParse(await request.json());
+  if (!parsed.success) {
     return NextResponse.json(
-      {
-        error: entitled
-          ? "Route Optimization is enabled for this org, but the platform Google Maps key isn't configured. Contact support."
-          : "Google Maps API key not configured. Add your own in Settings → Integrations, or purchase the Route Optimization add-on ($15/mo) to use ours.",
-      },
-      { status: 422 }
+      { error: "Need at least 2 visits to optimize" },
+      { status: 400 }
     );
   }
+  const { visitIds, strategy, crewId } = parsed.data;
+
+  const keyResult = await resolveApiKeyForOrg(sb, profile.org_id);
+  if ("error" in keyResult) {
+    return NextResponse.json({ error: keyResult.error }, { status: keyResult.status });
+  }
+  const { apiKey } = keyResult;
 
   // This query runs on the service-role client (needed above to read the org's
   // Google Maps key), which bypasses RLS entirely — so unlike the normal
