@@ -14,8 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Mail, Plus, Trash2 } from "lucide-react";
 import {
-  calcAutoQuantity,
-  calcMixVolume,
+  calcChemicalAndSolution,
   useChemicalApplicationRates,
   useChemicalApplicationsForVisit,
   useChemicalLookupItems,
@@ -351,16 +350,14 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
         (v) => v.fieldDefId === settings.areaCustomFieldId
       )?.valueNumber;
       if (defaultRate && areaValue != null) {
-        const computed = calcAutoQuantity(defaultRate, areaValue);
+        const computed = calcChemicalAndSolution(defaultRate, areaValue, unitsById);
         if (computed != null) {
-          chemicalAmount = Math.round(computed * 10000) / 10000;
-          unitOfMeasureId = defaultRate.unitOfMeasureId;
+          chemicalAmount = Math.round(computed.chemicalAmount * 10000) / 10000;
+          unitOfMeasureId = computed.chemicalUnitOfMeasureId;
           applicationMethodId = defaultRate.applicationMethodId;
-
-          const mix = calcMixVolume(defaultRate, chemicalAmount, unitsById);
-          if (mix) {
-            solutionAmount = Math.round(mix.solutionAmount * 100) / 100;
-            solutionUnitOfMeasureId = mix.solutionUnitOfMeasureId;
+          if (computed.solutionAmount != null) {
+            solutionAmount = Math.round(computed.solutionAmount * 100) / 100;
+            solutionUnitOfMeasureId = computed.solutionUnitOfMeasureId;
           }
         }
       }

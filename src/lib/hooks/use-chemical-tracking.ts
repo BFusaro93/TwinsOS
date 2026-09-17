@@ -262,11 +262,13 @@ export function useUpdateChemicalSettings() {
 }
 
 // ── pure helpers ──────────────────────────────────────────────────────────────
-// calcAutoQuantity/calcMixVolume live in chemical-mix-calc.ts (no "use client",
-// no react-query/browser-client deps) so server-side report code can reuse
-// them too. Re-exported here for existing importers (e.g. ChemicalApplicationPanel).
+// calcAutoQuantity/calcChemicalAndSolution live in chemical-mix-calc.ts (no
+// "use client", no react-query/browser-client deps) so server-side report
+// code can reuse them too. Re-exported here for existing importers (e.g.
+// ChemicalApplicationPanel).
 
-export { calcAutoQuantity, calcMixVolume } from "@/lib/chemical-mix-calc";
+export { calcAutoQuantity, calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
+export type { ChemicalCalcResult } from "@/lib/chemical-mix-calc";
 
 // ── application rates (per chemical product) ────────────────────────────────
 

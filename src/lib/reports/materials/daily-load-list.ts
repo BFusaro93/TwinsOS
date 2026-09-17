@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { calcMixVolume } from "@/lib/chemical-mix-calc";
+import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // ============================================================
@@ -11,8 +11,12 @@ import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemic
 // crm_jobs.crew_id, the same "effective crew" pattern DispatchBoard uses),
 // covering:
 //  - chemical products (track_chemicals=true): concentrate amount needed,
-//    plus the finished spray-mix volume via calcMixVolume (chemical-mix-calc.ts),
-//    preferring an already-entered crm_chemical_applications record for that
+//    plus the finished spray-mix volume, both resolved per-visit via
+//    calcChemicalAndSolution (chemical-mix-calc.ts) then summed — NOT summed
+//    first and converted after, since which of the two is the rate's
+//    "primary" number depends on the rate's own configured unit (see that
+//    function's doc comment) and must be resolved before aggregating.
+//    Prefers an already-entered crm_chemical_applications record for that
 //    visit/product over the rate-based estimate (crm_service_chemicals +
 //    crm_chemical_application_rates + property Area custom field) — same
 //    math as the Materials Needed report's chemical branch, just scoped to
@@ -218,22 +222,26 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
 
   // ── already-entered application records for these visits (preferred over estimate) ──
   const visitIds = liveVisits.map((v) => v.id);
-  const enteredByVisitProduct = new Map<string, number>();
+  const enteredByVisitProduct = new Map<string, { chemicalAmount: number; solutionAmount: number | null }>();
   if (visitIds.length > 0) {
     const apps = await fetchAllRows<{
       visit_id: string | null;
       product_id: string | null;
       chemical_amount: number | null;
+      solution_amount: number | null;
     }>(() =>
       supabase
         .from("crm_chemical_applications")
-        .select("visit_id, product_id, chemical_amount")
+        .select("visit_id, product_id, chemical_amount, solution_amount")
         .in("visit_id", visitIds)
         .is("deleted_at", null)
     );
     for (const a of apps) {
       if (!a.visit_id || !a.product_id || a.chemical_amount == null) continue;
-      enteredByVisitProduct.set(`${a.visit_id}:${a.product_id}`, Number(a.chemical_amount));
+      enteredByVisitProduct.set(`${a.visit_id}:${a.product_id}`, {
+        chemicalAmount: Number(a.chemical_amount),
+        solutionAmount: a.solution_amount != null ? Number(a.solution_amount) : null,
+      });
     }
   }
 
@@ -243,6 +251,9 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     crewName: string;
     crewColor: string | null;
     chemQtyByProduct: Map<string, number>;
+    chemUnitIdByProduct: Map<string, string>;
+    chemSolutionByProduct: Map<string, number>;
+    chemSolutionUnitIdByProduct: Map<string, string>;
     chemVisitsByProduct: Map<string, DailyLoadListJobRef[]>;
     materialQtyByProduct: Map<string, number>;
     materialJobsByProduct: Map<string, DailyLoadListJobRef[]>;
@@ -258,6 +269,9 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
         crewName: crew?.name ?? "Unassigned",
         crewColor: crew?.color ?? null,
         chemQtyByProduct: new Map(),
+        chemUnitIdByProduct: new Map(),
+        chemSolutionByProduct: new Map(),
+        chemSolutionUnitIdByProduct: new Map(),
         chemVisitsByProduct: new Map(),
         materialQtyByProduct: new Map(),
         materialJobsByProduct: new Map(),
@@ -290,19 +304,42 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
 
     for (const pid of productIdsForVisit) {
       const entered = enteredByVisitProduct.get(`${v.id}:${pid}`);
-      let qty: number | null = entered ?? null;
-      if (qty == null) {
-        const rate = defaultRateByProduct.get(pid);
+      const rate = defaultRateByProduct.get(pid);
+      let chemicalAmount: number | null = null;
+      let chemicalUnitId: string | null = rate?.unitOfMeasureId ?? null;
+      let solutionAmount: number | null = null;
+      let solutionUnitId: string | null = null;
+
+      if (entered) {
+        chemicalAmount = entered.chemicalAmount;
+        solutionAmount = entered.solutionAmount;
+      } else if (rate) {
         const areaValue = job.property_id ? areaValueByProperty.get(job.property_id) : undefined;
-        if (rate?.areaQty && rate.rateQty != null && areaValue != null) {
-          qty = (areaValue / rate.areaQty) * rate.rateQty;
+        if (areaValue != null) {
+          // Resolved per-visit, not summed-then-converted — which of
+          // chemical/solution is the rate's "primary" number depends on the
+          // rate's own configured unit (see calcChemicalAndSolution).
+          const computed = calcChemicalAndSolution(rate, areaValue, unitsById);
+          if (computed) {
+            chemicalAmount = computed.chemicalAmount;
+            chemicalUnitId = computed.chemicalUnitOfMeasureId;
+            solutionAmount = computed.solutionAmount;
+            solutionUnitId = computed.solutionUnitOfMeasureId;
+          }
         }
       }
-      if (qty == null || qty <= 0) continue;
+      if (chemicalAmount == null || chemicalAmount <= 0) continue;
 
-      acc.chemQtyByProduct.set(pid, (acc.chemQtyByProduct.get(pid) ?? 0) + qty);
+      acc.chemQtyByProduct.set(pid, (acc.chemQtyByProduct.get(pid) ?? 0) + chemicalAmount);
+      if (chemicalUnitId && !acc.chemUnitIdByProduct.has(pid)) acc.chemUnitIdByProduct.set(pid, chemicalUnitId);
+      if (solutionAmount != null) {
+        acc.chemSolutionByProduct.set(pid, (acc.chemSolutionByProduct.get(pid) ?? 0) + solutionAmount);
+        if (solutionUnitId && !acc.chemSolutionUnitIdByProduct.has(pid)) {
+          acc.chemSolutionUnitIdByProduct.set(pid, solutionUnitId);
+        }
+      }
       const list = acc.chemVisitsByProduct.get(pid) ?? [];
-      list.push({ jobId: job.id, visitId: v.id, clientName, address, qty: Math.round(qty * 10000) / 10000 });
+      list.push({ jobId: job.id, visitId: v.id, clientName, address, qty: Math.round(chemicalAmount * 10000) / 10000 });
       acc.chemVisitsByProduct.set(pid, list);
     }
   }
@@ -349,24 +386,17 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   const crews: DailyLoadListCrewGroup[] = [...crewAccums.values()]
     .map((acc) => {
       const chemicals: DailyLoadListChemicalRow[] = [...acc.chemQtyByProduct.entries()].map(([pid, qty]) => {
-        const rate = defaultRateByProduct.get(pid);
-        const concentrateUnitName = rate?.unitOfMeasureId ? unitsById.get(rate.unitOfMeasureId)?.name ?? null : null;
-        let mixVolumeQty: number | null = null;
-        let mixVolumeUnitName: string | null = null;
-        if (rate) {
-          const mix = calcMixVolume(rate, qty, unitsById);
-          if (mix) {
-            mixVolumeQty = Math.round(mix.solutionAmount * 100) / 100;
-            mixVolumeUnitName = unitsById.get(mix.solutionUnitOfMeasureId)?.name ?? null;
-          }
-        }
+        const concentrateUnitId = acc.chemUnitIdByProduct.get(pid);
+        const concentrateUnitName = concentrateUnitId ? unitsById.get(concentrateUnitId)?.name ?? null : null;
+        const solutionTotal = acc.chemSolutionByProduct.get(pid);
+        const solutionUnitId = acc.chemSolutionUnitIdByProduct.get(pid);
         return {
           productId: pid,
           productName: chemProductName.get(pid) ?? "Chemical",
           concentrateQty: Math.round(qty * 10000) / 10000,
           concentrateUnitName,
-          mixVolumeQty,
-          mixVolumeUnitName,
+          mixVolumeQty: solutionTotal != null ? Math.round(solutionTotal * 100) / 100 : null,
+          mixVolumeUnitName: solutionUnitId ? unitsById.get(solutionUnitId)?.name ?? null : null,
           visits: (acc.chemVisitsByProduct.get(pid) ?? []).sort((a, b) => a.clientName.localeCompare(b.clientName)),
         };
       });
