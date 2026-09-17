@@ -11926,6 +11926,7 @@ export type Database = {
           photo_module_access: boolean
           role: string
           status: string
+          ui_prefs: Json
           updated_at: string
         }
         Insert: {
@@ -11939,6 +11940,7 @@ export type Database = {
           photo_module_access?: boolean
           role?: string
           status?: string
+          ui_prefs?: Json
           updated_at?: string
         }
         Update: {
@@ -11952,6 +11954,7 @@ export type Database = {
           photo_module_access?: boolean
           role?: string
           status?: string
+          ui_prefs?: Json
           updated_at?: string
         }
         Relationships: [

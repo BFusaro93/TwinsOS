@@ -89,8 +89,26 @@ export function mapJob(row: any): CRMJob {
     // joined
     clientName: row.clients?.display_name ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
+    clientPriority: row.clients?.priority ?? null,
+    clientTags: (row.clients?.client_tags ?? []).map((t: { tag: string }) => t.tag),
     crewName: row.crm_crews?.name ?? null,
     salesRepName: row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null : null,
+    propertyTurfSqft: row.client_properties?.turf_sqft ?? null,
+    propertyMulchBedSqft: row.client_properties?.mulch_bed_sqft ?? null,
+    propertyGrossSqft: row.client_properties?.gross_sqft ?? null,
+    propertyLinearFtPerimeter: row.client_properties?.linear_ft_perimeter ?? null,
+    propertyLinearFtEdging: row.client_properties?.linear_ft_edging ?? null,
+    propertyYardsOfMulch: row.client_properties?.yards_of_mulch ?? null,
+    propertyParkingLotSqft: row.client_properties?.parking_lot_sqft ?? null,
+    propertyGateCode: row.client_properties?.gate_lock_code ?? null,
+    propertyNotesToCrew: row.client_properties?.notes_to_crew ?? null,
+    propertyCustomFieldValues: (row.client_properties?.crm_property_custom_field_values ?? []).map(
+      (v: { field_def_id: string; value_number: number | null; value_text: string | null }) => ({
+        fieldDefId: v.field_def_id,
+        valueNumber: v.value_number ?? null,
+        valueText: v.value_text ?? null,
+      })
+    ),
     services: (row.crm_job_services ?? []).map(mapJobServiceFull),
     visits: row.crm_job_visits
       ? (row.crm_job_visits as { id: string; scheduled_date: string; status: string; deleted_at: string | null; job_service_id: string | null; crm_crews: { name: string } | null }[])
@@ -218,9 +236,10 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         .from("crm_jobs")
         .select(`
           *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag)),
           crm_crews(name),
           sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
+          client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
           crm_job_services(*),
           crm_job_visits(id, deleted_at, job_service_id, status)
         `)
@@ -675,7 +694,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
           *,
           clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag)),
           crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)))
+          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })

@@ -16,6 +16,9 @@ import {
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { useOrgTags } from "@/lib/hooks/use-clients";
+import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import type { CustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
+import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -84,7 +87,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
+import type { CRMJob, CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
@@ -301,7 +304,8 @@ function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving
 
 // ── column visibility ─────────────────────────────────────────────────────────
 
-type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "variance" | "men" | "qty" | "rate" | "amt" | "icons";
+type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "variance" | "men" | "qty" | "rate" | "amt" | "icons"
+  | "priority" | "sales_rep" | "notes_to_crew" | "gate_code" | "turf_sqft" | "mulch_sqft" | "gross_sqft" | "lin_perimeter" | "lin_edging" | "yards_mulch" | "parking_sqft";
 
 const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "service",  label: "Service" },
@@ -321,6 +325,45 @@ const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "amt",      label: "Amount" },
   { key: "icons",    label: "Notes/Icons" },
 ];
+
+/** Extra columns not shown by default — fields from Client/Property records
+ *  that SA-style dispatch boards let you add. Appended after the fixed
+ *  columns above so they render at the end of the row. */
+const EXTRA_COL_DEFS: { key: ColKey; label: string }[] = [
+  { key: "priority",      label: "Priority" },
+  { key: "sales_rep",     label: "Sales Rep" },
+  { key: "notes_to_crew", label: "Notes to Crew" },
+  { key: "gate_code",     label: "Gate/Lock Code" },
+  { key: "turf_sqft",     label: "Turf Sq. Ft." },
+  { key: "mulch_sqft",    label: "Mulch Bed Sq. Ft." },
+  { key: "gross_sqft",    label: "Gross Sq. Ft." },
+  { key: "lin_perimeter", label: "Linear Ft. of Perimeter" },
+  { key: "lin_edging",    label: "Linear Ft. of Edging" },
+  { key: "yards_mulch",   label: "Yards of Mulch" },
+  { key: "parking_sqft",  label: "Parking Lot Sq. Ft." },
+];
+
+function customColKey(fieldDefId: string) { return `custom:${fieldDefId}`; }
+
+function formatSqft(n: number | null | undefined): string {
+  return n != null ? n.toLocaleString() : "—";
+}
+
+function extraColCellText(key: ColKey, job: CRMJob | null | undefined): string {
+  switch (key) {
+    case "sales_rep":     return job?.salesRepName ?? "—";
+    case "notes_to_crew": return job?.propertyNotesToCrew ?? job?.notesToCrew ?? "—";
+    case "gate_code":     return job?.propertyGateCode ?? "—";
+    case "turf_sqft":     return formatSqft(job?.propertyTurfSqft);
+    case "mulch_sqft":    return formatSqft(job?.propertyMulchBedSqft);
+    case "gross_sqft":    return formatSqft(job?.propertyGrossSqft);
+    case "lin_perimeter": return formatSqft(job?.propertyLinearFtPerimeter);
+    case "lin_edging":    return formatSqft(job?.propertyLinearFtEdging);
+    case "yards_mulch":   return formatSqft(job?.propertyYardsOfMulch);
+    case "parking_sqft":  return formatSqft(job?.propertyParkingLotSqft);
+    default:              return "—";
+  }
+}
 
 // ── job detail sheet ──────────────────────────────────────────────────────────
 
@@ -2119,6 +2162,7 @@ function VisitRow({
   anchorVisitId,
   allVisits,
   drivingCrewIds,
+  customFieldDefs,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -2133,7 +2177,7 @@ function VisitRow({
   onDragOver: (id: string) => void;
   onDragEnd: () => void;
   isDragOver: boolean;
-  isVisible: (col: ColKey) => boolean;
+  isVisible: (col: string) => boolean;
   serviceCodeById: Map<string, string>;
   crewCodeById: Map<string, string>;
   onReorder?: (id: string, newIndex: number) => void;
@@ -2153,6 +2197,8 @@ function VisitRow({
    * only — see useDrivingCrewIds). Used to swap this row's status icon for
    * a driving icon when this is that crew's next not-yet-started stop. */
   drivingCrewIds: Set<string>;
+  /** Org custom-field definitions (Settings), for the dynamic trailing columns. */
+  customFieldDefs: CustomFieldDef[];
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -2357,7 +2403,10 @@ function VisitRow({
 
   // Fixed cols (checkbox, #, St, Client) + whichever toggleable cols are shown —
   // used so the note/comment banner rows below can span the full table width.
-  const totalCols = 4 + COL_DEFS.filter((c) => isVisible(c.key)).length;
+  const totalCols = 4
+    + COL_DEFS.filter((c) => isVisible(c.key)).length
+    + EXTRA_COL_DEFS.filter((c) => isVisible(c.key)).length
+    + customFieldDefs.filter((d) => isVisible(customColKey(d.id))).length;
   const crewNoteBanner = visit.notesToCrew ?? visit.job?.notesToCrew ?? null;
 
   return (
@@ -2719,6 +2768,30 @@ function VisitRow({
           </td>
         );
       })()}
+      {isVisible("priority") && (
+        <td className="px-2 py-2 whitespace-nowrap">
+          <div className="flex items-center gap-1">
+            {visit.effectiveHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500" /></span>}
+            <span className="text-[11px] capitalize text-slate-500">{job?.clientPriority ?? visit.clientPriority ?? "normal"}</span>
+          </div>
+        </td>
+      )}
+      {EXTRA_COL_DEFS.filter((d) => d.key !== "priority").map((d) => isVisible(d.key) && (
+        <td key={d.key} className="px-2 py-2 text-slate-500 max-w-[160px] truncate" title={extraColCellText(d.key, job)}>
+          {extraColCellText(d.key, job)}
+        </td>
+      ))}
+      {customFieldDefs.map((def) => {
+        const key = customColKey(def.id);
+        if (!isVisible(key)) return null;
+        const val = job?.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
+        const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
+        return (
+          <td key={key} className="px-2 py-2 text-slate-500 max-w-[160px] truncate" title={display}>
+            {display}
+          </td>
+        );
+      })}
     </tr>
     {/* Job Notes intentionally has no banner row here — they can run long
         (see the Job Notes tab) and would clog up the board; the sticky-note
@@ -2763,7 +2836,7 @@ function countsTowardTotals(visit: CRMJobVisit): boolean {
 
 // ── totals row ─────────────────────────────────────────────────────────────────
 
-function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
+function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit[]; isVisible: (col: string) => boolean; customFieldDefs: CustomFieldDef[] }) {
   const counted   = visits.filter(countsTowardTotals);
   const totalBHrs = counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
@@ -2789,6 +2862,8 @@ function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (c
       {isVisible("rate")    && <td />}
       {isVisible("amt")     && <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>}
       {isVisible("icons")   && <td />}
+      {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <td key={d.key} />)}
+      {customFieldDefs.map((def) => isVisible(customColKey(def.id)) && <td key={def.id} />)}
     </tr>
   );
 }
@@ -2901,7 +2976,16 @@ export function DispatchBoard() {
   // order (identical to the current one) and popping the Save/Clear Order
   // bar despite nothing actually having moved.
   const [manualRouteMode, setManualRouteMode] = useState(false);
-  const [visibleKeys,     setVisibleKeys]     = useState<string[]>(COL_DEFS.map((d) => d.key));
+  const [visibleKeys,     setVisibleKeys]     = usePersistedColumns("dispatch_board", COL_DEFS.map((d) => d.key));
+  const { data: customFieldDefs = [] } = useCustomFieldDefs();
+  const allColumnDefs = useMemo(
+    () => [
+      ...COL_DEFS,
+      ...EXTRA_COL_DEFS,
+      ...customFieldDefs.map((d) => ({ key: customColKey(d.id), label: d.name + (d.unit ? ` (${d.unit})` : "") })),
+    ],
+    [customFieldDefs]
+  );
   const [statsOpen,       setStatsOpen]       = useState(false);
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
   const [printOpen,       setPrintOpen]       = useState(false);
@@ -3091,7 +3175,7 @@ export function DispatchBoard() {
     setShopLegMins(null);
   }
 
-  function isVisible(col: ColKey) { return visibleKeys.includes(col); }
+  function isVisible(col: string) { return visibleKeys.includes(col); }
 
   /**
    * The crew a visit actually runs with.
@@ -4108,7 +4192,7 @@ export function DispatchBoard() {
         {/* Columns selector — far right of dark bar */}
         <div className="ml-auto">
           <ColumnChooser
-            columns={COL_DEFS}
+            columns={allColumnDefs}
             visibleKeys={visibleKeys}
             onVisibleKeysChange={setVisibleKeys}
           />
@@ -4202,11 +4286,15 @@ export function DispatchBoard() {
               {isVisible("rate")     && <th className="px-2 py-2.5 text-right">Rate</th>}
               {isVisible("amt")      && <th className="px-2 py-2.5 text-right">Amt</th>}
               {isVisible("icons")    && <th className="px-2 py-2.5">Notes</th>}
+              {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <th key={d.key} className="px-2 py-2.5 whitespace-nowrap">{d.label}</th>)}
+              {customFieldDefs.map((def) => isVisible(customColKey(def.id)) && (
+                <th key={def.id} className="px-2 py-2.5 whitespace-nowrap">{def.name}{def.unit ? ` (${def.unit})` : ""}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {!isLoading && displayVisits.length > 0 && (
-              <TotalsRow visits={displayVisits} isVisible={isVisible} />
+              <TotalsRow visits={displayVisits} isVisible={isVisible} customFieldDefs={customFieldDefs} />
             )}
 
             {isLoading ? (
@@ -4252,6 +4340,7 @@ export function DispatchBoard() {
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                   allVisits={allVisits}
                   drivingCrewIds={drivingCrewIds}
+                  customFieldDefs={customFieldDefs}
                 />
               ))
             )}

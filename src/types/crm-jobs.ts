@@ -174,6 +174,18 @@ export interface CRMJob {
   clientTags?: string[];
   crewName?: string;
   salesRepName?: string | null;
+  /** Joined from the job's property (client_properties), for dispatch board / waiting list columns. */
+  propertyTurfSqft?: number | null;
+  propertyMulchBedSqft?: number | null;
+  propertyGrossSqft?: number | null;
+  propertyLinearFtPerimeter?: number | null;
+  propertyLinearFtEdging?: number | null;
+  propertyYardsOfMulch?: number | null;
+  propertyParkingLotSqft?: number | null;
+  propertyGateCode?: string | null;
+  propertyNotesToCrew?: string | null;
+  /** Org custom-field values for the job's property (field_def_id -> value). */
+  propertyCustomFieldValues?: { fieldDefId: string; valueNumber: number | null; valueText: string | null }[];
   services?: CRMJobService[];
   /** Populated only by useJobsList — the job's actual scheduled/generated visit occurrences. */
   visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null; jobServiceId: string | null }[];

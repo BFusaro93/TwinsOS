@@ -42,6 +42,13 @@ import { Plus, ListOrdered, ChevronDown, RotateCcw, Search, Send, X } from "luci
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
+import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import type { CustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
+import { useOrgTags } from "@/lib/hooks/use-clients";
+import { Flame, Tag } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
 
 function toLocalDateString(date: Date): string {
@@ -75,14 +82,60 @@ const WAITING_LIST_COLUMNS: ColumnDef[] = [
   { key: "rate", label: "Rate" },
 ];
 
-type ColFilterKey = "client" | "service" | "city" | "zip" | "crew";
+/** Extra columns not shown by default — the same Client/Property fields the
+ *  Dispatch Board's column picker offers, so the two boards stay in sync. */
+const EXTRA_COLUMNS: ColumnDef[] = [
+  { key: "priority",      label: "Priority" },
+  { key: "sales_rep",     label: "Sales Rep" },
+  { key: "notes_to_crew", label: "Notes to Crew" },
+  { key: "gate_code",     label: "Gate/Lock Code" },
+  { key: "turf_sqft",     label: "Turf Sq. Ft." },
+  { key: "mulch_sqft",    label: "Mulch Bed Sq. Ft." },
+  { key: "gross_sqft",    label: "Gross Sq. Ft." },
+  { key: "lin_perimeter", label: "Linear Ft. of Perimeter" },
+  { key: "lin_edging",    label: "Linear Ft. of Edging" },
+  { key: "yards_mulch",   label: "Yards of Mulch" },
+  { key: "parking_sqft",  label: "Parking Lot Sq. Ft." },
+];
+
+function customColKey(fieldDefId: string) { return `custom:${fieldDefId}`; }
+
+function formatSqft(n: number | null | undefined): string {
+  return n != null ? n.toLocaleString() : "—";
+}
+
+function extraColCellText(key: string, job: CRMJob): string {
+  switch (key) {
+    case "sales_rep":     return job.salesRepName ?? "—";
+    case "notes_to_crew": return job.propertyNotesToCrew ?? job.notesToCrew ?? "—";
+    case "gate_code":     return job.propertyGateCode ?? "—";
+    case "turf_sqft":     return formatSqft(job.propertyTurfSqft);
+    case "mulch_sqft":    return formatSqft(job.propertyMulchBedSqft);
+    case "gross_sqft":    return formatSqft(job.propertyGrossSqft);
+    case "lin_perimeter": return formatSqft(job.propertyLinearFtPerimeter);
+    case "lin_edging":    return formatSqft(job.propertyLinearFtEdging);
+    case "yards_mulch":   return formatSqft(job.propertyYardsOfMulch);
+    case "parking_sqft":  return formatSqft(job.propertyParkingLotSqft);
+    default:              return "—";
+  }
+}
+
+type ColFilterKey = "client" | "city" | "zip";
 
 const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
   { key: "client", label: "Client" },
-  { key: "service", label: "Service" },
   { key: "city", label: "City" },
   { key: "zip", label: "Zip" },
-  { key: "crew", label: "Crew" },
+];
+
+const PRIORITY_FILTER_JOB_OPTIONS = [
+  { value: "job_high",   label: "High priority" },
+  { value: "job_normal", label: "Normal priority" },
+];
+const PRIORITY_FILTER_CLIENT_OPTIONS = [
+  { value: "client_high",   label: "Client: High" },
+  { value: "client_normal", label: "Client: Normal" },
+  { value: "client_low",    label: "Client: Low" },
 ];
 
 // ── dispatch dialog ──────────────────────────────────────────────────────────
@@ -178,6 +231,8 @@ function WaitingJobRow({
   job,
   service,
   visibleKeys,
+  customFieldDefs,
+  crewCodeById,
   selected,
   onToggle,
   onSchedule,
@@ -187,6 +242,8 @@ function WaitingJobRow({
   /** When set, this row represents one visit within a package job rather than the whole job. */
   service?: CRMJobService | null;
   visibleKeys: string[];
+  customFieldDefs: CustomFieldDef[];
+  crewCodeById: Map<string, string>;
   selected: boolean;
   onToggle: () => void;
   onSchedule: () => void;
@@ -204,6 +261,7 @@ function WaitingJobRow({
   const effectiveRate = service
     ? service.rateCents ?? null
     : job.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
+  const effectiveCrew = (job.crewId && crewCodeById.get(job.crewId)) || job.crewName;
   const isVisible = (key: string) => visibleKeys.includes(key);
 
   return (
@@ -254,9 +312,9 @@ function WaitingJobRow({
       )}
       {isVisible("crew") && (
         <td className="px-4 py-3">
-          {job.crewName ? (
+          {effectiveCrew ? (
             <Badge variant="secondary" className="text-xs">
-              {job.crewName}
+              {effectiveCrew}
             </Badge>
           ) : (
             <span className="text-xs text-slate-400">Unassigned</span>
@@ -268,6 +326,30 @@ function WaitingJobRow({
           {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
         </td>
       )}
+      {isVisible("priority") && (
+        <td className="px-4 py-3 whitespace-nowrap">
+          <div className="flex items-center gap-1">
+            {job.isHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500" /></span>}
+            <span className="text-xs capitalize text-slate-500">{job.clientPriority ?? "normal"}</span>
+          </div>
+        </td>
+      )}
+      {EXTRA_COLUMNS.filter((c) => c.key !== "priority").map((c) => isVisible(c.key) && (
+        <td key={c.key} className="max-w-[160px] truncate px-4 py-3 text-slate-500" title={extraColCellText(c.key, job)}>
+          {extraColCellText(c.key, job)}
+        </td>
+      ))}
+      {customFieldDefs.map((def) => {
+        const key = customColKey(def.id);
+        if (!isVisible(key)) return null;
+        const val = job.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
+        const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
+        return (
+          <td key={key} className="max-w-[160px] truncate px-4 py-3 text-slate-500" title={display}>
+            {display}
+          </td>
+        );
+      })}
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onSchedule}>
           Schedule
@@ -291,8 +373,15 @@ export function WaitingList() {
   const [search, setSearch] = useState("");
   const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
   const [colFilterValue, setColFilterValue] = useState("");
+  // Service is multi-select (can filter to more than one at once), same as
+  // the Dispatch Board's Service filter.
+  const [serviceFilters, setServiceFilters] = useState<string[]>([]);
+  const [crewFilters, setCrewFilters] = useState<string[]>([]);
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
+  const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [visibleKeys, setVisibleKeys] = useState<string[]>(
+  const [visibleKeys, setVisibleKeys] = usePersistedColumns(
+    "waiting_list",
     WAITING_LIST_COLUMNS.map((c) => c.key)
   );
   const [dispatchItems, setDispatchItems] = useState<DispatchItem[] | null>(null);
@@ -300,20 +389,60 @@ export function WaitingList() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const { data: jobs, isLoading, refetch } = useWaitingListJobs(startDate, endDate);
+  const { data: crews } = useCRMCrews();
+  const orgTags = useOrgTags();
+  const { data: customFieldDefs = [] } = useCustomFieldDefs();
+  const allColumnDefs = useMemo(
+    () => [
+      ...WAITING_LIST_COLUMNS,
+      ...EXTRA_COLUMNS,
+      ...customFieldDefs.map((d) => ({ key: customColKey(d.id), label: d.name + (d.unit ? ` (${d.unit})` : "") })),
+    ],
+    [customFieldDefs]
+  );
+  // The Crew column shows the crew's abbreviated team code when it has one,
+  // same as the Dispatch Board's Assigned column.
+  const crewCodeById = new Map((crews ?? []).map((c) => [c.id, c.code]).filter((e): e is [string, string] => !!e[1]));
+
   const all = jobs ?? [];
+
+  const allServices = useMemo(() => {
+    const names = new Set<string>();
+    for (const job of all) for (const s of job.services ?? []) names.add(s.serviceName);
+    return Array.from(names).sort();
+  }, [all]);
 
   const filtered = useMemo(() => {
     let list = all;
+
+    if (crewFilters.length > 0) {
+      list = list.filter((job) => job.crewId && crewFilters.includes(job.crewId));
+    }
+    if (tagFilters.length > 0) {
+      list = list.filter((job) => (job.clientTags ?? []).some((t) => tagFilters.includes(t)));
+    }
+    if (priorityFilters.length > 0) {
+      list = list.filter((job) => {
+        return (
+          (priorityFilters.includes("job_high") && job.isHighPriority) ||
+          (priorityFilters.includes("job_normal") && !job.isHighPriority) ||
+          (priorityFilters.includes("client_high") && job.clientPriority === "high") ||
+          (priorityFilters.includes("client_normal") && job.clientPriority === "normal") ||
+          (priorityFilters.includes("client_low") && job.clientPriority === "low")
+        );
+      });
+    }
+    if (serviceFilters.length > 0) {
+      list = list.filter((job) => (job.services ?? []).some((s) => serviceFilters.includes(s.serviceName)));
+    }
 
     if (activeColFilter && colFilterValue.trim()) {
       const v = colFilterValue.toLowerCase();
       list = list.filter((job) => {
         switch (activeColFilter) {
           case "client":  return (job.clientName ?? "").toLowerCase().includes(v);
-          case "service": return (job.services ?? []).some((s) => s.serviceName.toLowerCase().includes(v));
           case "city":    return (job.serviceCity ?? "").toLowerCase().includes(v);
           case "zip":     return (job.serviceZip ?? "").toLowerCase().includes(v);
-          case "crew":    return (job.crewName ?? "").toLowerCase().includes(v);
           default:        return true;
         }
       });
@@ -328,7 +457,7 @@ export function WaitingList() {
     }
 
     return list;
-  }, [all, activeColFilter, colFilterValue, search]);
+  }, [all, activeColFilter, colFilterValue, search, crewFilters, tagFilters, priorityFilters, serviceFilters]);
 
   // Package jobs carry one crm_job_services row per visit, each with its own
   // date window — expand those into one row per visit so each can be scheduled
@@ -436,9 +565,9 @@ export function WaitingList() {
       </div>
 
       {/* Select a filter bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
+      <div className="flex flex-wrap items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           {COL_FILTERS.map(({ key, label }) => (
             <button
               key={key}
@@ -473,6 +602,87 @@ export function WaitingList() {
               </button>
             </>
           )}
+
+          {/* Service: multi-select popover, same as the Dispatch Board */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
+                  serviceFilters.length > 0 ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
+                )}
+              >
+                Service{serviceFilters.length > 0 && ` · ${serviceFilters.length}`}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-1" align="start">
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Services</p>
+              {allServices.length === 0 && (
+                <p className="px-2 py-2 text-xs text-slate-400 italic">No services found</p>
+              )}
+              {allServices.map((name) => (
+                <button
+                  key={name}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100",
+                    serviceFilters.includes(name) && "bg-brand-50 text-brand-700 font-medium"
+                  )}
+                  onClick={() => setServiceFilters((prev) =>
+                    prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
+                  )}
+                >
+                  <Checkbox checked={serviceFilters.includes(name)} className="h-3.5 w-3.5" />
+                  {name}
+                </button>
+              ))}
+              {serviceFilters.length > 0 && (
+                <div className="border-t mt-1 pt-1">
+                  <button
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100"
+                    onClick={() => setServiceFilters([])}
+                  >
+                    <X className="h-3 w-3" /> Clear filter
+                  </button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          {/* Crew: multi-select popover, matched by crew id (avoids the old
+              text-filter's name-vs-code mismatch entirely) */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
+                  crewFilters.length > 0 ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
+                )}
+              >
+                Crew{crewFilters.length > 0 && ` · ${crewFilters.length}`}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-1" align="start">
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Crews</p>
+              {(crews ?? []).length === 0 && (
+                <p className="px-2 py-2 text-xs text-slate-400 italic">No crews found</p>
+              )}
+              {(crews ?? []).map((c) => (
+                <button
+                  key={c.id}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100",
+                    crewFilters.includes(c.id) && "bg-brand-50 text-brand-700 font-medium"
+                  )}
+                  onClick={() => setCrewFilters((prev) =>
+                    prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                  )}
+                >
+                  <Checkbox checked={crewFilters.includes(c.id)} className="h-3.5 w-3.5" />
+                  {c.name}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -526,10 +736,94 @@ export function WaitingList() {
               className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
             />
           </div>
+
+          {/* Tag filter — client tags, "is any of" (OR) */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+                <Tag className="h-3 w-3" />
+                {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
+                <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1 max-h-72 overflow-y-auto" align="start">
+              <button
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                onClick={() => setTagFilters([])}
+              >
+                <Checkbox checked={tagFilters.length === 0} className="h-3.5 w-3.5" />
+                All Tags
+              </button>
+              {orgTags.length === 0 && (
+                <p className="px-2 py-1.5 text-[11px] text-slate-400">No client tags yet</p>
+              )}
+              {orgTags.map((tag) => (
+                <button
+                  key={tag}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                  onClick={() => setTagFilters((prev) =>
+                    prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
+                  )}
+                >
+                  <Checkbox checked={tagFilters.includes(tag)} className="h-3.5 w-3.5" />
+                  <span className="truncate">{tag}</span>
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+
+          {/* Priority filter — job high-priority flag + client priority level */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+                <Flame className="h-3 w-3" />
+                {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
+                <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-1" align="start">
+              <button
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                onClick={() => setPriorityFilters([])}
+              >
+                <Checkbox checked={priorityFilters.length === 0} className="h-3.5 w-3.5" />
+                All Priorities
+              </button>
+              <div className="my-1 border-t" />
+              <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Job</p>
+              {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                  onClick={() => setPriorityFilters((prev) =>
+                    prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                  )}
+                >
+                  <Checkbox checked={priorityFilters.includes(o.value)} className="h-3.5 w-3.5" />
+                  {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500" />}
+                  {o.label}
+                </button>
+              ))}
+              <div className="my-1 border-t" />
+              <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Client</p>
+              {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                  onClick={() => setPriorityFilters((prev) =>
+                    prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                  )}
+                >
+                  <Checkbox checked={priorityFilters.includes(o.value)} className="h-3.5 w-3.5" />
+                  {o.label}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
         </div>
 
         <ColumnChooser
-          columns={WAITING_LIST_COLUMNS}
+          columns={allColumnDefs}
           visibleKeys={visibleKeys}
           onVisibleKeysChange={setVisibleKeys}
         />
@@ -555,6 +849,10 @@ export function WaitingList() {
               {visibleKeys.includes("zip") && <th className="px-4 py-3">Zip</th>}
               {visibleKeys.includes("crew") && <th className="px-4 py-3">Crew</th>}
               {visibleKeys.includes("rate") && <th className="px-4 py-3 text-right">Rate</th>}
+              {EXTRA_COLUMNS.map((c) => visibleKeys.includes(c.key) && <th key={c.key} className="px-4 py-3 whitespace-nowrap">{c.label}</th>)}
+              {customFieldDefs.map((def) => visibleKeys.includes(customColKey(def.id)) && (
+                <th key={def.id} className="px-4 py-3 whitespace-nowrap">{def.name}{def.unit ? ` (${def.unit})` : ""}</th>
+              ))}
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -585,6 +883,8 @@ export function WaitingList() {
                   job={job}
                   service={service}
                   visibleKeys={visibleKeys}
+                  customFieldDefs={customFieldDefs}
+                  crewCodeById={crewCodeById}
                   selected={selectedKeys.has(key)}
                   onToggle={() => toggleOne(key)}
                   onSchedule={() => setDispatchItems([{ job, service }])}
