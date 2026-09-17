@@ -68,8 +68,10 @@ import {
   Car,
   Flame,
   Tag,
+  Mail,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
+import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -2883,6 +2885,7 @@ export function DispatchBoard() {
   // Bulk "Change Status" → Skipped/Cancelled waits on the reason dialog.
   const [bulkOutcome,     setBulkOutcome]     = useState<OutcomeStatus | null>(null);
   const [bulkOutcomePending, setBulkOutcomePending] = useState(false);
+  const [bulkEmailOpen,   setBulkEmailOpen]   = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
   // Service filter is multi-select (unlike the other Select-a-Filter text
@@ -4001,6 +4004,17 @@ export function DispatchBoard() {
 
               <DropdownMenuSeparator />
 
+              {/* Email Selected Clients */}
+              <DropdownMenuItem
+                className="text-xs"
+                onSelect={() => setBulkEmailOpen(true)}
+              >
+                <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                Email Selected Clients
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
               {/* Return to Waiting List — only when every selected visit
                   belongs to a waiting-list job that never got done. */}
               {displayVisits.filter((v) => selectedIds.has(v.id)).every((v) => v.job?.jobType === "waiting_list") && (
@@ -4256,6 +4270,11 @@ export function DispatchBoard() {
           try { await applyBulkStatus(bulkOutcome, reason); } finally { setBulkOutcomePending(false); setBulkOutcome(null); }
         }}
         onCancel={() => setBulkOutcome(null)}
+      />
+      <BulkEmailClientsDialog
+        open={bulkEmailOpen}
+        onClose={() => setBulkEmailOpen(false)}
+        clientIds={[...new Set(displayVisits.filter((v) => selectedIds.has(v.id)).map((v) => v.clientId))]}
       />
       {detailVisit && (
         <JobDetailSheet
