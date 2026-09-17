@@ -4927,6 +4927,7 @@ export type Database = {
           job_id: string
           notes: string | null
           org_id: string
+          planned_qty: number | null
           product_id: string | null
           product_name: string
           qty: number
@@ -4946,6 +4947,7 @@ export type Database = {
           job_id: string
           notes?: string | null
           org_id?: string
+          planned_qty?: number | null
           product_id?: string | null
           product_name: string
           qty?: number
@@ -4965,6 +4967,7 @@ export type Database = {
           job_id?: string
           notes?: string | null
           org_id?: string
+          planned_qty?: number | null
           product_id?: string | null
           product_name?: string
           qty?: number
