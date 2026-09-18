@@ -178,6 +178,7 @@ export function BulkEmailClientsDialog({
               placeholder="Write your message…"
               minHeight={160}
             />
+            <p className="pt-1.5 text-[11px] text-slate-400">Click a tag to insert it into the message at your cursor:</p>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {GENERAL_EMAIL_MERGE_TAGS.map((mt) => (
                 <button

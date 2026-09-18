@@ -598,25 +598,13 @@ export function WaitingList() {
               {label}
             </button>
           ))}
-          {activeColFilter && (
-            <>
-              <Input
-                autoFocus
-                value={colFilterValue}
-                onChange={(e) => setColFilterValue(e.target.value)}
-                placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
-                className="ml-2 h-6 w-48 text-xs"
-              />
-              <button
-                onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </>
-          )}
 
-          {/* Service: multi-select popover, same as the Dispatch Board */}
+          {/* Service: multi-select popover, same as the Dispatch Board. Placed
+              right after the tab buttons and before the text-filter Input
+              below, so that Input always docks at the end of the row no
+              matter which tab is active — matching the Dispatch Board,
+              where every "Select a Filter" tab lives in one group before
+              the shared Input. */}
           <Popover>
             <PopoverTrigger asChild>
               <button
@@ -657,6 +645,24 @@ export function WaitingList() {
               )}
             </PopoverContent>
           </Popover>
+
+          {activeColFilter && (
+            <>
+              <Input
+                autoFocus
+                value={colFilterValue}
+                onChange={(e) => setColFilterValue(e.target.value)}
+                placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
+                className="ml-2 h-6 w-48 text-xs"
+              />
+              <button
+                onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
