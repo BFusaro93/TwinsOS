@@ -931,7 +931,7 @@ const ROUTE_SHEET_STYLES = `
   .rs-job-extra b { font-weight: 600; }
   .rs-compact-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
   .rs-compact-table th, .rs-compact-table td { border: 1px solid #cbd5e1; padding: 5px 8px; text-align: left; }
-  .rs-compact-table th { background: #f1f5f9; }
+  .rs-compact-table th { background: #f1f5f9; color: #334155; }
 `;
 
 const RS_VISIT_STATUS_LABELS: Record<string, string> = {

@@ -801,7 +801,7 @@ function CustomFieldDefsEditor() {
       {/* Built-in read-only list */}
       <div className="pb-3">
         <p className="text-xs text-slate-400 mb-2">Built-in takeoffs (always available, stored on the client record)</p>
-        {["Turf Sq. Ft.", "Mulch Bed Sq. Ft.", "Gross Sq. Ft.", "Linear Ft. Perimeter", "Linear Ft. Edging", "Yards of Mulch"].map((f) => (
+        {["Turf Sq. Ft.", "Mulch Bed Sq. Ft.", "Gross Sq. Ft.", "Linear Ft. Perimeter", "Linear Ft. Edging", "Yards of Mulch", "Parking Lot Sq. Ft."].map((f) => (
           <div key={f} className="flex items-center gap-2 py-1.5 text-sm text-slate-600">
             <GripVertical className="h-3.5 w-3.5 text-slate-200" />
             <span className="flex-1">{f}</span>
@@ -881,7 +881,7 @@ function CustomFieldDefsEditor() {
                 autoFocus
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g. Parking Lot Sq. Ft."
+                placeholder="e.g. Fence Linear Ft."
                 onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); if (e.key === "Escape") setAdding(false); }}
                 className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
               />

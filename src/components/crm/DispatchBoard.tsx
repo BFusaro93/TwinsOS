@@ -367,6 +367,20 @@ function extraColCellText(key: ColKey, job: CRMJob | null | undefined): string {
   }
 }
 
+/** Raw numeric value behind an EXTRA_COL_DEFS cell, for the Totals row — null for text columns (sales rep, notes, gate code). */
+function extraColNumericValue(key: ColKey, job: CRMJob | null | undefined): number | null {
+  switch (key) {
+    case "turf_sqft":     return job?.propertyTurfSqft ?? null;
+    case "mulch_sqft":    return job?.propertyMulchBedSqft ?? null;
+    case "gross_sqft":    return job?.propertyGrossSqft ?? null;
+    case "lin_perimeter": return job?.propertyLinearFtPerimeter ?? null;
+    case "lin_edging":    return job?.propertyLinearFtEdging ?? null;
+    case "yards_mulch":   return job?.propertyYardsOfMulch ?? null;
+    case "parking_sqft":  return job?.propertyParkingLotSqft ?? null;
+    default:              return null;
+  }
+}
+
 // ── job detail sheet ──────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS: { value: VisitStatus; label: string }[] = [
@@ -1519,7 +1533,7 @@ function PrintDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-3xl p-0 sm:p-0 gap-0 max-h-[90vh] flex flex-col">
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white pl-5 pr-12 py-3 flex-row items-center justify-between">
           <DialogTitle className="text-sm font-semibold">
             Print Route Sheets — {selectedDate}
@@ -3008,6 +3022,8 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
   const totalBHrs = counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
   const totalAmt  = counted.reduce((s, v) => s + visitAmountCents(v), 0);
+  const totalMen  = counted.reduce((s, v) => s + (v.menCount ?? 0), 0);
+  const totalQty  = counted.reduce((s, v) => s + (v.qty ?? 0), 0);
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
   // Toggleable cols that appear before B Hrs:
@@ -3024,13 +3040,27 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
           {totalAct > 0 ? `${totalAct > totalBHrs ? "+" : ""}${(totalAct - totalBHrs).toFixed(2)}` : "—"}
         </td>
       )}
-      {isVisible("men")     && <td />}
-      {isVisible("qty")     && <td />}
+      {isVisible("men")     && <td className="px-2 py-1.5 text-center">{totalMen > 0 ? totalMen : "—"}</td>}
+      {isVisible("qty")     && <td className="px-2 py-1.5 text-right">{totalQty > 0 ? totalQty.toFixed(1) : "—"}</td>}
+      {/* Rate is a per-unit price — summing it across jobs isn't meaningful, unlike Amount below. */}
       {isVisible("rate")    && <td />}
       {isVisible("amt")     && <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>}
       {isVisible("icons")   && <td />}
-      {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <td key={d.key} />)}
-      {customFieldDefs.map((def) => isVisible(customColKey(def.id)) && <td key={def.id} />)}
+      {EXTRA_COL_DEFS.map((d) => {
+        if (!isVisible(d.key)) return null;
+        const total = counted.reduce((s, v) => s + (extraColNumericValue(d.key, v.job) ?? 0), 0);
+        return <td key={d.key} className="px-2 py-1.5 text-right">{total > 0 ? total.toLocaleString() : "—"}</td>;
+      })}
+      {customFieldDefs.map((def) => {
+        const key = customColKey(def.id);
+        if (!isVisible(key)) return null;
+        if (def.fieldType !== "number") return <td key={def.id} />;
+        const total = counted.reduce((s, v) => {
+          const val = v.job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === def.id);
+          return s + (val?.valueNumber ?? 0);
+        }, 0);
+        return <td key={def.id} className="px-2 py-1.5 text-right">{total > 0 ? total.toLocaleString() : "—"}</td>;
+      })}
     </tr>
   );
 }
