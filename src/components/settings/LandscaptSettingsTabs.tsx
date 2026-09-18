@@ -37,6 +37,8 @@ import {
 } from "@/lib/hooks/use-crm-discounts";
 import type { DiscountType } from "@/types/crm-discounts";
 import { formatCurrency } from "@/lib/utils";
+import { EmailTemplatesEditor } from "@/components/crm/settings/EmailTemplatesEditor";
+import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import {
   Select as UISelect,
   SelectContent as UISelectContent,
@@ -693,6 +695,14 @@ function CRMTab() {
       </AccordionSection>
       <AccordionSection title="Custom Client Fields" count={0} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
         <CustomFieldDefsEditor />
+      </AccordionSection>
+      <AccordionSection title="Email Templates" count={0} defaultOpen={false} description="General-purpose templates for one-off client emails, e.g. the Dispatch Board / Waiting List &quot;Email Selected Clients&quot; bulk action">
+        <EmailTemplatesEditor
+          templateType="general"
+          description="These templates only support client/company merge tags below — not estimate- or invoice-specific ones."
+          mergeTags={GENERAL_EMAIL_MERGE_TAGS}
+          emptyMessage="No email templates yet. Create one to reuse when emailing clients in bulk."
+        />
       </AccordionSection>
     </div>
   );

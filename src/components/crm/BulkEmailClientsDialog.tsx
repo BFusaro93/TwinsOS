@@ -10,19 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
+import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
+import Link from "next/link";
 import { toast } from "sonner";
-
-// The tags the send-email route actually resolves for a plain client email
-// (see buildClientMergeVars) — a picked template may contain other tags
-// (e.g. [quotelink] from an Estimate template) which just resolve blank.
-const BULK_EMAIL_MERGE_TAGS = [
-  { tag: "[clientfirstname]",    label: "Client First Name" },
-  { tag: "[clientlastname]",     label: "Client Last Name" },
-  { tag: "[clientfullname]",     label: "Client Full Name" },
-  { tag: "[companyname]",        label: "Company Name" },
-  { tag: "[companyphonenumber]", label: "Company Phone" },
-  { tag: "[accountbalance]",     label: "Account Balance" },
-] as const;
 
 type Recipient = { id: string; name: string; email: string | null };
 
@@ -36,7 +26,7 @@ export function BulkEmailClientsDialog({
   clientIds: string[];
 }) {
   const qc = useQueryClient();
-  const { data: templates = [] } = useEmailTemplates();
+  const { data: templates = [] } = useEmailTemplates("general");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
@@ -152,9 +142,9 @@ export function BulkEmailClientsDialog({
               </>
             )}
           </div>
-          {templates.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Template</Label>
+          <div className="space-y-1.5">
+            <Label>Template</Label>
+            {templates.length > 0 ? (
               <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Choose a template… (optional)" />
@@ -165,8 +155,16 @@ export function BulkEmailClientsDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            ) : (
+              <p className="text-xs text-slate-400">
+                No templates yet —{" "}
+                <Link href="/crm/settings?tab=crm" className="text-brand-600 hover:underline" target="_blank">
+                  create one in Settings → Clients → Email Templates
+                </Link>
+                , or just write a one-off message below.
+              </p>
+            )}
+          </div>
           <div className="space-y-1.5">
             <Label>Subject</Label>
             <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject line…" />
@@ -181,7 +179,7 @@ export function BulkEmailClientsDialog({
               minHeight={160}
             />
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {BULK_EMAIL_MERGE_TAGS.map((mt) => (
+              {GENERAL_EMAIL_MERGE_TAGS.map((mt) => (
                 <button
                   key={mt.tag}
                   type="button"

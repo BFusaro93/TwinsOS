@@ -32,7 +32,7 @@ export interface CRMEmailTemplate {
   name: string;
   subject: string;
   bodyHtml: string;
-  templateType: "estimate" | "confirmation" | "invoice" | "chemical_application";
+  templateType: "estimate" | "confirmation" | "invoice" | "chemical_application" | "general";
   isDefault: boolean;
   includePdf: boolean;
   createdAt: string;
@@ -70,6 +70,22 @@ export const CHEMICAL_EMAIL_MERGE_TAGS = [
 ] as const;
 
 export type ChemicalMergeTag = typeof CHEMICAL_EMAIL_MERGE_TAGS[number]["tag"];
+
+// Merge tags supported in general-purpose client email templates (Settings →
+// Clients → Email Templates, used by the Dispatch Board / Waiting List bulk
+// "Email Selected Clients" action) — must match buildClientMergeVars exactly,
+// since that's the only resolver a plain client email (no estimate/invoice/
+// application record) runs through.
+export const GENERAL_EMAIL_MERGE_TAGS = [
+  { tag: "[clientfirstname]",    label: "Client First Name" },
+  { tag: "[clientlastname]",     label: "Client Last Name" },
+  { tag: "[clientfullname]",     label: "Client Full Name" },
+  { tag: "[companyname]",        label: "Company Name" },
+  { tag: "[companyphonenumber]", label: "Company Phone" },
+  { tag: "[accountbalance]",     label: "Account Balance" },
+] as const;
+
+export type GeneralMergeTag = typeof GENERAL_EMAIL_MERGE_TAGS[number]["tag"];
 
 // Merge tags supported in the Send Invoice email template
 export const INVOICE_EMAIL_MERGE_TAGS = [
