@@ -582,7 +582,7 @@ function CrewDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setActiveCrew(crew); setForm(crew ? crewToForm(crew) : emptyForm); } onOpenChange(o); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[90vh] flex flex-col sm:p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="text-xl font-bold">{title}</DialogTitle>
         </DialogHeader>

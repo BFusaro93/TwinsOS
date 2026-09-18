@@ -303,7 +303,7 @@ export function SubscriptionTab() {
       </div>
 
       <Dialog open={checkoutClientSecret != null} onOpenChange={(open) => !open && setCheckoutClientSecret(null)}>
-        <DialogContent className="max-w-2xl p-0">
+        <DialogContent className="max-w-2xl p-0 sm:p-0">
           <DialogHeader className="p-6 pb-0">
             <DialogTitle>Subscribe</DialogTitle>
           </DialogHeader>

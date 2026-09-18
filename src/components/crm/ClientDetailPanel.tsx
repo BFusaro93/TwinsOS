@@ -941,7 +941,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl h-[85vh] flex flex-col p-0"
+        className="max-w-2xl h-[85vh] flex flex-col p-0 sm:p-0"
         // The Referred-By suggestion list unmounts on the same mousedown that
         // selects a suggestion; if Radix resolves that pointer event against a
         // detached node it reads as "outside" and would close the dialog and
