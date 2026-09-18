@@ -144,7 +144,9 @@ export async function POST(request: Request) {
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const entityLabel = meta.label;
   // purchase_order/requisition are Equipt (PO module); crm_estimate is Landscapt.
-  const fromAddress = entityType === "crm_estimate" ? EMAIL_FROM : EMAIL_FROM_EQUIPT;
+  const isLandscapt = entityType === "crm_estimate";
+  const fromAddress = isLandscapt ? EMAIL_FROM : EMAIL_FROM_EQUIPT;
+  const productName = isLandscapt ? "Landscapt" : "Equipt";
 
   let sent = 0;
   for (const req of activeRequests) {
@@ -171,7 +173,7 @@ export async function POST(request: Request) {
             Review &amp; Approve
           </a>
           <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">
-            Log in to Equipt to approve or reject this request.
+            Log in to ${productName} to approve or reject this request.
           </p>
         </div>
       `,
