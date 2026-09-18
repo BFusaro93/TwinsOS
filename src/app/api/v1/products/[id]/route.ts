@@ -64,5 +64,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (error) return jsonServerError("PATCH /api/v1/products/[id]", error);
   if (!data) return jsonError("Product not found", 404);
+
+  // Sync the same fields into the linked `parts` row, same as the app's own
+  // useUpdateProduct — without this, editing a maintenance_part via the API
+  // (rename, re-vendor, re-price) would silently desync the CMMS Parts tab
+  // from the catalog, the same class of bug fixed for POST /products.
+  const partSyncFields: Record<string, unknown> = {};
+  if (body.name !== undefined) partSyncFields.name = body.name;
+  if (body.partNumber !== undefined) partSyncFields.part_number = body.partNumber;
+  if (body.description !== undefined) partSyncFields.description = body.description;
+  if (body.unitCostCents !== undefined) partSyncFields.unit_cost = body.unitCostCents;
+  if (body.vendorId !== undefined) {
+    partSyncFields.vendor_id = body.vendorId;
+    partSyncFields.vendor_name = vendorName;
+  }
+  if (body.isInventory !== undefined) partSyncFields.is_inventory = body.isInventory;
+
+  if (Object.keys(partSyncFields).length > 0) {
+    const { error: partSyncError } = await db
+      .from("parts")
+      .update(partSyncFields)
+      .eq("org_id", auth.orgId)
+      .eq("product_item_id", id)
+      .is("deleted_at", null);
+    if (partSyncError) return jsonServerError("PATCH /api/v1/products/[id] (parts sync)", partSyncError);
+  }
+
   return NextResponse.json(shapeProduct(data));
 }
