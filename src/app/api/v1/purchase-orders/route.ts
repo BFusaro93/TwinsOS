@@ -109,6 +109,7 @@ export async function POST(request: Request) {
       org_id: auth.orgId,
       po_number: poNumber,
       po_date: body.poDate ?? new Date().toISOString().slice(0, 10),
+      invoice_number: body.invoiceNumber ?? null,
       status: "requested",
       vendor_id: body.vendorId,
       vendor_name: vendor.name,

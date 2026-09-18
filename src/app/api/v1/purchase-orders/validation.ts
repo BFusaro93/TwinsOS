@@ -23,6 +23,11 @@ export const createPurchaseOrderSchema = z.object({
   vendorId: z.string().uuid(),
   requisitionId: z.string().uuid().optional(),
   poDate: z.string().optional(),
+  // The vendor's own invoice/receipt number for this PO — distinct from
+  // poNumber (this system's own sequence). Same field the app's own
+  // NewPODialog lets a user set at creation (see useCreatePurchaseOrder in
+  // src/lib/hooks/use-purchase-orders.ts).
+  invoiceNumber: z.string().optional(),
   taxRatePercent: z.number().nonnegative().optional(),
   shippingCostCents: z.number().int().nonnegative().optional(),
   notes: z.string().optional(),
