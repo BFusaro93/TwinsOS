@@ -54,6 +54,19 @@ export async function POST(request: Request) {
     if (!rep || rep.org_id !== auth.orgId) return jsonError("Sales rep not found", 404);
   }
 
+  let serviceName: string | null = null;
+  if (body.serviceId) {
+    const { data: service } = await db
+      .from("crm_services")
+      .select("org_id, name")
+      .eq("id", body.serviceId)
+      .maybeSingle();
+    if (!service || service.org_id !== auth.orgId) return jsonError("Service not found", 404);
+    serviceName = body.serviceName ?? (service.name as string);
+  }
+
+  const menCount = body.menCount ?? 1;
+
   const { data, error } = await db
     .from("crm_jobs")
     .insert({
@@ -69,6 +82,8 @@ export async function POST(request: Request) {
       // Date Sold feeds the Sales by Date Sold / Approved Sales by Sales Rep reports.
       date_sold: body.dateSold ?? isoNy(new Date()),
       status: "scheduled",
+      man_count: menCount,
+      budgeted_hours: body.budgetedHours ?? null,
     })
     .select(JOB_SELECT)
     .single();
@@ -86,6 +101,44 @@ export async function POST(request: Request) {
     ref_id: data.id,
     ref_table: "crm_jobs",
   });
+
+  // Same two inserts useCreateClientJob does for its simplest single-service
+  // case — without these, the job has no line item and (if scheduled) no
+  // visit, so it never shows up correctly on the Dispatch Board or has
+  // anything to complete/invoice against.
+  if (body.serviceId && serviceName) {
+    const { data: jobService, error: serviceError } = await db
+      .from("crm_job_services")
+      .insert({
+        org_id: auth.orgId,
+        job_id: data.id,
+        service_id: body.serviceId,
+        service_name: serviceName,
+        qty: body.qty ?? 1,
+        rate_cents: body.rateCents ?? null,
+        team_size: menCount,
+        budgeted_hours: body.budgetedHours ?? 0,
+        sort_order: 0,
+      })
+      .select("id")
+      .single();
+
+    if (serviceError || !jobService) return jsonServerError("POST /api/v1/jobs (service)", serviceError);
+
+    if (body.scheduledDate) {
+      const { error: visitError } = await db.from("crm_job_visits").insert({
+        org_id: auth.orgId,
+        job_id: data.id,
+        client_id: body.clientId,
+        job_service_id: jobService.id,
+        scheduled_date: body.scheduledDate,
+        status: "scheduled",
+        crew_id: body.crewId ?? null,
+        men_count: menCount,
+      });
+      if (visitError) return jsonServerError("POST /api/v1/jobs (visit)", visitError);
+    }
+  }
 
   return NextResponse.json(shapeJob(data), { status: 201 });
 }
