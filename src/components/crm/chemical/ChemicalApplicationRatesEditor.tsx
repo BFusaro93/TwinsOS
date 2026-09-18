@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -21,7 +21,8 @@ import {
   useSaveChemicalApplicationRates,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useProducts } from "@/lib/hooks/use-products";
-import type { ChemicalMixType } from "@/types/chemical-tracking";
+import { sameUnitById } from "@/lib/chemical-mix-calc";
+import type { ChemicalLookupItem, ChemicalMixType } from "@/types/chemical-tracking";
 
 interface RateRow {
   applicationMethodId: string | null;
@@ -65,6 +66,44 @@ function emptyRow(isDefault: boolean, defaultUnitId: string | null, prevAreaUnit
   };
 }
 
+/**
+ * Why a row's mix ratio can't be resolved, or null when it can (or when the
+ * row is still half-filled and there's nothing to say yet).
+ *
+ * All three unit pickers draw from the same unconstrained list, so a rate that
+ * the mix calc has to refuse is one dropdown away — and its refusal is
+ * invisible downstream (no mix volume on the load list, the rate skipped in
+ * reports). Since a mis-read dilution is a dosing error, the editor says so at
+ * configuration time rather than letting it fail quietly later. Mirrors the
+ * branches in calcChemicalAndSolution.
+ */
+function mixConfigWarning(
+  row: RateRow,
+  unitsById: Map<string, ChemicalLookupItem>
+): string | null {
+  if (row.mixType === "none") return null;
+  const referenceUnitId = row.mixType === "water" ? row.dilutionChemicalUnitId : row.mixProductAmountUnitId;
+  const additiveUnitId = row.mixType === "water" ? row.dilutionWaterUnitId : row.mixProductTotalUnitId;
+  if (!row.unitOfMeasureId || !referenceUnitId || !additiveUnitId) return null;
+
+  if (sameUnitById(referenceUnitId, additiveUnitId, unitsById)) {
+    return "Both sides of this ratio use the same unit, so there's no way to tell whether the Applied amount is concentrate or finished mix — the mix volume will be left blank. Use different units (e.g. fluid ounces of chemical per gallon of water).";
+  }
+  const matchesAdditive = sameUnitById(row.unitOfMeasureId, additiveUnitId, unitsById);
+  const matchesReference = sameUnitById(row.unitOfMeasureId, referenceUnitId, unitsById);
+  if (!matchesAdditive && !matchesReference) {
+    const untagged = [row.unitOfMeasureId, referenceUnitId, additiveUnitId]
+      .map((id) => unitsById.get(id ?? ""))
+      .filter((u) => u && (u.unitClass == null || u.baseFactor == null))
+      .map((u) => u!.name);
+    if (untagged.length > 0) {
+      return `${[...new Set(untagged)].join(", ")} has no conversion set up, so the mix volume can't be calculated. Use one of the standard units from Settings > Chemical Tracking.`;
+    }
+    return "The Applied unit matches neither side of this ratio, so the mix volume can't be calculated. The Applied amount has to be stated in either the chemical's unit or the finished-mix unit.";
+  }
+  return null;
+}
+
 /** Application-rate manager for a chemical-tracking product — lives on the
  *  product's detail sheet since rates need an existing product id. */
 export function ChemicalApplicationRatesEditor({ productId }: { productId: string }) {
@@ -79,6 +118,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
 
   const [rows, setRows] = useState<RateRow[]>([]);
   const [dirty, setDirty] = useState(false);
+  const unitsById = new Map(volumeUnits.map((u) => [u.id, u] as const));
 
   useEffect(() => {
     if (!rates) return;
@@ -421,6 +461,16 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
               </div>
             )}
           </div>
+
+          {(() => {
+            const warning = mixConfigWarning(row, unitsById);
+            return warning ? (
+              <p className="col-span-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{warning}</span>
+              </p>
+            ) : null;
+          })()}
 
           {row.rateQty && row.productCost && (
             <p className="col-span-2 text-xs text-slate-400">

@@ -550,7 +550,19 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             unitType: li.unitType ?? undefined,
             productionRateSqftPerHr: li.productionRateSqftPerHr ?? undefined,
             budgetMethod: li.budgetMethod,
+            // Omitting this fell back to 100%, so a bulk increase recomputed
+            // every complexity-adjusted line as if it were standard — and then
+            // wrote the unscaled total back while leaving complexity_bps alone.
+            // A $750 line at 125% given "+10%" was rewritten to $660: a 10%
+            // increase landed as a 12% CUT, with the gauge still reading 125%,
+            // and any later cell edit silently re-inflated it to $825. The
+            // estimate's total depended on whether someone happened to touch a
+            // cell afterwards.
+            complexityBps: li.complexityBps,
           }, breakevenRateCents);
+          // A flat line discount can't survive a rate DECREASE unclamped —
+          // same floor the grid applies on every other write path.
+          const clampedDiscountCents = Math.max(0, Math.min(li.discountCents ?? 0, updated.totalCents));
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
@@ -564,6 +576,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               total_cost_cents: updated.totalCostCents,
               margin_bps: updated.marginBps,
               markup_bps: updated.markupBps,
+              ...(clampedDiscountCents !== (li.discountCents ?? 0) ? { discount_cents: clampedDiscountCents } : {}),
             },
           });
         })

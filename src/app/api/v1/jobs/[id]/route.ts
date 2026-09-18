@@ -38,7 +38,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
   if (body.crewId) {
-    const { data: crew } = await db.from("crm_crews").select("org_id").eq("id", body.crewId).maybeSingle();
+    const { data: crew } = await db
+      .from("crm_crews")
+      .select("org_id")
+      .eq("id", body.crewId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!crew || crew.org_id !== auth.orgId) return jsonError("Crew not found", 404);
   }
 

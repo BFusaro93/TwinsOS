@@ -269,15 +269,18 @@ export async function fetchJobProducts(visitId: string): Promise<JobProductMater
 /**
  * POST /api/crm/crew/visits/:id/job-products/:jobProductId/use-materials —
  * records how much of a planned material was actually used (or that it
- * wasn't used at all). Only valid while the row is still 'pending'; the
- * route 409s on an already-resolved row. Called by the offline sync engine
- * for queued 'record_material_usage' items, same pattern as
+ * wasn't used at all). `usedQty` alone records `used` — inventory comes down
+ * and the material STILL reaches the client's invoice; add
+ * `noInvoice: true` for the deliberate don't-bill case. Only valid while the
+ * row is still 'pending'; the route 409s on an already-resolved row and
+ * returns that row's current state in `material`. Called by the offline sync
+ * engine for queued 'record_material_usage' items, same pattern as
  * requestMaterials() above.
  */
 export async function useJobProductMaterials(
   visitId: string,
   jobProductId: string,
-  usage: { usedQty: number } | { notUsed: true }
+  usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true }
 ): Promise<JobProductMaterial> {
   return authedFetch(
     `/api/crm/crew/visits/${visitId}/job-products/${jobProductId}/use-materials`,
@@ -297,14 +300,22 @@ export async function acknowledgeNotes(visitId: string): Promise<unknown> {
 
 /**
  * POST /api/crm/crew/visits/:id/notes — appends a crew-authored note to the
- * visit's job_comments, visible to dispatchers on the web board. Not
- * idempotent (each call appends), so a retried request after a flaky
- * partial-success could double-post — same tradeoff as requestMaterials()
- * above.
+ * visit's job_comments, visible to dispatchers on the web board. Idempotent
+ * when `idempotencyKey` is supplied (the sync engine passes the queue item's
+ * id): the server uses it as the comment's own id and skips the append if a
+ * comment with that id is already there, so a retry after a flaky partial
+ * success can't double-post the note. The append itself happens inside the
+ * row lock server-side, so a dispatcher commenting at the same moment is no
+ * longer silently overwritten.
  */
-export async function addCrewNote(visitId: string, note: string): Promise<unknown> {
+export async function addCrewNote(
+  visitId: string,
+  note: string,
+  idempotencyKey?: string
+): Promise<unknown> {
   return authedFetch(`/api/crm/crew/visits/${visitId}/notes`, {
     method: 'POST',
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
     body: JSON.stringify({ note }),
   });
 }

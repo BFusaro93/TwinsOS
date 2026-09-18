@@ -38,7 +38,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
-import { visitServices } from "@/lib/utils/visit-stops";
+import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { toast } from "sonner";
@@ -53,21 +53,27 @@ function PlannedMaterialRow({
   material,
   onMarkUsed,
   onMarkNotUsed,
+  onMarkUsedNoInvoice,
   isSaving,
 }: {
   material: JobProductMaterial;
   onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
   onMarkNotUsed: (material: JobProductMaterial) => void;
+  onMarkUsedNoInvoice: (material: JobProductMaterial, usedQty: number) => void;
   isSaving: boolean;
 }) {
   const [qtyText, setQtyText] = useState(String(material.plannedQty));
   const parsedQty = Number(qtyText);
-  const isValid = qtyText.trim() !== "" && Number.isFinite(parsedQty) && parsedQty >= 0;
+  // Strictly positive: zero isn't "used none", it's Not Used, and the route
+  // rejects it — don't let the button offer an action that can only fail.
+  const isValid = qtyText.trim() !== "" && Number.isFinite(parsedQty) && parsedQty > 0;
 
   if (material.status !== "pending") {
     const resolved = material.status === "not_used"
       ? { label: "Not used", className: "bg-amber-100 text-amber-700" }
-      : { label: `Used: ${material.qty}`, className: "bg-green-100 text-green-700" };
+      : material.status === "used_no_invoice"
+        ? { label: `Used: ${material.qty} (not billed)`, className: "bg-slate-100 text-slate-600" }
+        : { label: `Used: ${material.qty}`, className: "bg-green-100 text-green-700" };
     return (
       <div className="px-4 py-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
@@ -94,6 +100,10 @@ function PlannedMaterialRow({
           onChange={(e) => setQtyText(e.target.value)}
           className="w-20 h-8 text-sm"
         />
+        {/* Mark Used keeps the material billable — the office called for it,
+            the client pays for it. The two links beside it are the
+            deliberate exceptions, and are styled as secondary for that
+            reason. */}
         <Button
           size="sm"
           className="bg-green-600 hover:bg-green-700"
@@ -102,6 +112,13 @@ function PlannedMaterialRow({
         >
           Mark Used
         </Button>
+        <button
+          className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          disabled={!isValid || isSaving}
+          onClick={() => onMarkUsedNoInvoice(material, parsedQty)}
+        >
+          Used — don&apos;t bill
+        </button>
         <button
           className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
           disabled={isSaving}
@@ -164,7 +181,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
   const anchor = stop?.visits.find(v => v.id === anchorVisitId) ?? stop?.visits[0];
   const hasNotes = !!stop?.notesToCrew;
-  const acknowledged = !!anchor?.acknowledgedNotesAt;
+  // Re-arms when the office edits the notes after the crew acknowledged them:
+  // an acknowledgment older than the notes' own updated stamp no longer
+  // counts, so "Acknowledged 7:02 AM" can't sit over a 9:40 AM "DOG IS
+  // LOOSE". The clock-in route enforces the same rule server-side — this is
+  // only the affordance.
+  const acknowledged = isNotesAcknowledgmentCurrent(
+    anchor?.acknowledgedNotesAt,
+    stop?.notesToCrewUpdatedAt
+  );
   const isActive = stop?.derivedStatus === "in_progress";
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped";
   const isPaused = isActive && !!stop?.pausedAt;
@@ -237,6 +262,19 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   async function handleMarkUsed(material: JobProductMaterial, usedQty: number) {
     try {
       await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { usedQty } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+    }
+  }
+
+  async function handleMarkUsedNoInvoice(material: JobProductMaterial, usedQty: number) {
+    if (!window.confirm(`${material.productName} will come out of inventory but won't be added to the client's invoice. Continue?`)) return;
+    try {
+      await useMaterials.mutateAsync({
+        visitId: anchorVisitId,
+        jobProductId: material.id,
+        usage: { usedQty, noInvoice: true },
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
     }
@@ -477,6 +515,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 </Button>
               </div>
             )}
+            {!acknowledged && anchor.acknowledgedNotesAt && (
+              <div className="px-4 pb-3">
+                <p className="text-xs text-amber-700">
+                  The office changed these notes after you read them — read them again.
+                </p>
+              </div>
+            )}
             {acknowledged && anchor.acknowledgedNotesAt && (
               <div className="px-4 pb-3">
                 <p className="text-xs text-green-600 flex items-center gap-1">
@@ -617,6 +662,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   material={m}
                   onMarkUsed={handleMarkUsed}
                   onMarkNotUsed={handleMarkNotUsed}
+                  onMarkUsedNoInvoice={handleMarkUsedNoInvoice}
                   isSaving={useMaterials.isPending}
                 />
               ))}

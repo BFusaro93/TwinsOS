@@ -256,10 +256,27 @@ export function useCustomFieldDefs(entityType?: "client" | "property") {
  * Matching logic:
  *   1. Find the first non-tail row where fromVal <= value < toVal
  *      (toVal === null means open upper bound — matches anything at or above fromVal).
- *   2. If the value exceeds every non-tail row's range, fall back to the tail row
- *      (isTailRow === true). The caller is responsible for applying the tail
- *      arithmetic (e.g. every tailEveryQty units over tailOverQty).
- *   3. Returns null if no match is found.
+ *   2. If the value OVERFLOWS every non-tail row's range — i.e. it is at or
+ *      above the lowest band but matched none of them — fall back to the tail
+ *      row (isTailRow === true), which exists precisely to price the
+ *      too-big-for-the-table case.
+ *   3. If the value UNDERFLOWS the table (below every row's fromVal), return
+ *      null so the caller keeps the service's own flat rate.
+ *   4. Returns null if no match is found.
+ *
+ * Step 3 is the fix for a real mispricing: the tail row used to be returned for
+ * anything the bands didn't match, in either direction. With bands
+ * [5,000-10,000] and [10,000-infinity], a 3,000 sq ft property fell off the
+ * bottom of the table and was handed the overflow-for-the-largest-property
+ * rate — $150 where the flat rate would have quoted $360. A value below the
+ * smallest band is not an overflow and must never be priced as one; the table
+ * simply has nothing to say about it.
+ *
+ * NOTE: the tail row's tailEveryQty/tailOverQty increment arithmetic ("plus X
+ * per every Y units over Z") is still the caller's to apply, and no caller
+ * applies it today — there is also no editor UI that can author those two
+ * fields, so they are null everywhere. Left alone deliberately rather than
+ * guessing at the intended formula for a money calculation.
  */
 export function lookupRateMatrixMatch(
   rows: RateMatrixRow[],
@@ -279,6 +296,11 @@ export function lookupRateMatrixMatch(
     const belowTo = row.toVal == null || propertyValue < row.toVal;
     if (aboveFrom && belowTo) return row;
   }
+
+  // Below the bottom of the whole table (tail row included) — an underflow,
+  // not an overflow. No row applies.
+  const lowestFromVal = rows.reduce((min, r) => Math.min(min, r.fromVal), Infinity);
+  if (propertyValue < lowestFromVal) return null;
 
   // Value exceeded all non-tail ranges — return tail row if present
   return tailRow;

@@ -87,6 +87,13 @@ import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBilling
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 
+/**
+ * crm_job_products statuses that still owe the client an invoice line —
+ * see buildPendingProductLineItems(). `used_no_invoice` and `not_used` are
+ * deliberately absent, and `invoiced` has already been billed.
+ */
+const BILLABLE_JOB_PRODUCT_STATUSES: string[] = ["pending", "used"];
+
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
   in_progress: "bg-yellow-100 text-yellow-700",
@@ -264,14 +271,32 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     }
   }
 
-  // Job products that haven't been resolved yet (used/cancelled/already
-  // invoiced) — these are the only ones swept into a newly-generated invoice.
-  // Each becomes a real invoice line item linked back via jobProductId, which
-  // set_job_product_status('invoiced') on the server flips to 'invoiced' and
-  // decrements product_items.quantity_on_hand if that product tracks inventory.
+  // Job products still owed to an invoice. Two statuses qualify:
+  //
+  //   pending — office called for it, nobody has recorded anything yet
+  //   used    — a crew recorded it as used in the field (crew "Mark Used")
+  //
+  // `used` is the important one. Materials a crew records as used stay
+  // billable by default: the office calls for 10 bags of mulch, the crew
+  // confirms 10, and $400 has to reach the invoice. Before this, the crew's
+  // only two buttons both wrote terminal not-billable statuses, so recording
+  // the truth in the field silently deleted the charge. The deliberate
+  // don't-bill case is its own status (`used_no_invoice`) and is excluded
+  // here on purpose, as are `not_used` and anything already `invoiced`.
+  //
+  // Each qualifying row becomes a real invoice line item linked back via
+  // jobProductId, which set_job_product_status('invoiced') flips to
+  // 'invoiced' server-side. That RPC treats `used` as an already-used status,
+  // so a used -> invoiced transition does NOT decrement
+  // product_items.quantity_on_hand a second time; only pending -> invoiced
+  // decrements.
   function buildPendingProductLineItems(serviceDate: string) {
     return jobProducts
-      .filter((p) => p.status === "pending")
+      // Compared as plain strings: `used` is new and use-crm-jobs.ts's
+      // JobProductStatus union hasn't been widened for it yet (that file is
+      // owned by another change this sprint), so a literal === comparison
+      // would be a "no overlap" type error rather than a behaviour change.
+      .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status))
       .map((p) => {
         // Bill the invoiceQty override when set (e.g. 5 bags used, only 4
         // invoiced) — the used qty still drives the inventory decrement via

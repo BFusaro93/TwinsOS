@@ -149,12 +149,24 @@ export default function StopDetailScreen() {
   const materialUsageQueueItems = queueItems.filter((i) => i.type === 'record_material_usage');
   const noteQueueItems = queueItems.filter((i) => i.type === 'add_note');
   const ackQueueItem = queueItems.find((i) => i.type === 'acknowledge_notes' && i.status !== 'failed');
+  const failedAckItem = queueItems.find((i) => i.type === 'acknowledge_notes' && i.status === 'failed');
 
   // Notes-acknowledgment gate — mirrors the web stop page's `anchor` lookup
-  // and Clock In disabling (stops/[visitId]/page.tsx:88-89, 403).
+  // and Clock In disabling, and is enforced server-side by the clock-in route
+  // so a replayed request can't walk past it.
+  //
+  // An acknowledgment given BEFORE the office last edited the notes doesn't
+  // count: otherwise a crew that read "gate code 4412" at 7:02 still sees a
+  // green "Acknowledged 7:02 AM" over a 9:40 AM "DOG IS LOOSE", with Clock In
+  // already enabled. A stop with no notes timestamp at all (older row) falls
+  // back to "any acknowledgment counts" rather than blocking every crew.
   const anchor = stop ? stop.visits.find((v) => v.id === stop.anchorVisitId) ?? stop.visits[0] : undefined;
   const hasNotes = !!stop?.notesToCrew;
-  const acknowledged = !!anchor?.acknowledgedNotesAt;
+  const notesChangedSinceAck =
+    !!anchor?.acknowledgedNotesAt &&
+    !!stop?.notesToCrewUpdatedAt &&
+    new Date(anchor.acknowledgedNotesAt).getTime() < new Date(stop.notesToCrewUpdatedAt).getTime();
+  const acknowledged = !!anchor?.acknowledgedNotesAt && !notesChangedSinceAck;
 
   // Once every queue item for this stop clears (synced), pull fresh server
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
@@ -275,9 +287,33 @@ export default function StopDetailScreen() {
     router.push({ pathname: '/visit/request-materials', params: { visitId: stop.anchorVisitId } });
   };
 
+  // Mark Used keeps the material billable — the office called for it, the
+  // client pays for it. See the `used` status on the route.
   const handleMarkUsed = (material: JobProductMaterial, usedQty: number) => {
     if (!stop) return;
     void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, { usedQty });
+  };
+
+  // The deliberate exception: used, inventory comes down, nothing reaches the
+  // invoice. Confirmed because it writes off real revenue.
+  const handleMarkUsedNoInvoice = (material: JobProductMaterial, usedQty: number) => {
+    if (!stop) return;
+    Alert.alert(
+      "Used — don't bill?",
+      `${material.productName} will come out of inventory but won't be added to the client's invoice.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: "Don't bill",
+          style: 'destructive',
+          onPress: () =>
+            void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, {
+              usedQty,
+              noInvoice: true,
+            }),
+        },
+      ]
+    );
   };
 
   const handleMarkNotUsed = (material: JobProductMaterial) => {
@@ -380,15 +416,22 @@ export default function StopDetailScreen() {
           <Text style={[styles.amberBoxTitle, acknowledged && styles.greenAckTitle]}>Job Notes</Text>
           <Text style={styles.amberBoxText}>{stop.notesToCrew}</Text>
           {!acknowledged ? (
-            <Pressable
-              style={({ pressed }) => [styles.ackButton, pressed && styles.ackButtonPressed]}
-              onPress={handleAcknowledge}
-              disabled={!!ackQueueItem}
-            >
-              <Text style={styles.ackButtonText}>
-                {ackQueueItem ? 'Saving…' : "I've read the notes"}
-              </Text>
-            </Pressable>
+            <>
+              {notesChangedSinceAck ? (
+                <Text style={styles.ackStaleText}>
+                  The office changed these notes after you read them — read them again.
+                </Text>
+              ) : null}
+              <Pressable
+                style={({ pressed }) => [styles.ackButton, pressed && styles.ackButtonPressed]}
+                onPress={handleAcknowledge}
+                disabled={!!ackQueueItem}
+              >
+                <Text style={styles.ackButtonText}>
+                  {ackQueueItem ? 'Saving…' : "I've read the notes"}
+                </Text>
+              </Pressable>
+            </>
           ) : (
             <Text style={styles.ackConfirmedText}>
               Acknowledged{anchor?.acknowledgedNotesAt ? ` ${new Date(anchor.acknowledgedNotesAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
@@ -475,6 +518,19 @@ export default function StopDetailScreen() {
         />
       ) : null}
 
+      {/* A failed acknowledgment used to be invisible: every consumer filters
+          `status !== 'failed'`, so the tap looked like it did nothing, Clock In
+          stayed disabled, and there was no Retry anywhere on the screen. */}
+      {failedAckItem ? (
+        <ConflictBox
+          message={failedAckItem.lastError ?? "Your note acknowledgment didn't sync — tap Retry to send it again."}
+          onRetry={() => void retry(failedAckItem.id)}
+          onDiscard={() =>
+            confirmDiscard(failedAckItem.id, "This will drop the unsynced acknowledgment — you'll need to read the notes again.")
+          }
+        />
+      ) : null}
+
       {progress === 'clocked_in' || progress === 'on_break' ? (
         <TextInput
           style={styles.notesInput}
@@ -527,6 +583,7 @@ export default function StopDetailScreen() {
         materials={plannedMaterials}
         usageQueueItems={materialUsageQueueItems}
         onMarkUsed={handleMarkUsed}
+        onMarkUsedNoInvoice={handleMarkUsedNoInvoice}
         onMarkNotUsed={handleMarkNotUsed}
         onRetry={(itemId) => void retry(itemId)}
         onDiscard={(itemId) => confirmDiscard(itemId, "This won't be recorded as used.")}
@@ -909,6 +966,7 @@ function PlannedMaterialsSection({
   materials,
   usageQueueItems,
   onMarkUsed,
+  onMarkUsedNoInvoice,
   onMarkNotUsed,
   onRetry,
   onDiscard,
@@ -916,6 +974,7 @@ function PlannedMaterialsSection({
   materials: JobProductMaterial[];
   usageQueueItems: ReturnType<typeof useOfflineQueue>['items'];
   onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkUsedNoInvoice: (material: JobProductMaterial, usedQty: number) => void;
   onMarkNotUsed: (material: JobProductMaterial) => void;
   onRetry: (itemId: string) => void;
   onDiscard: (itemId: string) => void;
@@ -942,7 +1001,12 @@ function PlannedMaterialsSection({
               {queueItem ? (
                 <QueuedMaterialRow item={queueItem} material={material} onRetry={onRetry} onDiscard={onDiscard} />
               ) : material.status === 'pending' ? (
-                <PendingMaterialRow material={material} onMarkUsed={onMarkUsed} onMarkNotUsed={onMarkNotUsed} />
+                <PendingMaterialRow
+                  material={material}
+                  onMarkUsed={onMarkUsed}
+                  onMarkUsedNoInvoice={onMarkUsedNoInvoice}
+                  onMarkNotUsed={onMarkNotUsed}
+                />
               ) : (
                 <ResolvedMaterialRow material={material} />
               )}
@@ -957,16 +1021,20 @@ function PlannedMaterialsSection({
 function PendingMaterialRow({
   material,
   onMarkUsed,
+  onMarkUsedNoInvoice,
   onMarkNotUsed,
 }: {
   material: JobProductMaterial;
   onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkUsedNoInvoice: (material: JobProductMaterial, usedQty: number) => void;
   onMarkNotUsed: (material: JobProductMaterial) => void;
 }) {
   const [qtyText, setQtyText] = useState(String(material.plannedQty));
 
   const parsedQty = Number(qtyText);
-  const isValid = qtyText.trim() !== '' && Number.isFinite(parsedQty) && parsedQty >= 0;
+  // Strictly positive: zero isn't "used none", it's Not Used, and the route
+  // rejects it — don't offer a button that can only fail.
+  const isValid = qtyText.trim() !== '' && Number.isFinite(parsedQty) && parsedQty > 0;
 
   return (
     <>
@@ -996,6 +1064,16 @@ function PendingMaterialRow({
           <Text style={styles.linkText}>Not Used</Text>
         </Pressable>
       </View>
+      {/* Secondary on purpose: the default (Mark Used) must stay billable. */}
+      <Pressable
+        onPress={() => onMarkUsedNoInvoice(material, parsedQty)}
+        disabled={!isValid}
+        hitSlop={8}
+      >
+        <Text style={[styles.linkText, styles.noBillLink, !isValid && styles.linkTextDisabled]}>
+          Used — don&apos;t bill
+        </Text>
+      </Pressable>
     </>
   );
 }
@@ -1012,7 +1090,11 @@ function QueuedMaterialRow({
   onDiscard: (itemId: string) => void;
 }) {
   const payload = item.payload as RecordMaterialUsagePayload;
-  const summary = payload.notUsed ? 'Not used' : `Used: ${payload.usedQty}`;
+  const summary = payload.notUsed
+    ? 'Not used'
+    : payload.noInvoice
+      ? `Used: ${payload.usedQty} (not billed)`
+      : `Used: ${payload.usedQty}`;
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.plannedMaterialHeader}>
@@ -1047,6 +1129,12 @@ function QueuedMaterialRow({
 
 function ResolvedMaterialRow({ material }: { material: JobProductMaterial }) {
   const color = material.status === 'not_used' ? C.amberTextStrong : C.green;
+  const label =
+    material.status === 'not_used'
+      ? 'Not used'
+      : material.status === 'used_no_invoice'
+        ? `Used: ${material.qty} (not billed)`
+        : `Used: ${material.qty}`;
   return (
     <View style={styles.plannedMaterialHeader}>
       <View>
@@ -1054,9 +1142,7 @@ function ResolvedMaterialRow({ material }: { material: JobProductMaterial }) {
         <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
       </View>
       <View style={[styles.materialsStatusPill, { backgroundColor: color }]}>
-        <Text style={styles.materialsStatusPillText}>
-          {material.status === 'not_used' ? 'Not used' : `Used: ${material.qty}`}
-        </Text>
+        <Text style={styles.materialsStatusPillText}>{label}</Text>
       </View>
     </View>
   );
@@ -1401,6 +1487,11 @@ const styles = StyleSheet.create({
     color: C.green,
     marginTop: 2,
   },
+  ackStaleText: {
+    fontSize: 12,
+    color: C.amberTextStrong,
+    marginBottom: 8,
+  },
 
   amberBanner: {
     flexDirection: 'row',
@@ -1605,6 +1696,15 @@ const styles = StyleSheet.create({
     color: C.textMuted,
     fontSize: 13,
     fontWeight: '600',
+  },
+  // Deliberately quieter than "Not Used": writing off a material the office
+  // called for should never look like the obvious choice.
+  noBillLink: {
+    fontWeight: '500',
+    marginTop: 6,
+  },
+  linkTextDisabled: {
+    color: C.textFaint,
   },
   mutedRowText: {
     color: C.textFaint,

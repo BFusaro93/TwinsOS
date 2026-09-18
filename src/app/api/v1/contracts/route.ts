@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { CONTRACT_SELECT, shapeContract } from "./shape";
 import { createContractSchema, type CreateContractItem } from "./validation";
 
@@ -26,8 +27,10 @@ export async function GET(request: Request) {
 /**
  * POST /api/v1/contracts — records one or more already-executed contracts
  * for billing. Requires scope "contracts:write:safe". See validation.ts for
- * why this can set a historical signedAt/signedBy and a non-"draft" initial
- * status, unlike the app's own contract-creation UI.
+ * why this can set a historical signedAt/signedBy — and why it nonetheless
+ * defaults to status "draft", which does NOT bill, so nothing created here
+ * charges a client until a human advances it (or the caller deliberately
+ * passes an explicit status).
  */
 export async function POST(request: Request) {
   const db = adminClient();
@@ -73,8 +76,16 @@ export async function POST(request: Request) {
     ];
   }
 
+  // deleted_at IS NULL on every FK check below: a contract attached to a
+  // soft-deleted client, estimate or rep is a dangling reference, and for
+  // the client in particular it used to mean the invoicing cron kept billing
+  // a deleted customer every month with nothing ever re-checking it.
   const clientIds = [...new Set(items.map((c) => c.clientId))];
-  const { data: clients } = await db.from("clients").select("id, org_id").in("id", clientIds);
+  const { data: clients } = await db
+    .from("clients")
+    .select("id, org_id")
+    .in("id", clientIds)
+    .is("deleted_at", null);
   const clientOrgs = new Map((clients ?? []).map((c) => [c.id as string, c.org_id as string]));
   for (const id of clientIds) {
     if (clientOrgs.get(id) !== auth.orgId) return jsonError(`Client ${id} not found`, 404);
@@ -83,7 +94,11 @@ export async function POST(request: Request) {
   const estimateIds = [...new Set(items.map((c) => c.estimateId).filter((id): id is string => !!id))];
   const estimateOrgs = new Map<string, string>();
   if (estimateIds.length > 0) {
-    const { data: estimates } = await db.from("estimates").select("id, org_id").in("id", estimateIds);
+    const { data: estimates } = await db
+      .from("estimates")
+      .select("id, org_id")
+      .in("id", estimateIds)
+      .is("deleted_at", null);
     for (const e of estimates ?? []) estimateOrgs.set(e.id as string, e.org_id as string);
   }
   for (const c of items) {
@@ -95,7 +110,11 @@ export async function POST(request: Request) {
   const salesRepIds = [...new Set(items.map((c) => c.salesRepId).filter((id): id is string => !!id))];
   const salesRepOrgs = new Map<string, string>();
   if (salesRepIds.length > 0) {
-    const { data: reps } = await db.from("crm_employees").select("id, org_id").in("id", salesRepIds);
+    const { data: reps } = await db
+      .from("crm_employees")
+      .select("id, org_id")
+      .in("id", salesRepIds)
+      .is("deleted_at", null);
     for (const r of reps ?? []) salesRepOrgs.set(r.id as string, r.org_id as string);
   }
   for (const c of items) {
@@ -109,7 +128,14 @@ export async function POST(request: Request) {
     client_id: c.clientId,
     title: c.title,
     estimate_id: c.estimateId ?? null,
-    status: c.status ?? (c.signedAt ? "active" : "draft"),
+    // Default "draft", NOT "active" — see the long note in validation.ts.
+    // Both billing paths require status ∈ {signed, active}, and
+    // auto_generate/is_active default true at the DB level, so status is the
+    // only brake. Defaulting to "active" whenever signedAt was present meant
+    // an agent recording a historical contract silently started charging a
+    // real client on the next billing day. A caller who genuinely wants
+    // billing to start passes status explicitly.
+    status: c.status ?? "draft",
     start_date: c.startDate ?? null,
     end_date: c.endDate ?? null,
     monthly_amount_cents: c.monthlyAmountCents ?? 0,
@@ -122,6 +148,13 @@ export async function POST(request: Request) {
     bill_month_in_advance: c.billMonthInAdvance ?? false,
     payment_type: c.paymentType ?? null,
     po_number: c.poNumber ?? null,
+    // auto_generate/is_active stay defaulted true, matching both the DB
+    // defaults and the app's own useCreateContract — and that is consistent
+    // with the "draft" default above rather than in tension with it: both
+    // billing paths require status ∈ {signed, active} as well, so a draft
+    // contract with auto_generate on still bills nothing. Leaving them true
+    // means that when a human does advance the contract in the app it
+    // behaves exactly like one created there.
     auto_generate: c.autoGenerate ?? true,
     is_active: c.isActive ?? true,
     include_sub_properties: c.includeSubProperties ?? true,
@@ -134,6 +167,32 @@ export async function POST(request: Request) {
 
   const { data, error } = await db.from("crm_contracts").insert(rows).select(CONTRACT_SELECT);
   if (error || !data) return jsonServerError("POST /api/v1/contracts", error);
+
+  // Same client-timeline row + automation trigger the app's own contract
+  // creation fires (useCreateContract, src/lib/hooks/use-contracts.ts).
+  // Without these, a contract recorded through the API left no entry on the
+  // client's activity timeline and never enrolled in any contract_created
+  // automation or Zapier subscription — POST /api/v1/clients was fixed for
+  // exactly this. Best-effort: a failed notification must not fail the
+  // create, since the contract row is already committed.
+  for (const row of data) {
+    const clientId = row.client_id as string;
+    await db.from("client_activity").insert({
+      org_id: auth.orgId,
+      client_id: clientId,
+      activity_type: "contract",
+      subject: `Contract created: ${row.title as string}`,
+      ref_id: row.id as string,
+      ref_table: "crm_contracts",
+    });
+    await fireSimpleTrigger(db, { orgId: auth.orgId, clientId, triggerType: "contract_created" });
+    // A contract recorded as already signed also fires contract_signed —
+    // the app fires it on the draft → signed transition, which this
+    // endpoint's "record something already executed" path skips over.
+    if (row.status === "signed" || row.status === "active") {
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId, triggerType: "contract_signed" });
+    }
+  }
 
   const shaped = data.map(shapeContract);
   return NextResponse.json(body.contracts ? { data: shaped } : shaped[0], { status: 201 });

@@ -93,7 +93,10 @@ export async function createRequisitionRecord(
 
   const subtotal = lineItemRows.reduce((sum, li) => sum + li.total_cost, 0);
   const taxRatePercent = input.taxRatePercent ?? 0;
-  const discountCost = input.discountCostCents ?? 0;
+  // Clamp the discount to the subtotal. Unclamped it produced a NEGATIVE
+  // grand_total, which flowed into the spend reports as money the org
+  // apparently got back from a vendor. Same clamp as the PO route.
+  const discountCost = Math.min(input.discountCostCents ?? 0, subtotal);
   const discountReducesTax = input.discountReducesTax ?? false;
   // Same formula as NewRequisitionDialog.tsx: discount always reduces the
   // grand total, but only reduces the taxable base when discountReducesTax

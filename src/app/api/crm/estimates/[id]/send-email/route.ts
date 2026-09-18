@@ -7,6 +7,7 @@ import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { complexityFactor } from "@/lib/estimate-calc";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
@@ -218,7 +219,15 @@ export async function POST(
       estimateDesc: li.estimate_desc ?? null,
       qty: li.qty ?? 1,
       unitType: li.unit_type ?? null,
-      rateCents: li.rate_cents ?? 0,
+      // adj_rate_cents is what the line was actually priced off when the
+      // estimator used the Adj Rate column (estimate-calc.ts prices off
+      // `adjRateCents ?? rateCents`), so the emailed PDF printed the stale
+      // pre-adjustment rate next to an adjusted total. Matches the
+      // Preview/Print pipeline in src/lib/estimate-pdf.ts.
+      rateCents: li.adj_rate_cents ?? li.rate_cents ?? 0,
+      // Lets the document scale the printed rate the same way the total is
+      // scaled — otherwise Qty x Rate doesn't equal Total on the client's copy.
+      complexityBps: li.complexity_bps ?? null,
       visits: li.visits ?? 1,
       totalCents: li.total_cents ?? 0,
       tier: li.tier ?? null,
@@ -372,7 +381,11 @@ export async function POST(
         id: li.id,
         serviceName: li.service_name,
         qty: li.qty,
-        rateCents: li.rate_cents,
+        // The rate as the client saw it on the attached PDF: priced off the
+        // adjusted rate and scaled by complexity. Recording the raw rate_cents
+        // made the stored version snapshot disagree with the document that was
+        // actually sent, which is the one thing a version snapshot exists for.
+        rateCents: Math.round((li.adj_rate_cents ?? li.rate_cents ?? 0) * complexityFactor(li.complexity_bps)),
         visits: li.visits,
         totalCents: li.total_cents,
         unitType: li.unit_type,

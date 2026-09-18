@@ -5,7 +5,7 @@ import { Calculator } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { centsToDisplay } from "@/lib/estimate-calc";
+import { bpsToPercent, centsToDisplay, complexityFactor } from "@/lib/estimate-calc";
 
 export interface BudgetedHoursPatch {
   budgetedHours: number;
@@ -22,6 +22,11 @@ interface Props {
   qty: number;
   visits: number;
   calcType: 0 | 1;
+  /** The line's complexity adjustment (10000 = 100%). `budgetedHours` above is
+   *  the UNSCALED base (estimate-calc.ts keeps the stored value pure), but
+   *  `totalCostCents` below is already scaled by it — so the two have to be put
+   *  back on the same footing before any $/man-hour arithmetic here is honest. */
+  complexityBps: number;
   /** Current totalCostCents (already reflects auto-fill-from-breakeven when active). */
   totalCostCents: number;
   /** True while Cost is auto-derived from budgetedHours × the org breakeven
@@ -50,6 +55,7 @@ export function BudgetedHoursPopover({
   qty,
   visits,
   calcType,
+  complexityBps,
   totalCostCents,
   isAutoCost,
   breakevenRateCents,
@@ -83,7 +89,19 @@ export function BudgetedHoursPopover({
     setHoursDraft(nextMen * (nextHrs + nextMin / 60));
   }
 
-  const occCostCents = occurrenceCostCents(totalCostCents, visits, calcType);
+  const factor = complexityFactor(complexityBps);
+  const isComplexityAdjusted = factor !== 1;
+  // Everything in this popover works in BASE terms — base hours (what the
+  // B.Hrs box holds and what actually gets stored) against base cost. The
+  // row's totalCostCents has already been scaled by complexity, so it's
+  // divided back out here; the alternative, dividing a scaled cost by unscaled
+  // hours, reported a $/man-hour inflated by exactly the complexity factor and
+  // made "adjust to $69.25/man-hr" land at $66.67 on a 115% line.
+  //
+  // Both sides carry the same factor, so it cancels: base cost ÷ base hours is
+  // the same $/man-hour as scaled cost ÷ scaled hours. Anything written back
+  // out is therefore already in the base units the row stores.
+  const occCostCents = occurrenceCostCents(totalCostCents, visits, calcType) / factor;
   const currentRateCentsPerHr = hoursDraft > 0 ? occCostCents / hoursDraft : 0;
   const targetRateCents = Math.round((parseFloat(targetRate) || 0) * 100);
 
@@ -98,6 +116,7 @@ export function BudgetedHoursPopover({
   function handleAdjustHours() {
     if (targetRateCents <= 0) return;
     const newHours = occCostCents / targetRateCents;
+    if (newHours <= 0) return;
     const patch: BudgetedHoursPatch = { budgetedHours: newHours };
     // If cost is still auto-derived from budgetedHours × breakeven, changing
     // budgetedHours alone would just re-derive cost from the SAME breakeven
@@ -111,6 +130,12 @@ export function BudgetedHoursPopover({
   }
 
   function handleApplyHoursOnly() {
+    // Zero hours zeroes the line's modelled cost, which reads as GM 100% — a
+    // number nobody would bid on purpose. It was reachable by accident: the
+    // Men box empties to "" while you retype it, Number("") is 0, and
+    // hoursDraft followed it to 0 with nothing stopping Apply. The button is
+    // disabled in that state too; this guard is the backstop.
+    if (hoursDraft <= 0) return;
     onApply({ budgetedHours: hoursDraft });
     setOpen(false);
   }
@@ -180,6 +205,12 @@ export function BudgetedHoursPopover({
         <div className="mb-3 rounded bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
           Cost ({centsToDisplay(occCostCents)}) ÷ B.Hrs ({hoursDraft.toFixed(2)}) ={" "}
           <span className="font-medium text-slate-800">{centsToDisplay(currentRateCentsPerHr)}/man-hr</span>
+          {isComplexityAdjusted && (
+            <span className="mt-1 block text-[10px] text-slate-400">
+              Before this line&apos;s {bpsToPercent(complexityBps)} complexity — it scales hours and cost
+              together, so the rate per man-hour is unchanged.
+            </span>
+          )}
         </div>
 
         <div className="mb-3">
@@ -207,7 +238,7 @@ export function BudgetedHoursPopover({
 
         <div className="flex justify-end gap-2 border-t pt-2">
           <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button size="sm" onClick={handleApplyHoursOnly}>Apply</Button>
+          <Button size="sm" onClick={handleApplyHoursOnly} disabled={hoursDraft <= 0}>Apply</Button>
         </div>
       </PopoverContent>
     </Popover>

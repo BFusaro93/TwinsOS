@@ -35,13 +35,23 @@ export async function POST(request: Request) {
 
   let assetName: string | null = null;
   if (body.assetId) {
-    const { data: asset } = await db.from("assets").select("org_id, name").eq("id", body.assetId).maybeSingle();
+    const { data: asset } = await db
+      .from("assets")
+      .select("org_id, name")
+      .eq("id", body.assetId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!asset || asset.org_id !== auth.orgId) return jsonError("Asset not found", 404);
     assetName = asset.name as string;
   }
 
   if (body.pmScheduleId) {
-    const { data: pm } = await db.from("pm_schedules").select("org_id").eq("id", body.pmScheduleId).maybeSingle();
+    const { data: pm } = await db
+      .from("pm_schedules")
+      .select("org_id")
+      .eq("id", body.pmScheduleId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!pm || pm.org_id !== auth.orgId) return jsonError("PM schedule not found", 404);
   }
   if (body.parentWorkOrderId) {
@@ -49,6 +59,7 @@ export async function POST(request: Request) {
       .from("work_orders")
       .select("org_id")
       .eq("id", body.parentWorkOrderId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!parent || parent.org_id !== auth.orgId) return jsonError("Parent work order not found", 404);
   }
@@ -59,7 +70,8 @@ export async function POST(request: Request) {
     const { data: employees } = await db
       .from("crm_employees")
       .select("id, org_id, first_name, last_name")
-      .in("id", assigneeIds);
+      .in("id", assigneeIds)
+      .is("deleted_at", null);
     for (const id of assigneeIds) {
       const emp = (employees ?? []).find((e) => e.id === id);
       if (!emp || emp.org_id !== auth.orgId) return jsonError(`Employee ${id} not found`, 404);

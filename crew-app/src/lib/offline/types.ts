@@ -70,6 +70,12 @@ export interface RecordMaterialUsagePayload {
   productName: string;
   /** Exactly one of these — a plain union of two request shapes, not both fields at once. */
   usedQty?: number;
+  /**
+   * Only meaningful alongside usedQty. Absent/false records `used`, which
+   * stays billable; true records `used_no_invoice` — the deliberate
+   * "we used it, don't charge for it" case behind the secondary action.
+   */
+  noInvoice?: boolean;
   notUsed?: true;
 }
 

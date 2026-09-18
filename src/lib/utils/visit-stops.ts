@@ -31,6 +31,63 @@ const TERMINAL_STATUSES: VisitStatus[] = ["completed", "cancelled", "skipped"];
 const STATUS_PROGRESS_ORDER: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "cancelled", "skipped"];
 
 /**
+ * A visit nobody can act on any more. Skipped/cancelled rows never get a
+ * clocked_out_at — the skip route only writes `status`/`skip_reason` — so
+ * every "is this stop finished / still running" test below has to treat a
+ * terminal status as satisfying the clock, or one skipped service pins the
+ * whole stop open (and, if it was skipped *while clocked in*, pins it at
+ * "in progress") for the rest of the season.
+ */
+function isTerminal(visit: Pick<CRMJobVisit, "status">): boolean {
+  return TERMINAL_STATUSES.includes(visit.status);
+}
+
+/** Still-running: clocked in, not clocked out, and not skipped/cancelled out from under the clock. */
+function isRunning(visit: Pick<CRMJobVisit, "status" | "clockedInAt" | "clockedOutAt">): boolean {
+  return !!visit.clockedInAt && !visit.clockedOutAt && !isTerminal(visit);
+}
+
+/**
+ * A visit carrying `notes_to_crew_updated_at` from both levels. Optional
+ * rather than added to CRMJobVisit itself: only the crew surfaces select the
+ * column, so requiring it would force every other producer of a CRMJobVisit
+ * (dispatch board, reports, API routes) to supply a value they never read.
+ */
+export interface VisitWithNotesStamp extends Omit<CRMJobVisit, "job"> {
+  notesToCrewUpdatedAt?: string | null;
+  job?: CRMJobVisit["job"] & { notesToCrewUpdatedAt?: string | null };
+}
+
+/**
+ * When the office last edited the notes-to-crew this visit shows, taking the
+ * later of the visit-level and job-level stamps. Used to stale an
+ * acknowledgment the crew gave *before* the notes changed — see the clock-in
+ * routes and isNotesAcknowledgmentCurrent().
+ */
+export function notesToCrewUpdatedAt(visit: VisitWithNotesStamp): string | null {
+  return [visit.notesToCrewUpdatedAt, visit.job?.notesToCrewUpdatedAt]
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
+    .sort()
+    .pop() ?? null;
+}
+
+/**
+ * True when `acknowledgedAt` still covers `notesUpdatedAt`. A null
+ * notes-timestamp means "we don't know when the notes last changed" (an
+ * older row written before the column existed) — that must not silently
+ * re-arm the gate on every crew every morning, so it falls back to "any
+ * acknowledgment counts".
+ */
+export function isNotesAcknowledgmentCurrent(
+  acknowledgedAt: string | null | undefined,
+  notesUpdatedAt: string | null | undefined
+): boolean {
+  if (!acknowledgedAt) return false;
+  if (!notesUpdatedAt) return true;
+  return new Date(acknowledgedAt).getTime() >= new Date(notesUpdatedAt).getTime();
+}
+
+/**
  * A "stop" is everything a crew does at one client/address on one day —
  * possibly spanning multiple crm_job_visits rows (one per service on a
  * multi-service job) and even multiple jobs (a recurring Mowing job plus a
@@ -52,6 +109,13 @@ export interface Stop {
   /** Set while the stop is on a break — see crm_job_visits.paused_at. */
   pausedAt: string | null;
   notesToCrew: string | null;
+  /**
+   * Latest `notes_to_crew_updated_at` across the stop's visits (and their
+   * jobs). An acknowledgment older than this is stale — the office changed
+   * the notes after the crew said they'd read them. Null when nothing in the
+   * stop carries the stamp; see isNotesAcknowledgmentCurrent().
+   */
+  notesToCrewUpdatedAt: string | null;
 }
 
 /**
@@ -102,14 +166,19 @@ export function pickAnchorVisit(visits: CRMJobVisit[]): CRMJobVisit {
 }
 
 function derivedStopStatus(visits: CRMJobVisit[]): VisitStatus {
-  if (visits.every((v) => TERMINAL_STATUSES.includes(v.status))) {
+  if (visits.every(isTerminal)) {
     // All terminal — prefer "completed" unless every one was cancelled/skipped.
     return visits.some((v) => v.status === "completed") ? "completed" : visits[0].status;
   }
-  if (visits.some((v) => v.status === "in_progress" || (v.clockedInAt && !v.clockedOutAt))) {
+  // Only a NON-terminal visit can hold the stop "in progress". A service
+  // skipped while the crew was clocked in keeps its clocked_in_at (that's the
+  // record of what actually happened) but must not out-vote its siblings —
+  // before this check excluded terminal rows, one such skip left the stop
+  // reading "in progress" forever, on the crew tablet and the dispatch board.
+  if (visits.some((v) => v.status === "in_progress" || isRunning(v))) {
     return "in_progress";
   }
-  const nonTerminal = visits.filter((v) => !TERMINAL_STATUSES.includes(v.status));
+  const nonTerminal = visits.filter((v) => !isTerminal(v));
   return nonTerminal
     .map((v) => v.status)
     .sort((a, b) => STATUS_PROGRESS_ORDER.indexOf(a) - STATUS_PROGRESS_ORDER.indexOf(b))[0]
@@ -146,12 +215,25 @@ export function groupVisitsIntoStops(visits: CRMJobVisit[]): Stop[] {
       // the stop with a not-yet-started one, taking the completed visit's
       // clock-in (with clockedOutAt null because not every visit is out)
       // made the card read "Not Started" and "Running" at the same time.
-      clockedInAt: stopVisits.find((v) => v.clockedInAt && !v.clockedOutAt)?.clockedInAt
+      clockedInAt: stopVisits.find(isRunning)?.clockedInAt
         ?? stopVisits.find((v) => v.clockedInAt)?.clockedInAt
         ?? null,
-      clockedOutAt: stopVisits.every((v) => v.clockedOutAt) ? (anchor.clockedOutAt ?? null) : null,
-      pausedAt: stopVisits.find((v) => v.clockedInAt && !v.clockedOutAt && v.pausedAt)?.pausedAt ?? null,
+      // A skipped/cancelled sibling is "done with" even though it has no
+      // clocked_out_at, so it can't hold the stop open. The stamp itself then
+      // comes from whichever visit actually clocked out (the anchor may be
+      // the skipped one), latest first.
+      clockedOutAt: stopVisits.every((v) => v.clockedOutAt || isTerminal(v))
+        ? (anchor.clockedOutAt
+          ?? stopVisits.map((v) => v.clockedOutAt).filter(Boolean).sort().pop()
+          ?? null)
+        : null,
+      pausedAt: stopVisits.find((v) => isRunning(v) && v.pausedAt)?.pausedAt ?? null,
       notesToCrew: [...new Set(stopVisits.map((v) => v.notesToCrew || v.job?.notesToCrew).filter(Boolean))].join("\n") || null,
+      notesToCrewUpdatedAt: stopVisits
+        .map(notesToCrewUpdatedAt)
+        .filter((s): s is string => !!s)
+        .sort()
+        .pop() ?? null,
     };
   });
 }

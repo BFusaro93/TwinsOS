@@ -38,15 +38,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
-  if (body.salesRepId !== undefined) {
-    const { data: rep } = await db.from("crm_employees").select("org_id").eq("id", body.salesRepId).maybeSingle();
+  // Truthy, not `!== undefined`: an explicit null clears the link and has
+  // nothing to look up (these fields are nullable so they can be cleared at
+  // all). deleted_at IS NULL so a soft-deleted rep/client can't be attached.
+  if (body.salesRepId) {
+    const { data: rep } = await db
+      .from("crm_employees")
+      .select("org_id")
+      .eq("id", body.salesRepId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!rep || rep.org_id !== auth.orgId) return jsonError("Sales rep not found", 404);
   }
-  if (body.referredByClientId !== undefined) {
+  if (body.referredByClientId) {
     const { data: ref } = await db
       .from("clients")
       .select("org_id")
       .eq("id", body.referredByClientId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!ref || ref.org_id !== auth.orgId) return jsonError("Referring client not found", 404);
   }
@@ -54,17 +63,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // Read the current status before updating, so a status change can be
   // logged and the right automation trigger fired — same as useUpdateClient
   // (src/lib/hooks/use-clients.ts).
+  // Also reads the current sms_opt_in so a false -> true transition can be
+  // stamped with a consent timestamp and source, the same way
+  // useUpdateClient does (smsOptInJustEnabled). Re-sending smsOptIn: true on
+  // an already-opted-in client must NOT refresh the timestamp — that would
+  // overwrite the real consent date with today's.
   let previousStatus: string | null = null;
-  if (body.status !== undefined) {
+  let previousSmsOptIn = false;
+  if (body.status !== undefined || body.smsOptIn !== undefined) {
     const { data: current } = await db
       .from("clients")
-      .select("status")
+      .select("status, sms_opt_in")
       .eq("org_id", auth.orgId)
       .eq("id", id)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!current) return jsonError("Client not found", 404);
     previousStatus = current.status as string;
+    previousSmsOptIn = (current.sms_opt_in as boolean | null) ?? false;
   }
+  const smsOptInJustEnabled = body.smsOptIn === true && !previousSmsOptIn;
 
   const { data, error } = await db
     .from("clients")
@@ -94,6 +112,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.okToEmail !== undefined && { ok_to_email: body.okToEmail }),
       ...(body.doNotMarket !== undefined && { do_not_market: body.doNotMarket }),
       ...(body.smsOptIn !== undefined && { sms_opt_in: body.smsOptIn }),
+      ...(smsOptInJustEnabled && {
+        sms_opt_in_at: new Date().toISOString(),
+        sms_opt_in_source: body.smsOptInSource ?? "manual",
+      }),
       ...(body.paymentMethod !== undefined && { payment_method: body.paymentMethod }),
       ...(body.billingTerms !== undefined && { billing_terms: body.billingTerms }),
       ...(body.invoiceFrequency !== undefined && { invoice_frequency: body.invoiceFrequency }),

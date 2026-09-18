@@ -37,15 +37,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
-  if (body.pmScheduleId !== undefined) {
-    const { data: pm } = await db.from("pm_schedules").select("org_id").eq("id", body.pmScheduleId).maybeSingle();
+  // Truthy, not `!== undefined`: an explicit null clears the link and has
+  // nothing to look up. deleted_at IS NULL so a soft-deleted schedule or
+  // parent WO can't be attached.
+  if (body.pmScheduleId) {
+    const { data: pm } = await db
+      .from("pm_schedules")
+      .select("org_id")
+      .eq("id", body.pmScheduleId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!pm || pm.org_id !== auth.orgId) return jsonError("PM schedule not found", 404);
   }
-  if (body.parentWorkOrderId !== undefined) {
+  if (body.parentWorkOrderId) {
     const { data: parent } = await db
       .from("work_orders")
       .select("org_id")
       .eq("id", body.parentWorkOrderId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!parent || parent.org_id !== auth.orgId) return jsonError("Parent work order not found", 404);
   }
@@ -56,7 +65,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { data: employees } = await db
       .from("crm_employees")
       .select("id, org_id, first_name, last_name")
-      .in("id", assigneeIds);
+      .in("id", assigneeIds)
+      .is("deleted_at", null);
     for (const empId of assigneeIds) {
       const emp = (employees ?? []).find((e) => e.id === empId);
       if (!emp || emp.org_id !== auth.orgId) return jsonError(`Employee ${empId} not found`, 404);
@@ -77,7 +87,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.parentWorkOrderId !== undefined && { parent_work_order_id: body.parentWorkOrderId }),
       ...(body.assignedToId !== undefined && {
         assigned_to_id: body.assignedToId,
-        assigned_to_name: employeeMap.get(body.assignedToId) ?? null,
+        // null unassigns — the denormalised name has to go with the id.
+        assigned_to_name: body.assignedToId ? (employeeMap.get(body.assignedToId) ?? null) : null,
       }),
       ...(body.assignedToIds !== undefined && {
         assigned_to_ids: body.assignedToIds,

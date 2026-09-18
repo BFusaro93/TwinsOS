@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
+import { calcChemicalAndSolution, createQuantityAccumulator } from "@/lib/chemical-mix-calc";
+import type { QuantityAccumulator } from "@/lib/chemical-mix-calc";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // ============================================================
@@ -12,10 +13,12 @@ import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemic
 // covering:
 //  - chemical products (track_chemicals=true): concentrate amount needed,
 //    plus the finished spray-mix volume, both resolved per-visit via
-//    calcChemicalAndSolution (chemical-mix-calc.ts) then summed — NOT summed
-//    first and converted after, since which of the two is the rate's
-//    "primary" number depends on the rate's own configured unit (see that
-//    function's doc comment) and must be resolved before aggregating.
+//    calcChemicalAndSolution (chemical-mix-calc.ts) then summed through a
+//    unit-aware accumulator — NOT summed first and converted after, since
+//    which of the two is the rate's "primary" number depends on the rate's
+//    own configured unit (see that function's doc comment) and must be
+//    resolved before aggregating, and the resolved unit is not the same on
+//    every stop.
 //    Prefers an already-entered crm_chemical_applications record for that
 //    visit/product over the rate-based estimate (crm_service_chemicals +
 //    crm_chemical_application_rates + property Area custom field) — same
@@ -23,26 +26,40 @@ import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemic
 //    one day and grouped by crew instead of aggregated across all outstanding jobs.
 //  - general (non-chemical) materials: explicit qty on crm_job_products,
 //    same as Materials Needed's general branch.
+//
+// This report is read by a crew loading a sprayer, so every quantity it
+// prints has to be trustworthy: anywhere the units involved can't be reduced
+// to one number the row reports *why* instead of printing a plausible-looking
+// figure (see DailyLoadListChemicalRow.unresolvedReason).
 // ============================================================
 
 const OUTSTANDING_VISIT_STATUSES = ["scheduled", "dispatched", "in_progress"];
 const TERMINAL_JOB_STATUSES = new Set(["cancelled", "completed", "hold"]);
+
+const MIXED_UNITS_REASON = "Stops use different units — record them in one unit to get a truck total";
+const NO_UNIT_REASON = "No unit set on the application rate — set one under the product's Application Rates";
 
 export interface DailyLoadListJobRef {
   jobId: string;
   visitId: string | null;
   clientName: string;
   address: string | null;
-  qty: number;
+  /** null when this stop's own rows don't share a unit. */
+  qty: number | null;
+  /** Unit `qty` is in — null when the rate/application never named one. */
+  unitName: string | null;
 }
 
 export interface DailyLoadListChemicalRow {
   productId: string;
   productName: string;
-  concentrateQty: number;
+  /** null when the stops' amounts can't be reduced to a single unit. */
+  concentrateQty: number | null;
   concentrateUnitName: string | null;
   mixVolumeQty: number | null;
   mixVolumeUnitName: string | null;
+  /** Set when concentrateQty is null — what to show the crew instead of a number. */
+  unresolvedReason: string | null;
   visits: DailyLoadListJobRef[];
 }
 
@@ -50,6 +67,8 @@ export interface DailyLoadListMaterialRow {
   productId: string;
   productName: string;
   qty: number;
+  /** Other crews this same job's materials also appear under (see below). */
+  sharedWithCrews: string[];
   jobs: DailyLoadListJobRef[];
 }
 
@@ -130,6 +149,8 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   const { data: unitRows } = await supabase.from("crm_chemical_lookup_items").select("*").is("deleted_at", null);
   const unitsById = new Map<string, ChemicalLookupItem>();
   for (const row of unitRows ?? []) unitsById.set(row.id, mapLookupItem(row));
+  const unitName = (id: string | null | undefined): string | null =>
+    id ? unitsById.get(id)?.name ?? null : null;
 
   // ── crews (names/colors for grouping) ───────────────────────────────────────
   const { data: crewRows } = await supabase.from("crm_crews").select("id, name, color").is("deleted_at", null);
@@ -141,6 +162,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     id: string;
     job_id: string;
     crew_id: string | null;
+    job_service_id: string | null;
     crm_jobs: {
       id: string;
       crew_id: string | null;
@@ -149,7 +171,12 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
       service_address: string | null;
       clients: { display_name: string | null } | null;
       crm_job_services:
-        | { service_id: string | null; crm_services: { track_chemicals: boolean | null } | null }[]
+        | {
+            id: string;
+            service_id: string | null;
+            included: boolean | null;
+            crm_services: { track_chemicals: boolean | null } | null;
+          }[]
         | null;
     } | null;
   }
@@ -157,7 +184,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     supabase
       .from("crm_job_visits")
       .select(
-        "id, job_id, crew_id, crm_jobs!inner(id, crew_id, property_id, status, service_address, clients:client_id(display_name), crm_job_services(service_id, crm_services:service_id(track_chemicals)))"
+        "id, job_id, crew_id, job_service_id, crm_jobs!inner(id, crew_id, property_id, status, service_address, clients:client_id(display_name), crm_job_services(id, service_id, included, crm_services:service_id(track_chemicals)))"
       )
       .eq("scheduled_date", date)
       .in("status", OUTSTANDING_VISIT_STATUSES)
@@ -168,6 +195,22 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
 
   function effectiveCrewId(v: VisitRow): string | null {
     return v.crew_id ?? v.crm_jobs?.crew_id ?? null;
+  }
+
+  /**
+   * Services a visit actually covers. A visit scoped to one job service
+   * (job_service_id) covers only that service — reading the job's whole
+   * service list per visit is what made a Mow + Spray day count the spray's
+   * chemical twice. Same rule as fetchVisitServiceIds() in use-crm-jobs.ts
+   * and /api/crm/visits/[visitId]/complete. Services excluded from the job
+   * (included = false) aren't being performed and need nothing loaded.
+   */
+  function chemicalServiceIdsForVisit(v: VisitRow): string[] {
+    const jobServices = (v.crm_jobs?.crm_job_services ?? []).filter(
+      (js) => js.included !== false && js.crm_services?.track_chemicals && js.service_id
+    );
+    const scoped = v.job_service_id ? jobServices.filter((js) => js.id === v.job_service_id) : jobServices;
+    return scoped.map((js) => js.service_id as string);
   }
 
   // ── chemical product <-> service links + default rates ──────────────────────
@@ -221,27 +264,127 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   }
 
   // ── already-entered application records for these visits (preferred over estimate) ──
+  //
+  // An entered record stores its own unit_of_measure_id / solution_unit_of_measure_id,
+  // which is frequently NOT the rate's unit: the rate can be "1 Gallon per
+  // 1,000 sq ft" (finished mix) while the saved concentrate figure is in fluid
+  // ounces. Labelling the saved number with the rate's unit overstated it 128x.
+  // A visit can also hold more than one row for the same product (a second
+  // spot application), so these accumulate rather than overwrite.
+  interface EnteredEntry {
+    chemical: { amount: number; unitId: string | null }[];
+    solution: { amount: number; unitId: string | null }[];
+  }
   const visitIds = liveVisits.map((v) => v.id);
-  const enteredByVisitProduct = new Map<string, { chemicalAmount: number; solutionAmount: number | null }>();
+  const enteredByVisitProduct = new Map<string, EnteredEntry>();
   if (visitIds.length > 0) {
     const apps = await fetchAllRows<{
       visit_id: string | null;
       product_id: string | null;
       chemical_amount: number | null;
       solution_amount: number | null;
+      unit_of_measure_id: string | null;
+      solution_unit_of_measure_id: string | null;
     }>(() =>
       supabase
         .from("crm_chemical_applications")
-        .select("visit_id, product_id, chemical_amount, solution_amount")
+        .select(
+          "visit_id, product_id, chemical_amount, solution_amount, unit_of_measure_id, solution_unit_of_measure_id"
+        )
         .in("visit_id", visitIds)
         .is("deleted_at", null)
     );
     for (const a of apps) {
       if (!a.visit_id || !a.product_id || a.chemical_amount == null) continue;
-      enteredByVisitProduct.set(`${a.visit_id}:${a.product_id}`, {
-        chemicalAmount: Number(a.chemical_amount),
-        solutionAmount: a.solution_amount != null ? Number(a.solution_amount) : null,
-      });
+      const key = `${a.visit_id}:${a.product_id}`;
+      const entry = enteredByVisitProduct.get(key) ?? { chemical: [], solution: [] };
+      entry.chemical.push({ amount: Number(a.chemical_amount), unitId: a.unit_of_measure_id });
+      if (a.solution_amount != null) {
+        entry.solution.push({ amount: Number(a.solution_amount), unitId: a.solution_unit_of_measure_id });
+      }
+      enteredByVisitProduct.set(key, entry);
+    }
+  }
+
+  // ── resolve demand per (crew, job, service, product) ─────────────────────────
+  //
+  // Keyed by service rather than by visit so a job whose services are split
+  // across several same-day visits isn't loaded twice for the same spray; kept
+  // per crew so a job split BETWEEN crews still puts the product on both
+  // trucks. An entered record always beats the rate estimate for the same key.
+  interface ChemDemand {
+    crewId: string | null;
+    jobId: string;
+    visitId: string;
+    clientName: string;
+    address: string | null;
+    productId: string;
+    chemical: { amount: number; unitId: string | null }[];
+    solution: { amount: number; unitId: string | null }[];
+    entered: boolean;
+  }
+  const demandByKey = new Map<string, ChemDemand>();
+
+  const jobCrewIds = new Map<string, Set<string | null>>();
+  const jobMetaMap = new Map<string, { clientName: string; address: string | null }>();
+
+  for (const v of liveVisits) {
+    const job = v.crm_jobs!;
+    const crewId = effectiveCrewId(v);
+    const clientName = job.clients?.display_name ?? "Job";
+    const address = job.service_address ?? null;
+    const crewSet = jobCrewIds.get(job.id) ?? new Set<string | null>();
+    crewSet.add(crewId);
+    jobCrewIds.set(job.id, crewSet);
+    if (!jobMetaMap.has(job.id)) jobMetaMap.set(job.id, { clientName, address });
+
+    for (const sid of chemicalServiceIdsForVisit(v)) {
+      for (const pid of productIdsByService.get(sid) ?? []) {
+        const key = `${crewId ?? "__unassigned__"}:${job.id}:${sid}:${pid}`;
+        const entered = enteredByVisitProduct.get(`${v.id}:${pid}`);
+        const existing = demandByKey.get(key);
+        // An entered record always wins; otherwise the first visit to resolve
+        // this service's product for this crew is the one that counts.
+        if (existing && (existing.entered || !entered)) continue;
+
+        if (entered) {
+          demandByKey.set(key, {
+            crewId,
+            jobId: job.id,
+            visitId: v.id,
+            clientName,
+            address,
+            productId: pid,
+            chemical: entered.chemical,
+            solution: entered.solution,
+            entered: true,
+          });
+          continue;
+        }
+
+        const rate = defaultRateByProduct.get(pid);
+        const areaValue = job.property_id ? areaValueByProperty.get(job.property_id) : undefined;
+        if (!rate || areaValue == null) continue;
+        // Resolved per-visit, not summed-then-converted — which of
+        // chemical/solution is the rate's "primary" number depends on the
+        // rate's own configured unit (see calcChemicalAndSolution).
+        const computed = calcChemicalAndSolution(rate, areaValue, unitsById);
+        if (!computed) continue;
+        demandByKey.set(key, {
+          crewId,
+          jobId: job.id,
+          visitId: v.id,
+          clientName,
+          address,
+          productId: pid,
+          chemical: [{ amount: computed.chemicalAmount, unitId: computed.chemicalUnitOfMeasureId }],
+          solution:
+            computed.solutionAmount != null
+              ? [{ amount: computed.solutionAmount, unitId: computed.solutionUnitOfMeasureId }]
+              : [],
+          entered: false,
+        });
+      }
     }
   }
 
@@ -250,13 +393,12 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     crewId: string | null;
     crewName: string;
     crewColor: string | null;
-    chemQtyByProduct: Map<string, number>;
-    chemUnitIdByProduct: Map<string, string>;
-    chemSolutionByProduct: Map<string, number>;
-    chemSolutionUnitIdByProduct: Map<string, string>;
+    chemByProduct: Map<string, QuantityAccumulator>;
+    solutionByProduct: Map<string, QuantityAccumulator>;
     chemVisitsByProduct: Map<string, DailyLoadListJobRef[]>;
     materialQtyByProduct: Map<string, number>;
     materialJobsByProduct: Map<string, DailyLoadListJobRef[]>;
+    materialSharedCrews: Map<string, Set<string>>;
   }
   const crewAccums = new Map<string, CrewAccum>();
   function getCrewAccum(crewId: string | null): CrewAccum {
@@ -268,84 +410,67 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
         crewId,
         crewName: crew?.name ?? "Unassigned",
         crewColor: crew?.color ?? null,
-        chemQtyByProduct: new Map(),
-        chemUnitIdByProduct: new Map(),
-        chemSolutionByProduct: new Map(),
-        chemSolutionUnitIdByProduct: new Map(),
+        chemByProduct: new Map(),
+        solutionByProduct: new Map(),
         chemVisitsByProduct: new Map(),
         materialQtyByProduct: new Map(),
         materialJobsByProduct: new Map(),
+        materialSharedCrews: new Map(),
       };
       crewAccums.set(key, acc);
     }
     return acc;
   }
 
-  const jobCrewMap = new Map<string, string | null>();
-  const jobMetaMap = new Map<string, { clientName: string; address: string | null }>();
+  for (const d of demandByKey.values()) {
+    if (!d.chemical.some((c) => c.amount > 0)) continue;
+    const acc = getCrewAccum(d.crewId);
 
-  for (const v of liveVisits) {
-    const job = v.crm_jobs!;
-    const crewId = effectiveCrewId(v);
-    const acc = getCrewAccum(crewId);
-    const clientName = job.clients?.display_name ?? "Job";
-    const address = job.service_address ?? null;
-    if (!jobCrewMap.has(job.id)) jobCrewMap.set(job.id, crewId);
-    if (!jobMetaMap.has(job.id)) jobMetaMap.set(job.id, { clientName, address });
+    // Every row feeds the crew total directly — a stop whose own rows disagree
+    // on a unit must still land in the total (as an unresolved one), never be
+    // dropped, or the truck is loaded short with no warning.
+    let chemAcc = acc.chemByProduct.get(d.productId);
+    if (!chemAcc) {
+      chemAcc = createQuantityAccumulator(unitsById);
+      acc.chemByProduct.set(d.productId, chemAcc);
+    }
+    for (const c of d.chemical) chemAcc.add(c.amount, c.unitId);
 
-    const serviceIds = (job.crm_job_services ?? [])
-      .filter((js) => js.crm_services?.track_chemicals)
-      .map((js) => js.service_id)
-      .filter(Boolean) as string[];
-    const productIdsForVisit = new Set<string>();
-    for (const sid of serviceIds) {
-      for (const pid of productIdsByService.get(sid) ?? []) productIdsForVisit.add(pid);
+    // Per-stop figure for the "which stops drive this" list — only meaningful
+    // as one number when that stop's own rows agree on a unit.
+    const stopTotal = createQuantityAccumulator(unitsById);
+    for (const c of d.chemical) stopTotal.add(c.amount, c.unitId);
+    const stop = stopTotal.total();
+
+    if (d.solution.length > 0) {
+      let solAcc = acc.solutionByProduct.get(d.productId);
+      if (!solAcc) {
+        solAcc = createQuantityAccumulator(unitsById);
+        acc.solutionByProduct.set(d.productId, solAcc);
+      }
+      for (const s of d.solution) solAcc.add(s.amount, s.unitId);
     }
 
-    for (const pid of productIdsForVisit) {
-      const entered = enteredByVisitProduct.get(`${v.id}:${pid}`);
-      const rate = defaultRateByProduct.get(pid);
-      let chemicalAmount: number | null = null;
-      let chemicalUnitId: string | null = rate?.unitOfMeasureId ?? null;
-      let solutionAmount: number | null = null;
-      let solutionUnitId: string | null = null;
-
-      if (entered) {
-        chemicalAmount = entered.chemicalAmount;
-        solutionAmount = entered.solutionAmount;
-      } else if (rate) {
-        const areaValue = job.property_id ? areaValueByProperty.get(job.property_id) : undefined;
-        if (areaValue != null) {
-          // Resolved per-visit, not summed-then-converted — which of
-          // chemical/solution is the rate's "primary" number depends on the
-          // rate's own configured unit (see calcChemicalAndSolution).
-          const computed = calcChemicalAndSolution(rate, areaValue, unitsById);
-          if (computed) {
-            chemicalAmount = computed.chemicalAmount;
-            chemicalUnitId = computed.chemicalUnitOfMeasureId;
-            solutionAmount = computed.solutionAmount;
-            solutionUnitId = computed.solutionUnitOfMeasureId;
-          }
-        }
-      }
-      if (chemicalAmount == null || chemicalAmount <= 0) continue;
-
-      acc.chemQtyByProduct.set(pid, (acc.chemQtyByProduct.get(pid) ?? 0) + chemicalAmount);
-      if (chemicalUnitId && !acc.chemUnitIdByProduct.has(pid)) acc.chemUnitIdByProduct.set(pid, chemicalUnitId);
-      if (solutionAmount != null) {
-        acc.chemSolutionByProduct.set(pid, (acc.chemSolutionByProduct.get(pid) ?? 0) + solutionAmount);
-        if (solutionUnitId && !acc.chemSolutionUnitIdByProduct.has(pid)) {
-          acc.chemSolutionUnitIdByProduct.set(pid, solutionUnitId);
-        }
-      }
-      const list = acc.chemVisitsByProduct.get(pid) ?? [];
-      list.push({ jobId: job.id, visitId: v.id, clientName, address, qty: Math.round(chemicalAmount * 10000) / 10000 });
-      acc.chemVisitsByProduct.set(pid, list);
-    }
+    const list = acc.chemVisitsByProduct.get(d.productId) ?? [];
+    list.push({
+      jobId: d.jobId,
+      visitId: d.visitId,
+      clientName: d.clientName,
+      address: d.address,
+      qty: stop.amount != null ? Math.round(stop.amount * 10000) / 10000 : null,
+      unitName: unitName(stop.unitId),
+    });
+    acc.chemVisitsByProduct.set(d.productId, list);
   }
 
   // ── general (non-chemical) materials, per job for the day ────────────────────
-  const jobIds = [...jobCrewMap.keys()];
+  //
+  // crm_job_products hangs off the JOB, not the visit, so a job worked by two
+  // crews on the same day has no way to say whose truck the mulch goes on.
+  // Putting it on whichever visit happened to be iterated first left the other
+  // crew on site without it, so the row is listed for every crew serving the
+  // job and flags the other crews it is shared with.
+  const jobIds = [...jobCrewIds.keys()];
   const generalProductName = new Map<string, string>();
   if (jobIds.length > 0) {
     interface JobProductRow {
@@ -365,38 +490,68 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     );
     for (const row of jobProducts) {
       if (!row.product_id || chemicalProductIds.has(row.product_id)) continue;
-      const crewId = jobCrewMap.get(row.job_id) ?? null;
-      const acc = getCrewAccum(crewId);
+      const crewIds = [...(jobCrewIds.get(row.job_id) ?? new Set<string | null>([null]))];
       const meta = jobMetaMap.get(row.job_id);
       generalProductName.set(row.product_id, row.product_items?.name ?? "Material");
-      acc.materialQtyByProduct.set(row.product_id, (acc.materialQtyByProduct.get(row.product_id) ?? 0) + Number(row.qty));
-      const list = acc.materialJobsByProduct.get(row.product_id) ?? [];
-      list.push({
-        jobId: row.job_id,
-        visitId: null,
-        clientName: meta?.clientName ?? "Job",
-        address: meta?.address ?? null,
-        qty: Number(row.qty),
-      });
-      acc.materialJobsByProduct.set(row.product_id, list);
+      for (const crewId of crewIds) {
+        const acc = getCrewAccum(crewId);
+        acc.materialQtyByProduct.set(
+          row.product_id,
+          (acc.materialQtyByProduct.get(row.product_id) ?? 0) + Number(row.qty)
+        );
+        const list = acc.materialJobsByProduct.get(row.product_id) ?? [];
+        list.push({
+          jobId: row.job_id,
+          visitId: null,
+          clientName: meta?.clientName ?? "Job",
+          address: meta?.address ?? null,
+          qty: Number(row.qty),
+          unitName: null,
+        });
+        acc.materialJobsByProduct.set(row.product_id, list);
+
+        const others = crewIds
+          .filter((c) => c !== crewId)
+          .map((c) => (c ? crewById.get(c)?.name ?? "Unassigned" : "Unassigned"));
+        if (others.length > 0) {
+          const shared = acc.materialSharedCrews.get(row.product_id) ?? new Set<string>();
+          for (const name of others) shared.add(name);
+          acc.materialSharedCrews.set(row.product_id, shared);
+        }
+      }
     }
   }
 
   // ── assemble ──────────────────────────────────────────────────────────────
+  let anyUnresolved = false;
   const crews: DailyLoadListCrewGroup[] = [...crewAccums.values()]
     .map((acc) => {
-      const chemicals: DailyLoadListChemicalRow[] = [...acc.chemQtyByProduct.entries()].map(([pid, qty]) => {
-        const concentrateUnitId = acc.chemUnitIdByProduct.get(pid);
-        const concentrateUnitName = concentrateUnitId ? unitsById.get(concentrateUnitId)?.name ?? null : null;
-        const solutionTotal = acc.chemSolutionByProduct.get(pid);
-        const solutionUnitId = acc.chemSolutionUnitIdByProduct.get(pid);
+      const chemicals: DailyLoadListChemicalRow[] = [...acc.chemByProduct.entries()].map(([pid, chemAcc]) => {
+        const concentrate = chemAcc.total();
+        const solution = acc.solutionByProduct.get(pid)?.total();
+        const unresolvedReason =
+          concentrate.amount == null
+            ? MIXED_UNITS_REASON
+            : concentrate.unitId == null
+              ? NO_UNIT_REASON
+              : null;
+        if (unresolvedReason) anyUnresolved = true;
         return {
           productId: pid,
           productName: chemProductName.get(pid) ?? "Chemical",
-          concentrateQty: Math.round(qty * 10000) / 10000,
-          concentrateUnitName,
-          mixVolumeQty: solutionTotal != null ? Math.round(solutionTotal * 100) / 100 : null,
-          mixVolumeUnitName: solutionUnitId ? unitsById.get(solutionUnitId)?.name ?? null : null,
+          concentrateQty:
+            concentrate.amount != null && concentrate.unitId != null
+              ? Math.round(concentrate.amount * 10000) / 10000
+              : null,
+          concentrateUnitName: unitName(concentrate.unitId),
+          // A mix volume that can't be expressed in one unit is simply not
+          // shown — it's an aid, and a wrong tank size is worse than none.
+          mixVolumeQty:
+            solution?.amount != null && solution.unitId != null
+              ? Math.round(solution.amount * 100) / 100
+              : null,
+          mixVolumeUnitName: unitName(solution?.unitId ?? null),
+          unresolvedReason,
           visits: (acc.chemVisitsByProduct.get(pid) ?? []).sort((a, b) => a.clientName.localeCompare(b.clientName)),
         };
       });
@@ -406,6 +561,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
         productId: pid,
         productName: generalProductName.get(pid) ?? "Material",
         qty: Math.round(qty * 10000) / 10000,
+        sharedWithCrews: [...(acc.materialSharedCrews.get(pid) ?? [])].sort(),
         jobs: (acc.materialJobsByProduct.get(pid) ?? []).sort((a, b) => a.clientName.localeCompare(b.clientName)),
       }));
       materials.sort((a, b) => a.productName.localeCompare(b.productName));
@@ -421,6 +577,11 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     .filter((c) => c.chemicals.length > 0 || c.materials.length > 0)
     .sort((a, b) => a.crewName.localeCompare(b.crewName));
 
+  if (anyUnresolved) {
+    notes.push(
+      "Some chemicals couldn't be totalled because their stops don't share a unit — those rows show the reason instead of a quantity."
+    );
+  }
   if (crews.length === 0) {
     notes.push("No outstanding visits with chemical or material demand are scheduled for this date.");
   }

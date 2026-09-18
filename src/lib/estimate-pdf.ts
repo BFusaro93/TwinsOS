@@ -85,6 +85,13 @@ export async function renderEstimatePDF(
       visits: (li.visits as number) ?? 1,
       totalCents: (li.total_cents as number) ?? 0,
       tier: (li.tier as "basic" | "standard" | "premium" | null) ?? null,
+      // Without this the printed Rate is the UNSCALED rate while the Total
+      // carries the complexity multiplier, so a client reading their own
+      // proposal multiplies Qty x Rate and lands on a different number than
+      // the Total beside it (5,000 @ $0.12 at 125% prints "0.12" and
+      // "750.00"). EstimateDocument scales the printed rate from this field;
+      // the emailed copy already passes it.
+      complexityBps: (li.complexity_bps as number | null) ?? null,
     }));
 
   const addr = (org?.address as Record<string, string>) ?? {};

@@ -37,12 +37,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
+  // Truthy, not `!== undefined`: an explicit null unassigns and has nothing
+  // to look up — assignedToName then stays null, clearing the denormalised
+  // name alongside the id.
   let assignedToName: string | null = null;
-  if (body.assignedToId !== undefined) {
+  if (body.assignedToId) {
     const { data: emp } = await db
       .from("crm_employees")
       .select("org_id, first_name, last_name")
       .eq("id", body.assignedToId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!emp || emp.org_id !== auth.orgId) return jsonError("Employee not found", 404);
     assignedToName = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();

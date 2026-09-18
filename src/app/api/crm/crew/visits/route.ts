@@ -72,9 +72,10 @@ export async function GET(request: Request) {
       notes_to_crew, notes_to_client, completion_notes, job_comments,
       men_count, actual_hours, budgeted_hours, clocked_in_at, clocked_out_at,
       paused_at, break_minutes, skip_reason,
-      acknowledged_notes_at, completed_at, created_at, updated_at,
+      acknowledged_notes_at, notes_to_crew_updated_at, completed_at, created_at, updated_at,
       clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
       crm_jobs(job_type, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
+        notes_to_crew, notes_to_crew_updated_at,
         crm_job_services(id, service_name, budgeted_hours, team_size, sort_order))
     `)
     .eq("org_id", orgId)
@@ -112,6 +113,7 @@ export async function GET(request: Request) {
       clockedInAt: row.clocked_in_at as string | null,
       clockedOutAt: row.clocked_out_at as string | null,
       acknowledgedNotesAt: row.acknowledged_notes_at as string | null,
+      notesToCrewUpdatedAt: (row.notes_to_crew_updated_at as string) ?? null,
       completedAt: row.completed_at as string | null,
       updatedAt: row.updated_at as string,
       clientName: (client?.display_name as string) ?? null,
@@ -192,6 +194,7 @@ export async function GET(request: Request) {
       pausedAt: row.paused_at as string | null,
       breakMinutes: (row.break_minutes as number) ?? 0,
       acknowledgedNotesAt: row.acknowledged_notes_at as string | null,
+      notesToCrewUpdatedAt: (row.notes_to_crew_updated_at as string) ?? null,
       skipReason: row.skip_reason as string | null,
       createdAt: (row.created_at as string) ?? "",
       updatedAt: row.updated_at as string,
@@ -203,6 +206,8 @@ export async function GET(request: Request) {
             clientId: row.client_id as string,
             propertyId: (job.property_id as string) ?? null,
             jobType: job.job_type as string,
+            notesToCrew: (job.notes_to_crew as string) ?? null,
+            notesToCrewUpdatedAt: (job.notes_to_crew_updated_at as string) ?? null,
             serviceAddress: (job.service_address as string) ?? null,
             serviceCity: (job.service_city as string) ?? null,
             serviceState: (job.service_state as string) ?? null,
@@ -227,6 +232,7 @@ export async function GET(request: Request) {
     pausedAt: stop.pausedAt,
     breakMinutes: Math.max(0, ...stop.visits.map((v) => v.breakMinutes ?? 0), 0),
     notesToCrew: stop.notesToCrew,
+    notesToCrewUpdatedAt: stop.notesToCrewUpdatedAt,
     scheduledDate: stop.visits[0]?.scheduledDate ?? date,
     visits: stop.visits.map((v) => {
       const svc = visitServices(v)[0];

@@ -10,13 +10,18 @@ import {
   useUpdateVisitStatus,
   useUpdateVisit,
   useCRMCrews,
+  useCRMJobProducts,
   useReturnVisitToWaitingList,
   useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { useOrgTags } from "@/lib/hooks/use-clients";
-import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
-import type { CustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
+// Property-scoped defs, NOT the client-level ones: the property values these
+// columns render come from crm_property_custom_field_values, which keys off
+// crm_rate_matrix_field_defs. Reading the client-level def table here is what
+// made every custom takeoff column permanently blank.
+import { usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import { WeekStrip } from "./WeekStrip";
@@ -115,6 +120,26 @@ function formatTimeShort(value: string): string {
   const period = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+/**
+ * The crew a visit actually runs with.
+ *
+ * crm_job_visits.crew_id is null whenever the visit inherits its crew from
+ * the job — which is the common case, since assigning a crew on the job is
+ * how most recurring work is set up and nothing writes the value down onto
+ * each generated visit. Every consumer MUST resolve through this, not through
+ * raw `v.crewId`: the two disagreeing is what let a job-inherited visit be
+ * grouped under its crew visually while being numbered, dragged, filtered and
+ * PRINTED as if it were unassigned.
+ *
+ * Module-level rather than a closure inside the board so the print path and
+ * the totals row resolve crews the same way the table does.
+ */
+export function effectiveCrewId(
+  v: { crewId: string | null; job?: { crewId?: string | null } | null }
+): string | null {
+  return v.crewId ?? v.job?.crewId ?? null;
 }
 
 // How many people are actually on a crew for a given day — the crew's default
@@ -431,6 +456,7 @@ function JobDetailSheet({
   // but a given visit is only for the ONE step it's linked to — show just that,
   // not every step on the whole package.
   const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
+  const { data: jobProducts = [] } = useCRMJobProducts(visit.jobId);
   const serviceName = linkedService
     ? linkedService.serviceName
     : services.length > 0
@@ -594,10 +620,10 @@ function JobDetailSheet({
       // Targets the stop's shared anchor visit id, not this visit's own id
       // — see EditJobTimesDialog for why crm_crew_member_times always lives
       // against the anchor even for a sibling service visit like this one.
-      const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
+      const visitCrewId = effectiveCrewId(visit);
       const targets = memberTimes.length > 0
         ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
-        : effectiveCrewMemberIds(effectiveCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet)
+        : effectiveCrewMemberIds(visitCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet)
             .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
       await Promise.all(targets.map((t) => upsertMemberTimeForSheet.mutateAsync({
         visitId: anchorVisitId,
@@ -711,7 +737,7 @@ function JobDetailSheet({
       // reaches an actual generated invoice, or a client-facing invoice
       // literally shows raw markup like "<p>...</p>".
       const masterDescription = stripHtml(visit.invoiceDescription || job?.invoiceDescription || "") || null;
-      const lineItems = services.map((s) => ({
+      const svcLineItems = services.map((s) => ({
         name: s.serviceName,
         description: masterDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName,
         qty: s.qty ?? 1,
@@ -719,6 +745,26 @@ function JobDetailSheet({
         totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),
         serviceDate,
       }));
+      // Sweep in unresolved (pending) Products/materials too — mirrors
+      // JobDetail.tsx's buildPendingProductLineItems(), which this popup's
+      // invoice creation was missing, silently leaving materials off the
+      // invoice and stuck on "Pending" forever.
+      const productLineItems = jobProducts
+        .filter((p) => p.status === "pending")
+        .map((p) => {
+          const billedQty = p.invoiceQty ?? p.qty;
+          return {
+            name: p.productName,
+            description: p.productName,
+            qty: billedQty,
+            rateCents: p.unitPriceCents,
+            totalCents: p.unitPriceCents * billedQty,
+            serviceDate,
+            productId: p.productId,
+            jobProductId: p.id,
+          };
+        });
+      const lineItems = [...svcLineItems, ...productLineItems];
       const subtotalCents = lineItems.reduce((sum, li) => sum + li.totalCents, 0);
       const invoice = await createInvoice({
         jobId: visit.jobId,
@@ -1365,12 +1411,15 @@ function PrintDialog({
   const { data: richCrews } = useCrews(false);
   const rosterByCrewId = new Map((richCrews ?? []).map((c) => [c.id, c.members ?? []]));
 
+  // Group on the EFFECTIVE crew (see effectiveCrewId) — grouping on the raw
+  // column printed every job-inherited visit on one "Unassigned" sheet while
+  // the crew that's actually running them got no sheet at all.
   const byCrew = crews.map((c) => ({
     crew: c,
     members: rosterByCrewId.get(c.id) ?? [],
-    visits: visits.filter((v) => v.crewId === c.id),
+    visits: visits.filter((v) => effectiveCrewId(v) === c.id),
   })).filter((x) => x.visits.length > 0);
-  const unassigned = visits.filter((v) => !v.crewId);
+  const unassigned = visits.filter((v) => !effectiveCrewId(v));
   const dateLabel = formatLongDate(selectedDate);
 
   function printRouteTable(cv: CRMJobVisit[]) {
@@ -2356,7 +2405,7 @@ function VisitRow({
    * a driving icon when this is that crew's next not-yet-started stop. */
   drivingCrewIds: Set<string>;
   /** Org custom-field definitions (Settings), for the dynamic trailing columns. */
-  customFieldDefs: CustomFieldDef[];
+  customFieldDefs: PropertyCustomFieldDef[];
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -2378,16 +2427,16 @@ function VisitRow({
   // instead of each service's own rate.
   // Σ services before job.rateCents — same reasoning as the sheet (C-03).
   const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null)));
-  const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
+  const visitCrewId = effectiveCrewId(visit);
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
-  const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
+  const effectiveCrew = (visitCrewId && crewCodeById.get(visitCrewId)) || effectiveCrewName;
   // Swap this row's status icon for a driving icon when the crew is
   // currently driving AND this is the next stop they haven't started yet —
   // ordered by `priority` (what manual drag/route-optimize saves, see
   // handleSaveOrder), not allVisits' own array order.
-  const isDrivingToThis = !!effectiveCrewId && drivingCrewIds.has(effectiveCrewId) && (() => {
+  const isDrivingToThis = !!visitCrewId && drivingCrewIds.has(visitCrewId) && (() => {
     const nextForCrew = allVisits
-      .filter((v) => (v.crewId ?? v.job?.crewId ?? null) === effectiveCrewId)
+      .filter((v) => effectiveCrewId(v) === visitCrewId)
       .filter((v) => v.status === "scheduled" || v.status === "dispatched")
       .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))[0];
     return nextForCrew?.id === visit.id;
@@ -2467,7 +2516,7 @@ function VisitRow({
     // there for why this is a warning, not a block.
     const conflictWith = findOverlappingCrewVisit(
       allVisits,
-      { id: visit.id, crewId: effectiveCrewId, scheduledDate: visit.scheduledDate },
+      { id: visit.id, crewId: visitCrewId, scheduledDate: visit.scheduledDate },
       newStart,
       newEnd
     );
@@ -2994,13 +3043,41 @@ function countsTowardTotals(visit: CRMJobVisit): boolean {
 
 // ── totals row ─────────────────────────────────────────────────────────────────
 
-function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit[]; isVisible: (col: string) => boolean; customFieldDefs: CustomFieldDef[] }) {
+function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit[]; isVisible: (col: string) => boolean; customFieldDefs: PropertyCustomFieldDef[] }) {
   const counted   = visits.filter(countsTowardTotals);
   const totalBHrs = counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
+  // Variance must compare like with like: totalAct deliberately includes time
+  // punched on skipped/cancelled stops (it's real time), but totalBHrs doesn't
+  // budget for them, so subtracting one from the other reported a phantom
+  // overrun. The variance cell uses the counted population on both sides.
+  const countedAct = counted.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
+  const variance   = countedAct - totalBHrs;
   const totalAmt  = counted.reduce((s, v) => s + visitAmountCents(v), 0);
-  const totalMen  = counted.reduce((s, v) => s + (v.menCount ?? 0), 0);
+  // Men is a multiplier per stop, not a quantity to accumulate — summing it
+  // reported "Men 60" for one 3-man crew doing 20 stops. What the dispatcher
+  // actually wants here is headcount on the road, so take each crew's largest
+  // stop and add those up. Stops with no crew are counted individually, since
+  // there's nothing yet saying they'll be run by the same people.
+  const menByCrew = new Map<string, number>();
+  for (const v of counted) {
+    const key = effectiveCrewId(v) ?? `unassigned:${v.id}`;
+    menByCrew.set(key, Math.max(menByCrew.get(key) ?? 0, v.menCount ?? 0));
+  }
+  const totalMen  = [...menByCrew.values()].reduce((s, n) => s + n, 0);
   const totalQty  = counted.reduce((s, v) => s + (v.qty ?? 0), 0);
+
+  // Takeoffs are properties of a PROPERTY, not of a visit: a package job with
+  // two services on the same day produces two visits pointing at one property,
+  // and summing per visit double-counted its 12,000 sq ft as 24,000. Collapse
+  // to one row per property first (keyed by client when the property was
+  // resolved via the client's sole property and so has no id of its own here).
+  const byProperty = new Map<string, CRMJobVisit>();
+  for (const v of counted) {
+    const key = v.job?.propertyId ?? `client:${v.clientId}`;
+    if (!byProperty.has(key)) byProperty.set(key, v);
+  }
+  const propertyRows = [...byProperty.values()];
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
   // Toggleable cols that appear before B Hrs:
@@ -3013,8 +3090,8 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
       {isVisible("b_hrs")   && <td className="px-2 py-1.5 text-right">{totalBHrs > 0 ? totalBHrs.toFixed(2) : "—"}</td>}
       {isVisible("actual")  && <td className="px-2 py-1.5 text-right">{totalAct  > 0 ? totalAct.toFixed(2)  : "—"}</td>}
       {isVisible("variance") && (
-        <td className={cn("px-2 py-1.5 text-right", totalAct > 0 && totalAct > totalBHrs ? "text-red-600" : totalAct > 0 && totalAct < totalBHrs ? "text-green-600" : "")}>
-          {totalAct > 0 ? `${totalAct > totalBHrs ? "+" : ""}${(totalAct - totalBHrs).toFixed(2)}` : "—"}
+        <td className={cn("px-2 py-1.5 text-right", countedAct > 0 && variance > 0 ? "text-red-600" : countedAct > 0 && variance < 0 ? "text-green-600" : "")}>
+          {countedAct > 0 ? `${variance > 0 ? "+" : ""}${variance.toFixed(2)}` : "—"}
         </td>
       )}
       {isVisible("men")     && <td className="px-2 py-1.5 text-center">{totalMen > 0 ? totalMen : "—"}</td>}
@@ -3025,14 +3102,14 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
       {isVisible("icons")   && <td />}
       {EXTRA_COL_DEFS.map((d) => {
         if (!isVisible(d.key)) return null;
-        const total = counted.reduce((s, v) => s + (extraColNumericValue(d.key, v.job) ?? 0), 0);
+        const total = propertyRows.reduce((s, v) => s + (extraColNumericValue(d.key, v.job) ?? 0), 0);
         return <td key={d.key} className="px-2 py-1.5 text-right">{total > 0 ? total.toLocaleString() : "—"}</td>;
       })}
       {customFieldDefs.map((def) => {
         const key = customColKey(def.id);
         if (!isVisible(key)) return null;
         if (def.fieldType !== "number") return <td key={def.id} />;
-        const total = counted.reduce((s, v) => {
+        const total = propertyRows.reduce((s, v) => {
           const val = v.job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === def.id);
           return s + (val?.valueNumber ?? 0);
         }, 0);
@@ -3151,12 +3228,14 @@ export function DispatchBoard() {
   // bar despite nothing actually having moved.
   const [manualRouteMode, setManualRouteMode] = useState(false);
   const [visibleKeys,     setVisibleKeys]     = usePersistedColumns("dispatch_board", COL_DEFS.map((d) => d.key));
-  const { data: customFieldDefs = [] } = useCustomFieldDefs();
+  const { data: customFieldDefs = [] } = usePropertyCustomFieldDefs();
   const allColumnDefs = useMemo(
     () => [
       ...COL_DEFS,
-      ...EXTRA_COL_DEFS,
-      ...customFieldDefs.map((d) => ({ key: customColKey(d.id), label: d.name + (d.unit ? ` (${d.unit})` : "") })),
+      // Off by default for everyone, so they don't count toward the chooser's
+      // "N hidden" badge — see ColumnDef.defaultHidden.
+      ...EXTRA_COL_DEFS.map((d) => ({ ...d, defaultHidden: true })),
+      ...customFieldDefs.map((d) => ({ key: customColKey(d.id), label: d.name, defaultHidden: true })),
     ],
     [customFieldDefs]
   );
@@ -3351,33 +3430,28 @@ export function DispatchBoard() {
 
   function isVisible(col: string) { return visibleKeys.includes(col); }
 
-  /**
-   * The crew a visit actually runs with.
-   *
-   * crm_job_visits.crew_id is null whenever the visit inherits its crew from
-   * the job — which is the common case, since assigning a crew on the job is
-   * how most recurring work is set up and nothing writes the value down onto
-   * each generated visit. Every consumer below MUST resolve through this, not
-   * through raw `v.crewId`: the two disagreeing is what let a job-inherited
-   * visit be grouped under its crew visually while being numbered and dragged
-   * as if it were unassigned.
-   */
-  const effectiveCrewIdOf = (v: { crewId: string | null; job?: { crewId?: string | null } | null }) =>
-    v.crewId ?? v.job?.crewId ?? null;
+  /** See effectiveCrewId at the top of this file. */
+  const effectiveCrewIdOf = effectiveCrewId;
 
   const filtered = allVisits.filter((v) => {
-    if (crewFilters.length > 0 && !crewFilters.includes(v.crewId ?? "")) return false;
+    // Effective crew, not the raw column — a visit that inherits its crew from
+    // the job would otherwise never match its own crew's filter chip.
+    if (crewFilters.length > 0 && !crewFilters.includes(effectiveCrewIdOf(v) ?? "")) return false;
     if (statusFilter !== "all" && v.status !== statusFilter) return false;
     if (tagFilters.length > 0) {
       const tags = v.clientTags ?? [];
       if (!tagFilters.some((t) => tags.includes(t))) return false;
     }
     if (priorityFilters.length > 0) {
+      // clients.priority is nullable and null MEANS normal — that's how the
+      // Priority column renders it (`?? "normal"`). Testing the raw value hid
+      // every client who had never had a priority set, which on real data is
+      // about half of them.
       const matches =
         (priorityFilters.includes("job_high") && v.effectiveHighPriority) ||
         (priorityFilters.includes("job_normal") && !v.effectiveHighPriority) ||
         (priorityFilters.includes("client_high") && v.clientPriority === "high") ||
-        (priorityFilters.includes("client_normal") && v.clientPriority === "normal") ||
+        (priorityFilters.includes("client_normal") && (v.clientPriority ?? "normal") === "normal") ||
         (priorityFilters.includes("client_low") && v.clientPriority === "low");
       if (!matches) return false;
     }
@@ -4246,14 +4320,17 @@ export function DispatchBoard() {
 
               <DropdownMenuSeparator />
 
-              {/* Email Selected Clients */}
-              <DropdownMenuItem
-                className="text-xs"
-                onSelect={() => setBulkEmailOpen(true)}
-              >
-                <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
-                Email Selected Clients
-              </DropdownMenuItem>
+              {/* Email Selected Clients — same permission as any other outbound
+                  client email (Email Activity's Send), which this bypassed. */}
+              {can("email_activity_send") && (
+                <DropdownMenuItem
+                  className="text-xs"
+                  onSelect={() => setBulkEmailOpen(true)}
+                >
+                  <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  Email Selected Clients
+                </DropdownMenuItem>
+              )}
 
               <DropdownMenuSeparator />
 
@@ -4443,7 +4520,7 @@ export function DispatchBoard() {
               {isVisible("icons")    && <th className="px-2 py-2.5">Notes</th>}
               {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <th key={d.key} className="px-2 py-2.5 whitespace-nowrap">{d.label}</th>)}
               {customFieldDefs.map((def) => isVisible(customColKey(def.id)) && (
-                <th key={def.id} className="px-2 py-2.5 whitespace-nowrap">{def.name}{def.unit ? ` (${def.unit})` : ""}</th>
+                <th key={def.id} className="px-2 py-2.5 whitespace-nowrap">{def.name}</th>
               ))}
             </tr>
           </thead>

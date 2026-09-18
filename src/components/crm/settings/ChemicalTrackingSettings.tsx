@@ -171,7 +171,7 @@ function GeneralChemicalSettings() {
 // empty list. Other lookup types (e.g. Areas Treated) are site-specific and
 // have no universal defaults, so they're left for the user to define.
 // Matches Service Autopilot's Units of Measure list (liquid + weight + metric).
-// unitClass/baseFactor let the mix-volume calc (calcMixVolume) convert
+// unitClass/baseFactor let the mix calc (calcChemicalAndSolution) convert
 // between these units — a factor to a canonical base unit (fluid ounce for
 // volume, gram for mass). Keep in sync with the backfill in migration
 // 20260918030000_chemical_mix_volume_calc.sql, which tags these same names
@@ -191,6 +191,67 @@ const DEFAULT_VOLUME_UNITS: { name: string; unitClass: ChemicalUnitClass; baseFa
   { name: "Tablespoons", unitClass: "volume", baseFactor: 0.5 },
   { name: "Teaspoons", unitClass: "volume", baseFactor: 1 / 6 },
 ];
+
+/**
+ * Alternate spellings a user is likely to type for one of the standard units
+ * above, so a hand-added unit still carries the unitClass/baseFactor the mix
+ * calc needs. Without that metadata calcChemicalAndSolution can't convert the
+ * unit and silently drops the mix volume for every rate that uses it, which is
+ * indistinguishable from "this rate has no mix".
+ *
+ * Deliberately absent: a bare "Ounce"/"oz". It is genuinely ambiguous between
+ * fluid and weight ounces (a ~28x difference on a pesticide mix), which is why
+ * migration 20260918030000 left the existing "Ounce" row untagged rather than
+ * guessing. Anything not recognised here is created untagged and the user is
+ * told so.
+ */
+const VOLUME_UNIT_ALIASES: Record<string, string> = {
+  gallon: "Gallons",
+  gal: "Gallons",
+  gals: "Gallons",
+  "fluid ounce": "Ounces - Liquid",
+  "fluid ounces": "Ounces - Liquid",
+  "fl oz": "Ounces - Liquid",
+  "liquid ounce": "Ounces - Liquid",
+  "liquid ounces": "Ounces - Liquid",
+  quart: "Quarts",
+  qt: "Quarts",
+  pint: "Pints",
+  pt: "Pints",
+  cup: "Cups",
+  liter: "Liters",
+  litre: "Liters",
+  litres: "Liters",
+  milliliter: "Milliliters",
+  millilitre: "Milliliters",
+  millilitres: "Milliliters",
+  ml: "Milliliters",
+  tablespoon: "Tablespoons",
+  tbsp: "Tablespoons",
+  teaspoon: "Teaspoons",
+  tsp: "Teaspoons",
+  gram: "Grams",
+  g: "Grams",
+  kilogram: "Kilograms",
+  kg: "Kilograms",
+  pound: "Pounds",
+  lb: "Pounds",
+  lbs: "Pounds",
+  "weight ounce": "Ounces - Weight",
+  "weight ounces": "Ounces - Weight",
+};
+
+/** Conversion metadata for a unit name the user typed, or undefined when the
+ *  name isn't one we can safely pin to a known scale. */
+function knownVolumeUnit(name: string): { unitClass: ChemicalUnitClass; baseFactor: number } | undefined {
+  const normalized = name.trim().toLowerCase();
+  const canonical =
+    DEFAULT_VOLUME_UNITS.find((u) => u.name.toLowerCase() === normalized)?.name ??
+    VOLUME_UNIT_ALIASES[normalized];
+  if (!canonical) return undefined;
+  const match = DEFAULT_VOLUME_UNITS.find((u) => u.name === canonical);
+  return match ? { unitClass: match.unitClass, baseFactor: match.baseFactor } : undefined;
+}
 
 const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
   volume_unit: DEFAULT_VOLUME_UNITS.map((u) => u.name),
@@ -218,33 +279,78 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
   const update = useUpdateChemicalLookupItem();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
-  const seededRef = useRef(false);
+  const seedInFlightRef = useRef(false);
+  const seedAttemptsRef = useRef(0);
+  const resumeSeedRef = useRef(false);
 
   useEffect(() => {
     const defaults = DEFAULT_LOOKUP_ITEMS[listType];
-    if (!defaults || isLoading || seededRef.current || items.length > 0) return;
-    seededRef.current = true;
+    if (!defaults || isLoading || seedInFlightRef.current) return;
+    // Seeding writes 13 volume + 3 area rows into the org's catalog, so it is
+    // a create and has to respect the same permission as the Add button —
+    // chem_create_uom is app-layer only (RLS lets any member insert), so
+    // without this check a crew or viewer just opening the tab populated the
+    // list for the whole org.
+    if (!canCreate) return;
+
+    const missing = defaults.filter(
+      (name) => !items.some((i) => i.name.trim().toLowerCase() === name.trim().toLowerCase())
+    );
+    if (missing.length === 0) return;
+    // Only ever seed a list nobody has touched — except when an earlier
+    // attempt in this session died part-way, in which case we finish the job
+    // rather than leaving a half-populated list that can never be topped up.
+    if (items.length > 0 && !resumeSeedRef.current) return;
+    if (seedAttemptsRef.current >= 2) return;
+
+    seedInFlightRef.current = true;
+    seedAttemptsRef.current += 1;
     (async () => {
-      for (let i = 0; i < defaults.length; i++) {
-        const volumeUnitMeta =
-          listType === "volume_unit"
-            ? DEFAULT_VOLUME_UNITS.find((u) => u.name === defaults[i])
-            : undefined;
-        const created = await create.mutateAsync({
-          listType,
-          name: defaults[i],
-          ...(volumeUnitMeta && { unitClass: volumeUnitMeta.unitClass, baseFactor: volumeUnitMeta.baseFactor }),
-        });
-        await update.mutateAsync({ id: created.id, sortOrder: i });
+      try {
+        for (const name of missing) {
+          const volumeUnitMeta =
+            listType === "volume_unit" ? DEFAULT_VOLUME_UNITS.find((u) => u.name === name) : undefined;
+          const created = await create.mutateAsync({
+            listType,
+            name,
+            ...(volumeUnitMeta && { unitClass: volumeUnitMeta.unitClass, baseFactor: volumeUnitMeta.baseFactor }),
+          });
+          await update.mutateAsync({ id: created.id, sortOrder: defaults.indexOf(name) });
+        }
+        resumeSeedRef.current = false;
+      } catch {
+        // The rows already written stay; flag the list so the next pass fills
+        // in the remainder instead of treating a partial list as finished.
+        resumeSeedRef.current = true;
+        toast.error("Couldn't finish adding the standard units — reopen this section to complete the list.");
+      } finally {
+        seedInFlightRef.current = false;
       }
     })();
-  }, [listType, isLoading, items.length, create, update]);
+  }, [listType, isLoading, items, canCreate, create, update]);
 
   function commitAdd() {
-    if (!newName.trim()) return;
+    const name = newName.trim();
+    if (!name) return;
+    // A volume/area unit created with no unitClass/baseFactor is invisible to
+    // the mix calc — every rate using it silently loses its mix volume. Pin
+    // the standard names to their known scale so a hand-added "Gallons"
+    // behaves exactly like the seeded one.
+    const meta = listType === "volume_unit" ? knownVolumeUnit(name) : undefined;
     create.mutate(
-      { listType, name: newName.trim() },
-      { onSuccess: () => { setNewName(""); setAdding(false); } }
+      { listType, name, ...(meta && { unitClass: meta.unitClass, baseFactor: meta.baseFactor }) },
+      {
+        onSuccess: () => {
+          setNewName("");
+          setAdding(false);
+          if (listType === "volume_unit" && !meta) {
+            toast.warning(
+              `"${name}" was added, but it has no known conversion, so mix volumes can't be calculated for rates that use it. Use one of the standard units (e.g. Gallons, Ounces - Liquid) if you need the mix calculation.`
+            );
+          }
+        },
+        onError: (err) => toast.error(`Failed to add: ${(err as Error).message}`),
+      }
     );
   }
 

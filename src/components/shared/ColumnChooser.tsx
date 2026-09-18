@@ -16,6 +16,13 @@ export interface ColumnDef {
   label: string;
   /** Locked columns are always visible and cannot be hidden */
   locked?: boolean;
+  /**
+   * Opt-in columns that start hidden for everyone (e.g. the SA-style takeoff
+   * columns). They are excluded from the "N hidden" badge: a fresh user has
+   * never seen them, so counting them made the button light up on first load
+   * as if they'd lost columns they never had.
+   */
+  defaultHidden?: boolean;
 }
 
 interface ColumnChooserProps {
@@ -39,7 +46,9 @@ export function ColumnChooser({
 
   const toggleable = columns.filter((c) => !c.locked);
   const allVisible = toggleable.every((c) => visibleKeys.includes(c.key));
-  const hiddenCount = toggleable.filter((c) => !visibleKeys.includes(c.key)).length;
+  const hiddenCount = toggleable.filter(
+    (c) => !c.defaultHidden && !visibleKeys.includes(c.key)
+  ).length;
 
   return (
     <DropdownMenu>

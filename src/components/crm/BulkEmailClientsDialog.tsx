@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -14,7 +14,19 @@ import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import Link from "next/link";
 import { toast } from "sonner";
 
-type Recipient = { id: string; name: string; email: string | null };
+type Recipient = { id: string; name: string; email: string | null; doNotMarket: boolean };
+
+// This is a one-to-many commercial send, so it is throttled the same way the
+// campaign sender is (src/lib/campaigns/send-campaign.ts): 5 concurrent sends
+// then a short pause, which keeps us under Resend's default 2 req/sec. Firing
+// one fetch per recipient at once used to rate-limit itself the moment anyone
+// selected more than a handful of clients.
+const SEND_CONCURRENCY = 5;
+const BATCH_DELAY_MS = 800;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function BulkEmailClientsDialog({
   open,
@@ -35,14 +47,24 @@ export function BulkEmailClientsDialog({
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const richTextRef = useRef<RichTextEditorHandle>(null);
 
-  useEffect(() => {
-    if (!selectedTemplateId) return;
-    const tpl = templates.find((t) => t.id === selectedTemplateId);
+  // Picking a template fills the fields once, from the click — deliberately not
+  // an effect keyed on `templates`, which is a fresh array identity on every
+  // refetch and so re-applied the template over whatever the user had since
+  // typed into the subject/body.
+  function applyTemplate(templateId: string) {
+    setSelectedTemplateId(templateId);
+    const tpl = templates.find((t) => t.id === templateId);
     if (tpl) { setSubject(tpl.subject); setBodyHtml(tpl.bodyHtml); }
-  }, [selectedTemplateId, templates]);
+  }
+
+  // The caller builds `clientIds` inline, so it's a new array on every parent
+  // render — keying the fetch off its identity re-ran the query continuously
+  // while the dialog was open. Key off the contents instead.
+  const clientIdsKey = clientIds.join(",");
 
   useEffect(() => {
-    if (!open || clientIds.length === 0) return;
+    const ids = clientIdsKey ? clientIdsKey.split(",") : [];
+    if (!open || ids.length === 0) return;
     let cancelled = false;
     setLoading(true);
     (async () => {
@@ -50,22 +72,31 @@ export function BulkEmailClientsDialog({
       const { data } = await supabase
         .from("clients")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .select("id, display_name, primary_email" as any)
-        .in("id", clientIds)
+        .select("id, display_name, primary_email, do_not_market" as any)
+        .in("id", ids)
         .is("deleted_at", null);
       if (cancelled) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows = (data ?? []) as any[];
       setRecipients(
-        rows.map((r) => ({ id: r.id as string, name: r.display_name as string, email: (r.primary_email as string | null) ?? null }))
+        rows.map((r) => ({
+          id: r.id as string,
+          name: r.display_name as string,
+          email: (r.primary_email as string | null) ?? null,
+          doNotMarket: (r.do_not_market as boolean | null) ?? false,
+        }))
       );
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [open, clientIds]);
+  }, [open, clientIdsKey]);
 
-  const withEmail = recipients.filter((r) => !!r.email);
-  const withoutEmail = recipients.filter((r) => !r.email);
+  // A selection blast is commercial mail, so Do Not Market applies here the
+  // same as it does to a campaign — the send route enforces it too, this just
+  // tells the sender up front who is being left out and why.
+  const withEmail = useMemo(() => recipients.filter((r) => !!r.email && !r.doNotMarket), [recipients]);
+  const withoutEmail = useMemo(() => recipients.filter((r) => !r.email), [recipients]);
+  const optedOut = useMemo(() => recipients.filter((r) => !!r.email && r.doNotMarket), [recipients]);
 
   function handleOpenChange(o: boolean) {
     if (!o) {
@@ -83,25 +114,30 @@ export function BulkEmailClientsDialog({
       return;
     }
     if (withEmail.length === 0) {
-      toast.error("None of the selected clients have an email on file");
+      toast.error("None of the selected clients can be emailed (no address on file, or opted out of marketing)");
       return;
     }
     setSending(true);
     try {
-      const results = await Promise.allSettled(
-        withEmail.map((r) =>
-          fetch(`/api/crm/clients/${r.id}/send-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subject, bodyHtml }),
-          }).then(async (res) => {
-            if (!res.ok) {
-              const json = await res.json().catch(() => ({}));
-              throw new Error(json.error ?? "Failed to send");
-            }
-          })
-        )
-      );
+      const results: PromiseSettledResult<void>[] = [];
+      for (let i = 0; i < withEmail.length; i += SEND_CONCURRENCY) {
+        const batch = withEmail.slice(i, i + SEND_CONCURRENCY);
+        results.push(...await Promise.allSettled(
+          batch.map((r) =>
+            fetch(`/api/crm/clients/${r.id}/send-email`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ subject, bodyHtml, bulk: true }),
+            }).then(async (res) => {
+              if (!res.ok) {
+                const json = await res.json().catch(() => ({}));
+                throw new Error(json.error ?? "Failed to send");
+              }
+            })
+          )
+        ));
+        if (i + SEND_CONCURRENCY < withEmail.length) await sleep(BATCH_DELAY_MS);
+      }
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (succeeded > 0) {
@@ -139,13 +175,18 @@ export function BulkEmailClientsDialog({
                     {withoutEmail.length} skipped (no email on file): {withoutEmail.map((r) => r.name).join(", ")}
                   </p>
                 )}
+                {optedOut.length > 0 && (
+                  <p className="text-xs text-amber-600">
+                    {optedOut.length} skipped (Do Not Market): {optedOut.map((r) => r.name).join(", ")}
+                  </p>
+                )}
               </>
             )}
           </div>
           <div className="space-y-1.5">
             <Label>Template</Label>
             {templates.length > 0 ? (
-              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+              <Select value={selectedTemplateId} onValueChange={applyTemplate}>
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Choose a template… (optional)" />
                 </SelectTrigger>

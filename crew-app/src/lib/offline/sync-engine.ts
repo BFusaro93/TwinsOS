@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase';
 import {
   listPendingQueueItems,
   removeQueueItem,
+  resetOrphanedSyncingItems,
   setQueueItemStatus,
 } from './db';
 import {
@@ -65,8 +66,29 @@ class ConnectivityStop extends Error {}
 
 let isDraining = false;
 
+/**
+ * Items whose request is actually in flight in THIS process right now. Only
+ * used by recoverOrphanedQueueItems() below, to tell "the app was killed
+ * mid-request and this row is stranded" apart from "this row is being sent
+ * as we speak". The SQLite status alone can't distinguish the two.
+ */
+const inFlightItemIds = new Set<string>();
+
+/**
+ * Puts 'syncing' rows nothing is currently sending back to 'pending'. Call
+ * once at startup (and whenever the signed-in user changes): a row flipped to
+ * 'syncing' just before the app was killed is otherwise invisible to the
+ * drain forever, and shows the crew a permanently locked "Sending…" card with
+ * no Retry or Discard.
+ */
+export async function recoverOrphanedQueueItems(userId: string): Promise<void> {
+  const recovered = await resetOrphanedSyncingItems(userId, Array.from(inFlightItemIds));
+  if (recovered > 0) notifyListeners();
+}
+
 async function processItem(item: QueueItem): Promise<void> {
   await setQueueItemStatus(item.id, 'syncing');
+  inFlightItemIds.add(item.id);
   notifyListeners();
 
   try {
@@ -124,10 +146,20 @@ async function processItem(item: QueueItem): Promise<void> {
       }
       case 'record_material_usage': {
         const payload = item.payload as RecordMaterialUsagePayload;
+        if (!payload.notUsed && !(typeof payload.usedQty === 'number' && payload.usedQty > 0)) {
+          // Defaulting a missing/zero usedQty to 0 used to send a "used none"
+          // request, which the server resolved as used-and-unbillable — a
+          // malformed payload silently wrote off the material. There is no
+          // safe value to guess here, so fail the item permanently (ApiError
+          // 4xx => no retries) and let the crew re-enter it.
+          throw new ApiError(400, "This material's quantity didn't save. Enter it again.");
+        }
         await useJobProductMaterials(
           item.visitId,
           payload.jobProductId,
-          payload.notUsed ? { notUsed: true } : { usedQty: payload.usedQty ?? 0 }
+          payload.notUsed
+            ? { notUsed: true }
+            : { usedQty: payload.usedQty as number, noInvoice: payload.noInvoice }
         );
         break;
       }
@@ -138,7 +170,10 @@ async function processItem(item: QueueItem): Promise<void> {
       }
       case 'add_note': {
         const payload = item.payload as AddNotePayload;
-        await addCrewNote(item.visitId, payload.note);
+        // The queue item's id doubles as the note's idempotency key, so a
+        // retry after a flaky partial success re-uses the same comment id
+        // server-side instead of appending the note twice.
+        await addCrewNote(item.visitId, payload.note, item.id);
         break;
       }
       case 'skip_service': {
@@ -154,17 +189,18 @@ async function processItem(item: QueueItem): Promise<void> {
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
       // The server rejected this as a conflict — surface it plainly rather
-      // than retrying forever or discarding silently. Message differs by
-      // action type: a clock/pause conflict means someone else already
-      // changed the visit; a material-usage conflict means this specific
-      // item was already recorded (e.g. from another device, or a prior
-      // sync that succeeded before a later retry).
+      // than retrying forever or discarding silently. The route's own
+      // sentence is preferred when it has one ("another crew already
+      // recorded this (used: 8)", "the office updated this job's notes"),
+      // because a generic message leaves the crew with nothing to act on;
+      // the fallbacks below only apply when the server sent no explanation.
       await setQueueItemStatus(item.id, 'failed', {
         attempts: item.attempts + 1,
         lastError:
-          item.type === 'record_material_usage'
+          err.message ||
+          (item.type === 'record_material_usage'
             ? "This didn't sync — this material's usage was already recorded."
-            : "This didn't sync — a supervisor may have already updated this visit.",
+            : "This didn't sync — a supervisor may have already updated this visit."),
       });
       notifyListeners();
       return;
@@ -199,6 +235,8 @@ async function processItem(item: QueueItem): Promise<void> {
       // Looks like a connectivity failure rather than a server response — stop this pass.
       throw new ConnectivityStop(message);
     }
+  } finally {
+    inFlightItemIds.delete(item.id);
   }
 }
 
@@ -253,7 +291,10 @@ export function startSyncEngine(): void {
 
   intervalHandle = setInterval(() => void drainQueue(), 30_000);
 
-  // Attempt once immediately in case there's already a pending queue from a previous session.
+  // Attempt once immediately in case there's already a pending queue from a
+  // previous session. recoverOrphanedQueueItems() runs before this from the
+  // provider, so anything stranded in 'syncing' by a killed app is already
+  // back to 'pending' and gets picked up by this first pass.
   void drainQueue();
 }
 

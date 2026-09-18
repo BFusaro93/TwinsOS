@@ -145,6 +145,31 @@ export async function removeQueueItem(id: string): Promise<void> {
   await db.runAsync(`DELETE FROM queue_items WHERE id = ?`, [id]);
 }
 
+/**
+ * Puts orphaned 'syncing' rows back to 'pending'. A queue item is flipped to
+ * 'syncing' before its request goes out, so an app killed (or crashed, or
+ * OOM'd by iOS) mid-request leaves the row stuck there forever: the drain
+ * only ever selects 'pending', and the UI renders Retry/Discard only for
+ * 'failed' — so the card sat on "Sending…" with its controls locked and the
+ * sync chip never cleared.
+ *
+ * `excludeIds` are the items genuinely in flight in this process right now
+ * (see the sync engine's in-flight set), so calling this while a drain is
+ * running can't double-send one. `attempts` is left alone: being killed
+ * isn't a failed attempt, and burning the retry budget on it would give up
+ * on a perfectly good action.
+ */
+export async function resetOrphanedSyncingItems(userId: string, excludeIds: string[]): Promise<number> {
+  const db = await getDb();
+  const placeholders = excludeIds.map(() => '?').join(', ');
+  const result = await db.runAsync(
+    `UPDATE queue_items SET status = 'pending' WHERE status = 'syncing' AND user_id = ?` +
+      (excludeIds.length > 0 ? ` AND id NOT IN (${placeholders})` : ''),
+    [userId, ...excludeIds]
+  );
+  return result.changes;
+}
+
 /** Resets a failed item back to pending with a clean attempt count — the user's "Retry" affordance. */
 export async function retryQueueItem(id: string): Promise<void> {
   const db = await getDb();

@@ -37,11 +37,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
-  let vendorName: string | undefined;
-  if (body.vendorId !== undefined) {
-    const { data: vendor } = await db.from("vendors").select("org_id, name").eq("id", body.vendorId).maybeSingle();
+  // Truthy, not `!== undefined`: an explicit null clears the vendor, and the
+  // denormalised vendor_name has to be cleared with it.
+  let vendorName: string | null | undefined;
+  if (body.vendorId) {
+    const { data: vendor } = await db
+      .from("vendors")
+      .select("org_id, name")
+      .eq("id", body.vendorId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!vendor || vendor.org_id !== auth.orgId) return jsonError("Vendor not found", 404);
     vendorName = vendor.name as string;
+  } else if (body.vendorId === null) {
+    vendorName = null;
   }
 
   const { data, error } = await db

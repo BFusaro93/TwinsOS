@@ -3,6 +3,9 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { computeDailyLoadList } from "@/lib/reports/materials/daily-load-list";
 
+/** "Today" is the company's operating day. The report page derives its initial
+ *  date the same way (REPORT_TIME_ZONE there) so a manager in another timezone
+ *  and this route never disagree about which day "no ?date=" means. */
 function todayNy(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }

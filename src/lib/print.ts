@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import type { PurchaseOrder, Project } from "@/types";
 import type { WorkOrder } from "@/types";
 import type { CRMJobVisit } from "@/types/crm-jobs";
@@ -6,10 +7,17 @@ import { stripMentionTokens } from "@/lib/mentions";
 import { computeSalesTax } from "@/lib/utils/po-tax";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
+import { formatDateShort } from "@/lib/utils";
 
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank", "width=900,height=700");
-  if (!win) return;
+  if (!win) {
+    // window.open returns null when the browser's popup blocker steps in. This
+    // replaced a plain window.print() that always worked, so failing silently
+    // reads as the Print button being broken.
+    toast.error("Your browser blocked the print window — allow pop-ups for this site and try again.");
+    return;
+  }
   win.document.write(html);
   win.document.close();
   win.focus();
@@ -1014,7 +1022,7 @@ function rsJobCard(v: CRMJobVisit, i: number): string {
         <span>Est: ${rsFormatEstHrsMins(computeBudgetedHours(v))}</span>
         <span># of Men: <span class="rs-blank"></span></span>
         <span>Materials Used: <span class="rs-blank wide"></span></span>
-        ${job?.lastServiceDate ? `<span>Last: ${escapeHtml(job.lastServiceDate)}</span>` : ""}
+        ${job?.lastServiceDate ? `<span>Last: ${escapeHtml(formatDateShort(job.lastServiceDate))}</span>` : ""}
       </div>
       ${turfSqft != null ? `<div class="rs-job-extra"><b>Turf Sq. Ft.</b> ${turfSqft.toLocaleString()}</div>` : ""}
       ${gateCode ? `<div class="rs-job-extra"><b>Gate/Lock Code</b> ${escapeHtml(gateCode)}</div>` : ""}
@@ -1068,10 +1076,16 @@ export function printRouteSheets(
   const { brandColor } = useSettingsStore.getState();
   const dateLabel = rsFormatLongDate(selectedDate);
 
+  // crm_job_visits.crew_id is null whenever the visit inherits its crew from
+  // the job, which is the common case for recurring work. Grouping on the raw
+  // column put every one of those stops on a single "Unassigned" sheet and left
+  // the crew actually running them with no route sheet — resolve the same way
+  // the board's own contract does (DispatchBoard's effectiveCrewId).
+  const effectiveCrewIdOf = (v: CRMJobVisit) => v.crewId ?? v.job?.crewId ?? null;
   const byCrew = crews
-    .map((c) => ({ crew: c, visits: visits.filter((v) => v.crewId === c.id) }))
+    .map((c) => ({ crew: c, visits: visits.filter((v) => effectiveCrewIdOf(v) === c.id) }))
     .filter((x) => x.visits.length > 0);
-  const unassigned = visits.filter((v) => !v.crewId);
+  const unassigned = visits.filter((v) => !effectiveCrewIdOf(v));
 
   const sections = [
     ...byCrew.map(({ crew, visits: cv }) =>

@@ -130,6 +130,81 @@ export function useDeleteCustomFieldDef() {
   });
 }
 
+// ── property field definitions ────────────────────────────────────────────────
+
+/**
+ * Takeoff/custom fields that live on a PROPERTY, not on a client.
+ *
+ * These are a different table from the client-level defs above:
+ * `crm_property_custom_field_values.field_def_id` points at
+ * `crm_rate_matrix_field_defs` (the same defs the estimating Rate Matrix keys
+ * off), while `crm_client_custom_field_values.field_def_id` points at
+ * `crm_custom_field_defs`. The dispatch board and waiting list used to render
+ * their property columns from the client-level def list, so no property value
+ * could ever match a def id and every custom takeoff column was permanently
+ * blank.
+ */
+export interface PropertyCustomFieldDef {
+  id: string;
+  /** `crm_rate_matrix_field_defs.field_key` — stable identifier, e.g. "turf_sqft". */
+  fieldKey: string;
+  /** Display label, e.g. "Turf Sq. Ft.". */
+  name: string;
+  fieldType: "text" | "number" | "select" | "date";
+  sortOrder: number;
+}
+
+/**
+ * Property field keys that the dispatch board / waiting list already render as
+ * dedicated built-in columns straight off `client_properties`. Every org is
+ * seeded with a matching def row (so the Rate Matrix can price off them), and
+ * offering both would list e.g. "Turf Sq. Ft." twice in the column chooser —
+ * once backed by the real column, once by an all-but-empty values table.
+ */
+const BUILT_IN_TAKEOFF_FIELD_KEYS = new Set([
+  "turf_sqft",
+  "mulch_bed_sqft",
+  "gross_sqft",
+  "linear_ft_perimeter",
+  "linear_ft_edging",
+  "yards_of_mulch",
+  "parking_lot_sqft",
+]);
+
+/**
+ * The org's genuinely custom property fields — i.e. the property defs that are
+ * NOT already a built-in takeoff column. These are what the dispatch board and
+ * waiting list offer as extra "custom:<id>" columns.
+ */
+export function usePropertyCustomFieldDefs() {
+  return useQuery({
+    queryKey: ["crm_rate_matrix_field_defs", "property", "custom-only"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_rate_matrix_field_defs")
+        .select("id, field_key, field_label, field_type, sort_order")
+        .eq("entity_type", "property")
+        .is("deleted_at", null)
+        .order("sort_order")
+        .order("field_label");
+      if (error) throw error;
+      return (data ?? [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((row: any): PropertyCustomFieldDef => ({
+          id: row.id,
+          fieldKey: row.field_key,
+          name: row.field_label,
+          fieldType: row.field_type,
+          sortOrder: row.sort_order ?? 0,
+        })) as PropertyCustomFieldDef[];
+    },
+  });
+}
+
 // ── field values per client ───────────────────────────────────────────────────
 
 export function useClientCustomFieldValues(clientId: string) {

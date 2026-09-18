@@ -179,11 +179,22 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
   }, [currentFieldId, selectedFieldId]);
 
   function addRow() {
+    // crm_service_rate_matrix.custom_field_id is NOT NULL — a row can't exist
+    // without knowing what it measures against. Adding one before picking a
+    // lookup field used to send an explicit null and surface the constraint
+    // violation as a generic "Failed to add rate matrix row" toast, which the
+    // hint below actively invited by suggesting you could add rows first.
+    // Refuse up front and say why (the button is disabled too; this is the
+    // backstop).
+    if (!selectedFieldId) {
+      toast.error("Pick a lookup field first — rate matrix rows need to know what value to measure against");
+      return;
+    }
     const nextSort = rows.length;
     upsert.mutate({
       serviceId,
       row: {
-        custom_field_id: selectedFieldId || null,
+        custom_field_id: selectedFieldId,
         calc_type: 1,
         from_val: 0,
         to_val: null,
@@ -218,8 +229,18 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
 
   function handleFieldChange(newFieldId: string) {
     setSelectedFieldId(newFieldId);
+    // Same NOT NULL constraint as addRow: clearing the picker back to "None"
+    // can't null out the existing rows' field. Clear the local selection so
+    // the picker reads None, but leave the rows pointing at whatever they
+    // already measure — deleting them is the way to start over.
+    if (!newFieldId) {
+      if (rows.length > 0) {
+        toast.error("Existing rows still need a lookup field — pick another field or delete the rows");
+      }
+      return;
+    }
     for (const row of rows) {
-      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId || null } }, {
+      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId } }, {
         onError: () => toast.error("Failed to update lookup field"),
       });
     }
@@ -316,11 +337,11 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           </tbody>
         </table>
         <div className="p-2 border-t bg-slate-50 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={addRow} className="text-xs">
+          <Button variant="ghost" size="sm" onClick={addRow} className="text-xs" disabled={!selectedFieldId}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
           </Button>
-          {!selectedFieldId && rows.length === 0 && (
-            <span className="text-xs text-slate-400">Tip: pick a lookup field above so rows know what to measure against</span>
+          {!selectedFieldId && (
+            <span className="text-xs text-slate-400">Pick a lookup field above so rows know what to measure against</span>
           )}
         </div>
       </div>

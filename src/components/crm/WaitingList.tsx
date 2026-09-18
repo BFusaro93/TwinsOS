@@ -44,8 +44,12 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
-import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
-import type { CustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
+// Property-scoped defs, NOT the client-level ones: the property values these
+// columns render come from crm_property_custom_field_values, which keys off
+// crm_rate_matrix_field_defs. Reading the client-level def table here is what
+// made every custom takeoff column permanently blank.
+import { usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { Flame, Tag, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -159,7 +163,14 @@ function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobsDialogP
   const createVisit = useCreateVisit();
   const singleService = items.length === 1 ? items[0].service : null;
   const [date, setDate] = useState(() => singleService?.startDate || toLocalDateString(new Date()));
-  const [crewId, setCrewId] = useState("");
+  // Seeded from the jobs' own crew when they all share one. Defaulting to
+  // "Unassigned" wrote crew_id: null onto every visit dispatched from here, so
+  // an already-crewed job landed on the board — and on the printed route
+  // sheets — as unassigned unless someone re-picked the crew it already had.
+  const [crewId, setCrewId] = useState(() => {
+    const ids = new Set(items.map((i) => i.job.crewId ?? ""));
+    return ids.size === 1 ? [...ids][0] : "";
+  });
 
   async function handleDispatch() {
     if (!date) return;
@@ -244,7 +255,7 @@ function WaitingJobRow({
   /** When set, this row represents one visit within a package job rather than the whole job. */
   service?: CRMJobService | null;
   visibleKeys: string[];
-  customFieldDefs: CustomFieldDef[];
+  customFieldDefs: PropertyCustomFieldDef[];
   crewCodeById: Map<string, string>;
   selected: boolean;
   onToggle: () => void;
@@ -394,12 +405,14 @@ export function WaitingList() {
   const { data: jobs, isLoading, refetch } = useWaitingListJobs(startDate, endDate);
   const { data: crews } = useCRMCrews();
   const orgTags = useOrgTags();
-  const { data: customFieldDefs = [] } = useCustomFieldDefs();
+  const { data: customFieldDefs = [] } = usePropertyCustomFieldDefs();
   const allColumnDefs = useMemo(
     () => [
       ...WAITING_LIST_COLUMNS,
-      ...EXTRA_COLUMNS,
-      ...customFieldDefs.map((d) => ({ key: customColKey(d.id), label: d.name + (d.unit ? ` (${d.unit})` : "") })),
+      // Off by default for everyone, so they don't count toward the chooser's
+      // "N hidden" badge — see ColumnDef.defaultHidden.
+      ...EXTRA_COLUMNS.map((d) => ({ ...d, defaultHidden: true })),
+      ...customFieldDefs.map((d) => ({ key: customColKey(d.id), label: d.name, defaultHidden: true })),
     ],
     [customFieldDefs]
   );
@@ -433,7 +446,9 @@ export function WaitingList() {
           (priorityFilters.includes("job_high") && job.isHighPriority) ||
           (priorityFilters.includes("job_normal") && !job.isHighPriority) ||
           (priorityFilters.includes("client_high") && job.clientPriority === "high") ||
-          (priorityFilters.includes("client_normal") && job.clientPriority === "normal") ||
+          // null means normal here, same as the Priority column's `?? "normal"`
+          // — see the matching note on the Dispatch Board's filter.
+          (priorityFilters.includes("client_normal") && (job.clientPriority ?? "normal") === "normal") ||
           (priorityFilters.includes("client_low") && job.clientPriority === "low")
         );
       });
@@ -694,13 +709,17 @@ export function WaitingList() {
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Dispatch Selected…
               </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={() => setBulkEmailOpen(true)}
-              >
-                <Mail className="mr-2 h-3.5 w-3.5" />
-                Email Selected Clients
-              </DropdownMenuItem>
+              {/* Same permission as any other outbound client email
+                  (Email Activity's Send), which this bypassed. */}
+              {can("email_activity_send") && (
+                <DropdownMenuItem
+                  disabled={!someSelected}
+                  onSelect={() => setBulkEmailOpen(true)}
+                >
+                  <Mail className="mr-2 h-3.5 w-3.5" />
+                  Email Selected Clients
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -856,7 +875,7 @@ export function WaitingList() {
               {visibleKeys.includes("rate") && <th className="px-4 py-3 text-right">Rate</th>}
               {EXTRA_COLUMNS.map((c) => visibleKeys.includes(c.key) && <th key={c.key} className="px-4 py-3 whitespace-nowrap">{c.label}</th>)}
               {customFieldDefs.map((def) => visibleKeys.includes(customColKey(def.id)) && (
-                <th key={def.id} className="px-4 py-3 whitespace-nowrap">{def.name}{def.unit ? ` (${def.unit})` : ""}</th>
+                <th key={def.id} className="px-4 py-3 whitespace-nowrap">{def.name}</th>
               ))}
               <th className="px-4 py-3" />
             </tr>

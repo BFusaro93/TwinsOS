@@ -1,5 +1,5 @@
 export const CLIENT_SELECT =
-  "id, display_name, first_name, last_name, account_number, account_type, status, primary_phone, primary_email, billing_address, billing_city, billing_state, billing_zip, billing_email, billing_same_as_service, service_address, service_city, service_state, service_zip, source, parent_client_id, sales_rep_id, referred_by, referred_by_client_id, ok_to_email, do_not_market, sms_opt_in, payment_method, billing_terms, invoice_frequency, invoice_delivery, default_tax_rate_bps, default_terms, default_payment_method, is_taxable, gate_lock_code, notes_to_crew, map_code, office_notes, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, client_since, created_at, updated_at";
+  "id, display_name, first_name, last_name, account_number, account_type, status, primary_phone, primary_email, billing_address, billing_city, billing_state, billing_zip, billing_email, billing_same_as_service, service_address, service_city, service_state, service_zip, source, parent_client_id, sales_rep_id, referred_by, referred_by_client_id, ok_to_email, do_not_market, sms_opt_in, sms_opt_in_at, sms_opt_in_source, payment_method, billing_terms, invoice_frequency, invoice_delivery, default_tax_rate_bps, default_terms, default_payment_method, is_taxable, gate_lock_code, notes_to_crew, map_code, office_notes, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, client_since, created_at, updated_at";
 
 export function shapeClient(row: Record<string, unknown>) {
   return {
@@ -30,6 +30,10 @@ export function shapeClient(row: Record<string, unknown>) {
     okToEmail: row.ok_to_email,
     doNotMarket: row.do_not_market,
     smsOptIn: row.sms_opt_in,
+    // Read back alongside the flag: an A2P 10DLC audit needs the consent
+    // record, not just the boolean.
+    smsOptInAt: row.sms_opt_in_at,
+    smsOptInSource: row.sms_opt_in_source,
     paymentMethod: row.payment_method,
     billingTerms: row.billing_terms,
     invoiceFrequency: row.invoice_frequency,

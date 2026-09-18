@@ -36,16 +36,24 @@ export async function POST(request: Request) {
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
   const body = parsed.data;
 
+  // deleted_at IS NULL throughout: attaching a new client to a soft-deleted
+  // parent, rep or referrer is a dangling reference nothing else resolves.
   if (body.parentClientId) {
     const { data: parent } = await db
       .from("clients")
       .select("org_id")
       .eq("id", body.parentClientId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!parent || parent.org_id !== auth.orgId) return jsonError("Parent client not found", 404);
   }
   if (body.salesRepId) {
-    const { data: rep } = await db.from("crm_employees").select("org_id").eq("id", body.salesRepId).maybeSingle();
+    const { data: rep } = await db
+      .from("crm_employees")
+      .select("org_id")
+      .eq("id", body.salesRepId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!rep || rep.org_id !== auth.orgId) return jsonError("Sales rep not found", 404);
   }
   if (body.referredByClientId) {
@@ -53,6 +61,7 @@ export async function POST(request: Request) {
       .from("clients")
       .select("org_id")
       .eq("id", body.referredByClientId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!ref || ref.org_id !== auth.orgId) return jsonError("Referring client not found", 404);
   }
@@ -91,6 +100,15 @@ export async function POST(request: Request) {
       ok_to_email: body.okToEmail ?? true,
       do_not_market: body.doNotMarket ?? false,
       sms_opt_in: body.smsOptIn ?? false,
+      // An SMS opt-in is only defensible under the approved A2P 10DLC
+      // campaign with a record of when consent was given and how it was
+      // collected. Every other path that sets sms_opt_in stamps both (the
+      // Twilio keyword webhook, form submission, useUpdateClient's manual
+      // toggle); this one recorded the flag alone, leaving an opt-in with no
+      // provenance. Source defaults to "manual" — a third party asserting
+      // consent through the API is the same situation as staff entering it.
+      sms_opt_in_at: body.smsOptIn ? new Date().toISOString() : null,
+      sms_opt_in_source: body.smsOptIn ? (body.smsOptInSource ?? "manual") : null,
       payment_method: body.paymentMethod ?? null,
       billing_terms: body.billingTerms ?? null,
       invoice_frequency: body.invoiceFrequency ?? null,

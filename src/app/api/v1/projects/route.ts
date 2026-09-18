@@ -34,7 +34,12 @@ export async function POST(request: Request) {
   const body = parsed.data;
 
   if (body.clientId) {
-    const { data: client } = await db.from("clients").select("org_id").eq("id", body.clientId).maybeSingle();
+    const { data: client } = await db
+      .from("clients")
+      .select("org_id")
+      .eq("id", body.clientId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!client || client.org_id !== auth.orgId) return jsonError("Client not found", 404);
   }
 
@@ -46,15 +51,20 @@ export async function POST(request: Request) {
       client_id: body.clientId ?? null,
       customer_name: body.customerName ?? "",
       address: body.address ?? "",
-      city: body.city ?? null,
-      state: body.state ?? null,
-      zip: body.zip ?? null,
+      // city/state/zip/estimated_cost_cents are NOT NULL with ''/''/''/0
+      // defaults on the projects table. An explicit NULL does NOT fall back
+      // to a column default, so writing `?? null` here turned the minimal
+      // payload `{ name }` — which the MCP create_projects tool sends — into
+      // a 500. Fall back to the column's own default value instead.
+      city: body.city ?? "",
+      state: body.state ?? "",
+      zip: body.zip ?? "",
       status: body.status ?? "scheduled",
       start_date: body.startDate ?? null,
       end_date: body.endDate ?? null,
       notes: body.notes ?? null,
       original_contract_price: body.contractPriceCents ?? 0,
-      estimated_cost_cents: body.estimatedCostCents ?? null,
+      estimated_cost_cents: body.estimatedCostCents ?? 0,
       labor_hours: body.laborHours ?? null,
       budget_hours: body.budgetHours ?? null,
       labor_rate_cents: body.laborRateCents ?? null,

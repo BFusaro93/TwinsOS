@@ -17,8 +17,11 @@ export interface ChemicalLookupItem {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
-  // Conversion metadata for volume_unit rows only — null for a custom/renamed
-  // unit the calc can't safely convert. See calcMixVolume.
+  // Conversion metadata for volume_unit rows (which also carry the org's mass
+  // units) — null for a custom/renamed unit the calc can't safely convert, in
+  // which case calcChemicalAndSolution refuses the mix rather than guessing.
+  // baseFactor is relative to a canonical base per class: fluid ounce for
+  // volume, gram for mass.
   unitClass: ChemicalUnitClass | null;
   baseFactor: number | null;
 }

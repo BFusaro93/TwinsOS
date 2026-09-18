@@ -219,7 +219,10 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     .filter((li) => li.taxable)
     .reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
   const taxRate = parseFloat(taxRatePercent) || 0;
-  const discountDollars = parseFloat(discountCost) || 0;
+  // Clamp the typed discount to the subtotal (and to >= 0). A discount
+  // larger than the order produced a negative grand total, which saved and
+  // then showed up in the spend reports as vendor income.
+  const discountDollars = Math.min(Math.max(parseFloat(discountCost) || 0, 0), subtotalDollars);
   const taxDollars = discountReducesTax
     ? Math.max(0, taxableSubtotalDollars - discountDollars) * (taxRate / 100)
     : taxableSubtotalDollars * (taxRate / 100);

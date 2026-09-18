@@ -10,7 +10,7 @@ import {
   listAllQueueItems,
   retryQueueItem,
 } from './db';
-import { drainQueue, startSyncEngine, subscribeQueueChanges } from './sync-engine';
+import { drainQueue, recoverOrphanedQueueItems, startSyncEngine, subscribeQueueChanges } from './sync-engine';
 import { DRIVE_QUEUE_VISIT_ID, type QueueItem } from './types';
 
 interface OfflineQueueContextValue {
@@ -48,12 +48,16 @@ interface OfflineQueueContextValue {
     quantity: number,
     note?: string
   ) => Promise<void>;
-  /** `visitId` here is the stop's anchor visit id, same as clock actions — see the route's job-id lookup. */
+  /**
+   * `visitId` here is the stop's anchor visit id, same as clock actions — see
+   * the route's job-id lookup. `usedQty` alone stays billable (`used`);
+   * `noInvoice: true` is the deliberate don't-bill case.
+   */
   enqueueRecordMaterialUsage: (
     visitId: string,
     jobProductId: string,
     productName: string,
-    usage: { usedQty: number } | { notUsed: true }
+    usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true }
   ) => Promise<void>;
   /** `visitId` here is the stop's anchor visit id, same as clock actions — gates Clock In, matching the web stop page. */
   enqueueAcknowledgeNotes: (anchorVisitId: string) => Promise<void>;
@@ -98,6 +102,12 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     let isMounted = true;
     void (async () => {
       await initOfflineDb();
+      // Before the first read/drain: an app killed mid-request left its queue
+      // item stranded in 'syncing', which nothing ever reset — the card stayed
+      // on "Sending…" with no Retry or Discard and the sync chip never
+      // cleared. Safe to run alongside a live drain; it skips anything
+      // actually in flight.
+      if (userId) await recoverOrphanedQueueItems(userId);
       await refresh();
       if (!isMounted) return;
       setIsReady(true);
@@ -112,7 +122,7 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       isMounted = false;
       unsubscribe();
     };
-  }, [refresh]);
+  }, [refresh, userId]);
 
   const enqueueClockIn = useCallback(
     async (visitId: string, localTime: string) => {
@@ -247,7 +257,7 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       visitId: string,
       jobProductId: string,
       productName: string,
-      usage: { usedQty: number } | { notUsed: true }
+      usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true }
     ) => {
       if (!userId) throw new Error('Not signed in');
       await enqueueAction({
@@ -258,7 +268,9 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
         payload: {
           jobProductId,
           productName,
-          ...('notUsed' in usage ? { notUsed: usage.notUsed } : { usedQty: usage.usedQty }),
+          ...('notUsed' in usage
+            ? { notUsed: usage.notUsed }
+            : { usedQty: usage.usedQty, noInvoice: usage.noInvoice }),
         },
       });
       await refresh();

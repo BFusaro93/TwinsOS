@@ -35,7 +35,12 @@ export async function POST(request: Request) {
 
   let assetName = "";
   if (body.assetId) {
-    const { data: asset } = await db.from("assets").select("org_id, name").eq("id", body.assetId).maybeSingle();
+    const { data: asset } = await db
+      .from("assets")
+      .select("org_id, name")
+      .eq("id", body.assetId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!asset || asset.org_id !== auth.orgId) return jsonError("Asset not found", 404);
     assetName = asset.name as string;
   }
@@ -46,6 +51,7 @@ export async function POST(request: Request) {
       .from("crm_employees")
       .select("org_id, first_name, last_name")
       .eq("id", body.assignedToId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!emp || emp.org_id !== auth.orgId) return jsonError("Employee not found", 404);
     assignedToName = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();

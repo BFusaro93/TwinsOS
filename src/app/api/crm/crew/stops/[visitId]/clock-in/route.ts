@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
+import { stopKeyForVisit, isNotesAcknowledgmentCurrent, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("crew/stops/clock-in");
 
 const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
@@ -18,7 +21,16 @@ interface VisitRow {
   crew_id: string | null;
   status: string;
   clocked_in_at: string | null;
-  crm_jobs: { property_id: string | null; service_address: string | null; service_city: string | null } | null;
+  notes_to_crew: string | null;
+  notes_to_crew_updated_at: string | null;
+  acknowledged_notes_at: string | null;
+  crm_jobs: {
+    property_id: string | null;
+    service_address: string | null;
+    service_city: string | null;
+    notes_to_crew: string | null;
+    notes_to_crew_updated_at: string | null;
+  } | null;
 }
 
 function toStopKeyInput(row: VisitRow): StopKeyInput {
@@ -32,7 +44,21 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at, crm_jobs(property_id, service_address, service_city)";
+const VISIT_SELECT = `
+  id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at,
+  notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
+  crm_jobs(property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
+`;
+
+/** The notes-to-crew this visit contributes to its stop, visit-level overriding job-level (same rule as groupVisitsIntoStops). */
+function notesForRow(row: VisitRow): { text: string | null; updatedAt: string | null } {
+  const text = row.notes_to_crew || row.crm_jobs?.notes_to_crew || null;
+  const updatedAt = [row.notes_to_crew_updated_at, row.crm_jobs?.notes_to_crew_updated_at]
+    .filter((s): s is string => !!s)
+    .sort()
+    .pop() ?? null;
+  return { text, updatedAt };
+}
 
 /**
  * Clocks in every visit that makes up "this stop" (same client/day/crew/
@@ -85,14 +111,43 @@ export async function POST(
   if (candErr) return NextResponse.json({ error: candErr.message }, { status: 500 });
 
   const anchorKey = stopKeyForVisit(toStopKeyInput(anchor));
-  const siblingIds = (candidateRows as VisitRow[])
+  const stopRows = (candidateRows as VisitRow[])
     .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
     // Defense in depth: stopKeyForVisit already encodes crew_id, so a match
     // on anchorKey mathematically implies r.crew_id === anchor.crew_id (the
     // crew whose ownership was just verified above) — this filter makes that
     // invariant explicit rather than implicit, so no row outside the caller's
     // crew can ever enter the mutation set below.
-    .filter((r) => r.crew_id === anchor.crew_id)
+    .filter((r) => r.crew_id === anchor.crew_id);
+
+  // Notes-acknowledgment gate, enforced here and not only in the two clients.
+  // It was previously a pure UI disable on the Clock In button, so anything
+  // replaying the request (the offline queue, a stale tab, curl) walked
+  // straight past a "DOG IS LOOSE" note. The acknowledgment lives on the
+  // anchor — that's the row both clients stamp — and it goes stale the moment
+  // the office edits the notes afterwards, which is what
+  // isNotesAcknowledgmentCurrent() compares.
+  const stopNotes = stopRows.map(notesForRow).filter((n) => !!n.text);
+  if (stopNotes.length > 0) {
+    const notesUpdatedAt = stopNotes
+      .map((n) => n.updatedAt)
+      .filter((s): s is string => !!s)
+      .sort()
+      .pop() ?? null;
+    if (!isNotesAcknowledgmentCurrent(anchor.acknowledged_notes_at, notesUpdatedAt)) {
+      return NextResponse.json(
+        {
+          error: anchor.acknowledged_notes_at
+            ? "The office updated this job's notes — read them again before starting."
+            : "Read and acknowledge this job's notes before starting.",
+          requiresNotesAcknowledgment: true,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  const siblingIds = stopRows
     .filter((r) => !r.clocked_in_at) // already clocked in — idempotent/double-tap safe
     .map((r) => r.id);
 
@@ -121,7 +176,10 @@ export async function POST(
   try {
     await closeOpenDriveSegment(supabase, anchor.crew_id!);
   } catch (err) {
-    console.error("[crew/stops/clock-in] auto-close drive segment failed:", err);
+    log.error("auto-close drive segment failed", {
+      crewId: anchor.crew_id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return NextResponse.json({ visitIds: siblingIds, visits: data });

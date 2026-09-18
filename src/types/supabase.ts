@@ -14718,6 +14718,7 @@ export type Database = {
         Args: { p_job_product_id: string; p_new_status: string }
         Returns: undefined
       }
+      set_ui_pref: { Args: { p_key: string; p_value: Json }; Returns: Json }
       settings_permission_for_list_name: {
         Args: { p_list_name: string }
         Returns: string

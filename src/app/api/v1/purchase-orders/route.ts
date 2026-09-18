@@ -40,11 +40,24 @@ export async function POST(request: Request) {
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
   const body = parsed.data;
 
-  const { data: vendor } = await db.from("vendors").select("org_id, name").eq("id", body.vendorId).maybeSingle();
+  // deleted_at IS NULL on every FK check here: a PO pointing at a
+  // soft-deleted vendor, requisition, product or project is a dangling
+  // reference the rest of the app will not resolve.
+  const { data: vendor } = await db
+    .from("vendors")
+    .select("org_id, name")
+    .eq("id", body.vendorId)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (!vendor || vendor.org_id !== auth.orgId) return jsonError("Vendor not found", 404);
 
   if (body.requisitionId) {
-    const { data: req } = await db.from("requisitions").select("org_id").eq("id", body.requisitionId).maybeSingle();
+    const { data: req } = await db
+      .from("requisitions")
+      .select("org_id")
+      .eq("id", body.requisitionId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!req || req.org_id !== auth.orgId) return jsonError("Requisition not found", 404);
   }
 
@@ -52,7 +65,8 @@ export async function POST(request: Request) {
   const { data: products } = await db
     .from("product_items")
     .select("id, org_id, name, part_number, unit_cost, category")
-    .in("id", productIds);
+    .in("id", productIds)
+    .is("deleted_at", null);
   const productMap = new Map((products ?? []).map((p) => [p.id as string, p]));
   for (const id of productIds) {
     const product = productMap.get(id);
@@ -64,7 +78,11 @@ export async function POST(request: Request) {
   const projectIds = [...new Set(body.lineItems.map((li) => li.projectId).filter((id): id is string => !!id))];
   const projectMap = new Map<string, { org_id: string }>();
   if (projectIds.length > 0) {
-    const { data: projects } = await db.from("projects").select("id, org_id").in("id", projectIds);
+    const { data: projects } = await db
+      .from("projects")
+      .select("id, org_id")
+      .in("id", projectIds)
+      .is("deleted_at", null);
     for (const p of projects ?? []) projectMap.set(p.id as string, p as { org_id: string });
   }
   for (const li of body.lineItems) {
@@ -75,6 +93,24 @@ export async function POST(request: Request) {
     }
     const project = projectMap.get(li.projectId);
     if (!project || project.org_id !== auth.orgId) return jsonError(`Project ${li.projectId} not found`, 404);
+  }
+
+  // guard_line_item_maint_part_integer_quantity() raises 23514 on a
+  // fractional quantity for a maintenance_part. That fired on the po_line_items
+  // INSERT — i.e. AFTER next_po_number had already handed out a number and
+  // the header had committed — so the request 500'd, the route hard-deleted
+  // the header (against CLAUDE.md's soft-deletes-only rule), and the org's
+  // PO sequence was left permanently gapped. Check it here instead, before
+  // anything is written and before a number is consumed, and say plainly
+  // what's wrong.
+  for (const li of body.lineItems) {
+    const product = productMap.get(li.productItemId)!;
+    if (product.category === "maintenance_part" && !Number.isInteger(li.quantity)) {
+      return jsonError(
+        `Product item ${li.productItemId} is a maintenance_part and cannot be ordered in a fractional quantity (got ${li.quantity})`,
+        400
+      );
+    }
   }
 
   const lineItemRows = body.lineItems.map((li) => {
@@ -99,7 +135,10 @@ export async function POST(request: Request) {
   // accepted per line item but never actually affected the tax calculation.
   const taxableSubtotal = lineItemRows.filter((li) => li.taxable).reduce((sum, li) => sum + li.total_cost, 0);
   const taxRatePercent = body.taxRatePercent ?? 0;
-  const discountCost = body.discountCostCents ?? 0;
+  // Clamp the discount to the subtotal. An unclamped discount produced a
+  // NEGATIVE grand_total that flowed straight into the spend reports as
+  // money the org apparently got back from a vendor.
+  const discountCost = Math.min(body.discountCostCents ?? 0, subtotal);
   const discountReducesTax = body.discountReducesTax ?? false;
   const taxableBase = discountReducesTax ? Math.max(0, taxableSubtotal - discountCost) : taxableSubtotal;
   const salesTax = Math.round(taxableBase * (taxRatePercent / 100));
@@ -141,9 +180,17 @@ export async function POST(request: Request) {
     .select(PO_LINE_ITEM_SELECT);
 
   if (lineItemsError) {
-    // Line items failed after the header committed — delete the just-created
-    // header (fresh row, no dependents yet) so it doesn't leak a po_number.
-    await db.from("purchase_orders").delete().eq("id", po.id);
+    // Line items failed after the header committed. Every cause we can see
+    // coming is now rejected above, before next_po_number is called, so this
+    // is a genuine last resort (a concurrent schema/trigger failure).
+    // Soft delete per CLAUDE.md rather than a hard DELETE: the po_number is
+    // spent either way, and a retired header at least leaves the gap
+    // explained instead of unaccounted for.
+    await db
+      .from("purchase_orders")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", po.id)
+      .eq("org_id", auth.orgId);
     return jsonServerError("POST /api/v1/purchase-orders (line items)", lineItemsError);
   }
 

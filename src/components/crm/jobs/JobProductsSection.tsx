@@ -30,19 +30,46 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Check, X, ChevronDown } from "lucide-react";
 
+// 'Used' vs 'Used, not billed' is the distinction that matters to the office at
+// a glance: both mean the material left the shelf, but only the first is still
+// going to appear on the customer's invoice.
 export const JOB_PRODUCT_STATUS_LABEL: Record<JobProductStatus, string> = {
   pending: "Pending",
+  used: "Used",
   invoiced: "Invoiced",
-  used_no_invoice: "Used",
+  used_no_invoice: "Used, not billed",
   not_used: "Not Used",
 };
 
 export const JOB_PRODUCT_STATUS_COLOR: Record<JobProductStatus, string> = {
   pending: "bg-slate-100 text-slate-600",
+  // Amber, not blue: 'used' is an outstanding action for the office (it still
+  // needs to reach an invoice), whereas used_no_invoice is a settled decision.
+  used: "bg-amber-100 text-amber-700",
   invoiced: "bg-green-100 text-green-700",
   used_no_invoice: "bg-blue-100 text-blue-700",
   not_used: "bg-red-100 text-red-600",
 };
+
+/**
+ * Parses a qty/price input.
+ *
+ * The old `parseFloat(x) || fallback` idiom silently rewrote a deliberate 0 to
+ * the fallback and let a negative straight through — and a negative qty is not
+ * cosmetic: `set_job_product_status` applies the row's qty as an inventory
+ * delta, so "-5" *increases* on-hand by 5 when the row is later marked used.
+ * Returns null for anything that isn't a finite number in range, so callers
+ * can refuse the save instead of writing a guess.
+ */
+function parseNonNegative(raw: string): number | null {
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function parsePositive(raw: string): number | null {
+  const n = parseNonNegative(raw);
+  return n != null && n > 0 ? n : null;
+}
 
 // Actions offered depend on the row's current status — mirrors Service
 // Autopilot's per-line Invoiced/Used/Not-Used control. Entering 'invoiced' is
@@ -52,8 +79,15 @@ function jobProductStatusActions(status: JobProductStatus): { label: string; nex
   switch (status) {
     case "pending":
       return [
+        { label: "Used, Invoice", next: "used" },
         { label: "Used, do not Invoice", next: "used_no_invoice" },
         { label: "Not Used, Cancel", next: "not_used" },
+      ];
+    case "used":
+      return [
+        { label: "Used, do not Invoice", next: "used_no_invoice" },
+        { label: "Not Used, Cancel", next: "not_used" },
+        { label: "Reopen to Pending", next: "pending" },
       ];
     case "invoiced":
       return [
@@ -63,11 +97,13 @@ function jobProductStatusActions(status: JobProductStatus): { label: string; nex
       ];
     case "used_no_invoice":
       return [
+        { label: "Used, Invoice", next: "used" },
         { label: "Not Used, Cancel", next: "not_used" },
         { label: "Reopen to Pending", next: "pending" },
       ];
     case "not_used":
       return [
+        { label: "Used, Invoice", next: "used" },
         { label: "Reopen to Pending", next: "pending" },
       ];
   }
@@ -174,8 +210,8 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                         className="h-7 w-24 text-right text-sm ml-auto" />
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums text-slate-500">
-                      {editProductPrice && editProductQty
-                        ? formatCurrency(Math.round(parseFloat(editProductPrice) * 100) * (parseFloat(editProductQty) || 1))
+                      {parseNonNegative(editProductPrice) != null && parseNonNegative(editProductQty) != null
+                        ? formatCurrency(Math.round(parseNonNegative(editProductPrice)! * 100) * parseNonNegative(editProductQty)!)
                         : "—"}
                     </td>
                     <td className="px-2 py-2 text-right">
@@ -186,16 +222,24 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                     <td className="px-2 py-2">
                       <div className="flex justify-end gap-1">
                         <button onClick={async () => {
+                          const qty = parsePositive(editProductQty);
+                          if (qty == null) { toast.error("Quantity must be greater than 0"); return; }
+                          const invoiceQty = editProductInvoiceQty.trim() ? parseNonNegative(editProductInvoiceQty) : null;
+                          if (editProductInvoiceQty.trim() && invoiceQty == null) { toast.error("Invoiced quantity can't be negative"); return; }
+                          const priceCents = editProductPrice.trim() ? parseNonNegative(editProductPrice) : 0;
+                          if (priceCents == null) { toast.error("Unit price can't be negative"); return; }
                           try {
                             await updateJobProduct.mutateAsync({
                               id: p.id, jobId,
-                              qty: parseFloat(editProductQty) || 1,
-                              invoiceQty: editProductInvoiceQty ? (parseFloat(editProductInvoiceQty) || 0) : null,
-                              unitPriceCents: editProductPrice ? Math.round(parseFloat(editProductPrice) * 100) : 0,
+                              qty,
+                              invoiceQty,
+                              unitPriceCents: Math.round(priceCents * 100),
                             });
                             setEditingProductId(null);
                             toast.success("Product updated");
-                          } catch { toast.error("Failed to update product"); }
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "Failed to update product");
+                          }
                         }} className="rounded p-1 hover:bg-green-50 text-green-600">
                           <Check className="h-3.5 w-3.5" />
                         </button>
@@ -287,8 +331,8 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                     className="h-7 w-24 text-right text-xs ml-auto" />
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums text-xs text-slate-500">
-                  {newProductPrice && newProductQty
-                    ? formatCurrency(Math.round(parseFloat(newProductPrice) * 100) * (parseFloat(newProductQty) || 1))
+                  {parseNonNegative(newProductPrice) != null && parseNonNegative(newProductQty) != null
+                    ? formatCurrency(Math.round(parseNonNegative(newProductPrice)! * 100) * parseNonNegative(newProductQty)!)
                     : "—"}
                 </td>
                 <td className="px-2 py-2 text-right">
@@ -302,13 +346,17 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                       if (!newProductId) return;
                       const prod = productCatalog.find((p) => p.id === newProductId);
                       if (!prod) return;
+                      const qty = parsePositive(newProductQty);
+                      if (qty == null) { toast.error("Quantity must be greater than 0"); return; }
+                      const price = newProductPrice.trim() ? parseNonNegative(newProductPrice) : null;
+                      if (newProductPrice.trim() && price == null) { toast.error("Unit price can't be negative"); return; }
                       try {
                         await addJobProduct.mutateAsync({
                           jobId,
                           productId: prod.id,
                           productName: prod.name,
-                          qty: parseFloat(newProductQty) || 1,
-                          unitPriceCents: newProductPrice ? Math.round(parseFloat(newProductPrice) * 100) : prod.price,
+                          qty,
+                          unitPriceCents: price != null ? Math.round(price * 100) : prod.price,
                           unitCostCents: prod.unitCost ?? null,
                         });
                         setAddingProduct(false);

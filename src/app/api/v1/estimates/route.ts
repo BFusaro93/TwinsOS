@@ -53,19 +53,32 @@ export async function POST(request: Request) {
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
   const body = parsed.data;
 
-  const { data: client } = await db.from("clients").select("org_id").eq("id", body.clientId).maybeSingle();
+  // deleted_at IS NULL on every FK check: an estimate pointing at a
+  // soft-deleted client, service or rep is a dangling reference.
+  const { data: client } = await db
+    .from("clients")
+    .select("org_id")
+    .eq("id", body.clientId)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (!client || client.org_id !== auth.orgId) return jsonError("Client not found", 404);
 
   const { data: service } = await db
     .from("crm_services")
     .select("org_id, name, unit, default_rate_cents, production_rate_sqft_per_hr, budget_method, is_active")
     .eq("id", body.serviceId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!service || service.org_id !== auth.orgId) return jsonError("Service not found", 404);
   if (!service.is_active) return jsonError("Service is not active", 400);
 
   if (body.salesRepId) {
-    const { data: rep } = await db.from("crm_employees").select("org_id").eq("id", body.salesRepId).maybeSingle();
+    const { data: rep } = await db
+      .from("crm_employees")
+      .select("org_id")
+      .eq("id", body.salesRepId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!rep || rep.org_id !== auth.orgId) return jsonError("Sales rep not found", 404);
   }
 

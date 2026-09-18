@@ -90,7 +90,7 @@ function allocateHeaderDiscount(
 }
 
 /**
- * The per-visit unit rate a job service must carry so that
+ * The (qty, per-visit unit rate) pair a job service must carry so that
  * qty x rate_cents x visits reproduces `net`, the amount the client actually
  * accepted for that line.
  *
@@ -98,11 +98,28 @@ function allocateHeaderDiscount(
  * and a fixed-total line's total IS the rate (estimate-calc.ts), so a fixed
  * line with qty > 1 also needs the qty divided back out or the invoice bills
  * it qty times over.
+ *
+ * crm_job_services stores only qty and an integer rate_cents — there is no
+ * total column — and the visit-completion auto-invoice bills qty x rate_cents.
+ * So whenever `net` isn't exactly divisible by the unit count, NO integer rate
+ * can reproduce it against the estimate's qty, and rounding to the nearest cent
+ * gets multiplied by the qty: a 5,000 sq ft line accepted at $690.00 rounded
+ * 13.8c up to 14c and billed 5,000 x 14c = $700.00. The client signed $690.
+ *
+ * The signed amount is the thing that must not move, so when the qty can't
+ * carry the rate exactly the service falls back to a single-unit
+ * representation (qty 1 at the whole per-visit price), which always can. The
+ * measured quantity is only descriptive on a job service — it stays on the
+ * estimate line, which is the priced document — whereas rate_cents is what
+ * gets billed.
  */
-function rateFromNet(li: EstimateLineItem, net: number): number {
-  const units = (li.qty || 0) * Math.max(1, li.visits || 1);
-  if (units <= 0) return li.adjRateCents ?? li.rateCents;
-  return Math.round(net / units);
+function jobServicePricing(li: EstimateLineItem, net: number): { qty: number; rateCents: number } {
+  const visits = Math.max(1, li.visits || 1);
+  const units = (li.qty || 0) * visits;
+  if (units <= 0) return { qty: li.qty, rateCents: li.adjRateCents ?? li.rateCents };
+  const exactRate = net / units;
+  if (Number.isInteger(exactRate)) return { qty: li.qty, rateCents: exactRate };
+  return { qty: 1, rateCents: Math.round(net / visits) };
 }
 
 interface Props {
@@ -246,10 +263,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         eacHintCents,
         salesRepId,
         dateSold: dateSold || null,
-        services: selectedItems.map((li) => ({
+        services: selectedItems.map((li) => {
+          const pricing = jobServicePricing(li, netByLineId.get(li.id) ?? 0);
+          return {
           serviceName:   li.serviceName ?? "Service",
           serviceId:     li.serviceId ?? null,
-          qty:           li.qty,
+          qty:           pricing.qty,
           // The estimate's own total is priced off adjRateCents when the
           // estimator used the Adj Rate column (estimate-calc.ts uses
           // `adjRateCents ?? rateCents`) -- sending the un-adjusted rate
@@ -276,11 +295,16 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           // rate", which silently dropped any LINE-level discount. With no
           // discount at all, net = qty x rate x visits, so this reduces to
           // the raw rate exactly.
-          rateCents:     rateFromNet(li, netByLineId.get(li.id) ?? 0),
+          rateCents:     pricing.rateCents,
           totalCents:    netByLineId.get(li.id) ?? 0,
+          // budgetedHoursFromLineItem applies the line's complexity: the stored
+          // budgeted_hours is the unscaled base (estimate-calc.ts), but the job
+          // is budgeted — and later measured — in the hours the crew will
+          // actually spend.
           budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
           budgetMethod:  li.budgetMethod,
-        })),
+        };
+        }),
         materials: selectedMaterialItems.map((dc) => ({
           productItemId:  dc.productItemId as string,
           productName:    dc.description,

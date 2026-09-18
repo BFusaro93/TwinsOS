@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
 
 const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
@@ -30,16 +31,43 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_in_at, org_id, crew_id")
+    .select(`
+      clocked_in_at, org_id, crew_id,
+      notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
+      crm_jobs(notes_to_crew, notes_to_crew_updated_at)
+    `)
     .eq("id", visitId)
     .is("deleted_at", null)
-    .single();
+    .maybeSingle();
   if (!existing) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing.crew_id))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
   if (existing?.clocked_in_at) {
     return NextResponse.json({ error: "Already clocked in" }, { status: 409 });
+  }
+
+  // Notes-acknowledgment gate — the same server-side enforcement the stop
+  // clock-in route applies, so neither entry point can be walked past by a
+  // replayed request. See isNotesAcknowledgmentCurrent(): an acknowledgment
+  // given before the office last edited the notes no longer counts.
+  const notesText = existing.notes_to_crew || existing.crm_jobs?.notes_to_crew || null;
+  if (notesText) {
+    const notesUpdatedAt = [existing.notes_to_crew_updated_at, existing.crm_jobs?.notes_to_crew_updated_at]
+      .filter((s: string | null): s is string => !!s)
+      .sort()
+      .pop() ?? null;
+    if (!isNotesAcknowledgmentCurrent(existing.acknowledged_notes_at, notesUpdatedAt)) {
+      return NextResponse.json(
+        {
+          error: existing.acknowledged_notes_at
+            ? "The office updated this job's notes — read them again before starting."
+            : "Read and acknowledge this job's notes before starting.",
+          requiresNotesAcknowledgment: true,
+        },
+        { status: 409 }
+      );
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

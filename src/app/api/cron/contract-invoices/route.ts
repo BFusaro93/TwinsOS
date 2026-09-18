@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
+import {
+  alreadyBilledReason,
+  billedInPeriod,
+  isBillingDueOn,
+  planContractBilling,
+} from "@/lib/contract-billing";
 
 /**
  * GET /api/cron/contract-invoices — called daily by Vercel Cron at 08:00 UTC
@@ -11,22 +17,29 @@ import type { Database } from "@/types/supabase";
  *   - status is "signed" or "active" (not draft/sent/cancelled/expired —
  *     a contract the client never signed, or one that's been cancelled or
  *     has expired, must never be auto-billed)
+ *   - the client it bills hasn't been soft-deleted (nothing re-checks this
+ *     once a contract is attached, so without it a deleted client keeps
+ *     getting invoiced forever)
  *   - start_date is null or has already arrived, and end_date is null or
  *     hasn't passed yet (nothing else transitions status to "expired" when
  *     end_date arrives, so this is the only thing stopping billing past term)
- *   - billing_day_of_month = today's day-of-month (or last day of month if
- *     billing_day > days in current month)
- *   - no invoice already exists for this contract in the current billing month
+ *   - today is a billing day for the contract's own billing_frequency —
+ *     see src/lib/contract-billing.ts for the per-frequency cadence. For
+ *     `monthly` (every live contract on PROD today) that is exactly the
+ *     previous rule: billing_day_of_month = today's day-of-month, or the
+ *     last day of the month when billing_day exceeds it.
+ *   - no invoice already exists for this contract in the current billing
+ *     PERIOD (the calendar month for `monthly`, the quarter/year/week for
+ *     the other frequencies, "ever" for `one_time`)
  *
- * Creates a crm_invoices row using the per-month amount from monthly_amounts
- * (falls back to monthly_amount_cents if the month key is absent), then
+ * Creates a crm_invoices row for the period's amount — monthly_amounts[month]
+ * if that month is overridden, else monthly_amount_cents, which is the
+ * per-invoice amount for every frequency (see contract-billing.ts) — then
  * updates last_billed_date on the contract.
  *
  * Security: Vercel passes Authorization: Bearer {CRON_SECRET}.
  * Reject anything else.
  */
-
-const MONTH_KEYS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"] as const;
 
 function ordinal(n: number) {
   const s = ["th","st","nd","rd"];
@@ -52,9 +65,6 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const todayDay = now.getDate();
-  // Last day of current month — contracts with billing_day > month length
-  // fire on the last day.
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
   // ── fetch candidates ──────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,7 +72,8 @@ export async function GET(request: Request) {
 
   const { data: contracts, error: fetchErr } = await sb
     .from("crm_contracts")
-    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id")
+    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at)")
+    .is("clients.deleted_at", null)
     .eq("is_active", true)
     .eq("auto_generate", true)
     // Only a contract the client has actually agreed to should be auto-billed.
@@ -81,20 +92,17 @@ export async function GET(request: Request) {
 
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(todayDay).padStart(2, "0")}`;
 
-  // Filter to contracts whose billing day matches today (or last day of month
-  // when billing_day > days in current month), that have actually started,
-  // and whose end_date (if any) hasn't passed — nothing else transitions a
-  // contract's status to "expired" automatically when its end_date arrives,
-  // so this cron is the only backstop against billing past a lapsed term.
+  // Filter to contracts due today for their own billing_frequency (see
+  // isBillingDueOn — for `monthly` this is the unchanged day-of-month rule),
+  // that have actually started, and whose end_date (if any) hasn't passed —
+  // nothing else transitions a contract's status to "expired" automatically
+  // when its end_date arrives, so this cron is the only backstop against
+  // billing past a lapsed term.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dueTodayContracts = ((contracts ?? []) as any[]).filter((c) => {
-    const effectiveDay = c.billing_day_of_month > lastDayOfMonth
-      ? lastDayOfMonth
-      : c.billing_day_of_month;
-    if (effectiveDay !== todayDay) return false;
     if (c.start_date && c.start_date > todayStr) return false;
     if (c.end_date && c.end_date < todayStr) return false;
-    return true;
+    return isBillingDueOn(c, now);
   });
 
   if (dueTodayContracts.length === 0) {
@@ -104,52 +112,51 @@ export async function GET(request: Request) {
   const results: { contractId: string; status: "created" | "skipped"; reason?: string }[] = [];
 
   for (const contract of dueTodayContracts) {
-    // ── determine billing month for THIS contract (advance billing shifts by
-    // one month) — runs on the configured billing day regardless, but a
-    // "bill month in advance" contract labels/dates the invoice for next
-    // calendar month instead of the current one, and the day is clamped to
-    // that target month's length (e.g. billing_day 31 shifting into a
-    // 30-day month).
-    const billingMonthDate = contract.bill_month_in_advance
-      ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
-      : new Date(now.getFullYear(), now.getMonth(), 1);
-    const billingMonthLastDay = new Date(billingMonthDate.getFullYear(), billingMonthDate.getMonth() + 1, 0).getDate();
-    // Clamp the contract's OWN configured billing day to the target month's
-    // length — not today's day-of-month. todayDay is already clamped to
-    // THIS month's length (see dueTodayContracts filter above), so for an
-    // advance-billed contract (target month = next month) reusing todayDay
-    // re-clamped a value that was clamped for the wrong month: a billing_day
-    // 31 contract firing on Feb 28 would date a March invoice the 28th
-    // instead of the 31st.
-    const billingDay = Math.min(contract.billing_day_of_month, billingMonthLastDay);
-    const billingMonthKey = MONTH_KEYS[billingMonthDate.getMonth()];
-    const invoiceDateStr = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingDay).padStart(2, "0")}`;
-    const monthStart = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
-    const monthEnd   = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingMonthLastDay).padStart(2, "0")}`;
+    // ── work out the invoice date and the "already billed" window for THIS
+    // contract's frequency. For a monthly contract this returns exactly what
+    // the hand-rolled month math here used to: the configured billing day
+    // clamped to the (advance-shifted) target month, and that month's first
+    // and last day as the window. See src/lib/contract-billing.ts.
+    const plan = planContractBilling(contract, now, { billNow: false });
 
-    // ── idempotency: skip if invoice already exists for this contract for the billing month
-    const { data: existing } = await sb
+    // Cheap first pass — for a non-monthly cadence, last_billed_date landing
+    // inside this period already proves the period is billed, without a
+    // query (and is what makes a one_time contract bill exactly once even if
+    // its invoice was later deleted).
+    if (billedInPeriod(plan, contract.last_billed_date)) {
+      results.push({ contractId: contract.id, status: "skipped", reason: alreadyBilledReason(plan) });
+      continue;
+    }
+
+    // ── idempotency: skip if an invoice already exists for this contract
+    // inside the billing period. one_time has an unbounded window (both
+    // bounds null) — any live invoice on the contract at all blocks it.
+    let existingQuery = sb
       .from("crm_invoices")
       .select("id")
       .eq("client_id", contract.client_id)
       .eq("contract_id", contract.id)
-      .gte("invoice_date", monthStart)
-      .lte("invoice_date", monthEnd)
       .is("deleted_at", null)
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    if (plan.periodStart) existingQuery = existingQuery.gte("invoice_date", plan.periodStart);
+    if (plan.periodEnd) existingQuery = existingQuery.lte("invoice_date", plan.periodEnd);
+    const { data: existing } = await existingQuery.maybeSingle();
 
     if (existing) {
-      results.push({ contractId: contract.id, status: "skipped", reason: "already billed for this month" });
+      results.push({ contractId: contract.id, status: "skipped", reason: alreadyBilledReason(plan) });
       continue;
     }
 
-    // ── resolve amount for the billing month ───────────────────────────────
+    // ── resolve the amount for this invoice ────────────────────────────────
+    // monthly_amount_cents is the PER-INVOICE amount for every frequency, not
+    // an annualised figure — an annual contract stores its full yearly price
+    // and is billed it once a year. monthly_amounts overrides it by the
+    // billing month's key (a seasonal contract billing less in winter).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const monthlyAmounts = (contract.monthly_amounts ?? {}) as Record<string, number>;
     const monthAmount: number =
-      monthlyAmounts[billingMonthKey] != null
-        ? monthlyAmounts[billingMonthKey]
+      monthlyAmounts[plan.monthKey] != null
+        ? monthlyAmounts[plan.monthKey]
         : contract.monthly_amount_cents;
 
     if (monthAmount <= 0) {
@@ -172,7 +179,7 @@ export async function GET(request: Request) {
         contract_id: contract.id,
         sales_rep_id: contract.sales_rep_id ?? null,
         description,
-        invoice_date: invoiceDateStr,
+        invoice_date: plan.invoiceDate,
         due_date: null,
         status: "draft",
         subtotal_cents: monthAmount,
@@ -188,8 +195,14 @@ export async function GET(request: Request) {
       // cron invocation) already inserted this month's invoice between the
       // SELECT check above and this INSERT; report it the same as the
       // pre-existing skip path rather than a raw error.
+      //
+      // That index is keyed on (contract_id, year, month), so it is ALSO
+      // what a weekly/biweekly contract hits on its second invoice of a
+      // calendar month. Until the index is re-keyed on
+      // (contract_id, invoice_date), sub-monthly cadences are capped at one
+      // invoice per month — an under-bill, not an over-bill.
       if (invErr.code === "23505") {
-        results.push({ contractId: contract.id, status: "skipped", reason: "already billed for this month" });
+        results.push({ contractId: contract.id, status: "skipped", reason: alreadyBilledReason(plan) });
         continue;
       }
       console.error(`[contract-invoices] invoice insert error for contract ${contract.id}:`, invErr);
@@ -230,7 +243,7 @@ export async function GET(request: Request) {
     // ── update last_billed_date ───────────────────────────────────────────
     await sb
       .from("crm_contracts")
-      .update({ last_billed_date: invoiceDateStr })
+      .update({ last_billed_date: plan.invoiceDate })
       .eq("id", contract.id);
 
     results.push({ contractId: contract.id, status: "created" });

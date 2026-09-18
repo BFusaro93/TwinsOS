@@ -47,6 +47,18 @@ export async function getRouteAuth(request: Request): Promise<{
  * Resolves the crm_crews row the authenticated caller IS (crew accounts log
  * in as the crew itself — see crew/visits/route.ts), scoped to org so a
  * cross-org id can never match.
+ *
+ * Two things this deliberately does NOT do:
+ *  - it doesn't match soft-deleted crews (`deleted_at IS NULL`), which is
+ *    both the repo-wide query rule and the reason a retired crew's account
+ *    can't keep acting on visits;
+ *  - it doesn't use .maybeSingle(), which THROWS when more than one row
+ *    comes back. The same auth user being attached to two crm_crews rows is
+ *    a data problem, but it used to turn into a blanket 403 on every crew
+ *    route (assertCallerOwnsVisit would see a rejected promise) with nothing
+ *    in the response explaining why. Ordering by created_at and taking the
+ *    first keeps the caller working on their original crew; ownership is
+ *    still proven per-visit by assertCallerOwnsVisit below.
  */
 export async function resolveCallerCrewId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,8 +71,11 @@ export async function resolveCallerCrewId(
     .select("id")
     .eq("user_id", userId)
     .eq("org_id", orgId)
-    .maybeSingle();
-  return (data?.id as string | undefined) ?? null;
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const rows = (data ?? []) as { id: string }[];
+  return rows[0]?.id ?? null;
 }
 
 /**

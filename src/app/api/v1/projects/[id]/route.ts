@@ -37,11 +37,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
-  if (body.clientId !== undefined) {
-    const { data: client } = await db.from("clients").select("org_id").eq("id", body.clientId).maybeSingle();
+  if (body.clientId) {
+    const { data: client } = await db
+      .from("clients")
+      .select("org_id")
+      .eq("id", body.clientId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!client || client.org_id !== auth.orgId) return jsonError("Client not found", 404);
   }
 
+  // Note on NOT NULL columns: city/state/zip/customer_name/address/
+  // estimated_cost_cents/original_contract_price are all NOT NULL with
+  // defaults on `projects`. That's why they stay `.optional()` and NOT
+  // `.nullable()` in validation.ts — the `!== undefined` spread below only
+  // ever writes a real value, never an explicit NULL (which would NOT fall
+  // back to the column default; see the same trap fixed in POST).
   const { data, error } = await db
     .from("projects")
     .update({

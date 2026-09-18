@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { AlertTriangle, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DailyLoadListResult, DailyLoadListCrewGroup } from "@/lib/reports/materials/daily-load-list";
@@ -11,10 +11,17 @@ function fmtQty(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
-function todayLocal(): string {
-  const d = new Date();
-  const tz = d.getTimezoneOffset() * 60000;
-  return new Date(d.getTime() - tz).toISOString().slice(0, 10);
+/**
+ * "Today" for this report is the company's operating day, not the reader's.
+ * The API route defaults an omitted ?date= to America/New_York; deriving the
+ * picker's initial value from the browser's own timezone instead meant a
+ * manager in Pacific at 10pm Monday saw Monday while the same URL with no
+ * ?date= returned Tuesday. Both sides now agree.
+ */
+const REPORT_TIME_ZONE = "America/New_York";
+
+function todayForReport(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: REPORT_TIME_ZONE });
 }
 
 function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
@@ -38,12 +45,30 @@ function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
               {crew.chemicals.map((c) => (
                 <tr key={c.productId} className="border-b border-slate-100 last:border-0">
                   <td className="py-1.5 pr-2 font-medium text-slate-800 align-top">{c.productName}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums whitespace-nowrap align-top">
-                    {fmtQty(c.concentrateQty)} {c.concentrateUnitName ?? ""}
-                  </td>
-                  <td className="py-1.5 text-right tabular-nums whitespace-nowrap text-slate-500 align-top">
-                    {c.mixVolumeQty != null ? `≈ ${fmtQty(c.mixVolumeQty)} ${c.mixVolumeUnitName ?? ""} mixed` : ""}
-                  </td>
+                  {/* A bare number with no unit is unusable (and unsafe) on a
+                      load sheet — say what's wrong instead. */}
+                  {c.concentrateQty != null && c.concentrateUnitName ? (
+                    <>
+                      <td className="py-1.5 pr-2 text-right tabular-nums whitespace-nowrap align-top">
+                        {fmtQty(c.concentrateQty)} {c.concentrateUnitName}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums whitespace-nowrap text-slate-500 align-top">
+                        {c.mixVolumeQty != null && c.mixVolumeUnitName
+                          ? `≈ ${fmtQty(c.mixVolumeQty)} ${c.mixVolumeUnitName} mixed`
+                          : ""}
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={2} className="py-1.5 text-right align-top">
+                      <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        Can&apos;t compute
+                      </span>
+                      <span className="block text-[10px] font-normal text-amber-700 mt-0.5 max-w-[15rem] ml-auto">
+                        {c.unresolvedReason ?? "Check this product's application rate setup."}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -58,8 +83,15 @@ function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
             <tbody>
               {crew.materials.map((m) => (
                 <tr key={m.productId} className="border-b border-slate-100 last:border-0">
-                  <td className="py-1.5 pr-2 font-medium text-slate-800">{m.productName}</td>
-                  <td className="py-1.5 text-right tabular-nums whitespace-nowrap">{fmtQty(m.qty)}</td>
+                  <td className="py-1.5 pr-2 font-medium text-slate-800">
+                    {m.productName}
+                    {m.sharedWithCrews.length > 0 && (
+                      <span className="block text-[10px] font-normal text-amber-700">
+                        Job is also on {m.sharedWithCrews.join(", ")} — confirm who loads it
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums whitespace-nowrap align-top">{fmtQty(m.qty)}</td>
                 </tr>
               ))}
             </tbody>
@@ -84,7 +116,7 @@ function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
 }
 
 export default function DailyLoadListReportPage() {
-  const [date, setDate] = useState(todayLocal());
+  const [date, setDate] = useState(todayForReport());
 
   const { data, isLoading, error } = useQuery<DailyLoadListResult>({
     queryKey: ["crm-daily-load-list-report", date],

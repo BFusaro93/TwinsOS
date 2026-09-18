@@ -50,6 +50,46 @@ export function getBreakevenRateCents(customizations: Record<string, unknown> | 
   return typeof v === "number" && v > 0 ? v : undefined;
 }
 
+// Complexity is stored in basis points (10000 = 100% = no adjustment) and the
+// only UI that writes it (LineItemComplexityPopover) offers 50%-200%. Nothing
+// in the database enforces that range today, so a value written by an API
+// caller, an older build or a hand-edited row could be 0 (a free line),
+// negative (negative revenue on every line it touches) or absurdly large.
+// Clamping here — on every read, not just on write — means a bad stored value
+// can never price a line, and the popover clamps the same way on its own
+// round-trip so it can't write one back out.
+export const COMPLEXITY_BPS_MIN = 5000;
+export const COMPLEXITY_BPS_MAX = 20000;
+export const COMPLEXITY_BPS_DEFAULT = 10000;
+
+/** Coerce a stored/incoming complexity_bps into the supported 50%-200% range. */
+export function clampComplexityBps(bps: number | null | undefined): number {
+  if (typeof bps !== "number" || !Number.isFinite(bps)) return COMPLEXITY_BPS_DEFAULT;
+  return Math.min(COMPLEXITY_BPS_MAX, Math.max(COMPLEXITY_BPS_MIN, Math.round(bps)));
+}
+
+/** Complexity expressed as a plain multiplier (1 = no adjustment). */
+export function complexityFactor(bps: number | null | undefined): number {
+  return clampComplexityBps(bps) / 10000;
+}
+
+/**
+ * The hours a line ACTUALLY consumes: the stored, user-entered base hours
+ * scaled by the line's complexity.
+ *
+ * `budgeted_hours` on the row is deliberately the UNSCALED base (see
+ * computeLineItem's docstring) — complexity is re-derived here on every read
+ * instead of ever being baked into the stored number. Every consumer that
+ * wants "how many hours will this really take" (cost auto-fill, the total-hours
+ * column, convert-to-job, the man-hour rate calculator) must go through this
+ * rather than reading `budgetedHours` raw.
+ */
+export function effectiveBudgetedHours(
+  li: { budgetedHours: number; complexityBps?: number | null }
+): number {
+  return li.budgetedHours * complexityFactor(li.complexityBps);
+}
+
 /**
  * Recompute all derived fields on a line item from its inputs.
  *
@@ -60,7 +100,6 @@ export function getBreakevenRateCents(customizations: Record<string, unknown> | 
  *                        qty itself IS the hours (direct pass-through either way).
  *   - 'production_rate' (Aspire style): budgetedHours (per occurrence) is derived
  *                        from qty ÷ productionRateSqftPerHr.
- *   - totalBudgetedHours = budgetedHours × visits
  *
  * breakevenRateCents (optional) auto-fills costCents from budgetedHours × rate
  * whenever costCents is still 0 (the "never manually set" convention used
@@ -68,10 +107,32 @@ export function getBreakevenRateCents(customizations: Record<string, unknown> | 
  * other fields won't clobber it.
  *
  * complexityBps (10000 = 100%, i.e. no adjustment) is an Aspire-style "how
- * much harder is this job than standard" multiplier. It's applied as the very
- * last step to totalCents, budgetedHours, and totalCostCents alike — scaling
- * price and cost together keeps marginBps/markupBps unchanged, so a harder
- * job costs and prices proportionally more without silently moving margin.
+ * much harder is this job than standard" multiplier. Scaling price and cost
+ * together keeps marginBps/markupBps unchanged, so a harder job costs and
+ * prices proportionally more without silently moving margin.
+ *
+ * INVARIANT — the returned `budgetedHours` is the PURE, UNSCALED base, exactly
+ * as the user entered it (or as the production rate derived it), and that is
+ * what callers persist to `estimate_line_items.budgeted_hours`. Complexity is
+ * applied only to values that are re-derived from scratch on every pass and
+ * never fed back in: `totalBudgetedHours`, `totalCents` and `totalCostCents`.
+ *
+ * This used to be `budgetedHours = budgetedHours * complexityFactor`, whose
+ * scaled result was persisted and then read back as `item.budgetedHours` on
+ * the NEXT recompute — so a 125% line's 6.00 hrs became 7.50, then 9.375, then
+ * 11.72 on every subsequent cell edit, without bound and without reversing:
+ * dropping the slider back to 100% left the inflated hours in place and only
+ * removed the price uplift, so the line's GM% walked from 30% to negative.
+ * (Only `budgetMethod: 'manual'` lines compounded — 'production_rate' and 'hr'
+ * lines re-derive their base every pass, which is precisely why they were
+ * immune, and precisely the discipline applied here.) It's the same corruption
+ * class the long comment on `costCents` below documents, and it has the same
+ * cure: keep the STORED value a pure input, derive the scaled figure fresh.
+ * Anything that needs the real, complexity-adjusted hours calls
+ * effectiveBudgetedHours() instead of reading `budgetedHours` raw.
+ *
+ *   - effective (per-occurrence) hours = budgetedHours × complexityFactor
+ *   - totalBudgetedHours               = effective hours × visits
  */
 export function computeLineItem(
   item: Pick<
@@ -100,12 +161,12 @@ export function computeLineItem(
   | "markupBps"
 > & { budgetedHours: number } {
   const effectiveRate = item.adjRateCents ?? item.rateCents;
-  const complexityFactor = (item.complexityBps ?? 10000) / 10000;
+  const factor = complexityFactor(item.complexityBps);
 
   const totalCents = Math.round(
     (item.calcType === 1
       ? item.qty * effectiveRate * item.visits
-      : effectiveRate) * complexityFactor // fixed: total IS the rate
+      : effectiveRate) * factor // fixed: total IS the rate
   );
 
   // Auto-calculate budgeted hours from production rate (Aspire engine) — only
@@ -126,13 +187,14 @@ export function computeLineItem(
   ) {
     budgetedHours = item.qty / item.productionRateSqftPerHr;
   }
-  // Complexity scales whatever hours were arrived at above, last — a harder
-  // job takes proportionally longer regardless of which branch set the base
-  // hours. This also flows into the breakeven cost auto-fill below, so cost
-  // scales with it automatically without a second multiplication there.
-  budgetedHours = budgetedHours * complexityFactor;
+  // Complexity scales whatever hours were arrived at above — a harder job takes
+  // proportionally longer regardless of which branch set the base hours — but
+  // ONLY into a derived local, never back into `budgetedHours` itself. See this
+  // function's docstring: `budgetedHours` is returned (and persisted) unscaled
+  // so the next recompute starts from the same base instead of compounding.
+  const scaledBudgetedHours = effectiveBudgetedHours({ budgetedHours, complexityBps: item.complexityBps });
 
-  const totalBudgetedHours = budgetedHours * item.visits;
+  const totalBudgetedHours = scaledBudgetedHours * item.visits;
 
   // `costCents === 0` is this type's "never manually set" convention (see
   // this function's docstring) — costCents is left at 0 for as long as the
@@ -154,15 +216,17 @@ export function computeLineItem(
   // (totalCostCents ÷ qty ÷ visits) if it wants to show one, without
   // feeding that back in as costCents.
   let totalCostCents: number;
-  if (item.costCents === 0 && breakevenRateCents && budgetedHours > 0) {
-    // budgetedHours already carries the complexity factor (see above), so
-    // this branch's cost scales with it for free — no second multiplication.
-    const perOccurrenceCostCents = Math.round(budgetedHours * breakevenRateCents);
+  if (item.costCents === 0 && breakevenRateCents && scaledBudgetedHours > 0) {
+    // Costed off the COMPLEXITY-SCALED hours, not the stored base — a 125%
+    // line really does burn 25% more labour. Using the scaled local here is
+    // what keeps cost moving with the slider now that the stored hours no
+    // longer carry the factor themselves.
+    const perOccurrenceCostCents = Math.round(scaledBudgetedHours * breakevenRateCents);
     totalCostCents =
       item.calcType === 1 ? Math.round(perOccurrenceCostCents * item.visits) : perOccurrenceCostCents;
   } else {
     totalCostCents = Math.round(
-      (item.calcType === 1 ? item.costCents * item.qty * item.visits : item.costCents) * complexityFactor
+      (item.calcType === 1 ? item.costCents * item.qty * item.visits : item.costCents) * factor
     );
   }
   const costCents = item.costCents;
@@ -207,14 +271,24 @@ export function computeJobServiceBudgetedHours(
  * Budgeted hours to carry from an accepted estimate's line item into the new
  * job's crm_job_services row (per-occurrence, matching how budgeted_hours is
  * used everywhere else in the job/service/visit chain). `computeLineItem`
- * already keeps `budgetedHours` correct on every line-item edit, so this is
- * normally just a direct read — the production-rate recompute here is only a
- * defensive fallback for a stale/zero stored value, not the primary path.
+ * already keeps `budgetedHours` correct on every line-item edit, so the base
+ * is normally just a direct read — the production-rate recompute here is only
+ * a defensive fallback for a stale/zero stored value, not the primary path.
+ *
+ * The result is COMPLEXITY-SCALED: the stored `budgeted_hours` is the unscaled
+ * base (see computeLineItem's docstring), but the crew really does spend the
+ * scaled hours on a 125% line, and `crm_job_services.budgeted_hours` is the
+ * number every budget-vs-actual variance is measured against. Reading the base
+ * raw here would under-budget every complexity-adjusted job by exactly the
+ * complexity factor.
  */
 export function budgetedHoursFromLineItem(
-  li: Pick<EstimateLineItem, "budgetedHours" | "budgetMethod" | "productionRateSqftPerHr" | "unitType" | "qty">
+  li: Pick<EstimateLineItem, "budgetedHours" | "budgetMethod" | "productionRateSqftPerHr" | "unitType" | "qty"> & {
+    complexityBps?: number | null;
+  }
 ): number {
-  if (li.budgetedHours > 0) return li.budgetedHours;
+  const factor = complexityFactor(li.complexityBps);
+  if (li.budgetedHours > 0) return li.budgetedHours * factor;
   if (
     li.budgetMethod === "production_rate" &&
     li.productionRateSqftPerHr &&
@@ -223,7 +297,7 @@ export function budgetedHoursFromLineItem(
     li.unitType !== "each" &&
     li.qty > 0
   ) {
-    return li.qty / li.productionRateSqftPerHr;
+    return (li.qty / li.productionRateSqftPerHr) * factor;
   }
   return 0;
 }
@@ -395,8 +469,18 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .maybeSingle();
   const overheadSettings = overheadRow ? mapOverheadSettingsRow(overheadRow) : OVERHEAD_SETTINGS_DEFAULTS;
 
+  // Each line contributes at most its own total and never less than zero. A
+  // flat line-level discount is only clamped against the total by the grid's
+  // inline edit path (EstimateLineItemsGrid's update()); every other writer —
+  // the complexity popover, a bulk Rate Increase, the public API — could shrink
+  // total_cents while leaving a larger discount_cents behind, and the line then
+  // contributed NEGATIVE revenue to the subtotal (a $600 line with a $500 flat
+  // discount dropped to 50% complexity subtracted $200 from the estimate).
+  // Those writers now clamp on write; this floor is the backstop that makes it
+  // impossible for any future writer to drive the rollup negative, and it
+  // mirrors the estimate-level clamp a few lines below.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lineItemSubtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + (li.total_cents - (li.discount_cents ?? 0)), 0);
+  const lineItemSubtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + Math.max(0, li.total_cents - (li.discount_cents ?? 0)), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subitemRevenueCents = (subitems ?? []).reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

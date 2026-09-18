@@ -90,6 +90,12 @@ export interface CrewStop {
   pausedAt: string | null;
   breakMinutes: number;
   notesToCrew: string | null;
+  /**
+   * When the office last edited those notes. An acknowledgment older than
+   * this no longer counts — see isNotesAcknowledgmentCurrent() on the web
+   * side, which the clock-in route enforces server-side.
+   */
+  notesToCrewUpdatedAt: string | null;
   scheduledDate: string;
   visits: CrewStopVisit[];
 }
@@ -164,7 +170,11 @@ export interface VisitChemicalApplication {
 // the current value, which becomes "quantity actually used" once status
 // leaves 'pending' (see supabase/migrations/
 // 20260918050000_crm_job_products_planned_qty.sql).
-export type JobProductStatus = 'pending' | 'invoiced' | 'used_no_invoice' | 'not_used';
+// 'used' = used, inventory decremented, STILL TO BE INVOICED — what the
+// crew's "Mark Used" button records, and what JobDetail.tsx sweeps into the
+// job's invoice. 'used_no_invoice' is the deliberate don't-bill variant
+// behind the secondary "Used — don't bill" action.
+export type JobProductStatus = 'pending' | 'invoiced' | 'used' | 'used_no_invoice' | 'not_used';
 
 export interface JobProductMaterial {
   id: string;

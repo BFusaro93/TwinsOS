@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
+import { calcChemicalAndSolution, convertQuantity } from "@/lib/chemical-mix-calc";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,11 +80,21 @@ export interface MaterialsNeededRow {
   category: string;
   isChemical: boolean;
   neededQty: number;
+  /** Unit neededQty/onHand/shortfall are all in; null for a non-chemical row,
+   *  whose demand is already recorded in the product's own stock unit. */
+  neededUnitName: string | null;
   onHand: number;
   onOrder: number;
-  shortfall: number;
+  /** null when the demand couldn't be restated in the product's own unit, so
+   *  differencing it against on-hand stock would be meaningless. */
+  shortfall: number | null;
   unitCostCents: number;
   nextNeededBy: string | null;
+  /** Jobs whose demand could not be converted into the product's own unit. */
+  unitMismatchJobs: number;
+  /** Jobs with no usable application rate or no measured area — their demand
+   *  is missing from neededQty entirely, so the figure is a floor. */
+  unestimatedJobs: number;
   jobsAffected: MaterialsNeededJobRef[];
 }
 
@@ -156,24 +166,41 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     chemDemandByProduct.set(productId, list);
   }
 
+  /**
+   * Services a visit or job actually performs. A visit scoped to a single job
+   * service covers only that service — reading the job's whole service list
+   * per visit counted a Mow + Spray day's chemical twice. Same rule as
+   * fetchVisitServiceIds() in use-crm-jobs.ts and the visit-complete route.
+   * Services excluded from the job (included = false) aren't performed at all.
+   */
+  function servicesFor(
+    jobServices: { id: string; service_id: string | null; included: boolean | null }[] | null,
+    jobServiceId: string | null
+  ): string[] {
+    const performed = (jobServices ?? []).filter((js) => js.included !== false && js.service_id);
+    const scoped = jobServiceId ? performed.filter((js) => js.id === jobServiceId) : performed;
+    return scoped.map((js) => js.service_id as string);
+  }
+
   if (chemicalProductIds.size > 0) {
     // Dispatched jobs: demand comes from outstanding scheduled visits.
     interface VisitRow {
       scheduled_date: string | null;
+      job_service_id: string | null;
       crm_jobs: {
         id: string;
         property_id: string | null;
         status: string | null;
         scheduled_date: string | null;
         clients: { display_name: string | null } | null;
-        crm_job_services: { service_id: string | null }[] | null;
+        crm_job_services: { id: string; service_id: string | null; included: boolean | null }[] | null;
       } | null;
     }
     const visitsRaw = await fetchAllRows<VisitRow>(() =>
       supabase
         .from("crm_job_visits")
         .select(
-          "scheduled_date, crm_jobs!inner(id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(service_id))"
+          "scheduled_date, job_service_id, crm_jobs!inner(id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(id, service_id, included))"
         )
         .in("status", OUTSTANDING_VISIT_STATUSES)
         .is("deleted_at", null)
@@ -182,7 +209,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     for (const v of visitsRaw) {
       const job = v.crm_jobs;
       if (!job || TERMINAL_JOB_STATUSES.has(job.status ?? "")) continue;
-      const serviceIds = (job.crm_job_services ?? []).map((js) => js.service_id).filter(Boolean) as string[];
+      const serviceIds = servicesFor(job.crm_job_services, v.job_service_id);
       const productIdsForVisit = new Set<string>();
       for (const sid of serviceIds) {
         for (const pid of productIdsByService.get(sid) ?? []) productIdsForVisit.add(pid);
@@ -205,14 +232,14 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       property_id: string | null;
       waiting_list_start: string | null;
       clients: { display_name: string | null } | null;
-      crm_job_services: { service_id: string | null }[] | null;
+      crm_job_services: { id: string; service_id: string | null; included: boolean | null }[] | null;
       crm_job_visits: { id: string }[] | null;
     }
     const waitingRaw = await fetchAllRows<WaitingJobRow>(() =>
       supabase
         .from("crm_jobs")
         .select(
-          "id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(service_id), crm_job_visits(id)"
+          "id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(id, service_id, included), crm_job_visits(id)"
         )
         .eq("job_type", "waiting_list")
         .not("status", "in", '("cancelled","completed","hold")')
@@ -224,7 +251,8 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     );
     for (const job of waitingRaw) {
       if ((job.crm_job_visits ?? []).length > 0) continue;
-      const serviceIds = (job.crm_job_services ?? []).map((js) => js.service_id).filter(Boolean) as string[];
+      // A waiting-list job has no visit, so nothing narrows it to one service.
+      const serviceIds = servicesFor(job.crm_job_services, null);
       const productIdsForJob = new Set<string>();
       for (const sid of serviceIds) {
         for (const pid of productIdsByService.get(sid) ?? []) productIdsForJob.add(pid);
@@ -424,22 +452,46 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     const demand = chemDemandByProduct.get(p.id) ?? [];
     if (demand.length === 0) continue;
     const rate = defaultRateByProduct.get(p.id);
+    // The whole table is denominated in the product's own unit, because that
+    // is the unit quantity_on_hand is kept in and the unit a resulting
+    // requisition/PO line is ordered in. product_items carries no unit column,
+    // so the only thing that can stand in for it is the application rate's own
+    // unit_of_measure_id — which is exactly what calcAutoQuantity's contract
+    // says this report consumes ("the product's own unit").
+    const stockUnitId = rate?.unitOfMeasureId ?? null;
 
     const perJobQty = new Map<string, number>();
     const perJobMeta = new Map<string, { jobName: string; neededBy: string | null }>();
     let neededQty = 0;
     let nextNeededBy: string | null = null;
+    let unitMismatchJobs = 0;
+    let unestimatedJobs = 0;
     for (const d of demand) {
       const areaValue = d.propertyId ? areaValueByProperty.get(d.propertyId) : undefined;
-      // chemicalAmount (not the raw "Applied X per area" number) is the
-      // right quantity for "how much of the catalog product will this job
-      // consume" — calcChemicalAndSolution resolves it correctly whether the
-      // rate's own unit represents concentrate or a finished-mix volume.
-      const portion = rate && areaValue != null ? calcChemicalAndSolution(rate, areaValue, unitsById)?.chemicalAmount ?? 0 : 0;
-      neededQty += portion;
-      perJobQty.set(d.jobId, (perJobQty.get(d.jobId) ?? 0) + portion);
       perJobMeta.set(d.jobId, { jobName: d.jobName, neededBy: d.neededBy });
       nextNeededBy = earliest(nextNeededBy, d.neededBy);
+
+      // chemicalAmount (not the raw "Applied X per area" number) is what the
+      // job actually consumes out of the drum — calcChemicalAndSolution
+      // resolves it whether the rate's own unit states concentrate or a
+      // finished-mix volume. But it comes back in the unit that resolution
+      // landed on (fluid ounces of concentrate for a rate stated in gallons of
+      // spray), so it has to be restated in the stock unit before it can be
+      // differenced against on-hand. Subtracting 355 fluid ounces from 4
+      // gallons is what turned 2.8 gallons of real demand into a one-click
+      // purchase order for 351.
+      const computed = rate && areaValue != null ? calcChemicalAndSolution(rate, areaValue, unitsById) : null;
+      if (!computed) {
+        unestimatedJobs += 1;
+        continue;
+      }
+      const portion = convertQuantity(computed.chemicalAmount, computed.chemicalUnitOfMeasureId, stockUnitId, unitsById);
+      if (portion == null) {
+        unitMismatchJobs += 1;
+        continue;
+      }
+      neededQty += portion;
+      perJobQty.set(d.jobId, (perJobQty.get(d.jobId) ?? 0) + portion);
     }
 
     const onHand = p.quantity_on_hand ?? 0;
@@ -450,11 +502,18 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       category: p.category,
       isChemical: true,
       neededQty: Math.round(neededQty * 10000) / 10000,
+      neededUnitName: stockUnitId ? unitsById.get(stockUnitId)?.name ?? null : null,
       onHand,
       onOrder,
-      shortfall: Math.round((onHand + onOrder - neededQty) * 10000) / 10000,
+      // Any job whose demand couldn't be restated in the stock unit means
+      // neededQty is missing an unknown amount, so the difference can't be
+      // trusted to drive a purchase — say so instead of printing a number.
+      shortfall:
+        unitMismatchJobs > 0 ? null : Math.round((onHand + onOrder - neededQty) * 10000) / 10000,
       unitCostCents: p.unit_cost ?? 0,
       nextNeededBy,
+      unitMismatchJobs,
+      unestimatedJobs,
       jobsAffected: [...perJobQty.entries()].map(([jobId, qty]) => ({
         jobId,
         jobName: perJobMeta.get(jobId)?.jobName ?? "Job",
@@ -487,11 +546,15 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       category: p.category,
       isChemical: false,
       neededQty: Math.round(neededQty * 10000) / 10000,
+      // crm_job_products.qty is already recorded in the product's own unit.
+      neededUnitName: null,
       onHand,
       onOrder,
       shortfall: Math.round((onHand + onOrder - neededQty) * 10000) / 10000,
       unitCostCents: p.unit_cost ?? 0,
       nextNeededBy,
+      unitMismatchJobs: 0,
+      unestimatedJobs: 0,
       jobsAffected: [...perJobQty.entries()].map(([jobId, qty]) => ({
         jobId,
         jobName: perJobMeta.get(jobId)?.jobName ?? "Job",
@@ -501,7 +564,20 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     });
   }
 
-  rows.sort((a, b) => a.shortfall - b.shortfall);
+  // Rows whose shortfall couldn't be computed need a human before anything is
+  // ordered, so they lead; the rest run worst-shortfall first as before.
+  rows.sort((a, b) => {
+    if (a.shortfall == null || b.shortfall == null) {
+      return (a.shortfall == null ? 0 : 1) - (b.shortfall == null ? 0 : 1);
+    }
+    return a.shortfall - b.shortfall;
+  });
+
+  if (rows.some((r) => r.shortfall == null)) {
+    notes.push(
+      "Some chemicals' demand is stated in a unit that can't be converted to the unit they're stocked in — those rows show no shortfall and can't be ordered from here until the application rate's units are corrected."
+    );
+  }
 
   return { rows, notes };
 }

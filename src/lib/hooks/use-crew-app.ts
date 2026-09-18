@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { groupVisitsIntoStops, type Stop } from "@/lib/utils/visit-stops";
+import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ function crewVisitSelect(hidePricing: boolean): string {
   // request. The visit-level notes_to_client (which does exist) is unaffected.
   const jobCols = [
     "id", "org_id", "client_id", "property_id", "job_type", "status",
-    "notes_to_crew", "notes",
+    "notes_to_crew", "notes_to_crew_updated_at", "notes",
     "service_address", "service_city", "service_state", "service_zip",
     "budgeted_hours",
   ].join(", ");
@@ -78,7 +78,7 @@ function crewVisitSelect(hidePricing: boolean): string {
     "priority", "notes_to_crew", "notes_to_client", "invoice_description",
     "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
     "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes",
-    "acknowledged_notes_at", "skip_reason",
+    "acknowledged_notes_at", "notes_to_crew_updated_at", "skip_reason",
     "created_at", "updated_at", "deleted_at",
   ].join(", ");
 
@@ -112,6 +112,9 @@ function mapJobRow(job: Record<string, unknown>): CRMJob {
     jobType:        job.job_type as CRMJob["jobType"],
     status:         job.status as string,
     notesToCrew:    (job.notes_to_crew as string) ?? null,
+    // Not on CRMJob — see VisitWithNotesStamp in visit-stops.ts. Drives the
+    // "the office changed the notes after you acknowledged them" re-arm.
+    notesToCrewUpdatedAt: (job.notes_to_crew_updated_at as string) ?? null,
     notesToClient:  (job.notes_to_client as string) ?? null,
     notes:          (job.notes as string) ?? null,
     serviceAddress: (job.service_address as string) ?? null,
@@ -123,7 +126,7 @@ function mapJobRow(job: Record<string, unknown>): CRMJob {
   } as unknown as CRMJob;
 }
 
-function mapVisit(row: Record<string, unknown>): CRMJobVisit {
+function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
   const client = row.clients as Record<string, unknown> | null;
   const crew   = row.crm_crews as Record<string, unknown> | null;
   const job    = row.crm_jobs as Record<string, unknown> | null;
@@ -173,6 +176,7 @@ function mapVisit(row: Record<string, unknown>): CRMJobVisit {
     pausedAt:             row.paused_at as string | null,
     breakMinutes:         (row.break_minutes as number) ?? 0,
     acknowledgedNotesAt:  row.acknowledged_notes_at as string | null,
+    notesToCrewUpdatedAt: (row.notes_to_crew_updated_at as string) ?? null,
     skipReason:           row.skip_reason as string | null,
     createdAt:            row.created_at as string,
     updatedAt:            row.updated_at as string,
@@ -397,7 +401,9 @@ export function useVisitChemicals(visitIds: string[]) {
 // status leaves 'pending' (see supabase/migrations/
 // 20260918050000_crm_job_products_planned_qty.sql).
 
-export type JobProductStatus = "pending" | "invoiced" | "used_no_invoice" | "not_used";
+// 'used' = used, inventory decremented, STILL TO BE INVOICED (what "Mark
+// Used" records). 'used_no_invoice' is the deliberate don't-bill variant.
+export type JobProductStatus = "pending" | "invoiced" | "used" | "used_no_invoice" | "not_used";
 
 export interface JobProductMaterial {
   id: string;
@@ -633,7 +639,14 @@ export function useStopClockIn() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ localTime }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        // The route enforces the notes-acknowledgment gate server-side and
+        // explains itself in `error` (including "the office updated the
+        // notes, read them again") — show that instead of a generic
+        // connection message the crew can't act on.
+        const payload = await res.json().catch(() => null);
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Failed to start job");
+      }
       return res.json();
     },
     onSuccess: (_data, anchorVisitId) => {
@@ -646,7 +659,12 @@ export function useStopClockIn() {
       // stops showing "Driving" the moment a job actually starts.
       qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
     },
-    onError: () => toast.error("Failed to start job — check your connection and try again"),
+    onError: (err, anchorVisitId) => {
+      toast.error(err instanceof Error ? err.message : "Failed to start job");
+      // A rejected clock-in usually means our copy of the notes (or the
+      // acknowledgment) is stale — pull fresh so the gate re-renders.
+      qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
+    },
   });
 }
 
@@ -801,10 +819,14 @@ export function useAddCrewNote() {
 
 /**
  * POST /api/crm/crew/visits/:id/job-products/:jobProductId/use-materials —
- * records how much of a planned material was actually used (or that it
- * wasn't used at all). Only valid while the row is still 'pending'; the
- * route 409s on an already-resolved row, same as crew-app's
+ * records how much of a planned material was actually used, whether it
+ * should still be billed, or that it wasn't used at all. Only valid while
+ * the row is still 'pending'; the route 409s on an already-resolved row
+ * (e.g. a second crew on the same job got there first), same as crew-app's
  * useJobProductMaterials().
+ *
+ * `noInvoice: true` is the secondary "Used — don't bill" action. Omitting it
+ * records 'used', which stays billable.
  */
 export function useUseJobProductMaterials() {
   const qc = useQueryClient();
@@ -816,7 +838,7 @@ export function useUseJobProductMaterials() {
     }: {
       visitId: string;
       jobProductId: string;
-      usage: { usedQty: number } | { notUsed: true };
+      usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true };
     }) => {
       const res = await fetch(
         `/api/crm/crew/visits/${visitId}/job-products/${jobProductId}/use-materials`,
@@ -826,13 +848,25 @@ export function useUseJobProductMaterials() {
           body: JSON.stringify(usage),
         }
       );
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        // The route answers every rejection it can explain with a plain
+        // sentence in `error` (over-quantity, nothing on hand, already
+        // recorded by someone else). Surface that rather than the raw
+        // response body, which used to reach the crew as a JSON blob.
+        const payload = await res.json().catch(() => null);
+        const message = typeof payload?.error === "string"
+          ? payload.error
+          : "Couldn't record materials used";
+        throw new Error(message);
+      }
       return res.json() as Promise<JobProductMaterial>;
     },
-    onSuccess: (_data, { visitId }) => {
+    // Refetch on failure too: a 409 means the server's copy is the truth and
+    // the row should flip to its resolved, read-only state rather than
+    // leaving the crew staring at controls that can never succeed.
+    onSettled: (_data, _err, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-job-products", visitId] });
     },
-    onError: () => toast.error("Failed to record materials used — check your connection and try again"),
   });
 }
 

@@ -25,7 +25,7 @@ export function shapePurchaseOrder(row: Record<string, unknown>) {
 }
 
 export const PO_LINE_ITEM_SELECT =
-  "id, product_item_id, product_item_name, part_number, quantity, unit_cost, total_cost, project_id, notes";
+  "id, product_item_id, product_item_name, part_number, quantity, unit_cost, total_cost, project_id, notes, taxable";
 
 export function shapePoLineItem(row: Record<string, unknown>) {
   return {
@@ -38,5 +38,9 @@ export function shapePoLineItem(row: Record<string, unknown>) {
     totalCostCents: row.total_cost,
     projectId: row.project_id,
     notes: row.notes,
+    // Writable on create and part of the tax base, so it has to be readable
+    // too — a caller otherwise had no way to see which lines it had actually
+    // marked taxable, or why salesTaxCents came out the way it did.
+    taxable: row.taxable,
   };
 }
