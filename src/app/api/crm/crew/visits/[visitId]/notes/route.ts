@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { z } from "zod";
+import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 
 const Body = z.object({ note: z.string().min(1) });
 
+// Accepts either the web app's cookie session or crew-app's bearer token —
+// see getRouteAuth().
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ visitId: string }> }
 ) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getRouteAuth(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { visitId } = await params;
@@ -30,11 +24,16 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, client_id, org_id, job_comments")
+    .select("job_id, client_id, org_id, crew_id, job_comments")
     .eq("id", visitId)
+    .is("deleted_at", null)
     .single();
 
   if (visitError) return NextResponse.json({ error: visitError.message }, { status: 500 });
+  if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+  if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit.crew_id))) {
+    return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
 
   const now = new Date().toISOString();
   const existingComments = Array.isArray(visit.job_comments)

@@ -285,6 +285,43 @@ export async function useJobProductMaterials(
   ) as Promise<JobProductMaterial>;
 }
 
+/**
+ * POST /api/crm/crew/visits/:id/acknowledge — marks the office's notes-to-crew
+ * as read on this visit, gating Clock In the same way the web stop page does
+ * (see visit/[id].tsx). Idempotent server-side (just re-stamps `now`), so no
+ * idempotency key is needed.
+ */
+export async function acknowledgeNotes(visitId: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/acknowledge`, { method: 'POST' });
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/notes — appends a crew-authored note to the
+ * visit's job_comments, visible to dispatchers on the web board. Not
+ * idempotent (each call appends), so a retried request after a flaky
+ * partial-success could double-post — same tradeoff as requestMaterials()
+ * above.
+ */
+export async function addCrewNote(visitId: string, note: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/skip — skips one service line within a stop
+ * (as opposed to clock-out, which completes it). `visitId` here is the
+ * individual crm_job_visits row's id, not the stop's anchor — matching the
+ * web stop page, where each service row can be skipped independently.
+ */
+export async function skipVisit(visitId: string, reason: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/skip`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
 /** GET /api/crm/crew/products?q=... — the "Request Materials" product picker's search. */
 export async function searchPickerProducts(query: string): Promise<PickerProduct[]> {
   return authedFetch(`/api/crm/crew/products?q=${encodeURIComponent(query)}`) as Promise<PickerProduct[]>;

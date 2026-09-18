@@ -10,7 +10,10 @@ export type QueueActionType =
   | 'drive_end'
   | 'add_photo'
   | 'request_materials'
-  | 'record_material_usage';
+  | 'record_material_usage'
+  | 'acknowledge_notes'
+  | 'add_note'
+  | 'skip_service';
 
 export type QueueStatus = 'pending' | 'syncing' | 'failed';
 
@@ -70,6 +73,20 @@ export interface RecordMaterialUsagePayload {
   notUsed?: true;
 }
 
+/** Same "no data of its own" shape as PausePayload/ResumePayload above — the
+ * server derives which visit and when from the anchor visit id + timestamp. */
+export type AcknowledgeNotesPayload = Record<string, never>;
+
+export interface AddNotePayload {
+  note: string;
+}
+
+export interface SkipServicePayload {
+  reason: string;
+  /** Denormalized for display while queued/syncing, mirroring RequestMaterialsPayload's productItemName above. */
+  serviceName: string;
+}
+
 export type QueuePayload =
   | ClockInPayload
   | ClockOutPayload
@@ -79,7 +96,10 @@ export type QueuePayload =
   | DriveEndPayload
   | AddPhotoPayload
   | RequestMaterialsPayload
-  | RecordMaterialUsagePayload;
+  | RecordMaterialUsagePayload
+  | AcknowledgeNotesPayload
+  | AddNotePayload
+  | SkipServicePayload;
 
 /** A single queued offline action, persisted in SQLite (see db.ts). */
 export interface QueueItem {

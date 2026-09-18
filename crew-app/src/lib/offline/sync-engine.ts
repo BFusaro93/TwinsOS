@@ -3,6 +3,8 @@ import NetInfo from '@react-native-community/netinfo';
 import { File } from 'expo-file-system';
 
 import {
+  acknowledgeNotes,
+  addCrewNote,
   ApiError,
   clockInStop,
   clockOutStop,
@@ -10,6 +12,7 @@ import {
   pauseStop,
   requestMaterials,
   resumeStop,
+  skipVisit,
   startDrive,
   uploadVisitPhoto,
   useJobProductMaterials,
@@ -23,12 +26,14 @@ import {
 } from './db';
 import {
   MAX_SYNC_ATTEMPTS,
+  type AddNotePayload,
   type AddPhotoPayload,
   type ClockInPayload,
   type ClockOutPayload,
   type QueueItem,
   type RecordMaterialUsagePayload,
   type RequestMaterialsPayload,
+  type SkipServicePayload,
 } from './types';
 
 // Drains the local offline queue against the real API. Triggered by (a)
@@ -124,6 +129,23 @@ async function processItem(item: QueueItem): Promise<void> {
           payload.jobProductId,
           payload.notUsed ? { notUsed: true } : { usedQty: payload.usedQty ?? 0 }
         );
+        break;
+      }
+      case 'acknowledge_notes': {
+        // item.visitId is the stop's anchor visit id — see enqueueAcknowledgeNotes().
+        await acknowledgeNotes(item.visitId);
+        break;
+      }
+      case 'add_note': {
+        const payload = item.payload as AddNotePayload;
+        await addCrewNote(item.visitId, payload.note);
+        break;
+      }
+      case 'skip_service': {
+        // item.visitId here is the individual service visit id, not the
+        // stop's anchor — see enqueueSkipVisit().
+        const payload = item.payload as SkipServicePayload;
+        await skipVisit(item.visitId, payload.reason);
         break;
       }
     }

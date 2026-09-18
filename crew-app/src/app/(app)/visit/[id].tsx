@@ -35,7 +35,13 @@ import {
 import { applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { captureVisitPhoto } from '@/lib/offline/photos';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
-import type { AddPhotoPayload, RecordMaterialUsagePayload, RequestMaterialsPayload } from '@/lib/offline/types';
+import type {
+  AddNotePayload,
+  AddPhotoPayload,
+  RecordMaterialUsagePayload,
+  RequestMaterialsPayload,
+  SkipServicePayload,
+} from '@/lib/offline/types';
 import type {
   CrewStopVisit,
   JobProductMaterial,
@@ -92,6 +98,9 @@ export default function StopDetailScreen() {
     enqueueResume,
     enqueueAddPhoto,
     enqueueRecordMaterialUsage,
+    enqueueAcknowledgeNotes,
+    enqueueAddNote,
+    enqueueSkipVisit,
     retry,
     discard,
   } = useOfflineQueue();
@@ -102,6 +111,9 @@ export default function StopDetailScreen() {
   const [requisitions, setRequisitions] = useState<VisitRequisition[]>([]);
   const [chemicals, setChemicals] = useState<VisitChemicalApplication[]>([]);
   const [plannedMaterials, setPlannedMaterials] = useState<JobProductMaterial[]>([]);
+  const [noteText, setNoteText] = useState('');
+  const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
+  const [skipReasonText, setSkipReasonText] = useState('');
   const [, forceTick] = useState(0);
 
   const serverStop = useMemo(() => stops.find((s) => s.anchorVisitId === id), [stops, id]);
@@ -111,6 +123,18 @@ export default function StopDetailScreen() {
     [serverStop, queueItems]
   );
   const progress = stop ? stopProgress(stop) : null;
+  // Skip targets an individual service visit, not the stop's anchor, so its
+  // queue items live under each visit's own id — gather them separately from
+  // `queueItems` above (which is scoped to the anchor only).
+  const skipQueueItemsByVisitId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof itemsForVisit>>();
+    if (stop) {
+      for (const v of stop.visits) {
+        map.set(v.id, itemsForVisit(v.id).filter((i) => i.type === 'skip_service'));
+      }
+    }
+    return map;
+  }, [stop, itemsForVisit]);
 
   const clockQueueItems = queueItems.filter((i) => i.type === 'clock_in' || i.type === 'clock_out');
   const failedClockItem = clockQueueItems.find((i) => i.status === 'failed');
@@ -123,6 +147,14 @@ export default function StopDetailScreen() {
   const photoQueueItems = queueItems.filter((i) => i.type === 'add_photo');
   const materialsQueueItems = queueItems.filter((i) => i.type === 'request_materials');
   const materialUsageQueueItems = queueItems.filter((i) => i.type === 'record_material_usage');
+  const noteQueueItems = queueItems.filter((i) => i.type === 'add_note');
+  const ackQueueItem = queueItems.find((i) => i.type === 'acknowledge_notes' && i.status !== 'failed');
+
+  // Notes-acknowledgment gate — mirrors the web stop page's `anchor` lookup
+  // and Clock In disabling (stops/[visitId]/page.tsx:88-89, 403).
+  const anchor = stop ? stop.visits.find((v) => v.id === stop.anchorVisitId) ?? stop.visits[0] : undefined;
+  const hasNotes = !!stop?.notesToCrew;
+  const acknowledged = !!anchor?.acknowledgedNotesAt;
 
   // Once every queue item for this stop clears (synced), pull fresh server
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
@@ -263,6 +295,25 @@ export default function StopDetailScreen() {
     ]);
   };
 
+  const handleAcknowledge = () => {
+    if (!stop) return;
+    void enqueueAcknowledgeNotes(stop.anchorVisitId);
+  };
+
+  const handleSendNote = () => {
+    if (!stop || !noteText.trim()) return;
+    void enqueueAddNote(stop.anchorVisitId, noteText.trim());
+    setNoteText('');
+  };
+
+  const handleSkip = () => {
+    if (!skipTargetId || !skipReasonText.trim() || !stop) return;
+    const visit = stop.visits.find((v) => v.id === skipTargetId);
+    void enqueueSkipVisit(skipTargetId, skipReasonText.trim(), visit?.serviceName ?? 'Service');
+    setSkipTargetId(null);
+    setSkipReasonText('');
+  };
+
   const confirmDiscard = (queueItemId: string, description: string) => {
     Alert.alert('Discard this?', description, [
       { text: 'Cancel', style: 'cancel' },
@@ -324,14 +375,43 @@ export default function StopDetailScreen() {
         </View>
       </View>
 
-      {stop.notesToCrew ? (
-        <View style={styles.amberBox}>
-          <Text style={styles.amberBoxTitle}>Notes from the office</Text>
+      {hasNotes ? (
+        <View style={[styles.amberBox, acknowledged && styles.greenAckBox]}>
+          <Text style={[styles.amberBoxTitle, acknowledged && styles.greenAckTitle]}>Job Notes</Text>
           <Text style={styles.amberBoxText}>{stop.notesToCrew}</Text>
+          {!acknowledged ? (
+            <Pressable
+              style={({ pressed }) => [styles.ackButton, pressed && styles.ackButtonPressed]}
+              onPress={handleAcknowledge}
+              disabled={!!ackQueueItem}
+            >
+              <Text style={styles.ackButtonText}>
+                {ackQueueItem ? 'Saving…' : "I've read the notes"}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.ackConfirmedText}>
+              Acknowledged{anchor?.acknowledgedNotesAt ? ` ${new Date(anchor.acknowledgedNotesAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
+            </Text>
+          )}
         </View>
       ) : null}
 
-      <ServicesSection visits={stop.visits} />
+      <ServicesSection
+        visits={stop.visits}
+        skipQueueItemsByVisitId={skipQueueItemsByVisitId}
+        skipTargetId={skipTargetId}
+        skipReasonText={skipReasonText}
+        onSkipReasonChange={setSkipReasonText}
+        onStartSkip={setSkipTargetId}
+        onCancelSkip={() => {
+          setSkipTargetId(null);
+          setSkipReasonText('');
+        }}
+        onConfirmSkip={handleSkip}
+        onRetrySkip={(itemId) => void retry(itemId)}
+        onDiscardSkip={(itemId) => confirmDiscard(itemId, 'This skip will not be recorded.')}
+      />
 
       <ChemicalsSection chemicals={chemicals} />
 
@@ -407,7 +487,12 @@ export default function StopDetailScreen() {
       ) : null}
 
       {progress === 'not_started' ? (
-        <ActionButton label="Clock In" variant="solidGreen" onPress={handleClockIn} />
+        <ActionButton
+          label="Clock In"
+          variant="solidGreen"
+          onPress={handleClockIn}
+          disabled={hasNotes && !acknowledged}
+        />
       ) : null}
 
       {progress === 'on_break' ? (
@@ -456,6 +541,16 @@ export default function StopDetailScreen() {
           confirmDiscard(itemId, 'This materials request will not be submitted.')
         }
       />
+
+      <NotesToOfficeSection
+        jobComments={anchor?.jobComments}
+        noteText={noteText}
+        onNoteTextChange={setNoteText}
+        onSend={handleSendNote}
+        noteQueueItems={noteQueueItems}
+        onRetry={(itemId) => void retry(itemId)}
+        onDiscard={(itemId) => confirmDiscard(itemId, 'This note will not be sent to the office.')}
+      />
     </ScrollView>
   );
 }
@@ -473,10 +568,12 @@ function ActionButton({
   label,
   variant,
   onPress,
+  disabled,
 }: {
   label: string;
   variant: 'solidGreen' | 'solidRed' | 'outlineBlue';
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
@@ -485,9 +582,11 @@ function ActionButton({
         variant === 'solidGreen' && styles.actionButtonGreen,
         variant === 'solidRed' && styles.actionButtonRed,
         variant === 'outlineBlue' && styles.actionButtonOutlineBlue,
-        pressed && styles.actionButtonPressed,
+        pressed && !disabled && styles.actionButtonPressed,
+        disabled && styles.actionButtonDisabled,
       ]}
       onPress={onPress}
+      disabled={disabled}
     >
       <Text
         style={[
@@ -525,8 +624,38 @@ function ConflictBox({
   );
 }
 
-/** One row per underlying visit in the stop — mirrors the web stop page's services checklist. */
-function ServicesSection({ visits }: { visits: CrewStopVisit[] }) {
+/**
+ * One row per underlying visit in the stop — mirrors the web stop page's
+ * services checklist, including the per-service Skip control
+ * (stops/[visitId]/page.tsx:284-296, 645-670). A row mid-flight (queued,
+ * syncing, or failed to sync) shows that instead of the Skip button; once
+ * the queue item clears and the next refetch lands, `v.status === 'skipped'`
+ * takes over from server truth, same convergence pattern as
+ * PlannedMaterialsSection.
+ */
+function ServicesSection({
+  visits,
+  skipQueueItemsByVisitId,
+  skipTargetId,
+  skipReasonText,
+  onSkipReasonChange,
+  onStartSkip,
+  onCancelSkip,
+  onConfirmSkip,
+  onRetrySkip,
+  onDiscardSkip,
+}: {
+  visits: CrewStopVisit[];
+  skipQueueItemsByVisitId: Map<string, ReturnType<typeof useOfflineQueue>['items']>;
+  skipTargetId: string | null;
+  skipReasonText: string;
+  onSkipReasonChange: (text: string) => void;
+  onStartSkip: (visitId: string) => void;
+  onCancelSkip: () => void;
+  onConfirmSkip: () => void;
+  onRetrySkip: (itemId: string) => void;
+  onDiscardSkip: (itemId: string) => void;
+}) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
@@ -537,31 +666,88 @@ function ServicesSection({ visits }: { visits: CrewStopVisit[] }) {
       {visits.length === 0 ? (
         <Text style={styles.mutedRowText}>No services listed</Text>
       ) : (
-        visits.map((v, index) => (
-          <View
-            key={v.id}
-            style={[styles.serviceRow, index === visits.length - 1 && styles.lastRow]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.serviceRowTitle}>{v.serviceName ?? 'Service'}</Text>
-              {v.budgetedHours != null ? (
-                <Text style={styles.serviceRowSubtitle}>Budgeted: {v.budgetedHours}h</Text>
+        visits.map((v, index) => {
+          const rowTerminal = v.status === 'completed' || v.status === 'cancelled' || v.status === 'skipped';
+          const skipItems = skipQueueItemsByVisitId.get(v.id) ?? [];
+          const activeSkipItem = skipItems.find((i) => i.status !== 'failed');
+          const failedSkipItem = skipItems.find((i) => i.status === 'failed');
+          const isSkipTarget = skipTargetId === v.id;
+          return (
+            <View
+              key={v.id}
+              style={[styles.serviceRow, index === visits.length - 1 && styles.lastRow]}
+            >
+              <View style={styles.serviceRowTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.serviceRowTitle}>{v.serviceName ?? 'Service'}</Text>
+                  {v.budgetedHours != null ? (
+                    <Text style={styles.serviceRowSubtitle}>Budgeted: {v.budgetedHours}h</Text>
+                  ) : null}
+                </View>
+                {activeSkipItem ? (
+                  <Text style={styles.serviceStatus}>
+                    {activeSkipItem.status === 'syncing' ? 'Skipping…' : 'Skip queued'}
+                  </Text>
+                ) : failedSkipItem ? null : v.status === 'skipped' ? (
+                  <Text style={[styles.serviceStatus, styles.serviceStatusSkipped]}>Skipped</Text>
+                ) : v.status === 'completed' ? (
+                  <Text style={[styles.serviceStatus, styles.serviceStatusDone]}>{STATUS_LABEL[v.status]}</Text>
+                ) : !rowTerminal && !isSkipTarget ? (
+                  <Pressable onPress={() => onStartSkip(v.id)} hitSlop={8}>
+                    <Text style={styles.linkText}>Skip</Text>
+                  </Pressable>
+                ) : !rowTerminal ? null : (
+                  <Text style={styles.serviceStatus}>{STATUS_LABEL[v.status]}</Text>
+                )}
+              </View>
+
+              {failedSkipItem ? (
+                <View style={styles.skipFailedRow}>
+                  <Text style={[styles.errorText, styles.materialsErrorText]}>
+                    {failedSkipItem.lastError ?? "This skip didn't sync."}
+                  </Text>
+                  <View style={styles.materialsFailedActions}>
+                    <Pressable onPress={() => onRetrySkip(failedSkipItem.id)}>
+                      <Text style={styles.linkText}>Retry</Text>
+                    </Pressable>
+                    <Pressable onPress={() => onDiscardSkip(failedSkipItem.id)}>
+                      <Text style={styles.linkText}>Discard</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+
+              {isSkipTarget ? (
+                <View style={styles.skipForm}>
+                  <TextInput
+                    style={styles.skipReasonInput}
+                    placeholder="Reason for skipping (required)"
+                    placeholderTextColor="#94a3b8"
+                    value={skipReasonText}
+                    onChangeText={onSkipReasonChange}
+                    multiline
+                  />
+                  <View style={styles.skipFormActions}>
+                    <Pressable onPress={onCancelSkip} hitSlop={8}>
+                      <Text style={styles.linkText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.skipConfirmButton,
+                        pressed && styles.skipConfirmButtonPressed,
+                        !skipReasonText.trim() && styles.markUsedButtonDisabled,
+                      ]}
+                      disabled={!skipReasonText.trim()}
+                      onPress={onConfirmSkip}
+                    >
+                      <Text style={styles.skipConfirmButtonText}>Confirm Skip</Text>
+                    </Pressable>
+                  </View>
+                </View>
               ) : null}
             </View>
-            <Text
-              style={[
-                styles.serviceStatus,
-                v.status === 'skipped'
-                  ? styles.serviceStatusSkipped
-                  : v.status === 'completed'
-                    ? styles.serviceStatusDone
-                    : undefined,
-              ]}
-            >
-              {STATUS_LABEL[v.status]}
-            </Text>
-          </View>
-        ))
+          );
+        })
       )}
     </View>
   );
@@ -969,6 +1155,118 @@ function MaterialsSection({
   );
 }
 
+/** Parses the anchor visit's job_comments into display strings, matching the
+ * web stop page's handling of both the legacy string format and the current
+ * `{ text }[]` shape (stops/[visitId]/page.tsx:533-540). */
+function formatJobComments(jobComments: unknown): string[] {
+  if (!jobComments) return [];
+  if (typeof jobComments === 'string') return [jobComments];
+  if (Array.isArray(jobComments)) {
+    return jobComments
+      .map((c) => (c && typeof c === 'object' ? ((c as { text?: string; content?: string }).text ?? (c as { text?: string; content?: string }).content ?? '') : ''))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/**
+ * "Notes to Office" — a crew-authored note thread visible to dispatchers on
+ * the web board (POST .../notes), mirroring the web stop page's card of the
+ * same name. Existing comments come from the anchor visit's jobComments
+ * (refreshed on the next fetchCrewVisits() poll); a note that hasn't synced
+ * yet renders separately below, same additive pattern as MaterialsSection.
+ */
+function NotesToOfficeSection({
+  jobComments,
+  noteText,
+  onNoteTextChange,
+  onSend,
+  noteQueueItems,
+  onRetry,
+  onDiscard,
+}: {
+  jobComments: unknown;
+  noteText: string;
+  onNoteTextChange: (text: string) => void;
+  onSend: () => void;
+  noteQueueItems: ReturnType<typeof useOfflineQueue>['items'];
+  onRetry: (itemId: string) => void;
+  onDiscard: (itemId: string) => void;
+}) {
+  const comments = formatJobComments(jobComments);
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>Notes to Office</Text>
+        <Text style={styles.serviceRowSubtitle}>Visible on the dispatch board</Text>
+      </View>
+      <View style={styles.cardBody}>
+        {comments.length > 0 ? (
+          <View style={styles.notesHistoryBox}>
+            {comments.map((text, i) => (
+              <Text key={i} style={styles.notesHistoryText}>
+                {text}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {noteQueueItems.map((item) => {
+          const payload = item.payload as AddNotePayload;
+          return (
+            <View key={item.id} style={styles.materialsRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.materialsItemName}>{payload.note}</Text>
+                {item.status === 'failed' ? (
+                  <Text style={[styles.errorText, styles.materialsErrorText]}>{item.lastError}</Text>
+                ) : null}
+              </View>
+              {item.status === 'failed' ? (
+                <View style={styles.materialsFailedActions}>
+                  <Pressable onPress={() => onRetry(item.id)}>
+                    <Text style={styles.linkText}>Retry</Text>
+                  </Pressable>
+                  <Pressable onPress={() => onDiscard(item.id)}>
+                    <Text style={styles.linkText}>Discard</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={[styles.materialsStatusPill, { backgroundColor: C.amberTextStrong }]}>
+                  <Text style={styles.materialsStatusPillText}>
+                    {item.status === 'syncing' ? 'Sending…' : 'Queued'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          );
+        })}
+
+        <View style={styles.noteComposeRow}>
+          <TextInput
+            style={styles.noteInput}
+            placeholder="Write a note..."
+            placeholderTextColor="#94a3b8"
+            value={noteText}
+            onChangeText={onNoteTextChange}
+            multiline
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.markUsedButton,
+              pressed && styles.markUsedButtonPressed,
+              !noteText.trim() && styles.markUsedButtonDisabled,
+            ]}
+            disabled={!noteText.trim()}
+            onPress={onSend}
+          >
+            <Text style={styles.markUsedButtonText}>Send</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screenBg: {
     backgroundColor: C.bg,
@@ -1073,6 +1371,35 @@ const styles = StyleSheet.create({
   amberBoxText: {
     fontSize: 14,
     color: C.text,
+  },
+  greenAckBox: {
+    borderColor: C.greenBorder,
+    backgroundColor: C.greenBg,
+  },
+  greenAckTitle: {
+    color: C.greenText,
+  },
+  ackButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  ackButtonPressed: {
+    backgroundColor: C.amberBorder,
+  },
+  ackButtonText: {
+    color: C.amberTextStrong,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  ackConfirmedText: {
+    fontSize: 12,
+    color: C.green,
+    marginTop: 2,
   },
 
   amberBanner: {
@@ -1209,6 +1536,9 @@ const styles = StyleSheet.create({
   actionButtonPressed: {
     opacity: 0.85,
   },
+  actionButtonDisabled: {
+    opacity: 0.4,
+  },
   actionButtonText: {
     color: '#ffffff',
     fontWeight: '700',
@@ -1289,17 +1619,58 @@ const styles = StyleSheet.create({
   },
 
   serviceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: C.headerBorder,
+    gap: 8,
+  },
+  serviceRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   lastRow: {
     borderBottomWidth: 0,
+  },
+  skipFailedRow: {
+    gap: 6,
+  },
+  skipForm: {
+    gap: 8,
+  },
+  skipReasonInput: {
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: C.text,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  skipFormActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 16,
+  },
+  skipConfirmButton: {
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: C.red,
+  },
+  skipConfirmButtonPressed: {
+    opacity: 0.85,
+  },
+  skipConfirmButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
   },
   serviceRowTitle: {
     fontSize: 14,
@@ -1484,5 +1855,37 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
+  },
+
+  notesHistoryBox: {
+    backgroundColor: C.bg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.headerBorder,
+    padding: 12,
+    gap: 6,
+  },
+  notesHistoryText: {
+    fontSize: 13,
+    color: C.textMuted,
+  },
+  noteComposeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  noteInput: {
+    flex: 1,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: C.text,
+    minHeight: 44,
+    maxHeight: 100,
+    textAlignVertical: 'top',
   },
 });

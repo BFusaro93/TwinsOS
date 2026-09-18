@@ -55,6 +55,12 @@ interface OfflineQueueContextValue {
     productName: string,
     usage: { usedQty: number } | { notUsed: true }
   ) => Promise<void>;
+  /** `visitId` here is the stop's anchor visit id, same as clock actions — gates Clock In, matching the web stop page. */
+  enqueueAcknowledgeNotes: (anchorVisitId: string) => Promise<void>;
+  /** `visitId` here is the stop's anchor visit id, same as clock actions. */
+  enqueueAddNote: (anchorVisitId: string, note: string) => Promise<void>;
+  /** `visitId` here is the individual service visit id, NOT the stop's anchor — each service in a stop can be skipped independently, matching the web stop page. */
+  enqueueSkipVisit: (visitId: string, reason: string, serviceName: string) => Promise<void>;
   /** Resets a failed item back to pending so the sync engine attempts it again. */
   retry: (id: string) => Promise<void>;
   /** Permanently discards a failed item (e.g. after the crew member acknowledges a conflict). */
@@ -261,6 +267,54 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     [refresh, userId]
   );
 
+  const enqueueAcknowledgeNotes = useCallback(
+    async (anchorVisitId: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'acknowledge_notes',
+        visitId: anchorVisitId,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueAddNote = useCallback(
+    async (anchorVisitId: string, note: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'add_note',
+        visitId: anchorVisitId,
+        userId,
+        payload: { note },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueSkipVisit = useCallback(
+    async (visitId: string, reason: string, serviceName: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'skip_service',
+        visitId,
+        userId,
+        payload: { reason, serviceName },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
   const retry = useCallback(
     async (id: string) => {
       await retryQueueItem(id);
@@ -300,6 +354,9 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       enqueueAddPhoto,
       enqueueRequestMaterials,
       enqueueRecordMaterialUsage,
+      enqueueAcknowledgeNotes,
+      enqueueAddNote,
+      enqueueSkipVisit,
       retry,
       discard,
       syncNow,
@@ -316,6 +373,9 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     enqueueAddPhoto,
     enqueueRequestMaterials,
     enqueueRecordMaterialUsage,
+    enqueueAcknowledgeNotes,
+    enqueueAddNote,
+    enqueueSkipVisit,
     retry,
     discard,
     syncNow,

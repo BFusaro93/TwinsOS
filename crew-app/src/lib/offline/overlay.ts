@@ -75,6 +75,9 @@ export function applyStopQueueOverlay(stop: CrewStop, queueItemsForStop: QueueIt
   const pauseItems = queueItemsForStop.filter(
     (i) => (i.type === 'pause' || i.type === 'resume') && i.status !== 'failed'
   );
+  const acknowledgeItem = queueItemsForStop.find(
+    (i) => i.type === 'acknowledge_notes' && i.status !== 'failed'
+  );
 
   let clockedInAt = stop.clockedInAt;
   let clockedOutAt = stop.clockedOutAt;
@@ -98,8 +101,21 @@ export function applyStopQueueOverlay(stop: CrewStop, queueItemsForStop: QueueIt
     pausedAt = item.type === 'pause' ? (pausedAt ?? item.createdAt) : null;
   }
 
+  // Optimistically mark the anchor visit's notes as acknowledged, mirroring
+  // web's `anchor.acknowledgedNotesAt` gate (see visit/[id].tsx) — otherwise
+  // Clock In would stay disabled until the next refetch even though the tap
+  // already queued successfully.
+  const visits = acknowledgeItem
+    ? stop.visits.map((v) =>
+        v.id === stop.anchorVisitId
+          ? { ...v, acknowledgedNotesAt: v.acknowledgedNotesAt ?? acknowledgeItem.createdAt }
+          : v
+      )
+    : stop.visits;
+
   return {
     ...stop,
+    visits,
     clockedInAt,
     clockedOutAt,
     pausedAt,
