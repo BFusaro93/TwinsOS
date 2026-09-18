@@ -624,7 +624,15 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
   );
 }
 
-export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetProps) {
+/**
+ * Every piece of state below belongs to the part currently being shown. The
+ * parents render <PartDetailSheet> unconditionally, so the component would
+ * otherwise never unmount and that state would carry over to the next part
+ * opened — which is how an adjusted quantity ended up displayed on an
+ * unrelated part. The wrapper keys this on the part id and unmounts it while
+ * closed, so each open starts clean.
+ */
+function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps) {
   const { data: allParts } = useParts();
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
@@ -636,7 +644,11 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const level = useOverlayLevel();
   const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
   const { backdrop: childBackdropZ, panel: childPanelZ } = overlayZ(level + 1);
-  const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
+  // Optimistic display of a just-saved quantity, tagged with the value it
+  // replaced so it clears itself the moment the invalidated ["parts"] query
+  // comes back — rather than pinning the panel to a number that later changed
+  // elsewhere (a goods receipt, a work order consuming the part).
+  const [qtyOverride, setQtyOverride] = useState<{ partId: string; from: number; to: number } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [nestedPart, setNestedPart] = useState<Part | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -725,12 +737,16 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   // instead of staying stuck on the stale prop passed from the parent.
   const livePart = (allParts ?? []).find((p) => p.id === part.id) ?? part;
 
-  const effectiveQty = qtyOnHand ?? livePart.quantityOnHand;
   const partId = livePart.id;
+  const effectiveQty =
+    qtyOverride && qtyOverride.partId === partId && livePart.quantityOnHand === qtyOverride.from
+      ? qtyOverride.to
+      : livePart.quantityOnHand;
 
   async function handleQtyChange(n: number, reason: string) {
+    const from = livePart.quantityOnHand;
     await adjustQtyManualAsync({ id: partId, quantityOnHand: n, reason });
-    setQtyOnHand(n);
+    setQtyOverride({ partId, from, to: n });
   }
 
   function handleVendorsSave(
@@ -1099,5 +1115,17 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         );
       })()}
     </>
+  );
+}
+
+export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetProps) {
+  if (!part || !open) return null;
+  return (
+    <PartDetailSheetInner
+      key={part.id}
+      part={part}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
   );
 }

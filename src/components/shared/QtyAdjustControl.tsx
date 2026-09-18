@@ -23,10 +23,19 @@ interface QtyAdjustControlProps {
 
 export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
   const [inputVal, setInputVal] = useState(String(value));
+  // The control is reused across records without remounting (the part detail
+  // sheet keeps it mounted between opens), so re-seed the box whenever the
+  // incoming value changes instead of leaving the previous record's number in it.
+  const [lastValue, setLastValue] = useState(value);
   const [saved, setSaved] = useState(false);
   const [pendingQty, setPendingQty] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  if (value !== lastValue) {
+    setLastValue(value);
+    setInputVal(String(value));
+  }
 
   const parsed = parseInt(inputVal, 10);
   const isDirty = !isNaN(parsed) && parsed !== value;
