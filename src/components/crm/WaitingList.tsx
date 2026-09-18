@@ -554,7 +554,7 @@ export function WaitingList() {
         title="Waiting List"
         description="Jobs queued for opportunistic scheduling"
         action={
-          <Button size="sm" className="h-8 text-xs" onClick={() => setAddOpen(true)}>
+          <Button size="sm" onClick={() => setAddOpen(true)}>
             <Plus className="mr-1 h-3.5 w-3.5" />
             Add to Waiting List
           </Button>
