@@ -38,6 +38,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { LineItemNotesPopover, type LineItemNotes } from "./LineItemNotesPopover";
+import { BudgetedHoursPopover, type BudgetedHoursPatch } from "./BudgetedHoursPopover";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { AddSubitemDialog } from "./AddSubitemDialog";
 import {
@@ -375,6 +376,36 @@ function LineItemRow({
     }
   }
 
+  async function applyBudgetedHoursPatch(patch: BudgetedHoursPatch) {
+    // Mirrors saveDiscount rather than update()+save(): both fields need to
+    // land in the SAME computeLineItem pass (a two-step update()/update()
+    // would recompute totalCostCents off the old budgetedHours in between),
+    // and the upsert needs the freshly merged row, not the current closure's
+    // stale `row` a queued save() would read.
+    const next = { ...row, budgetedHours: patch.budgetedHours, ...(patch.costCents !== undefined ? { costCents: patch.costCents } : {}) };
+    const computed = computeLineItem(next, breakevenRateCents);
+    const merged: RowState = { ...next, ...computed };
+    setRow(merged);
+    try {
+      await upsert({
+        estimateId,
+        item: {
+          id: merged.id,
+          budgeted_hours: merged.budgetedHours,
+          total_budgeted_hours: merged.totalBudgetedHours,
+          cost_cents: merged.costCents,
+          total_cost_cents: merged.totalCostCents,
+          margin_bps: merged.marginBps,
+          markup_bps: merged.markupBps,
+          total_cents: merged.totalCents,
+        },
+      });
+    } catch {
+      setRow(row);
+      toast.error("Failed to update budgeted hours");
+    }
+  }
+
   async function saveNotes(notes: LineItemNotes) {
     try {
       await upsert({
@@ -560,16 +591,30 @@ function LineItemRow({
         </td>
 
         {/* B.Hr — budgeted hours per visit. Auto-calc shown in blue if production rate is active */}
-        <td className="w-14 px-2 py-1.5 text-right tabular-nums">
-          {isAutoHrs ? (
-            <span className="text-blue-600 font-medium">{row.budgetedHours.toFixed(2)}</span>
-          ) : (
-            <InlineNum
-              value={row.budgetedHours}
-              onChange={(v) => update("budgetedHours", v)}
-              onBlur={save}
-            />
-          )}
+        <td className="w-20 px-2 py-1.5">
+          <div className="flex items-center justify-end gap-0.5">
+            {isAutoHrs ? (
+              <span className="text-right text-blue-600 font-medium tabular-nums">{row.budgetedHours.toFixed(2)}</span>
+            ) : (
+              <>
+                <InlineNum
+                  value={row.budgetedHours}
+                  onChange={(v) => update("budgetedHours", v)}
+                  onBlur={save}
+                />
+                <BudgetedHoursPopover
+                  budgetedHours={row.budgetedHours}
+                  qty={row.qty}
+                  visits={row.visits}
+                  calcType={row.calcType}
+                  totalCostCents={row.totalCostCents}
+                  isAutoCost={isAutoCost}
+                  breakevenRateCents={breakevenRateCents}
+                  onApply={applyBudgetedHoursPatch}
+                />
+              </>
+            )}
+          </div>
         </td>
 
         {/* T.H. — total hours = B.Hr × Visits */}
