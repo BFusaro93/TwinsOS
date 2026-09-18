@@ -252,7 +252,7 @@ function AddJobsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setInitialized(false); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col sm:p-0">
+      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col [&>button:last-child]:top-1">
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">Add Jobs to Dispatch</DialogTitle>
         </DialogHeader>
@@ -977,7 +977,7 @@ export function SnowDispatchBoard() {
             <Printer className="h-3.5 w-3.5" />Print
           </Button>
           {canManage && (
-            <Button size="sm" className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
+            <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
               <Plus className="h-3.5 w-3.5" />Add Jobs
             </Button>
           )}
