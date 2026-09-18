@@ -252,7 +252,7 @@ function AddJobsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setInitialized(false); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col [&>button:last-child]:top-1">
+      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col [&>button:last-child]:top-0">
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">Add Jobs to Dispatch</DialogTitle>
         </DialogHeader>
@@ -434,7 +434,7 @@ function SnowCrewAssignDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl p-0 gap-0 max-h-[85vh] flex flex-col [&>button:last-child]:top-1"
+        className="max-w-3xl p-0 gap-0 max-h-[85vh] flex flex-col [&>button:last-child]:top-0"
         // Escape cancels a pick-up first; a second press closes the dialog.
         onEscapeKeyDown={(e) => {
           if (heldVisit) {
@@ -977,7 +977,7 @@ export function SnowDispatchBoard() {
             <Printer className="h-3.5 w-3.5" />Print
           </Button>
           {canManage && (
-            <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
+            <Button size="sm" className="h-9 text-xs gap-1.5" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
               <Plus className="h-3.5 w-3.5" />Add Jobs
             </Button>
           )}
