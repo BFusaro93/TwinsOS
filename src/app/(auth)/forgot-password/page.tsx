@@ -18,11 +18,20 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/auth/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      // Request never completed (offline, server unreachable) — surface it
+      // instead of letting the rejection escape and stranding the button.
+      setError("Couldn't reach the server. Check your connection and try again.");
+      setLoading(false);
+      return;
+    }
 
     setLoading(false);
 
