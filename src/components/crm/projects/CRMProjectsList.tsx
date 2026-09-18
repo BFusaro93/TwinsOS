@@ -421,7 +421,7 @@ function ProjectDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col sm:p-0">
+      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between border-b px-6 py-4">
           <div>

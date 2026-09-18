@@ -582,7 +582,7 @@ export function AddPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
-      <DialogContent className="max-w-3xl p-0 gap-0 sm:p-0">
+      <DialogContent className="max-w-3xl p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle className="text-lg font-semibold flex items-center justify-between">
             <span>{isCreditMode ? (isEdit ? "Edit Account Credit" : "Issue Account Credit") : (isEdit ? "Edit Payment" : chargeMode ? "Charge Card / Bank" : "Add Payment")}</span>
