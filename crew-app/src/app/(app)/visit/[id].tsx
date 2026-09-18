@@ -14,7 +14,14 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { ThemedText } from '@/components/themed-text';
-import { fetchVisitChemicals, fetchVisitPhotos, fetchVisitRequisitions, todayLocalDate } from '@/lib/api';
+import {
+  fetchJobProducts,
+  fetchVisitChemicals,
+  fetchVisitPhotos,
+  fetchVisitRequisitions,
+  todayLocalDate,
+} from '@/lib/api';
+import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
 import {
   elapsedSince,
@@ -28,37 +35,14 @@ import {
 import { applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { captureVisitPhoto } from '@/lib/offline/photos';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
-import type { AddPhotoPayload, RequestMaterialsPayload } from '@/lib/offline/types';
-import type { CrewStopVisit, VisitChemicalApplication, VisitPhoto, VisitRequisition } from '@/lib/types';
-
-// Matches the web crew stop page's actual Tailwind palette (src/app/(crm)/crm/
-// crew/stops/[visitId]/page.tsx) — kept in sync by hand, same as the login
-// screen's brand colors, since this app has no shared Tailwind config.
-const C = {
-  bg: '#f8fafc',
-  card: '#ffffff',
-  border: '#e2e8f0',
-  headerBorder: '#f1f5f9',
-  text: '#1e293b',
-  textMuted: '#64748b',
-  textFaint: '#94a3b8',
-  green: '#16a34a',
-  greenBg: '#f0fdf4',
-  greenBorder: '#bbf7d0',
-  greenText: '#166534',
-  amberBg: '#fffbeb',
-  amberBorder: '#fde68a',
-  amberText: '#92400e',
-  amberTextStrong: '#b45309',
-  blue: '#2563eb',
-  blueBg: '#eff6ff',
-  blueBorder: '#bfdbfe',
-  blueText: '#1d4ed8',
-  red: '#dc2626',
-  redBg: '#fef2f2',
-  redBorder: '#fecaca',
-  redText: '#b91c1c',
-};
+import type { AddPhotoPayload, RecordMaterialUsagePayload, RequestMaterialsPayload } from '@/lib/offline/types';
+import type {
+  CrewStopVisit,
+  JobProductMaterial,
+  VisitChemicalApplication,
+  VisitPhoto,
+  VisitRequisition,
+} from '@/lib/types';
 
 const REQUISITION_STATUS_LABEL: Record<VisitRequisition['status'], string> = {
   draft: 'Submitted',
@@ -107,6 +91,7 @@ export default function StopDetailScreen() {
     enqueuePause,
     enqueueResume,
     enqueueAddPhoto,
+    enqueueRecordMaterialUsage,
     retry,
     discard,
   } = useOfflineQueue();
@@ -116,6 +101,7 @@ export default function StopDetailScreen() {
   const [confirmedPhotos, setConfirmedPhotos] = useState<VisitPhoto[]>([]);
   const [requisitions, setRequisitions] = useState<VisitRequisition[]>([]);
   const [chemicals, setChemicals] = useState<VisitChemicalApplication[]>([]);
+  const [plannedMaterials, setPlannedMaterials] = useState<JobProductMaterial[]>([]);
   const [, forceTick] = useState(0);
 
   const serverStop = useMemo(() => stops.find((s) => s.anchorVisitId === id), [stops, id]);
@@ -136,6 +122,7 @@ export default function StopDetailScreen() {
 
   const photoQueueItems = queueItems.filter((i) => i.type === 'add_photo');
   const materialsQueueItems = queueItems.filter((i) => i.type === 'request_materials');
+  const materialUsageQueueItems = queueItems.filter((i) => i.type === 'record_material_usage');
 
   // Once every queue item for this stop clears (synced), pull fresh server
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
@@ -148,6 +135,7 @@ export default function StopDetailScreen() {
       void loadPhotos();
       void loadRequisitions();
       void loadChemicals();
+      void loadPlannedMaterials();
     }
     prevActiveCountRef.current = activeCount;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,10 +175,21 @@ export default function StopDetailScreen() {
     }
   }
 
+  async function loadPlannedMaterials() {
+    if (!id) return;
+    try {
+      const data = await fetchJobProducts(id);
+      setPlannedMaterials(data);
+    } catch {
+      // Same tolerance as the other load*() functions above.
+    }
+  }
+
   useEffect(() => {
     void loadPhotos();
     void loadRequisitions();
     void loadChemicals();
+    void loadPlannedMaterials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -242,6 +241,26 @@ export default function StopDetailScreen() {
   const handleRequestMaterials = () => {
     if (!stop) return;
     router.push({ pathname: '/visit/request-materials', params: { visitId: stop.anchorVisitId } });
+  };
+
+  const handleMarkUsed = (material: JobProductMaterial, usedQty: number) => {
+    if (!stop) return;
+    void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, { usedQty });
+  };
+
+  const handleMarkNotUsed = (material: JobProductMaterial) => {
+    if (!stop) return;
+    Alert.alert('Mark as not used?', `${material.productName} won't be counted as used on this job.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Not Used',
+        style: 'destructive',
+        onPress: () =>
+          void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, {
+            notUsed: true,
+          }),
+      },
+    ]);
   };
 
   const confirmDiscard = (queueItemId: string, description: string) => {
@@ -417,6 +436,15 @@ export default function StopDetailScreen() {
         onDiscard={(itemId) =>
           confirmDiscard(itemId, 'This photo will not be uploaded. It stays saved on this device.')
         }
+      />
+
+      <PlannedMaterialsSection
+        materials={plannedMaterials}
+        usageQueueItems={materialUsageQueueItems}
+        onMarkUsed={handleMarkUsed}
+        onMarkNotUsed={handleMarkNotUsed}
+        onRetry={(itemId) => void retry(itemId)}
+        onDiscard={(itemId) => confirmDiscard(itemId, "This won't be recorded as used.")}
       />
 
       <MaterialsSection
@@ -675,6 +703,174 @@ function PhotosSection({
             })}
           </View>
         )}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Materials office staff already planned/called for on this job
+ * (crm_job_products) — distinct from MaterialsSection below, which is an
+ * ad-hoc NEW request for something not already planned. Lets the crew
+ * confirm or correct the actual quantity used against what was called for,
+ * since the two often differ in the field. A queued-but-unsynced usage item
+ * replaces that row's editable controls with its pending/failed state,
+ * mirroring how PhotosSection/MaterialsSection show queued items — once
+ * confirmed by the server (row removed from the queue), the next
+ * loadPlannedMaterials() refetch shows the resolved, read-only state.
+ */
+function PlannedMaterialsSection({
+  materials,
+  usageQueueItems,
+  onMarkUsed,
+  onMarkNotUsed,
+  onRetry,
+  onDiscard,
+}: {
+  materials: JobProductMaterial[];
+  usageQueueItems: ReturnType<typeof useOfflineQueue>['items'];
+  onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkNotUsed: (material: JobProductMaterial) => void;
+  onRetry: (itemId: string) => void;
+  onDiscard: (itemId: string) => void;
+}) {
+  if (materials.length === 0) return null;
+
+  const queuedByJobProductId = new Map(
+    usageQueueItems.map((item) => [(item.payload as RecordMaterialUsagePayload).jobProductId, item])
+  );
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>Materials called for</Text>
+      </View>
+      <View style={styles.materialsList}>
+        {materials.map((material, index) => {
+          const queueItem = queuedByJobProductId.get(material.id);
+          return (
+            <View
+              key={material.id}
+              style={[styles.plannedMaterialRow, index === materials.length - 1 && styles.lastRow]}
+            >
+              {queueItem ? (
+                <QueuedMaterialRow item={queueItem} material={material} onRetry={onRetry} onDiscard={onDiscard} />
+              ) : material.status === 'pending' ? (
+                <PendingMaterialRow material={material} onMarkUsed={onMarkUsed} onMarkNotUsed={onMarkNotUsed} />
+              ) : (
+                <ResolvedMaterialRow material={material} />
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function PendingMaterialRow({
+  material,
+  onMarkUsed,
+  onMarkNotUsed,
+}: {
+  material: JobProductMaterial;
+  onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkNotUsed: (material: JobProductMaterial) => void;
+}) {
+  const [qtyText, setQtyText] = useState(String(material.plannedQty));
+
+  const parsedQty = Number(qtyText);
+  const isValid = qtyText.trim() !== '' && Number.isFinite(parsedQty) && parsedQty >= 0;
+
+  return (
+    <>
+      <View style={styles.plannedMaterialHeader}>
+        <Text style={styles.materialsItemName}>{material.productName}</Text>
+        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+      </View>
+      <View style={styles.plannedMaterialActionsRow}>
+        <TextInput
+          style={styles.qtyInput}
+          keyboardType="decimal-pad"
+          value={qtyText}
+          onChangeText={setQtyText}
+        />
+        <Pressable
+          style={({ pressed }) => [
+            styles.markUsedButton,
+            pressed && styles.markUsedButtonPressed,
+            !isValid && styles.markUsedButtonDisabled,
+          ]}
+          disabled={!isValid}
+          onPress={() => onMarkUsed(material, parsedQty)}
+        >
+          <Text style={styles.markUsedButtonText}>Mark Used</Text>
+        </Pressable>
+        <Pressable onPress={() => onMarkNotUsed(material)} hitSlop={8}>
+          <Text style={styles.linkText}>Not Used</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+}
+
+function QueuedMaterialRow({
+  item,
+  material,
+  onRetry,
+  onDiscard,
+}: {
+  item: ReturnType<typeof useOfflineQueue>['items'][number];
+  material: JobProductMaterial;
+  onRetry: (itemId: string) => void;
+  onDiscard: (itemId: string) => void;
+}) {
+  const payload = item.payload as RecordMaterialUsagePayload;
+  const summary = payload.notUsed ? 'Not used' : `Used: ${payload.usedQty}`;
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.plannedMaterialHeader}>
+        <Text style={styles.materialsItemName}>{material.productName}</Text>
+        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+      </View>
+      <View style={styles.queuedMaterialFooter}>
+        <Text style={styles.plannedQtyText}>{summary}</Text>
+        {item.status === 'failed' ? (
+          <View style={styles.materialsFailedActions}>
+            <Pressable onPress={() => onRetry(item.id)}>
+              <Text style={styles.linkText}>Retry</Text>
+            </Pressable>
+            <Pressable onPress={() => onDiscard(item.id)}>
+              <Text style={styles.linkText}>Discard</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={[styles.materialsStatusPill, { backgroundColor: C.amberTextStrong }]}>
+            <Text style={styles.materialsStatusPillText}>
+              {item.status === 'syncing' ? 'Sending…' : 'Queued'}
+            </Text>
+          </View>
+        )}
+      </View>
+      {item.status === 'failed' ? (
+        <Text style={[styles.errorText, styles.materialsErrorText]}>{item.lastError}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function ResolvedMaterialRow({ material }: { material: JobProductMaterial }) {
+  const color = material.status === 'not_used' ? C.amberTextStrong : C.green;
+  return (
+    <View style={styles.plannedMaterialHeader}>
+      <View>
+        <Text style={styles.materialsItemName}>{material.productName}</Text>
+        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+      </View>
+      <View style={[styles.materialsStatusPill, { backgroundColor: color }]}>
+        <Text style={styles.materialsStatusPillText}>
+          {material.status === 'not_used' ? 'Not used' : `Used: ${material.qty}`}
+        </Text>
       </View>
     </View>
   );
@@ -1193,6 +1389,63 @@ const styles = StyleSheet.create({
   },
   photoFailedActions: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  plannedMaterialRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.headerBorder,
+    gap: 8,
+  },
+  plannedMaterialHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  plannedQtyText: {
+    fontSize: 12,
+    color: C.textFaint,
+    marginTop: 2,
+  },
+  plannedMaterialActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  qtyInput: {
+    width: 64,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 15,
+    color: C.text,
+    textAlign: 'center',
+  },
+  markUsedButton: {
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: C.green,
+  },
+  markUsedButtonPressed: {
+    opacity: 0.85,
+  },
+  markUsedButtonDisabled: {
+    opacity: 0.4,
+  },
+  markUsedButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  queuedMaterialFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
 

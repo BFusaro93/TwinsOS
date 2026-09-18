@@ -12,6 +12,7 @@ import {
   resumeStop,
   startDrive,
   uploadVisitPhoto,
+  useJobProductMaterials,
 } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
@@ -26,6 +27,7 @@ import {
   type ClockInPayload,
   type ClockOutPayload,
   type QueueItem,
+  type RecordMaterialUsagePayload,
   type RequestMaterialsPayload,
 } from './types';
 
@@ -115,16 +117,32 @@ async function processItem(item: QueueItem): Promise<void> {
         await requestMaterials(item.visitId, payload.productItemId, payload.quantity, item.id, payload.note);
         break;
       }
+      case 'record_material_usage': {
+        const payload = item.payload as RecordMaterialUsagePayload;
+        await useJobProductMaterials(
+          item.visitId,
+          payload.jobProductId,
+          payload.notUsed ? { notUsed: true } : { usedQty: payload.usedQty ?? 0 }
+        );
+        break;
+      }
     }
     await removeQueueItem(item.id);
     notifyListeners();
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
-      // The server rejected this as a conflict (already clocked in/out from elsewhere) —
-      // surface it plainly rather than retrying forever or discarding silently.
+      // The server rejected this as a conflict — surface it plainly rather
+      // than retrying forever or discarding silently. Message differs by
+      // action type: a clock/pause conflict means someone else already
+      // changed the visit; a material-usage conflict means this specific
+      // item was already recorded (e.g. from another device, or a prior
+      // sync that succeeded before a later retry).
       await setQueueItemStatus(item.id, 'failed', {
         attempts: item.attempts + 1,
-        lastError: "This didn't sync — a supervisor may have already updated this visit.",
+        lastError:
+          item.type === 'record_material_usage'
+            ? "This didn't sync — this material's usage was already recorded."
+            : "This didn't sync — a supervisor may have already updated this visit.",
       });
       notifyListeners();
       return;

@@ -9,7 +9,8 @@ export type QueueActionType =
   | 'drive_start'
   | 'drive_end'
   | 'add_photo'
-  | 'request_materials';
+  | 'request_materials'
+  | 'record_material_usage';
 
 export type QueueStatus = 'pending' | 'syncing' | 'failed';
 
@@ -60,6 +61,15 @@ export interface RequestMaterialsPayload {
   note?: string;
 }
 
+export interface RecordMaterialUsagePayload {
+  jobProductId: string;
+  /** Denormalized for display while queued/syncing, mirroring RequestMaterialsPayload's productItemName above. */
+  productName: string;
+  /** Exactly one of these — a plain union of two request shapes, not both fields at once. */
+  usedQty?: number;
+  notUsed?: true;
+}
+
 export type QueuePayload =
   | ClockInPayload
   | ClockOutPayload
@@ -68,7 +78,8 @@ export type QueuePayload =
   | DriveStartPayload
   | DriveEndPayload
   | AddPhotoPayload
-  | RequestMaterialsPayload;
+  | RequestMaterialsPayload
+  | RecordMaterialUsagePayload;
 
 /** A single queued offline action, persisted in SQLite (see db.ts). */
 export interface QueueItem {

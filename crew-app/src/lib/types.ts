@@ -157,6 +157,23 @@ export interface VisitChemicalApplication {
   applicationRateLabel: string | null;
 }
 
+// Mirrors GET/POST .../job-products[/:id/use-materials] — materials office
+// staff already planned/called for on this job (crm_job_products), distinct
+// from VisitRequisition below (an ad-hoc new request for something NOT
+// already planned). plannedQty is the original called-for amount; qty is
+// the current value, which becomes "quantity actually used" once status
+// leaves 'pending' (see supabase/migrations/
+// 20260918050000_crm_job_products_planned_qty.sql).
+export type JobProductStatus = 'pending' | 'invoiced' | 'used_no_invoice' | 'not_used';
+
+export interface JobProductMaterial {
+  id: string;
+  productName: string;
+  plannedQty: number;
+  qty: number;
+  status: JobProductStatus;
+}
+
 export type RequisitionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'ordered' | 'closed';
 
 // Mirrors shapeRequisition() (src/app/api/v1/requisitions/shape.ts), as

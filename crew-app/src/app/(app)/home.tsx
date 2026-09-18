@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
 import { SyncStatusChip } from '@/components/sync-status-chip';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/lib/auth-context';
+import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
 import { supabase } from '@/lib/supabase';
 import { todayLocalDate } from '@/lib/api';
@@ -21,7 +20,6 @@ import {
 import { applyDriveOverlay, applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
 import { unregisterPushToken } from '@/lib/notifications';
-import { useTheme } from '@/hooks/use-theme';
 
 const TODAY = todayLocalDate();
 
@@ -63,6 +61,8 @@ export default function HomeScreen() {
     return p === 'clocked_in' || p === 'on_break';
   });
 
+  const completedCount = stops.filter((s) => stopProgress(s) === 'completed').length;
+
   // Refresh whenever the tab regains focus — e.g. coming back from a stop
   // detail screen after clocking in/out.
   useFocusEffect(
@@ -83,22 +83,42 @@ export default function HomeScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <ThemedText type="title" style={styles.title}>
-            Today
-          </ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-            {crewName ? crewName : session?.user.email ?? 'Crew'} · {TODAY}
-          </ThemedText>
-          <View style={styles.chipRow}>
-            <SyncStatusChip />
+        <View style={styles.headerTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eyebrow}>Today</Text>
+            <Text style={styles.title}>{crewName ? crewName : session?.user.email ?? 'Crew'}</Text>
           </View>
+          <Pressable onPress={handleSignOut} hitSlop={12}>
+            <Text style={styles.signOutLink}>Sign out</Text>
+          </Pressable>
         </View>
-        <Pressable onPress={handleSignOut} hitSlop={12}>
-          <ThemedText type="linkPrimary">Sign out</ThemedText>
-        </Pressable>
+
+        <View style={styles.chipRow}>
+          <SyncStatusChip />
+        </View>
+
+        {stops.length > 0 ? (
+          <View style={styles.progressBlock}>
+            <View style={styles.progressLabelRow}>
+              <Text style={styles.progressLabel}>
+                {completedCount} of {stops.length} complete
+              </Text>
+              <Text style={styles.progressLabel}>
+                {Math.round((completedCount / stops.length) * 100)}%
+              </Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${(completedCount / stops.length) * 100}%` },
+                ]}
+              />
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <DriveBanner
@@ -114,19 +134,17 @@ export default function HomeScreen() {
         </View>
       ) : error ? (
         <View style={styles.centered}>
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <Text style={styles.errorText}>{error}</Text>
           <Pressable style={styles.retryButton} onPress={() => void refetch()}>
-            <ThemedText style={styles.retryButtonText}>Try again</ThemedText>
+            <Text style={styles.retryButtonText}>Try again</Text>
           </Pressable>
         </View>
       ) : stops.length === 0 ? (
         <View style={styles.centered}>
-          <ThemedText type="subtitle" style={styles.emptyTitle}>
-            No jobs today
-          </ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.emptyBody}>
+          <Text style={styles.emptyTitle}>No jobs today</Text>
+          <Text style={styles.emptyBody}>
             You&apos;re not scheduled for anything today. Pull down to refresh.
-          </ThemedText>
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -144,7 +162,7 @@ export default function HomeScreen() {
           )}
         />
       )}
-    </ThemedView>
+    </View>
   );
 }
 
@@ -161,15 +179,18 @@ function DriveBanner({
 }) {
   if (drive.openSegment) {
     return (
-      <Pressable style={[styles.driveBanner, styles.driveBannerActive]} onPress={onEndDrive}>
+      <Pressable
+        style={({ pressed }) => [styles.driveBanner, pressed && styles.driveBannerPressed]}
+        onPress={onEndDrive}
+      >
         <View style={{ flex: 1 }}>
-          <ThemedText style={styles.driveBannerTitle}>Driving</ThemedText>
-          <ThemedText style={styles.driveBannerSubtitle}>
+          <Text style={styles.driveBannerTitle}>Driving</Text>
+          <Text style={styles.driveBannerSubtitle}>
             Since {elapsedSince(drive.openSegment.startedAt)}
-          </ThemedText>
+          </Text>
         </View>
         <View style={styles.driveArrivedButton}>
-          <ThemedText style={styles.driveArrivedButtonText}>Arrived</ThemedText>
+          <Text style={styles.driveArrivedButtonText}>Arrived</Text>
         </View>
       </Pressable>
     );
@@ -178,60 +199,70 @@ function DriveBanner({
   return (
     <View style={styles.driveBannerRow}>
       <Pressable
-        style={[styles.driveStartButton, disabled && styles.driveStartButtonDisabled]}
+        style={({ pressed }) => [
+          styles.driveStartButton,
+          pressed && !disabled && styles.driveStartButtonPressed,
+          disabled && styles.driveStartButtonDisabled,
+        ]}
         onPress={onStartDrive}
         disabled={disabled}
       >
-        <ThemedText style={styles.driveStartButtonText}>Start Drive</ThemedText>
+        <Text style={styles.driveStartButtonText}>Start Drive</Text>
       </Pressable>
       {drive.totalMinutes > 0 ? (
-        <ThemedText themeColor="textSecondary" type="small">
-          Drive today: {drive.totalMinutes}m
-        </ThemedText>
+        <Text style={styles.driveTodayText}>Drive today: {drive.totalMinutes}m</Text>
       ) : null}
     </View>
   );
 }
 
 function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOverlay>; onPress: () => void }) {
-  const theme = useTheme();
   const progress = stopProgress(stop);
   const services = stopServiceNames(stop);
 
   return (
     <Pressable
-      style={[styles.card, { backgroundColor: theme.backgroundElement }]}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={onPress}
     >
       <View style={styles.cardTopRow}>
         <View style={{ flex: 1 }}>
           <View style={styles.cardNameRow}>
-            <ThemedText type="smallBold" style={styles.cardClientName}>
+            <Text style={styles.cardClientName} numberOfLines={1}>
               {stop.clientName ?? 'Unknown client'}
-            </ThemedText>
+            </Text>
             {stop.visits.length > 1 ? (
               <View style={styles.serviceCountPill}>
-                <ThemedText style={styles.serviceCountPillText}>{stop.visits.length} services</ThemedText>
+                <Text style={styles.serviceCountPillText}>{stop.visits.length} services</Text>
               </View>
             ) : null}
           </View>
+          <Text style={styles.cardMeta}>{formatStopTimeWindow(stop)}</Text>
+          {formatStopAddress(stop) ? (
+            <Text style={styles.cardMeta} numberOfLines={1}>
+              {formatStopAddress(stop)}
+            </Text>
+          ) : null}
+          {services ? (
+            <Text style={styles.cardMeta} numberOfLines={1}>
+              {services}
+            </Text>
+          ) : null}
         </View>
-        <View style={[styles.statusPill, { backgroundColor: STOP_PROGRESS_COLOR[progress] }]}>
-          <ThemedText style={styles.statusPillText}>{STOP_PROGRESS_LABEL[progress]}</ThemedText>
+        <View style={styles.cardStatusColumn}>
+          <View style={[styles.statusPill, { backgroundColor: STOP_PROGRESS_COLOR[progress] }]}>
+            <Text style={styles.statusPillText}>{STOP_PROGRESS_LABEL[progress]}</Text>
+          </View>
+          {progress === 'on_break' ? <Text style={styles.onBreakText}>On Break</Text> : null}
         </View>
       </View>
-      <ThemedText themeColor="textSecondary" type="small">
-        {formatStopTimeWindow(stop)}
-      </ThemedText>
-      {formatStopAddress(stop) ? (
-        <ThemedText themeColor="textSecondary" type="small" numberOfLines={1}>
-          {formatStopAddress(stop)}
-        </ThemedText>
-      ) : null}
-      {services ? (
-        <ThemedText themeColor="textSecondary" type="small" numberOfLines={1}>
-          {services}
-        </ThemedText>
+
+      {stop.notesToCrew ? (
+        <View style={styles.cardNote}>
+          <Text style={styles.cardNoteText} numberOfLines={2}>
+            {stop.notesToCrew}
+          </Text>
+        </View>
       ) : null}
     </Pressable>
   );
@@ -240,47 +271,95 @@ function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOve
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
+    backgroundColor: C.bg,
   },
   header: {
+    backgroundColor: C.card,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    gap: 12,
+  },
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    color: C.textFaint,
   },
   title: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
-  subtitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: C.text,
     marginTop: 2,
   },
-  chipRow: {
-    marginTop: 8,
+  signOutLink: {
+    color: C.blueText,
+    fontWeight: '600',
+    fontSize: 15,
   },
+  chipRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+  },
+  progressBlock: {
+    marginTop: 14,
+  },
+  progressLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: C.headerBorder,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: C.green,
+  },
+
   driveBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 20,
-    marginBottom: 16,
+    marginTop: 16,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    backgroundColor: C.blueBg,
     padding: 14,
     gap: 10,
   },
-  driveBannerActive: {
-    backgroundColor: '#208AEF18',
+  driveBannerPressed: {
+    backgroundColor: C.blueBorder,
   },
   driveBannerTitle: {
     fontWeight: '700',
-    color: '#208AEF',
+    fontSize: 14,
+    color: C.blueText,
   },
   driveBannerSubtitle: {
     fontSize: 12,
-    color: '#208AEF',
+    color: C.blue,
+    marginTop: 2,
   },
   driveArrivedButton: {
-    backgroundColor: '#208AEF',
+    backgroundColor: C.blue,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -295,39 +374,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginHorizontal: 20,
-    marginBottom: 16,
+    marginTop: 16,
     gap: 10,
   },
   driveStartButton: {
     borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#208AEF',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: C.blue,
+    backgroundColor: C.blueBg,
+  },
+  driveStartButtonPressed: {
+    backgroundColor: C.blueBorder,
   },
   driveStartButtonDisabled: {
     opacity: 0.4,
   },
   driveStartButtonText: {
-    color: '#208AEF',
+    color: C.blueText,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 14,
   },
+  driveTodayText: {
+    fontSize: 12,
+    color: C.textMuted,
+  },
+
   list: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    padding: 20,
     gap: 12,
   },
   card: {
+    backgroundColor: C.card,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
     padding: 16,
-    gap: 4,
+  },
+  cardPressed: {
+    backgroundColor: C.headerBorder,
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'flex-start',
+    gap: 10,
   },
   cardNameRow: {
     flexDirection: 'row',
@@ -336,17 +428,29 @@ const styles = StyleSheet.create({
   },
   cardClientName: {
     flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.text,
+  },
+  cardMeta: {
+    fontSize: 13,
+    color: C.textMuted,
+    marginTop: 4,
   },
   serviceCountPill: {
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    backgroundColor: '#8a8a8a22',
+    backgroundColor: C.headerBorder,
   },
   serviceCountPillText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#8a8a8a',
+    color: C.textMuted,
+  },
+  cardStatusColumn: {
+    alignItems: 'flex-end',
+    gap: 4,
   },
   statusPill: {
     borderRadius: 999,
@@ -356,8 +460,28 @@ const styles = StyleSheet.create({
   statusPillText: {
     color: '#ffffff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
+  onBreakText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.blueText,
+  },
+  cardNote: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: C.headerBorder,
+  },
+  cardNoteText: {
+    fontSize: 12,
+    color: C.amberText,
+    backgroundColor: C.amberBg,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -366,19 +490,21 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyTitle: {
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 18,
+    fontWeight: '700',
+    color: C.text,
     textAlign: 'center',
   },
   emptyBody: {
     textAlign: 'center',
+    color: C.textMuted,
   },
   errorText: {
-    color: '#d9342b',
+    color: C.redText,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#208AEF',
+    backgroundColor: C.blue,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,

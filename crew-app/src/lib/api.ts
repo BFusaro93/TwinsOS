@@ -3,6 +3,7 @@ import { File, UploadType } from 'expo-file-system';
 import { supabase } from '@/lib/supabase';
 import type {
   CrewVisitsResponse,
+  JobProductMaterial,
   PickerProduct,
   VisitChemicalApplication,
   VisitPhoto,
@@ -254,6 +255,34 @@ export async function requestMaterials(
 /** GET /api/crm/crew/visits/:id/requisitions — status list for this visit's "My Requests" section. */
 export async function fetchVisitRequisitions(visitId: string): Promise<VisitRequisition[]> {
   return authedFetch(`/api/crm/crew/visits/${visitId}/requisitions`) as Promise<VisitRequisition[]>;
+}
+
+/**
+ * GET /api/crm/crew/visits/:id/job-products — materials office staff already
+ * planned/called for on this visit's job, distinct from requestMaterials()
+ * above (an ad-hoc new request, not something already planned).
+ */
+export async function fetchJobProducts(visitId: string): Promise<JobProductMaterial[]> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/job-products`) as Promise<JobProductMaterial[]>;
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/job-products/:jobProductId/use-materials —
+ * records how much of a planned material was actually used (or that it
+ * wasn't used at all). Only valid while the row is still 'pending'; the
+ * route 409s on an already-resolved row. Called by the offline sync engine
+ * for queued 'record_material_usage' items, same pattern as
+ * requestMaterials() above.
+ */
+export async function useJobProductMaterials(
+  visitId: string,
+  jobProductId: string,
+  usage: { usedQty: number } | { notUsed: true }
+): Promise<JobProductMaterial> {
+  return authedFetch(
+    `/api/crm/crew/visits/${visitId}/job-products/${jobProductId}/use-materials`,
+    { method: 'POST', body: JSON.stringify(usage) }
+  ) as Promise<JobProductMaterial>;
 }
 
 /** GET /api/crm/crew/products?q=... — the "Request Materials" product picker's search. */

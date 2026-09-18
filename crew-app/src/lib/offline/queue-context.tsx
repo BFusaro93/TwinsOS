@@ -48,6 +48,13 @@ interface OfflineQueueContextValue {
     quantity: number,
     note?: string
   ) => Promise<void>;
+  /** `visitId` here is the stop's anchor visit id, same as clock actions — see the route's job-id lookup. */
+  enqueueRecordMaterialUsage: (
+    visitId: string,
+    jobProductId: string,
+    productName: string,
+    usage: { usedQty: number } | { notUsed: true }
+  ) => Promise<void>;
   /** Resets a failed item back to pending so the sync engine attempts it again. */
   retry: (id: string) => Promise<void>;
   /** Permanently discards a failed item (e.g. after the crew member acknowledges a conflict). */
@@ -229,6 +236,31 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     [refresh, userId]
   );
 
+  const enqueueRecordMaterialUsage = useCallback(
+    async (
+      visitId: string,
+      jobProductId: string,
+      productName: string,
+      usage: { usedQty: number } | { notUsed: true }
+    ) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'record_material_usage',
+        visitId,
+        userId,
+        payload: {
+          jobProductId,
+          productName,
+          ...('notUsed' in usage ? { notUsed: usage.notUsed } : { usedQty: usage.usedQty }),
+        },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
   const retry = useCallback(
     async (id: string) => {
       await retryQueueItem(id);
@@ -267,6 +299,7 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       enqueueEndDrive,
       enqueueAddPhoto,
       enqueueRequestMaterials,
+      enqueueRecordMaterialUsage,
       retry,
       discard,
       syncNow,
@@ -282,6 +315,7 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     enqueueEndDrive,
     enqueueAddPhoto,
     enqueueRequestMaterials,
+    enqueueRecordMaterialUsage,
     retry,
     discard,
     syncNow,
