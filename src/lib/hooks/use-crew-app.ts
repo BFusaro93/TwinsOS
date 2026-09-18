@@ -389,6 +389,36 @@ export function useVisitChemicals(visitIds: string[]) {
   });
 }
 
+// ── useJobProducts ───────────────────────────────────────────────────────────
+// Materials office staff already planned/called for on this visit's job
+// (crm_job_products) — distinct from an ad-hoc new request. Mirrors
+// crew-app's fetchJobProducts()/GET .../job-products route. plannedQty is
+// the original called-for amount; qty becomes "quantity actually used" once
+// status leaves 'pending' (see supabase/migrations/
+// 20260918050000_crm_job_products_planned_qty.sql).
+
+export type JobProductStatus = "pending" | "invoiced" | "used_no_invoice" | "not_used";
+
+export interface JobProductMaterial {
+  id: string;
+  productName: string;
+  plannedQty: number;
+  qty: number;
+  status: JobProductStatus;
+}
+
+export function useJobProducts(visitId: string) {
+  return useQuery<JobProductMaterial[]>({
+    queryKey: ["crew-app-job-products", visitId],
+    enabled: !!visitId,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/job-products`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+}
+
 // ── useCrewMemberTimesForDate ─────────────────────────────────────────────────
 // Batched by scheduled_date instead of one useCrewMemberTimes(visitId) call per
 // row — the Dispatch Board needs every visible visit's member times at once
@@ -766,6 +796,43 @@ export function useAddCrewNote() {
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
     onError: () => toast.error("Failed to send note — check your connection and try again"),
+  });
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/job-products/:jobProductId/use-materials —
+ * records how much of a planned material was actually used (or that it
+ * wasn't used at all). Only valid while the row is still 'pending'; the
+ * route 409s on an already-resolved row, same as crew-app's
+ * useJobProductMaterials().
+ */
+export function useUseJobProductMaterials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      visitId,
+      jobProductId,
+      usage,
+    }: {
+      visitId: string;
+      jobProductId: string;
+      usage: { usedQty: number } | { notUsed: true };
+    }) => {
+      const res = await fetch(
+        `/api/crm/crew/visits/${visitId}/job-products/${jobProductId}/use-materials`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(usage),
+        }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      return res.json() as Promise<JobProductMaterial>;
+    },
+    onSuccess: (_data, { visitId }) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-job-products", visitId] });
+    },
+    onError: () => toast.error("Failed to record materials used — check your connection and try again"),
   });
 }
 

@@ -7,6 +7,7 @@ import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
   Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles, FlaskConical,
+  ClipboardList,
 } from "lucide-react";
 import {
   useStopDetail,
@@ -22,7 +23,11 @@ import {
   useUploadVisitPhoto,
   useFieldUpsellServices,
   useSubmitFieldUpsell,
+  useJobProducts,
+  useUseJobProductMaterials,
+  type JobProductMaterial,
 } from "@/lib/hooks/use-crew-app";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -37,6 +42,77 @@ import { visitServices } from "@/lib/utils/visit-stops";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { toast } from "sonner";
+
+/**
+ * One row of the "Materials called for" card — mirrors crew-app's
+ * PendingMaterialRow/ResolvedMaterialRow (visit/[id].tsx). Pending rows let
+ * the crew confirm or correct the actual quantity used against what the
+ * office planned; resolved rows are read-only.
+ */
+function PlannedMaterialRow({
+  material,
+  onMarkUsed,
+  onMarkNotUsed,
+  isSaving,
+}: {
+  material: JobProductMaterial;
+  onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkNotUsed: (material: JobProductMaterial) => void;
+  isSaving: boolean;
+}) {
+  const [qtyText, setQtyText] = useState(String(material.plannedQty));
+  const parsedQty = Number(qtyText);
+  const isValid = qtyText.trim() !== "" && Number.isFinite(parsedQty) && parsedQty >= 0;
+
+  if (material.status !== "pending") {
+    const resolved = material.status === "not_used"
+      ? { label: "Not used", className: "bg-amber-100 text-amber-700" }
+      : { label: `Used: ${material.qty}`, className: "bg-green-100 text-green-700" };
+    return (
+      <div className="px-4 py-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm text-slate-700 truncate">{material.productName}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Called for: {material.plannedQty}</p>
+        </div>
+        <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${resolved.className}`}>
+          {resolved.label}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-slate-700">{material.productName}</p>
+        <p className="text-xs text-slate-400">Called for: {material.plannedQty}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          value={qtyText}
+          onChange={(e) => setQtyText(e.target.value)}
+          className="w-20 h-8 text-sm"
+        />
+        <Button
+          size="sm"
+          className="bg-green-600 hover:bg-green-700"
+          disabled={!isValid || isSaving}
+          onClick={() => onMarkUsed(material, parsedQty)}
+        >
+          Mark Used
+        </Button>
+        <button
+          className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          disabled={isSaving}
+          onClick={() => onMarkNotUsed(material)}
+        >
+          Not Used
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ElapsedTimer({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
@@ -72,6 +148,8 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const uploadPhoto   = useUploadVisitPhoto();
   const { data: upsellServices = [] } = useFieldUpsellServices();
   const submitUpsell  = useSubmitFieldUpsell();
+  const { data: jobProducts = [] } = useJobProducts(anchorVisitId);
+  const useMaterials  = useUseJobProductMaterials();
 
   const [noteText, setNoteText]       = useState("");
   const [upsellOpen, setUpsellOpen]       = useState(false);
@@ -153,6 +231,23 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       setUpsellPhoto(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't send the suggestion");
+    }
+  }
+
+  async function handleMarkUsed(material: JobProductMaterial, usedQty: number) {
+    try {
+      await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { usedQty } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+    }
+  }
+
+  async function handleMarkNotUsed(material: JobProductMaterial) {
+    if (!window.confirm(`${material.productName} won't be counted as used on this job. Continue?`)) return;
+    try {
+      await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { notUsed: true } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
     }
   }
 
@@ -503,6 +598,31 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             </div>
           )}
         </div>
+
+        {/* Materials called for — office-planned materials (crm_job_products),
+            distinct from an ad-hoc new request. Mirrors crew-app's
+            PlannedMaterialsSection. */}
+        {jobProducts.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <ClipboardList className="h-4 w-4" />
+                Materials called for
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {jobProducts.map((m) => (
+                <PlannedMaterialRow
+                  key={m.id}
+                  material={m}
+                  onMarkUsed={handleMarkUsed}
+                  onMarkNotUsed={handleMarkNotUsed}
+                  isSaving={useMaterials.isPending}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Suggest work — hidden unless the office has opened up services for
             crews to suggest, which is how the feature is switched on. */}
