@@ -57,6 +57,18 @@ export async function POST(request: Request) {
         status: body.status,
         signedAt: body.signedAt,
         signedBy: body.signedBy,
+        billingDayOfMonth: body.billingDayOfMonth,
+        billMonthInAdvance: body.billMonthInAdvance,
+        paymentType: body.paymentType,
+        poNumber: body.poNumber,
+        autoGenerate: body.autoGenerate,
+        isActive: body.isActive,
+        includeSubProperties: body.includeSubProperties,
+        source: body.source,
+        salesRepId: body.salesRepId,
+        monthlyAmounts: body.monthlyAmounts,
+        invoiceLineItems: body.invoiceLineItems,
+        defaultService: body.defaultService,
       },
     ];
   }
@@ -80,6 +92,18 @@ export async function POST(request: Request) {
     }
   }
 
+  const salesRepIds = [...new Set(items.map((c) => c.salesRepId).filter((id): id is string => !!id))];
+  const salesRepOrgs = new Map<string, string>();
+  if (salesRepIds.length > 0) {
+    const { data: reps } = await db.from("crm_employees").select("id, org_id").in("id", salesRepIds);
+    for (const r of reps ?? []) salesRepOrgs.set(r.id as string, r.org_id as string);
+  }
+  for (const c of items) {
+    if (c.salesRepId && salesRepOrgs.get(c.salesRepId) !== auth.orgId) {
+      return jsonError(`Sales rep ${c.salesRepId} not found`, 404);
+    }
+  }
+
   const rows = items.map((c) => ({
     org_id: auth.orgId,
     client_id: c.clientId,
@@ -94,6 +118,18 @@ export async function POST(request: Request) {
     notes: c.notes ?? null,
     signed_at: c.signedAt ?? null,
     signed_by: c.signedBy ?? null,
+    billing_day_of_month: c.billingDayOfMonth ?? 1,
+    bill_month_in_advance: c.billMonthInAdvance ?? false,
+    payment_type: c.paymentType ?? null,
+    po_number: c.poNumber ?? null,
+    auto_generate: c.autoGenerate ?? true,
+    is_active: c.isActive ?? true,
+    include_sub_properties: c.includeSubProperties ?? true,
+    source: c.source ?? null,
+    sales_rep_id: c.salesRepId ?? null,
+    monthly_amounts: c.monthlyAmounts ?? {},
+    invoice_line_items: c.invoiceLineItems ?? [],
+    default_service: c.defaultService ?? null,
   }));
 
   const { data, error } = await db.from("crm_contracts").insert(rows).select(CONTRACT_SELECT);

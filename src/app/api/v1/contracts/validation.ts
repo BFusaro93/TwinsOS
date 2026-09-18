@@ -3,6 +3,26 @@ import { z } from "zod";
 const BILLING_FREQUENCIES = ["weekly", "biweekly", "monthly", "quarterly", "annual", "one_time"] as const;
 const CONTRACT_STATUSES = ["draft", "sent", "signed", "active", "expired", "cancelled"] as const;
 
+// jan..dec -> cents. Lets a seasonal contract (e.g. lower in winter, higher
+// in growing season) bill a different amount each calendar month, cycling
+// every year — not a year-over-year escalation schedule.
+const monthlyAmountsSchema = z
+  .object({
+    jan: z.number().int().nonnegative().optional(),
+    feb: z.number().int().nonnegative().optional(),
+    mar: z.number().int().nonnegative().optional(),
+    apr: z.number().int().nonnegative().optional(),
+    may: z.number().int().nonnegative().optional(),
+    jun: z.number().int().nonnegative().optional(),
+    jul: z.number().int().nonnegative().optional(),
+    aug: z.number().int().nonnegative().optional(),
+    sep: z.number().int().nonnegative().optional(),
+    oct: z.number().int().nonnegative().optional(),
+    nov: z.number().int().nonnegative().optional(),
+    dec: z.number().int().nonnegative().optional(),
+  })
+  .optional();
+
 const contractItemSchema = z.object({
   clientId: z.string().uuid(),
   title: z.string().min(1),
@@ -16,6 +36,18 @@ const contractItemSchema = z.object({
   status: z.enum(CONTRACT_STATUSES).optional(),
   signedAt: z.string().optional(),
   signedBy: z.string().optional(),
+  billingDayOfMonth: z.number().int().min(1).max(28).optional(),
+  billMonthInAdvance: z.boolean().optional(),
+  paymentType: z.string().optional(),
+  poNumber: z.string().optional(),
+  autoGenerate: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  includeSubProperties: z.boolean().optional(),
+  source: z.string().optional(),
+  salesRepId: z.string().uuid().optional(),
+  monthlyAmounts: monthlyAmountsSchema,
+  invoiceLineItems: z.array(z.string()).optional(),
+  defaultService: z.string().optional(),
 });
 
 /**
@@ -47,6 +79,18 @@ export const createContractSchema = z.object({
   status: z.enum(CONTRACT_STATUSES).optional(),
   signedAt: z.string().optional(),
   signedBy: z.string().optional(),
+  billingDayOfMonth: z.number().int().min(1).max(28).optional(),
+  billMonthInAdvance: z.boolean().optional(),
+  paymentType: z.string().optional(),
+  poNumber: z.string().optional(),
+  autoGenerate: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  includeSubProperties: z.boolean().optional(),
+  source: z.string().optional(),
+  salesRepId: z.string().uuid().optional(),
+  monthlyAmounts: monthlyAmountsSchema,
+  invoiceLineItems: z.array(z.string()).optional(),
+  defaultService: z.string().optional(),
   contracts: z.array(contractItemSchema).min(1).max(50).optional(),
 });
 
