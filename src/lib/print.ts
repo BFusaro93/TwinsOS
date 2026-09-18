@@ -1,9 +1,11 @@
 import type { PurchaseOrder, Project } from "@/types";
 import type { WorkOrder } from "@/types";
+import type { CRMJobVisit } from "@/types/crm-jobs";
 import { useSettingsStore } from "@/stores/settings-store";
 import { stripMentionTokens } from "@/lib/mentions";
 import { computeSalesTax } from "@/lib/utils/po-tax";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank", "width=900,height=700");
@@ -898,4 +900,202 @@ export function printProject(
 </html>`;
 
   openPrintWindow(projHtml);
+}
+
+// ── route sheets ────────────────────────────────────────────────────────────
+
+const ROUTE_SHEET_STYLES = `
+  .rs-page + .rs-page { page-break-before: always; }
+  .rs-section + .rs-section { margin-top: 32px; }
+  .rs-crew-header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid #1e293b; padding-bottom: 6px; margin-bottom: 12px; }
+  .rs-crew-header h2 { font-size: 16px; font-weight: 700; color: #0f172a; }
+  .rs-crew-header .rs-date { font-size: 13px; color: #64748b; }
+  .rs-roster { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 16px; }
+  .rs-roster table { width: auto; flex: 1; margin-bottom: 0; font-size: 12px; }
+  .rs-roster th { background: none; color: #334155; padding: 2px 10px 6px 0; text-align: left; font-size: 11px; text-transform: none; font-weight: 600; }
+  .rs-roster td { padding: 6px 10px 6px 0; border-bottom: 1px solid #cbd5e1; }
+  .rs-side { width: 190px; flex-shrink: 0; font-size: 12px; padding-top: 20px; }
+  .rs-side-row { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; margin-bottom: 8px; }
+  .rs-side-row:last-child { border-bottom: none; font-weight: 700; }
+  .rs-blank { display: inline-block; border-bottom: 1px solid #94a3b8; min-width: 40px; }
+  .rs-blank.wide { min-width: 90px; }
+  .rs-blank.full { display: block; width: 100%; min-height: 14px; }
+  .rs-job { border-bottom: 1px solid #cbd5e1; padding: 10px 0; page-break-inside: avoid; }
+  .rs-job-top { display: flex; justify-content: space-between; gap: 12px; }
+  .rs-job-title { font-size: 13px; font-weight: 700; color: #0f172a; }
+  .rs-job-service { font-size: 12px; color: #475569; }
+  .rs-job-meta { text-align: right; font-size: 11px; color: #64748b; white-space: nowrap; }
+  .rs-job-meta b { color: #1e293b; }
+  .rs-job-fields { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 8px; font-size: 12px; }
+  .rs-job-extra { margin-top: 6px; font-size: 12px; }
+  .rs-job-extra b { font-weight: 600; }
+  .rs-compact-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
+  .rs-compact-table th, .rs-compact-table td { border: 1px solid #cbd5e1; padding: 5px 8px; text-align: left; }
+  .rs-compact-table th { background: #f1f5f9; }
+`;
+
+const RS_VISIT_STATUS_LABELS: Record<string, string> = {
+  scheduled: "Scheduled", dispatched: "Dispatched", in_progress: "In Progress",
+  completed: "Completed", cancelled: "Cancelled", skipped: "Skipped",
+};
+
+function rsCrewNotes(v: CRMJobVisit): string {
+  return v.notesToCrew ?? v.job?.notesToCrew ?? v.job?.propertyNotesToCrew ?? "";
+}
+
+function rsFormatEstHrsMins(hours: number | null | undefined): string {
+  if (hours == null) return "—";
+  const totalMins = Math.round(hours * 60);
+  return `${Math.floor(totalMins / 60)} hrs / ${totalMins % 60} mins`;
+}
+
+function rsFormatLongDate(iso: string): string {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(d);
+}
+
+function rsCompactTable(visits: CRMJobVisit[]): string {
+  const rows = visits.map((v, i) => {
+    const job = v.job;
+    const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
+    const addr = [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", ");
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(v.clientName ?? "—")}</td>
+        <td>${escapeHtml(addr || "—")}</td>
+        <td>${escapeHtml(svc || "—")}</td>
+        <td>${escapeHtml(v.startTime ?? "—")}</td>
+        <td>${computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
+        <td><span class="rs-blank full"></span></td>
+        <td><span class="rs-blank full"></span></td>
+        <td>${escapeHtml(rsCrewNotes(v))}</td>
+      </tr>`;
+  }).join("");
+  return `
+    <table class="rs-compact-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Client</th><th>Address</th><th>Service</th><th>Sched.</th>
+          <th>B Hrs</th><th>Start</th><th>End</th><th>Notes to Crew</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function rsJobCard(v: CRMJobVisit, i: number): string {
+  const job = v.job;
+  const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
+  const addr = [job?.serviceAddress, [job?.serviceCity, job?.serviceZip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const title = [v.clientName, addr].filter(Boolean).join(" - ");
+  const notes = rsCrewNotes(v);
+  const gateCode = job?.propertyGateCode;
+  const turfSqft = job?.propertyTurfSqft;
+
+  return `
+    <div class="rs-job">
+      <div class="rs-job-top">
+        <div>
+          <div class="rs-job-title">${i + 1}. ${escapeHtml(title || "—")}</div>
+          <div class="rs-job-service">${escapeHtml(svc || "—")}</div>
+        </div>
+        <div class="rs-job-meta">
+          <div>Status: <b>${escapeHtml(RS_VISIT_STATUS_LABELS[v.status] ?? v.status)}</b></div>
+          <div>Map Code: ${escapeHtml(job?.mapCode ?? "—")}</div>
+          <div>Priority: <b>${v.effectiveHighPriority ? "High" : "Normal"}</b></div>
+        </div>
+      </div>
+      <div class="rs-job-fields">
+        <span>Start Time: <span class="rs-blank"></span></span>
+        <span>End Time: <span class="rs-blank"></span></span>
+        <span>Est: ${rsFormatEstHrsMins(computeBudgetedHours(v))}</span>
+        <span># of Men: <span class="rs-blank"></span></span>
+        <span>Materials Used: <span class="rs-blank wide"></span></span>
+        ${job?.lastServiceDate ? `<span>Last: ${escapeHtml(job.lastServiceDate)}</span>` : ""}
+      </div>
+      ${turfSqft != null ? `<div class="rs-job-extra"><b>Turf Sq. Ft.</b> ${turfSqft.toLocaleString()}</div>` : ""}
+      ${gateCode ? `<div class="rs-job-extra"><b>Gate/Lock Code</b> ${escapeHtml(gateCode)}</div>` : ""}
+      ${notes ? `<div class="rs-job-extra"><b>Notes to Crew</b> ${escapeHtml(notes)}</div>` : ""}
+    </div>`;
+}
+
+function rsRosterHeader(members: { id: string; employeeName?: string | null; resourceCode?: string | null }[], jobCount: number): string {
+  const rows = (members.length > 0 ? members : [null]).map((m) => `
+    <tr>
+      <td>${m ? escapeHtml(`${m.employeeName ?? "—"}${m.resourceCode ? ` (${m.resourceCode})` : ""}`) : "&nbsp;"}</td>
+      <td><span class="rs-blank full"></span></td>
+      <td><span class="rs-blank full"></span></td>
+      <td><span class="rs-blank full"></span></td>
+    </tr>`).join("");
+  return `
+    <div class="rs-roster">
+      <table>
+        <thead><tr><th>Assigned Resource:</th><th>Start:</th><th>End:</th><th>Total Hrs:</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="rs-side">
+        <div class="rs-side-row"><span>Truck #:</span><span class="rs-blank wide"></span></div>
+        <div class="rs-side-row"><span>Start Mileage:</span><span class="rs-blank wide"></span></div>
+        <div class="rs-side-row"><span>End Mileage:</span><span class="rs-blank wide"></span></div>
+        <div class="rs-side-row"><span>Job Count:</span><span>${jobCount}</span></div>
+      </div>
+    </div>`;
+}
+
+function rsDetailedSheet(label: string, members: { id: string; employeeName?: string | null; resourceCode?: string | null }[], visits: CRMJobVisit[], dateLabel: string): string {
+  return `
+    <div class="rs-page">
+      <div class="rs-crew-header"><h2>${escapeHtml(label)}</h2><span class="rs-date">${escapeHtml(dateLabel)}</span></div>
+      ${rsRosterHeader(members, visits.length)}
+      ${visits.map((v, i) => rsJobCard(v, i)).join("")}
+    </div>`;
+}
+
+/**
+ * Prints daily crew route sheets in a separate window — mirrors the on-screen
+ * preview in DispatchBoard's PrintDialog, but as an isolated document so
+ * printing doesn't capture the app chrome behind the dialog.
+ */
+export function printRouteSheets(
+  selectedDate: string,
+  format: "compact" | "detailed",
+  crews: { id: string; name: string; members: { id: string; employeeName?: string | null; resourceCode?: string | null }[] }[],
+  visits: CRMJobVisit[]
+): void {
+  const { brandColor } = useSettingsStore.getState();
+  const dateLabel = rsFormatLongDate(selectedDate);
+
+  const byCrew = crews
+    .map((c) => ({ crew: c, visits: visits.filter((v) => v.crewId === c.id) }))
+    .filter((x) => x.visits.length > 0);
+  const unassigned = visits.filter((v) => !v.crewId);
+
+  const sections = [
+    ...byCrew.map(({ crew, visits: cv }) =>
+      format === "detailed"
+        ? rsDetailedSheet(crew.name, crew.members, cv, dateLabel)
+        : `<div class="rs-section"><div class="rs-crew-header"><h2>${escapeHtml(crew.name)}</h2><span class="rs-date">${cv.length} stop${cv.length !== 1 ? "s" : ""} · ${escapeHtml(dateLabel)}</span></div>${rsCompactTable(cv)}</div>`
+    ),
+    ...(unassigned.length > 0
+      ? [format === "detailed"
+        ? rsDetailedSheet("Unassigned", [], unassigned, dateLabel)
+        : `<div class="rs-section"><div class="rs-crew-header"><h2>Unassigned</h2><span class="rs-date">${unassigned.length} stop${unassigned.length !== 1 ? "s" : ""} · ${escapeHtml(dateLabel)}</span></div>${rsCompactTable(unassigned)}</div>`]
+      : []),
+  ];
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Route Sheets — ${escapeHtml(selectedDate)}</title>
+  <style>${buildStyles(brandColor)}${ROUTE_SHEET_STYLES}</style>
+</head>
+<body>
+  ${sections.join("") || `<p style="color:#94a3b8;">No visits to print for this date.</p>`}
+</body>
+</html>`;
+
+  openPrintWindow(html);
 }

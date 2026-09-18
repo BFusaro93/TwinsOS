@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency, cn, relativeTime, formatDateShort, todayLocalISODate, formatHours } from "@/lib/utils";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
+import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -1519,11 +1520,11 @@ function PrintDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
-        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3 flex-row items-center justify-between">
+        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white pl-5 pr-12 py-3 flex-row items-center justify-between">
           <DialogTitle className="text-sm font-semibold">
             Print Route Sheets — {selectedDate}
           </DialogTitle>
-          <div className="flex items-center rounded-md border border-white/30 p-0.5 text-xs print:hidden">
+          <div className="flex items-center rounded-md border border-white/30 p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setFormat("detailed")}
@@ -1575,11 +1576,15 @@ function PrintDialog({
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between print:hidden">
-          <p className="text-[11px] text-slate-400">Uses your browser&apos;s print dialog</p>
+        <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between">
+          <p className="text-[11px] text-slate-400">Opens your browser&apos;s print dialog in a new window</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
-            <Button size="sm" className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={() => window.print()}>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+              onClick={() => printRouteSheets(selectedDate, format, byCrew.map(({ crew, members }) => ({ id: crew.id, name: crew.name, members })), visits)}
+            >
               <Printer className="mr-1.5 h-3.5 w-3.5" />
               Print
             </Button>
