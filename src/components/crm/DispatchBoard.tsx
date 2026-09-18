@@ -1332,6 +1332,34 @@ import { Plus, Trash2 } from "lucide-react";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
 import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey } from "@/lib/hooks/use-route-order";
 
+/** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
+function WriteInBlank({ className = "" }: { className?: string }) {
+  return <span className={cn("inline-block border-b border-slate-400", className)}>&nbsp;</span>;
+}
+
+function crewNotesFor(v: CRMJobVisit): string {
+  return v.notesToCrew ?? v.job?.notesToCrew ?? v.job?.propertyNotesToCrew ?? "";
+}
+
+/** "1.5" -> "1 hrs / 30 mins", matching the SA route-sheet Est. format. */
+function formatEstHrsMins(hours: number | null | undefined): string {
+  if (hours == null) return "—";
+  const totalMins = Math.round(hours * 60);
+  return `${Math.floor(totalMins / 60)} hrs / ${totalMins % 60} mins`;
+}
+
+function formatLongDate(iso: string): string {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(d);
+}
+
+const VISIT_STATUS_LABELS: Record<string, string> = {
+  scheduled: "Scheduled", dispatched: "Dispatched", in_progress: "In Progress",
+  completed: "Completed", cancelled: "Cancelled", skipped: "Skipped",
+};
+
 function PrintDialog({
   open, onOpenChange, visits, crews, selectedDate,
 }: {
@@ -1341,11 +1369,17 @@ function PrintDialog({
   crews: { id: string; name: string }[];
   selectedDate: string;
 }) {
-  const byCrew = (crews).map((c) => ({
+  const [format, setFormat] = useState<"compact" | "detailed">("detailed");
+  const { data: richCrews } = useCrews(false);
+  const rosterByCrewId = new Map((richCrews ?? []).map((c) => [c.id, c.members ?? []]));
+
+  const byCrew = crews.map((c) => ({
     crew: c,
+    members: rosterByCrewId.get(c.id) ?? [],
     visits: visits.filter((v) => v.crewId === c.id),
   })).filter((x) => x.visits.length > 0);
   const unassigned = visits.filter((v) => !v.crewId);
+  const dateLabel = formatLongDate(selectedDate);
 
   function printRouteTable(cv: CRMJobVisit[]) {
     return (
@@ -1356,8 +1390,10 @@ function PrintDialog({
             <th className="border border-slate-300 px-2 py-1 text-left">Client</th>
             <th className="border border-slate-300 px-2 py-1 text-left">Address</th>
             <th className="border border-slate-300 px-2 py-1 text-left">Service</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Time</th>
+            <th className="border border-slate-300 px-2 py-1 text-left">Sched.</th>
             <th className="border border-slate-300 px-2 py-1 text-center">B Hrs</th>
+            <th className="border border-slate-300 px-2 py-1 text-center w-16">Start</th>
+            <th className="border border-slate-300 px-2 py-1 text-center w-16">End</th>
             <th className="border border-slate-300 px-2 py-1 text-left">Notes to Crew</th>
           </tr>
         </thead>
@@ -1374,7 +1410,9 @@ function PrintDialog({
                 <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
                 <td className="border border-slate-200 px-2 py-1 text-center">{computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{v.notesToCrew ?? ""}</td>
+                <td className="border border-slate-200 px-2 py-1"><WriteInBlank className="w-full" /></td>
+                <td className="border border-slate-200 px-2 py-1"><WriteInBlank className="w-full" /></td>
+                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{crewNotesFor(v)}</td>
               </tr>
             );
           })}
@@ -1383,38 +1421,161 @@ function PrintDialog({
     );
   }
 
+  function renderCrewRosterHeader(members: { id: string; employeeName?: string; resourceCode?: string | null }[], jobCount: number) {
+    const rows = members.length > 0 ? members : [null];
+    return (
+      <div className="flex items-start gap-4 mb-3">
+        <table className="flex-1 text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className="pb-1 text-left font-semibold">Assigned Resource:</th>
+              <th className="pb-1 text-left font-semibold w-20">Start:</th>
+              <th className="pb-1 text-left font-semibold w-20">End:</th>
+              <th className="pb-1 text-left font-semibold w-24">Total Hrs:</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((m, i) => (
+              <tr key={m?.id ?? i}>
+                <td className="py-1.5 pr-3 border-b border-slate-300">
+                  {m ? `${m.employeeName ?? "—"}${m.resourceCode ? ` (${m.resourceCode})` : ""}` : <>&nbsp;</>}
+                </td>
+                <td className="py-1.5 pr-3 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
+                <td className="py-1.5 pr-3 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
+                <td className="py-1.5 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="w-48 shrink-0 space-y-2 pt-5 text-xs">
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">Truck #:</span><WriteInBlank className="flex-1" /></div>
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">Start Mileage:</span><WriteInBlank className="flex-1" /></div>
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">End Mileage:</span><WriteInBlank className="flex-1" /></div>
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">Job Count:</span><span className="font-bold">{jobCount}</span></div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderJobCard(v: CRMJobVisit, i: number) {
+    const job = v.job;
+    const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
+    const addr = [job?.serviceAddress, [job?.serviceCity, job?.serviceZip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    const title = [v.clientName, addr].filter(Boolean).join(" - ");
+    const notes = crewNotesFor(v);
+    const gateCode = job?.propertyGateCode;
+    const turfSqft = job?.propertyTurfSqft;
+
+    return (
+      <div key={v.id} className="border-b border-slate-300 py-2.5 break-inside-avoid">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 inline-block h-3.5 w-3.5 border border-slate-600 shrink-0" />
+            <div>
+              <p className="font-bold text-sm leading-snug">{title || "—"}</p>
+              <p className="text-xs text-slate-600">{svc || "—"}</p>
+            </div>
+          </div>
+          <div className="text-right text-xs shrink-0 space-y-0.5">
+            <p><span className="text-slate-500">Status:</span> <span className="font-semibold">{VISIT_STATUS_LABELS[v.status] ?? v.status}</span></p>
+            <p className="text-slate-500">Map Code: {job?.mapCode ?? "—"}</p>
+            <p><span className="text-slate-500">Priority:</span> <span className="font-semibold">{v.effectiveHighPriority ? "High" : "Normal"}</span></p>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-xs">
+          <span className="flex items-baseline gap-1">Start Time: <WriteInBlank className="w-14" /></span>
+          <span className="flex items-baseline gap-1">End Time: <WriteInBlank className="w-14" /></span>
+          <span>Est: {formatEstHrsMins(computeBudgetedHours(v))}</span>
+          <span className="flex items-baseline gap-1"># of Men: <WriteInBlank className="w-8" /></span>
+          <span className="flex items-baseline gap-1">Materials Used: <WriteInBlank className="w-28" /></span>
+          {job?.lastServiceDate && <span>Last: {formatDateShort(job.lastServiceDate)}</span>}
+        </div>
+        {turfSqft != null && (
+          <p className="mt-1 text-xs"><span className="font-semibold">Turf Sq. Ft.</span> {turfSqft.toLocaleString()}</p>
+        )}
+        {gateCode && (
+          <p className="mt-1 text-xs"><span className="font-semibold">Gate/Lock Code</span> {gateCode}</p>
+        )}
+        {notes && (
+          <p className="mt-1 text-xs text-slate-700"><span className="font-semibold">Notes to Crew</span> <span className="italic">{notes}</span></p>
+        )}
+      </div>
+    );
+  }
+
+  function renderDetailedSheet(label: string, members: { id: string; employeeName?: string; resourceCode?: string | null }[], cv: CRMJobVisit[], pageBreak: boolean) {
+    return (
+      <div style={pageBreak ? { pageBreakBefore: "always" } : undefined}>
+        <div className="flex items-baseline justify-between border-b-2 border-slate-800 pb-1 mb-3">
+          <h2 className="text-base font-bold">{label}</h2>
+          <span className="text-sm font-medium text-slate-600">{dateLabel}</span>
+        </div>
+        {renderCrewRosterHeader(members, cv.length)}
+        {cv.map((v, i) => renderJobCard(v, i))}
+      </div>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
-        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
+        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3 flex-row items-center justify-between">
           <DialogTitle className="text-sm font-semibold">
             Print Route Sheets — {selectedDate}
           </DialogTitle>
+          <div className="flex items-center rounded-md border border-white/30 p-0.5 text-xs print:hidden">
+            <button
+              type="button"
+              onClick={() => setFormat("detailed")}
+              className={cn("rounded px-2.5 py-1", format === "detailed" ? "bg-white text-slate-900" : "text-white/80 hover:text-white")}
+            >
+              Detailed
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormat("compact")}
+              className={cn("rounded px-2.5 py-1", format === "compact" ? "bg-white text-slate-900" : "text-white/80 hover:text-white")}
+            >
+              Compact
+            </button>
+          </div>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto p-5 space-y-8">
           {byCrew.length === 0 && unassigned.length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8">No visits to print for this date.</p>
           )}
-          {byCrew.map(({ crew, visits: cv }) => (
+          {byCrew.map(({ crew, members, visits: cv }, idx) => (
             <div key={crew.id}>
-              <div className="border-b-2 border-slate-800 pb-1 mb-2 flex items-baseline justify-between">
-                <h2 className="text-sm font-bold">{crew.name}</h2>
-                <span className="text-xs text-slate-500">{cv.length} stop{cv.length !== 1 ? "s" : ""} · {selectedDate}</span>
-              </div>
-              {printRouteTable(cv)}
+              {format === "detailed" ? (
+                renderDetailedSheet(crew.name, members, cv, idx > 0)
+              ) : (
+                <>
+                  <div className="border-b-2 border-slate-800 pb-1 mb-2 flex items-baseline justify-between">
+                    <h2 className="text-sm font-bold">{crew.name}</h2>
+                    <span className="text-xs text-slate-500">{cv.length} stop{cv.length !== 1 ? "s" : ""} · {selectedDate}</span>
+                  </div>
+                  {printRouteTable(cv)}
+                </>
+              )}
             </div>
           ))}
           {unassigned.length > 0 && (
             <div>
-              <div className="border-b-2 border-amber-600 pb-1 mb-2 flex items-baseline justify-between">
-                <h2 className="text-sm font-bold text-amber-700">Unassigned</h2>
-                <span className="text-xs text-amber-600">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""} · {selectedDate}</span>
-              </div>
-              {printRouteTable(unassigned)}
+              {format === "detailed" ? (
+                renderDetailedSheet("Unassigned", [], unassigned, byCrew.length > 0)
+              ) : (
+                <>
+                  <div className="border-b-2 border-amber-600 pb-1 mb-2 flex items-baseline justify-between">
+                    <h2 className="text-sm font-bold text-amber-700">Unassigned</h2>
+                    <span className="text-xs text-amber-600">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""} · {selectedDate}</span>
+                  </div>
+                  {printRouteTable(unassigned)}
+                </>
+              )}
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between">
+        <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between print:hidden">
           <p className="text-[11px] text-slate-400">Uses your browser&apos;s print dialog</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>

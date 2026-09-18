@@ -28,6 +28,11 @@ import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useInvoices, usePayments, usePayment, usePaymentAllocations, useAllocatedPaymentsFromOtherClients } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
+import {
+  useCustomFieldDefs as useRateMatrixFieldDefs,
+  usePropertyCustomFieldValues,
+  useUpsertPropertyCustomFieldValue,
+} from "@/lib/hooks/use-rate-matrix";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClientPortalStatus, clientPortalStatusKey, type ClientPortalStatusResponse } from "@/lib/hooks/use-client-portal-status";
 import { useContracts } from "@/lib/hooks/use-contracts";
@@ -1712,6 +1717,9 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
               <Input value={form.notesToCrew} onChange={(e) => patch("notesToCrew", e.target.value)} />
             </div>
           </div>
+          {/* Rate Matrix pricing inputs (e.g. Turf Sq Ft) — only meaningful once
+              the property has an id, same as any other property-scoped panel. */}
+          {isEditing && property && <PropertyCustomFieldsSection propertyId={property.id} />}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1719,6 +1727,48 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Numeric custom field values used as Rate Matrix pricing lookups (e.g.
+// "Turf Sq Ft: 12,000"). Auto-saves per field on blur — independent of the
+// dialog's own Save button, same pattern as other property sub-panels.
+function PropertyCustomFieldsSection({ propertyId }: { propertyId: string }) {
+  const { data: fieldDefs = [] } = useRateMatrixFieldDefs("property");
+  const numericFieldDefs = fieldDefs.filter((d) => d.fieldType === "number");
+  const { data: values = [] } = usePropertyCustomFieldValues(propertyId);
+  const upsertValue = useUpsertPropertyCustomFieldValue();
+
+  if (numericFieldDefs.length === 0) return null;
+
+  function valueFor(fieldDefId: string): number | "" {
+    const v = values.find((x) => x.fieldDefId === fieldDefId)?.valueNumber;
+    return v ?? "";
+  }
+
+  function saveValue(fieldDefId: string, raw: string) {
+    const valueNumber = raw === "" ? null : Number(raw);
+    upsertValue.mutate({ propertyId, fieldDefId, valueNumber }, {
+      onError: () => toast.error("Failed to save custom field value"),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <Label className="text-slate-500">Custom Fields (Rate Matrix pricing inputs)</Label>
+      <div className="grid grid-cols-2 gap-3">
+        {numericFieldDefs.map((d) => (
+          <div key={d.id} className="flex flex-col gap-1.5">
+            <Label className="text-xs font-normal text-slate-500">{d.label}</Label>
+            <Input
+              type="number"
+              defaultValue={valueFor(d.id)}
+              onBlur={(e) => saveValue(d.id, e.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

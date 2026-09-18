@@ -10,6 +10,8 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useClient } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
+import { usePropertyCustomFieldValues, lookupRateMatrixMatch, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { isAreaUnit, needsProductionRateUnitWarning, unitLabel } from "@/lib/estimates/units";
 import { resolveTakeoffSqft, type ClientTakeoff } from "@/lib/estimates/client-takeoff";
@@ -39,6 +41,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { LineItemNotesPopover, type LineItemNotes } from "./LineItemNotesPopover";
 import { BudgetedHoursPopover, type BudgetedHoursPatch } from "./BudgetedHoursPopover";
+import { LineItemComplexityPopover } from "./LineItemComplexityPopover";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { AddSubitemDialog } from "./AddSubitemDialog";
 import {
@@ -333,6 +336,7 @@ function LineItemRow({
           unit_type: row.unitType,
           production_rate_sqft_per_hr: row.productionRateSqftPerHr,
           budget_method: row.budgetMethod,
+          complexity_bps: row.complexityBps,
           rate_cents: row.rateCents,
           visits: row.visits,
           total_cents: row.totalCents,
@@ -421,6 +425,30 @@ function LineItemRow({
       setRow((r) => ({ ...r, ...notes }));
     } catch {
       toast.error("Failed to save notes");
+    }
+  }
+
+  async function saveComplexity(complexityBps: number) {
+    const computed = computeLineItem({ ...row, complexityBps }, breakevenRateCents);
+    const next: RowState = { ...row, complexityBps, ...computed };
+    setRow(next);
+    try {
+      await upsert({
+        estimateId,
+        item: {
+          id: row.id,
+          complexity_bps: next.complexityBps,
+          total_cents: next.totalCents,
+          budgeted_hours: next.budgetedHours,
+          total_budgeted_hours: next.totalBudgetedHours,
+          total_cost_cents: next.totalCostCents,
+          margin_bps: next.marginBps,
+          markup_bps: next.markupBps,
+        },
+      });
+    } catch {
+      setRow(row);
+      toast.error("Failed to save complexity adjustment");
     }
   }
 
@@ -709,6 +737,10 @@ function LineItemRow({
               notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null }}
               onSave={saveNotes}
             />
+            <LineItemComplexityPopover
+              complexityBps={row.complexityBps}
+              onSave={saveComplexity}
+            />
             <button
               onClick={() => onDuplicate(row)}
               title="Duplicate"
@@ -815,6 +847,8 @@ interface Props {
   estimateId: string;
   /** The estimate's client — used to default sq ft quantities from their takeoff. */
   clientId?: string;
+  /** The estimate's property, if set — drives Rate Matrix lookups when a service being added has matrix rows keyed off one of this property's custom field values. */
+  propertyId?: string | null;
   items: EstimateLineItem[];
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
@@ -822,7 +856,7 @@ interface Props {
   onItemStatusChange?: (status: LineItemStatus) => void;
 }
 
-export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
+export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
@@ -831,6 +865,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds
   // columns plus any numeric custom fields — so a production-rate sq ft
   // service can default its qty instead of starting at 1.
   const { data: client } = useClient(clientId ?? "");
+  const { data: propertyFieldValues = [] } = usePropertyCustomFieldValues(propertyId ?? "");
   const { data: customFieldDefs = [] } = useCustomFieldDefs();
   const { data: customFieldValues = [] } = useClientCustomFieldValues(clientId ?? "");
   const takeoff: ClientTakeoff | null = client
@@ -892,6 +927,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds
             markup_bps: item.markupBps,
             adj_rate_cents: item.adjRateCents,
             budget_method: item.budgetMethod,
+            complexity_bps: item.complexityBps,
             tier: item.tier,
             discount_cents: item.discountCents,
             discount_type: item.discountType,
@@ -935,7 +971,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds
   async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null }) {
     const unit = svc.unit ?? null;
     const prodRate = svc.productionRate ?? null;
-    const budgetMethod = svc.budgetMethod ?? "manual";
+    let budgetMethod = svc.budgetMethod ?? "manual";
 
     // A production-rate service measured in sq ft starts from the client's
     // takeoff (e.g. Turf Sq. Ft.) so budgeted hours are real from the first
@@ -945,13 +981,70 @@ export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds
       : null;
     const qty = takeoffQty ?? 1;
 
+    // Rate Matrix override: if this service has banded rows keyed off a
+    // property custom field, and the estimate has a property with a value
+    // for that field, the matched row's rate/hours/cost replace the flat
+    // production_rate lookup entirely — snapshotted once at add-time (same
+    // moment budgetMethod/productionRateSqftPerHr are normally snapshotted),
+    // not re-resolved on every render. No property, no matrix rows, or no
+    // value for the property → falls through to today's unchanged behavior.
+    let calcType: 0 | 1 = 1;
+    let effectiveRateCents = svc.rateCents ?? 0;
+    let matrixBudgetedHours: number | null = null;
+    let matrixCostCents: number | null = null;
+    if (svc.id && propertyId) {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: matrixRows } = await (supabase as any)
+        .from("crm_service_rate_matrix")
+        .select("*")
+        .eq("service_id", svc.id)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true });
+      const rows = (matrixRows ?? []) as Record<string, unknown>[];
+      const customFieldId = rows[0]?.custom_field_id as string | undefined;
+      const propertyValue = customFieldId
+        ? propertyFieldValues.find((v) => v.fieldDefId === customFieldId)?.valueNumber ?? null
+        : null;
+      if (rows.length > 0 && propertyValue != null) {
+        const mapped: RateMatrixRow[] = rows.map((r) => ({
+          id: r.id as string,
+          orgId: r.org_id as string,
+          serviceId: r.service_id as string,
+          customFieldId: r.custom_field_id as string,
+          calcType: r.calc_type as 0 | 1,
+          fromVal: Number(r.from_val ?? 0),
+          toVal: r.to_val != null ? Number(r.to_val) : null,
+          rateCents: (r.rate_cents as number) ?? 0,
+          budgetedHours: Number(r.budgeted_hours ?? 0),
+          budgetedCostCents: (r.budgeted_cost_cents as number) ?? 0,
+          sortOrder: (r.sort_order as number) ?? 0,
+          isTailRow: (r.is_tail_row as boolean) ?? false,
+          tailEveryQty: r.tail_every_qty != null ? Number(r.tail_every_qty) : null,
+          tailOverQty: r.tail_over_qty != null ? Number(r.tail_over_qty) : null,
+        }));
+        const match = lookupRateMatrixMatch(mapped, propertyValue);
+        if (match) {
+          calcType = match.calcType;
+          effectiveRateCents = match.rateCents;
+          matrixCostCents = match.budgetedCostCents;
+          // computeLineItem's calcType formula already multiplies rate/cost
+          // by qty for a per-unit row — but its 'manual' budgetMethod path
+          // does NOT auto-scale budgetedHours by qty, so that one
+          // multiplication has to happen here instead.
+          matrixBudgetedHours = match.calcType === 1 ? match.budgetedHours * qty : match.budgetedHours;
+          budgetMethod = "manual";
+        }
+      }
+    }
+
     const computed = computeLineItem({
-      calcType: 1,
+      calcType,
       qty,
-      rateCents: svc.rateCents ?? 0,
+      rateCents: effectiveRateCents,
       visits: 1,
-      budgetedHours: 0, // derived from qty ÷ production rate (production_rate) or set manually
-      costCents: 0,
+      budgetedHours: matrixBudgetedHours ?? 0, // derived from qty ÷ production rate (production_rate), a Rate Matrix match, or set manually
+      costCents: matrixCostCents ?? 0,
       adjRateCents: null,
       unitType: unit,
       productionRateSqftPerHr: prodRate,
@@ -965,7 +1058,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds
           service_id: svc.id ?? null,
           service_name: svc.name,
           status: "quote",
-          calc_type: 1,
+          calc_type: calcType,
           qty,
           unit_type: unit,
           // Both are authored via a rich-text editor on the Service (Descriptions
@@ -979,7 +1072,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds
           invoice_desc: svc.invoiceDesc ? stripHtml(svc.invoiceDesc) || null : null,
           production_rate_sqft_per_hr: prodRate,
           budget_method: budgetMethod,
-          rate_cents: svc.rateCents ?? 0,
+          rate_cents: effectiveRateCents,
           visits: 1,
           cost_cents: computed.costCents,
           adj_rate_cents: null,

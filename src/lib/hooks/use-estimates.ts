@@ -44,6 +44,7 @@ function mapLineItem(row: any): EstimateLineItem {
     unitType: row.unit_type ?? null,
     productionRateSqftPerHr: row.production_rate_sqft_per_hr ? Number(row.production_rate_sqft_per_hr) : null,
     budgetMethod: row.budget_method ?? "manual",
+    complexityBps: row.complexity_bps ?? 10000,
     sortOrder: row.sort_order,
     estimateDesc: row.estimate_desc ?? null,
     jobNote: row.job_note ?? null,
@@ -84,6 +85,7 @@ function mapEstimate(row: any): Estimate {
     orgId: row.org_id,
     estimateNumber: row.estimate_number,
     clientId: row.client_id,
+    propertyId: row.property_id ?? null,
     description: row.description,
     salesRepId: row.sales_rep_id,
     source: row.source,
@@ -222,6 +224,7 @@ export function useCreateEstimate() {
   return useMutation({
     mutationFn: async (values: {
       clientId: string;
+      propertyId?: string | null;
       description: string;
       salesRepId?: string;
       estimateDate: string;
@@ -251,6 +254,7 @@ export function useCreateEstimate() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          property_id: values.propertyId ?? null,
           description: values.description,
           sales_rep_id: values.salesRepId ?? null,
           estimate_date: values.estimateDate,

@@ -28,7 +28,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule } from "@/lib/estimate-calc";
@@ -432,6 +432,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const [saving,           setSaving]           = useState(false);
   const [recalcPending,    setRecalcPending]    = useState(false);
   const [headerEdits,      setHeaderEdits]      = useState<Record<string, string | boolean | number | null>>({});
+  const effectiveClientId = (headerEdits.client_id as string) ?? estimate?.clientId ?? "";
+  const { data: clientProperties } = useClientProperties(effectiveClientId);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [wonLostDialog, setWonLostDialog] = useState<"accepted" | "lost" | null>(null);
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
@@ -1122,6 +1124,30 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             </SelectContent>
                           </Select>
                         </FieldRow>
+                        {(clientProperties?.length ?? 0) > 0 && (
+                          <FieldRow label="Property">
+                            <Select
+                              value={(headerEdits.property_id as string) ?? (estimate.propertyId ?? "none")}
+                              onValueChange={(v) => {
+                                const propertyId = v === "none" ? null : v;
+                                patchHeader("property_id", propertyId);
+                                saveHeader({ ...headerEdits, property_id: propertyId });
+                              }}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="No property / general estimate" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No property / general estimate</SelectItem>
+                                {(clientProperties ?? []).map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.name ?? p.address ?? "Unnamed property"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FieldRow>
+                        )}
                         <FieldRow label="Sales Rep">
                           <Select
                             value={(headerEdits.sales_rep_id as string) ?? (estimate.salesRepId ?? "")}
@@ -1506,6 +1532,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               <EstimateLineItemsGrid
                 estimateId={estimate.id}
                 clientId={estimate.clientId}
+                propertyId={estimate.propertyId}
                 items={visibleLineItems}
                 selectedIds={selectedLineItemIds}
                 onSelectionChange={setSelectedLineItemIds}

@@ -235,6 +235,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       const { jobId } = await createJobs.mutateAsync({
         estimateId: estimate.id,
         clientId: estimate.clientId,
+        propertyId: estimate.propertyId,
         jobType,
         scheduledDate: scheduledDate || null,
         crewId: crewId || null,

@@ -66,6 +66,12 @@ export function getBreakevenRateCents(customizations: Record<string, unknown> | 
  * whenever costCents is still 0 (the "never manually set" convention used
  * elsewhere on this type) — once a user types a real cost, further edits to
  * other fields won't clobber it.
+ *
+ * complexityBps (10000 = 100%, i.e. no adjustment) is an Aspire-style "how
+ * much harder is this job than standard" multiplier. It's applied as the very
+ * last step to totalCents, budgetedHours, and totalCostCents alike — scaling
+ * price and cost together keeps marginBps/markupBps unchanged, so a harder
+ * job costs and prices proportionally more without silently moving margin.
  */
 export function computeLineItem(
   item: Pick<
@@ -81,6 +87,7 @@ export function computeLineItem(
   > & {
     unitType?: string | null;
     productionRateSqftPerHr?: number | null;
+    complexityBps?: number | null;
   },
   breakevenRateCents?: number
 ): Pick<
@@ -93,11 +100,13 @@ export function computeLineItem(
   | "markupBps"
 > & { budgetedHours: number } {
   const effectiveRate = item.adjRateCents ?? item.rateCents;
+  const complexityFactor = (item.complexityBps ?? 10000) / 10000;
 
-  const totalCents =
-    item.calcType === 1
-      ? Math.round(item.qty * effectiveRate * item.visits)
-      : effectiveRate; // fixed: total IS the rate
+  const totalCents = Math.round(
+    (item.calcType === 1
+      ? item.qty * effectiveRate * item.visits
+      : effectiveRate) * complexityFactor // fixed: total IS the rate
+  );
 
   // Auto-calculate budgeted hours from production rate (Aspire engine) — only
   // when the line item is explicitly set to that budget method AND its qty is
@@ -117,6 +126,11 @@ export function computeLineItem(
   ) {
     budgetedHours = item.qty / item.productionRateSqftPerHr;
   }
+  // Complexity scales whatever hours were arrived at above, last — a harder
+  // job takes proportionally longer regardless of which branch set the base
+  // hours. This also flows into the breakeven cost auto-fill below, so cost
+  // scales with it automatically without a second multiplication there.
+  budgetedHours = budgetedHours * complexityFactor;
 
   const totalBudgetedHours = budgetedHours * item.visits;
 
@@ -141,12 +155,15 @@ export function computeLineItem(
   // feeding that back in as costCents.
   let totalCostCents: number;
   if (item.costCents === 0 && breakevenRateCents && budgetedHours > 0) {
+    // budgetedHours already carries the complexity factor (see above), so
+    // this branch's cost scales with it for free — no second multiplication.
     const perOccurrenceCostCents = Math.round(budgetedHours * breakevenRateCents);
     totalCostCents =
       item.calcType === 1 ? Math.round(perOccurrenceCostCents * item.visits) : perOccurrenceCostCents;
   } else {
-    totalCostCents =
-      item.calcType === 1 ? Math.round(item.costCents * item.qty * item.visits) : item.costCents;
+    totalCostCents = Math.round(
+      (item.calcType === 1 ? item.costCents * item.qty * item.visits : item.costCents) * complexityFactor
+    );
   }
   const costCents = item.costCents;
 

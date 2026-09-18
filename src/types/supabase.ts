@@ -8654,6 +8654,7 @@ export type Database = {
           budget_method: string
           budgeted_hours: number
           calc_type: number
+          complexity_bps: number
           cost_cents: number
           created_at: string
           deleted_at: string | null
@@ -8692,6 +8693,7 @@ export type Database = {
           budget_method?: string
           budgeted_hours?: number
           calc_type?: number
+          complexity_bps?: number
           cost_cents?: number
           created_at?: string
           deleted_at?: string | null
@@ -8730,6 +8732,7 @@ export type Database = {
           budget_method?: string
           budgeted_hours?: number
           calc_type?: number
+          complexity_bps?: number
           cost_cents?: number
           created_at?: string
           deleted_at?: string | null
@@ -9325,6 +9328,7 @@ export type Database = {
           portal_signature_name: string | null
           portal_user_id: string | null
           probability_bps: number
+          property_id: string | null
           reason: string | null
           revenue_cents: number
           sales_rep_id: string | null
@@ -9392,6 +9396,7 @@ export type Database = {
           portal_signature_name?: string | null
           portal_user_id?: string | null
           probability_bps?: number
+          property_id?: string | null
           reason?: string | null
           revenue_cents?: number
           sales_rep_id?: string | null
@@ -9459,6 +9464,7 @@ export type Database = {
           portal_signature_name?: string | null
           portal_user_id?: string | null
           probability_bps?: number
+          property_id?: string | null
           reason?: string | null
           revenue_cents?: number
           sales_rep_id?: string | null
@@ -9506,6 +9512,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "client_properties"
             referencedColumns: ["id"]
           },
           {

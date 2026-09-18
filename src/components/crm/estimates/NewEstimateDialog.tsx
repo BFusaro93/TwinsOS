@@ -25,7 +25,7 @@ import {
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
@@ -37,6 +37,7 @@ import type { Estimate } from "@/types/crm-estimates";
 
 const schema = z.object({
   clientId:       z.string().min(1, "Client is required"),
+  propertyId:     z.string(),
   description:    z.string().min(1, "Description is required"),
   estimateDate:   z.string().min(1),
   validUntilDate: z.string(),
@@ -100,6 +101,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
     resolver: zodResolver(schema),
     defaultValues: {
       clientId:       defaultClientId ?? "",
+      propertyId:     "none",
       description:    `Estimate - ${defaultDescription()}`,
       estimateDate:   todayStr(),
       validUntilDate: thirtyDaysOut(),
@@ -113,6 +115,19 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   useEffect(() => {
     if (defaultClientId) setValue("clientId", defaultClientId);
   }, [defaultClientId, setValue]);
+
+  const selectedClientId = watch("clientId");
+  const { data: clientProperties } = useClientProperties(selectedClientId);
+  const propertiesPrevClientId = useRef(selectedClientId);
+  // A property belongs to one client — switching clients invalidates whatever
+  // was picked, so it must reset rather than silently pointing at a property
+  // that isn't even this client's.
+  useEffect(() => {
+    if (propertiesPrevClientId.current !== selectedClientId) {
+      propertiesPrevClientId.current = selectedClientId;
+      setValue("propertyId", "none");
+    }
+  }, [selectedClientId, setValue]);
 
   // The auto-generated "Estimate - <date>" description is only a placeholder
   // for an untouched field. Once the user types their own text it must never
@@ -130,6 +145,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       setValue("description", `Estimate - ${defaultDescription()}`);
       setValue("estimateDate", todayStr());
       setValue("validUntilDate", thirtyDaysOut());
+      setValue("propertyId", "none");
     }
   }, [open, setValue]);
 
@@ -150,6 +166,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
 
       const estimate = await createEstimate({
         clientId:       values.clientId,
+        propertyId:     values.propertyId !== "none" ? values.propertyId : undefined,
         description:    values.description,
         estimateDate:   values.estimateDate,
         validUntilDate: values.validUntilDate || undefined,
@@ -252,6 +269,26 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               {errors.clientId && (
                 <p className="text-xs text-red-500">{errors.clientId.message}</p>
               )}
+            </div>
+          )}
+
+          {/* Property — optional; drives Rate Matrix pricing lookups when set */}
+          {!!selectedClientId && (clientProperties?.length ?? 0) > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Property</Label>
+              <Select value={watch("propertyId")} onValueChange={(v) => setValue("propertyId", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="No property / general estimate" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No property / general estimate</SelectItem>
+                  {(clientProperties ?? []).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name ?? p.address ?? "Unnamed property"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

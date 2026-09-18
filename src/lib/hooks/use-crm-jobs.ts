@@ -1811,6 +1811,7 @@ export function useCreateJobsFromEstimate() {
     mutationFn: async ({
       estimateId,
       clientId,
+      propertyId,
       jobType,
       scheduledDate,
       crewId,
@@ -1826,6 +1827,8 @@ export function useCreateJobsFromEstimate() {
     }: {
       estimateId: string;
       clientId: string;
+      /** Estimate's property (client_properties.id), if any — carried onto the job so job-level Rate Matrix / production-rate lookups can resolve it. */
+      propertyId?: string | null;
       jobType: string;
       scheduledDate: string | null;
       crewId: string | null;
@@ -1921,6 +1924,7 @@ export function useCreateJobsFromEstimate() {
         .insert({
           created_by: user?.id ?? null,
           client_id: clientId,
+          property_id: propertyId ?? null,
           estimate_id: estimateId,
           job_type: jobType,
           project_id: jobType === "project" ? (projectId ?? null) : null,

@@ -47,6 +47,7 @@ export interface EstimateLineItem {
   unitType: string | null;               // sqft, lf, cuyd, hr, each, acres
   productionRateSqftPerHr: number | null; // from service record — drives budgetedHours auto-calc when budgetMethod is 'production_rate'
   budgetMethod: BudgetMethod;             // snapshotted from the service when the line item is added
+  complexityBps: number;                  // 10000 = 100% (no adjustment) — scales totalCents and totalCostCents/budgetedHours together
   sortOrder: number;
   // per-line-item notes (Sprint 3a)
   estimateDesc: string | null;  // shown on client-facing estimate document
@@ -108,6 +109,11 @@ export interface Estimate {
   orgId: string;
   estimateNumber: number;
   clientId: string;
+  /** Which of the client's properties this estimate is for — null for most
+   *  estimates today. Drives Rate Matrix lookups (a property's custom field
+   *  values); with no property, production_rate/Rate Matrix falls back to
+   *  the flat behavior every estimate already had. */
+  propertyId: string | null;
   description: string;
   salesRepId: string | null;
   source: string | null;
@@ -251,6 +257,7 @@ export interface EstimateTemplateItem {
 
 export interface NewEstimateFormValues {
   clientId: string;
+  propertyId: string | null;
   description: string;
   salesRepId: string;
   source: string;
