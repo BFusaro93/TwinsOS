@@ -20,14 +20,8 @@ import {
   useCRMSchedules,
   useCreateCRMSchedule,
   useCRMJobProducts,
-  useAddCRMJobProduct,
-  useUpdateCRMJobProduct,
-  useDeleteCRMJobProduct,
-  useSetJobProductStatus,
-  type JobProductStatus,
-  type CRMJobProduct,
 } from "@/lib/hooks/use-crm-jobs";
-import { useProducts } from "@/lib/hooks/use-products";
+import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -143,77 +137,6 @@ const VISIT_STATUS_COLOR: Record<string, string> = {
   skipped:     "bg-slate-50 text-slate-500",
 };
 
-const JOB_PRODUCT_STATUS_LABEL: Record<JobProductStatus, string> = {
-  pending:          "Pending",
-  invoiced:         "Invoiced",
-  used_no_invoice:  "Used",
-  not_used:         "Not Used",
-};
-
-const JOB_PRODUCT_STATUS_COLOR: Record<JobProductStatus, string> = {
-  pending:         "bg-slate-100 text-slate-600",
-  invoiced:        "bg-green-100 text-green-700",
-  used_no_invoice: "bg-blue-100 text-blue-700",
-  not_used:        "bg-red-100 text-red-600",
-};
-
-// Actions offered depend on the row's current status — mirrors Service
-// Autopilot's per-line Invoiced/Used/Not-Used control. Entering 'invoiced' is
-// never an action here (only the invoice-generation flow does that); this menu
-// only ever leaves 'invoiced' or reopens/cancels a row.
-function jobProductStatusActions(status: JobProductStatus): { label: string; next: JobProductStatus }[] {
-  switch (status) {
-    case "pending":
-      return [
-        { label: "Used, do not Invoice", next: "used_no_invoice" },
-        { label: "Not Used, Cancel", next: "not_used" },
-      ];
-    case "invoiced":
-      return [
-        { label: "Remove from Invoice", next: "pending" },
-        { label: "Used, do not Invoice", next: "used_no_invoice" },
-        { label: "Not Used, Cancel", next: "not_used" },
-      ];
-    case "used_no_invoice":
-      return [
-        { label: "Not Used, Cancel", next: "not_used" },
-        { label: "Reopen to Pending", next: "pending" },
-      ];
-    case "not_used":
-      return [
-        { label: "Reopen to Pending", next: "pending" },
-      ];
-  }
-}
-
-function JobProductStatusMenu({ product, onChange }: {
-  product: CRMJobProduct;
-  onChange: (next: JobProductStatus) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          className={cn(
-            "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold focus:outline-none",
-            JOB_PRODUCT_STATUS_COLOR[product.status]
-          )}
-        >
-          {JOB_PRODUCT_STATUS_LABEL[product.status]}
-          <ChevronDown className="h-3 w-3" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        {jobProductStatusActions(product.status).map((a) => (
-          <DropdownMenuItem key={a.next} onSelect={() => onChange(a.next)}>
-            {a.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "attachments" | "audit";
 
 interface Props {
@@ -242,11 +165,6 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const deleteJobService = useDeleteJobService();
   const { data: crmServices = [] } = useCRMServices();
   const { data: jobProducts = [] } = useCRMJobProducts(jobId);
-  const addJobProduct = useAddCRMJobProduct();
-  const updateJobProduct = useUpdateCRMJobProduct();
-  const deleteJobProduct = useDeleteCRMJobProduct();
-  const setJobProductStatus = useSetJobProductStatus();
-  const { data: productCatalog = [] } = useProducts();
   const deleteVisit = useDeleteVisit();
   const deleteVisitsByDay = useDeleteVisitsByDayOfWeek();
   const updateVisit = useUpdateVisit();
@@ -278,18 +196,6 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [newSvcQty, setNewSvcQty] = useState("1");
   const [newSvcBHrs, setNewSvcBHrs] = useState("0");
   const [newSvcStartDate, setNewSvcStartDate] = useState("");
-
-  // product tab state
-  const [addingProduct, setAddingProduct] = useState(false);
-  const [newProductId, setNewProductId] = useState("");
-  const [newProductQty, setNewProductQty] = useState("1");
-  const [newProductPrice, setNewProductPrice] = useState("");
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [editProductQty, setEditProductQty] = useState("");
-  const [editProductPrice, setEditProductPrice] = useState("");
-  // Blank = "same as used qty" (invoice_qty null); only sent as an override
-  // when the user types something different.
-  const [editProductInvoiceQty, setEditProductInvoiceQty] = useState("");
 
   const autoGeneratedRef = useRef(false);
 
@@ -1492,231 +1398,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               )}
 
               {/* ── Products (materials) ── */}
-              <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-                <div className="bg-slate-50 border-b px-4 py-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Products</p>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th className="px-4 py-3 text-left">Product</th>
-                      <th className="px-4 py-3 text-right">QTY</th>
-                      <th className="px-4 py-3 text-right">QTY Invoiced</th>
-                      <th className="px-4 py-3 text-right">Unit Price</th>
-                      <th className="px-4 py-3 text-right">Total</th>
-                      <th className="px-4 py-3 text-right">Status</th>
-                      <th className="px-4 py-3 w-20" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobProducts.length === 0 && !addingProduct && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-6 text-center text-slate-400 text-sm">
-                          No products on this job yet.
-                        </td>
-                      </tr>
-                    )}
-                    {jobProducts.map((p) => (
-                      <tr key={p.id} className="group border-b last:border-0">
-                        <td className="px-4 py-3 font-medium text-slate-800">{p.productName}</td>
-                        {editingProductId === p.id ? (
-                          <>
-                            <td className="px-2 py-2 text-right">
-                              <Input type="number" min="0" step="0.01" value={editProductQty}
-                                onChange={(e) => setEditProductQty(e.target.value)}
-                                className="h-7 w-20 text-right text-sm ml-auto" />
-                            </td>
-                            <td className="px-2 py-2 text-right">
-                              <Input type="number" min="0" step="0.01" value={editProductInvoiceQty}
-                                onChange={(e) => setEditProductInvoiceQty(e.target.value)}
-                                placeholder={editProductQty || "same"}
-                                title="Leave blank to invoice the same qty as used"
-                                className="h-7 w-20 text-right text-sm ml-auto" />
-                            </td>
-                            <td className="px-2 py-2 text-right">
-                              <Input type="number" min="0" step="0.01" value={editProductPrice}
-                                onChange={(e) => setEditProductPrice(e.target.value)}
-                                placeholder="0.00"
-                                className="h-7 w-24 text-right text-sm ml-auto" />
-                            </td>
-                            <td className="px-2 py-2 text-right tabular-nums text-slate-500">
-                              {editProductPrice && editProductQty
-                                ? formatCurrency(Math.round(parseFloat(editProductPrice) * 100) * (parseFloat(editProductQty) || 1))
-                                : "—"}
-                            </td>
-                            <td className="px-2 py-2 text-right">
-                              <span className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold", JOB_PRODUCT_STATUS_COLOR[p.status])}>
-                                {JOB_PRODUCT_STATUS_LABEL[p.status]}
-                              </span>
-                            </td>
-                            <td className="px-2 py-2">
-                              <div className="flex justify-end gap-1">
-                                <button onClick={async () => {
-                                  if (!job) return;
-                                  try {
-                                    await updateJobProduct.mutateAsync({
-                                      id: p.id, jobId: job.id,
-                                      qty: parseFloat(editProductQty) || 1,
-                                      invoiceQty: editProductInvoiceQty ? (parseFloat(editProductInvoiceQty) || 0) : null,
-                                      unitPriceCents: editProductPrice ? Math.round(parseFloat(editProductPrice) * 100) : 0,
-                                    });
-                                    setEditingProductId(null);
-                                    toast.success("Product updated");
-                                  } catch { toast.error("Failed to update product"); }
-                                }} className="rounded p-1 hover:bg-green-50 text-green-600">
-                                  <Check className="h-3.5 w-3.5" />
-                                </button>
-                                <button onClick={() => setEditingProductId(null)} className="rounded p-1 hover:bg-slate-100 text-slate-400">
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-4 py-3 text-right tabular-nums">{p.qty}</td>
-                            <td className="px-4 py-3 text-right tabular-nums">
-                              {p.invoiceQty != null && p.invoiceQty !== p.qty
-                                ? <span className="font-medium text-brand-600">{p.invoiceQty}</span>
-                                : <span className="text-slate-400">{p.qty}</span>}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(p.unitPriceCents)}</td>
-                            <td className="px-4 py-3 text-right tabular-nums font-semibold">{formatCurrency(p.unitPriceCents * (p.invoiceQty ?? p.qty))}</td>
-                            <td className="px-4 py-3 text-right">
-                              <JobProductStatusMenu
-                                product={p}
-                                onChange={(next) => {
-                                  if (!job) return;
-                                  setJobProductStatus.mutate(
-                                    {
-                                      id: p.id,
-                                      jobId: job.id,
-                                      newStatus: next,
-                                      invoiceLineItemId: p.invoiceLineItemId,
-                                    },
-                                    {
-                                      onSuccess: () => toast.success(`Marked ${JOB_PRODUCT_STATUS_LABEL[next]}`),
-                                      onError: () => toast.error("Failed to update product status"),
-                                    }
-                                  );
-                                }}
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className={cn("flex justify-end gap-1", p.status === "pending" ? "opacity-0 group-hover:opacity-100" : "opacity-0")}>
-                                <button disabled={p.status !== "pending"} onClick={() => {
-                                  setEditingProductId(p.id);
-                                  setEditProductQty(String(p.qty));
-                                  setEditProductInvoiceQty(p.invoiceQty != null ? String(p.invoiceQty) : "");
-                                  setEditProductPrice(String(p.unitPriceCents / 100));
-                                }} className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700">
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button disabled={p.status !== "pending"} onClick={async () => {
-                                  if (!job) return;
-                                  try {
-                                    await deleteJobProduct.mutateAsync({ id: p.id, jobId: job.id });
-                                    toast.success("Product removed");
-                                  } catch { toast.error("Failed to remove product"); }
-                                }} className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                    {addingProduct && (
-                      <tr className="border-t bg-slate-50">
-                        <td className="px-2 py-2">
-                          <Select value={newProductId} onValueChange={(v) => {
-                            const prod = productCatalog.find((p) => p.id === v);
-                            setNewProductId(v);
-                            if (prod) setNewProductPrice(String(prod.price / 100));
-                          }}>
-                            <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select product…" /></SelectTrigger>
-                            <SelectContent>
-                              {productCatalog
-                                .filter((p) => p.category === "stocked_material" || p.category === "project_material")
-                                .map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="px-2 py-2 text-right">
-                          <Input type="number" min="0" step="0.01" value={newProductQty}
-                            onChange={(e) => setNewProductQty(e.target.value)}
-                            className="h-7 w-20 text-right text-xs ml-auto" />
-                        </td>
-                        <td className="px-2 py-2 text-right text-xs text-slate-400">same</td>
-                        <td className="px-2 py-2 text-right">
-                          <Input type="number" min="0" step="0.01" value={newProductPrice}
-                            onChange={(e) => setNewProductPrice(e.target.value)}
-                            placeholder="0.00"
-                            className="h-7 w-24 text-right text-xs ml-auto" />
-                        </td>
-                        <td className="px-2 py-2 text-right tabular-nums text-xs text-slate-500">
-                          {newProductPrice && newProductQty
-                            ? formatCurrency(Math.round(parseFloat(newProductPrice) * 100) * (parseFloat(newProductQty) || 1))
-                            : "—"}
-                        </td>
-                        <td className="px-2 py-2 text-right">
-                          <span className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold", JOB_PRODUCT_STATUS_COLOR.pending)}>
-                            {JOB_PRODUCT_STATUS_LABEL.pending}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="flex justify-end gap-1">
-                            <button onClick={async () => {
-                              if (!job || !newProductId) return;
-                              const prod = productCatalog.find((p) => p.id === newProductId);
-                              if (!prod) return;
-                              try {
-                                await addJobProduct.mutateAsync({
-                                  jobId: job.id,
-                                  productId: prod.id,
-                                  productName: prod.name,
-                                  qty: parseFloat(newProductQty) || 1,
-                                  unitPriceCents: newProductPrice ? Math.round(parseFloat(newProductPrice) * 100) : prod.price,
-                                  unitCostCents: prod.unitCost ?? null,
-                                });
-                                setAddingProduct(false);
-                                setNewProductId(""); setNewProductPrice(""); setNewProductQty("1");
-                                toast.success("Product added");
-                              } catch { toast.error("Failed to add product"); }
-                            }} className="rounded p-1 hover:bg-green-50 text-green-600">
-                              <Check className="h-3.5 w-3.5" />
-                            </button>
-                            <button onClick={() => setAddingProduct(false)} className="rounded p-1 hover:bg-slate-100 text-slate-400">
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                  {jobProducts.length > 0 && (
-                    <tfoot>
-                      <tr className="border-t bg-slate-50">
-                        <td colSpan={4} className="px-4 py-2 text-right text-xs font-semibold text-slate-500">Total</td>
-                        <td className="px-4 py-2 text-right font-bold text-slate-800">
-                          {formatCurrency(jobProducts.reduce((s, p) => s + p.unitPriceCents * (p.invoiceQty ?? p.qty), 0))}
-                        </td>
-                        <td />
-                        <td />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-              {!addingProduct && (
-                <div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs"
-                    onClick={() => { setAddingProduct(true); setNewProductId(""); setNewProductPrice(""); setNewProductQty("1"); }}>
-                    <Plus className="mr-1 h-3 w-3" /> Add Product
-                  </Button>
-                </div>
-              )}
+              <JobProductsSection jobId={job.id} />
             </div>
           )}
 

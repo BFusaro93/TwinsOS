@@ -10,7 +10,6 @@ import {
   useUpdateVisitStatus,
   useUpdateVisit,
   useCRMCrews,
-  useCRMJobProducts,
   useReturnVisitToWaitingList,
   useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
@@ -76,6 +75,7 @@ import {
   Mail,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
+import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import {
   DropdownMenu,
@@ -431,7 +431,6 @@ function JobDetailSheet({
   // but a given visit is only for the ONE step it's linked to — show just that,
   // not every step on the whole package.
   const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
-  const { data: jobProducts = [] } = useCRMJobProducts(visit.jobId);
   const serviceName = linkedService
     ? linkedService.serviceName
     : services.length > 0
@@ -1196,32 +1195,10 @@ function JobDetailSheet({
                 </table>
               </div>
             )}
-            {/* Products (materials) section */}
-            {jobProducts.length > 0 && (
-              <div className="border-t">
-                <div className="bg-slate-50 border-b px-4 py-2">
-                  <p className="text-xs font-semibold text-slate-600">Products ({jobProducts.length})</p>
-                </div>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b bg-slate-50 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      <th className="px-4 py-2">Product</th>
-                      <th className="px-2 py-2 text-right">Qty</th>
-                      <th className="px-2 py-2 text-right">Unit Price</th>
-                      <th className="px-2 py-2 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobProducts.map((p) => (
-                      <tr key={p.id} className="border-b">
-                        <td className="px-4 py-2 text-slate-700">{p.productName}</td>
-                        <td className="px-2 py-2 text-right text-slate-500">{p.qty}</td>
-                        <td className="px-2 py-2 text-right text-slate-500">{formatCurrency(p.unitPriceCents)}</td>
-                        <td className="px-2 py-2 text-right font-medium text-slate-700">{formatCurrency(p.unitPriceCents * p.qty)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Products (materials) section — used vs. billed qty can differ, see JobProductsSection */}
+            {job && (
+              <div className="border-t px-4 py-3">
+                <JobProductsSection jobId={job.id} />
               </div>
             )}
           </div>
