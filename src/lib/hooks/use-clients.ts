@@ -1362,7 +1362,8 @@ export function useBulkUpdateClients() {
       const supabase = createClient();
       const { error } = await supabase
         .from("clients")
-        .update(patch)
+        // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+        .update(patch as never)
         .in("id", clientIds);
       if (error) throw error;
     },

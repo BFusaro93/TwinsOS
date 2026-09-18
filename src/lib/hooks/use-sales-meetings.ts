@@ -206,7 +206,8 @@ export function useUpdateSalesMeeting() {
 
       const { data, error } = await supabase
         .from("crm_sales_meetings")
-        .update(patch)
+        // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+        .update(patch as never)
         .eq("id", id)
         .select()
         .single();

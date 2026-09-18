@@ -279,7 +279,8 @@ export function useUpdateProduct() {
       if (Object.keys(syncFields).length > 0) {
         await supabase
           .from("parts")
-          .update(syncFields)
+          // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+          .update(syncFields as never)
           .eq("product_item_id", id)
           .is("deleted_at", null);
       }

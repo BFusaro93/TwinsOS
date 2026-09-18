@@ -81,7 +81,8 @@ export async function POST(request: Request) {
   // multiple times shouldn't keep moving the recorded timestamp forward.
   const { data: updated, error } = await supabase
     .from("client_activity")
-    .update({ [column]: event.data.created_at ?? new Date().toISOString() })
+    // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+    .update({ [column]: event.data.created_at ?? new Date().toISOString() } as never)
     .eq("resend_message_id", messageId)
     .is(column, null)
     .select("client_id")

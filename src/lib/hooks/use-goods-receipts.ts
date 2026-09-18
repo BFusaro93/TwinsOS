@@ -361,7 +361,8 @@ export function useUpdateGoodsReceipt() {
           headerPatch.notes = input.notes;
         }
 
-        await supabase.from("goods_receipts").update(headerPatch).eq("id", input.id);
+        // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+        await supabase.from("goods_receipts").update(headerPatch as never).eq("id", input.id);
       }
 
       // Write audit entries for quantity changes via SECURITY DEFINER RPC
