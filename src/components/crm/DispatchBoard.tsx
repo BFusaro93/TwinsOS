@@ -1510,7 +1510,7 @@ function PrintDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col [&>button:last-child]:top-0">
+      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col rounded-t-none [&>button:last-child]:top-0">
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white pl-5 pr-12 py-3 flex-row items-center justify-between">
           <DialogTitle className="text-sm font-semibold">
             Print Route Sheets — {selectedDate}
@@ -1711,7 +1711,7 @@ function TeamAssignDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col [&>button:last-child]:top-0"
+        className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col rounded-t-none [&>button:last-child]:top-0"
         // Escape cancels a pick-up first; a second press closes the dialog.
         onEscapeKeyDown={(e) => {
           if (held) {
