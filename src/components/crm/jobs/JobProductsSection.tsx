@@ -129,7 +129,8 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
         <div className="bg-slate-50 border-b px-4 py-2 flex items-center justify-between">
           <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Products</p>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <th className="px-4 py-3 text-left">Product</th>
@@ -338,6 +339,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
             </tfoot>
           )}
         </table>
+        </div>
       </div>
       {!addingProduct && (
         <div>
