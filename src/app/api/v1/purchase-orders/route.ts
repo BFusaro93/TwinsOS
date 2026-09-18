@@ -94,10 +94,17 @@ export async function POST(request: Request) {
   });
 
   const subtotal = lineItemRows.reduce((sum, li) => sum + li.total_cost, 0);
+  // Only taxable line items form the tax base — NewPODialog.tsx does the
+  // same taxableSubtotalDollars filter. The `taxable` field was already
+  // accepted per line item but never actually affected the tax calculation.
+  const taxableSubtotal = lineItemRows.filter((li) => li.taxable).reduce((sum, li) => sum + li.total_cost, 0);
   const taxRatePercent = body.taxRatePercent ?? 0;
-  const salesTax = Math.round(subtotal * (taxRatePercent / 100));
+  const discountCost = body.discountCostCents ?? 0;
+  const discountReducesTax = body.discountReducesTax ?? false;
+  const taxableBase = discountReducesTax ? Math.max(0, taxableSubtotal - discountCost) : taxableSubtotal;
+  const salesTax = Math.round(taxableBase * (taxRatePercent / 100));
   const shippingCost = body.shippingCostCents ?? 0;
-  const grandTotal = subtotal + salesTax + shippingCost;
+  const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
   // Atomic per-org/year counter, not Date.now() — same as work orders/requisitions.
   const { data: poNumber, error: numErr } = await db.rpc("next_po_number", { p_org_id_override: auth.orgId });
@@ -117,6 +124,8 @@ export async function POST(request: Request) {
       tax_rate_percent: taxRatePercent,
       sales_tax: salesTax,
       shipping_cost: shippingCost,
+      discount_cost: discountCost,
+      discount_reduces_tax: discountReducesTax,
       grand_total: grandTotal,
       requisition_id: body.requisitionId ?? null,
       notes: body.notes ?? null,

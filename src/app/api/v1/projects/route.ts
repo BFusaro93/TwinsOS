@@ -33,17 +33,32 @@ export async function POST(request: Request) {
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
   const body = parsed.data;
 
+  if (body.clientId) {
+    const { data: client } = await db.from("clients").select("org_id").eq("id", body.clientId).maybeSingle();
+    if (!client || client.org_id !== auth.orgId) return jsonError("Client not found", 404);
+  }
+
   const { data, error } = await db
     .from("projects")
     .insert({
       org_id: auth.orgId,
       name: body.name,
+      client_id: body.clientId ?? null,
       customer_name: body.customerName ?? "",
       address: body.address ?? "",
+      city: body.city ?? null,
+      state: body.state ?? null,
+      zip: body.zip ?? null,
       status: body.status ?? "scheduled",
       start_date: body.startDate ?? null,
       end_date: body.endDate ?? null,
       notes: body.notes ?? null,
+      original_contract_price: body.contractPriceCents ?? 0,
+      estimated_cost_cents: body.estimatedCostCents ?? null,
+      labor_hours: body.laborHours ?? null,
+      budget_hours: body.budgetHours ?? null,
+      labor_rate_cents: body.laborRateCents ?? null,
+      burdened_rate_cents: body.burdenedRateCents ?? null,
     })
     .select(PROJECT_SELECT)
     .single();

@@ -30,6 +30,8 @@ export const createPurchaseOrderSchema = z.object({
   invoiceNumber: z.string().optional(),
   taxRatePercent: z.number().nonnegative().optional(),
   shippingCostCents: z.number().int().nonnegative().optional(),
+  discountCostCents: z.number().int().nonnegative().optional(),
+  discountReducesTax: z.boolean().optional(),
   notes: z.string().optional(),
   lineItems: z.array(poLineItemSchema).min(1),
 });

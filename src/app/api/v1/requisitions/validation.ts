@@ -13,7 +13,10 @@ export const createRequisitionSchema = z.object({
   vendorId: z.string().uuid().optional(),
   taxRatePercent: z.number().nonnegative().optional(),
   shippingCostCents: z.number().int().nonnegative().optional(),
+  discountCostCents: z.number().int().nonnegative().optional(),
+  discountReducesTax: z.boolean().optional(),
   notes: z.string().optional(),
   workOrderId: z.string().uuid().optional(),
+  crmJobId: z.string().uuid().optional(),
   lineItems: z.array(lineItemSchema).min(1),
 });

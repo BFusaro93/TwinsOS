@@ -49,6 +49,10 @@ export async function POST(request: Request) {
     const { data: wo } = await db.from("work_orders").select("org_id").eq("id", body.workOrderId).maybeSingle();
     if (!wo || wo.org_id !== auth.orgId) return jsonError("Work order not found", 404);
   }
+  if (body.crmJobId) {
+    const { data: job } = await db.from("crm_jobs").select("org_id").eq("id", body.crmJobId).maybeSingle();
+    if (!job || job.org_id !== auth.orgId) return jsonError("Job not found", 404);
+  }
 
   const productIds = [...new Set(body.lineItems.map((li) => li.productItemId))];
   const { data: products } = await db
@@ -95,10 +99,13 @@ export async function POST(request: Request) {
       vendorId: body.vendorId ?? null,
       vendorName,
       workOrderId: body.workOrderId ?? null,
+      crmJobId: body.crmJobId ?? null,
       requestedByName: "Public API",
       notes: body.notes ?? null,
       taxRatePercent: body.taxRatePercent,
       shippingCostCents: body.shippingCostCents,
+      discountCostCents: body.discountCostCents,
+      discountReducesTax: body.discountReducesTax,
       lineItems: body.lineItems.map((li) => ({
         productItemId: li.productItemId,
         quantity: li.quantity,

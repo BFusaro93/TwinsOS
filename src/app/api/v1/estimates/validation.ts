@@ -15,4 +15,8 @@ export const createEstimateSchema = z.object({
   description: z.string().optional(),
   estimateDate: z.string().optional(),
   validUntilDate: z.string().optional(),
+  // Attribution only, not a pricing field — safe to expose under the same
+  // "narrow, no caller-supplied dollar figures" rule the rest of this
+  // schema follows.
+  salesRepId: z.string().uuid().optional(),
 });

@@ -1,5 +1,5 @@
 export const PURCHASE_ORDER_SELECT =
-  "id, po_number, po_date, invoice_number, status, vendor_id, vendor_name, subtotal, tax_rate_percent, sales_tax, shipping_cost, grand_total, requisition_id, notes, created_at, updated_at";
+  "id, po_number, po_date, invoice_number, status, vendor_id, vendor_name, subtotal, tax_rate_percent, sales_tax, shipping_cost, discount_cost, discount_reduces_tax, grand_total, requisition_id, notes, created_at, updated_at";
 
 export function shapePurchaseOrder(row: Record<string, unknown>) {
   return {
@@ -14,6 +14,8 @@ export function shapePurchaseOrder(row: Record<string, unknown>) {
     taxRatePercent: row.tax_rate_percent,
     salesTaxCents: row.sales_tax,
     shippingCostCents: row.shipping_cost,
+    discountCostCents: row.discount_cost,
+    discountReducesTax: row.discount_reduces_tax,
     grandTotalCents: row.grand_total,
     requisitionId: row.requisition_id,
     notes: row.notes,

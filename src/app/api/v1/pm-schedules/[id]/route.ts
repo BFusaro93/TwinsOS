@@ -37,6 +37,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
+  let assignedToName: string | null = null;
+  if (body.assignedToId !== undefined) {
+    const { data: emp } = await db
+      .from("crm_employees")
+      .select("org_id, first_name, last_name")
+      .eq("id", body.assignedToId)
+      .maybeSingle();
+    if (!emp || emp.org_id !== auth.orgId) return jsonError("Employee not found", 404);
+    assignedToName = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();
+  }
+
   const { data, error } = await db
     .from("pm_schedules")
     .update({
@@ -46,6 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.lastCompletedDate !== undefined && { last_completed_date: body.lastCompletedDate }),
       ...(body.isActive !== undefined && { is_active: body.isActive }),
       ...(body.description !== undefined && { description: body.description }),
+      ...(body.assignedToId !== undefined && { assigned_to_id: body.assignedToId, assigned_to_name: assignedToName }),
     })
     .eq("org_id", auth.orgId)
     .eq("id", id)

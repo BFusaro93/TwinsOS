@@ -23,6 +23,8 @@ export interface CreateRequisitionInput {
   notes?: string | null;
   taxRatePercent?: number;
   shippingCostCents?: number;
+  discountCostCents?: number;
+  discountReducesTax?: boolean;
   lineItems: CreateRequisitionLineItemInput[];
 }
 
@@ -91,9 +93,16 @@ export async function createRequisitionRecord(
 
   const subtotal = lineItemRows.reduce((sum, li) => sum + li.total_cost, 0);
   const taxRatePercent = input.taxRatePercent ?? 0;
-  const salesTax = Math.round(subtotal * (taxRatePercent / 100));
+  const discountCost = input.discountCostCents ?? 0;
+  const discountReducesTax = input.discountReducesTax ?? false;
+  // Same formula as NewRequisitionDialog.tsx: discount always reduces the
+  // grand total, but only reduces the taxable base when discountReducesTax
+  // is set — requisitions have no per-line taxable flag, so the whole
+  // subtotal is the taxable base (unlike purchase orders).
+  const taxableBase = discountReducesTax ? Math.max(0, subtotal - discountCost) : subtotal;
+  const salesTax = Math.round(taxableBase * (taxRatePercent / 100));
   const shippingCost = input.shippingCostCents ?? 0;
-  const grandTotal = subtotal + salesTax + shippingCost;
+  const grandTotal = subtotal - discountCost + salesTax + shippingCost;
   // Atomic per-org/year counter, not Date.now() — two requests in the same
   // millisecond (concurrent submits, two automation runs) previously
   // produced the same number with nothing to catch it.
@@ -122,6 +131,8 @@ export async function createRequisitionRecord(
       tax_rate_percent: taxRatePercent,
       sales_tax: salesTax,
       shipping_cost: shippingCost,
+      discount_cost: discountCost,
+      discount_reduces_tax: discountReducesTax,
       grand_total: grandTotal,
     })
     .select(REQUISITION_SELECT)

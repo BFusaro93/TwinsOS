@@ -37,6 +37,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);
 
+  if (body.pmScheduleId !== undefined) {
+    const { data: pm } = await db.from("pm_schedules").select("org_id").eq("id", body.pmScheduleId).maybeSingle();
+    if (!pm || pm.org_id !== auth.orgId) return jsonError("PM schedule not found", 404);
+  }
+  if (body.parentWorkOrderId !== undefined) {
+    const { data: parent } = await db
+      .from("work_orders")
+      .select("org_id")
+      .eq("id", body.parentWorkOrderId)
+      .maybeSingle();
+    if (!parent || parent.org_id !== auth.orgId) return jsonError("Parent work order not found", 404);
+  }
+
+  const assigneeIds = [...new Set([body.assignedToId, ...(body.assignedToIds ?? [])].filter((x): x is string => !!x))];
+  const employeeMap = new Map<string, string>();
+  if (assigneeIds.length > 0) {
+    const { data: employees } = await db
+      .from("crm_employees")
+      .select("id, org_id, first_name, last_name")
+      .in("id", assigneeIds);
+    for (const empId of assigneeIds) {
+      const emp = (employees ?? []).find((e) => e.id === empId);
+      if (!emp || emp.org_id !== auth.orgId) return jsonError(`Employee ${empId} not found`, 404);
+      employeeMap.set(empId, `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim());
+    }
+  }
+
   const { data, error } = await db
     .from("work_orders")
     .update({
@@ -46,6 +73,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.priority !== undefined && { priority: body.priority }),
       ...(body.dueDate !== undefined && { due_date: body.dueDate }),
       ...(body.category !== undefined && { category: body.category }),
+      ...(body.pmScheduleId !== undefined && { pm_schedule_id: body.pmScheduleId }),
+      ...(body.parentWorkOrderId !== undefined && { parent_work_order_id: body.parentWorkOrderId }),
+      ...(body.assignedToId !== undefined && {
+        assigned_to_id: body.assignedToId,
+        assigned_to_name: employeeMap.get(body.assignedToId) ?? null,
+      }),
+      ...(body.assignedToIds !== undefined && {
+        assigned_to_ids: body.assignedToIds,
+        assigned_to_names: body.assignedToIds.map((id) => employeeMap.get(id)),
+      }),
     })
     .eq("org_id", auth.orgId)
     .eq("id", id)

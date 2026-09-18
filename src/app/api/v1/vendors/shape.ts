@@ -1,5 +1,5 @@
 export const VENDOR_SELECT =
-  "id, name, contact_name, email, phone, address, website, notes, vendor_type, is_active, w9_status, created_at, updated_at";
+  "id, name, contact_name, email, phone, address, website, notes, vendor_type, is_active, w9_status, w9_received_date, w9_expiration_date, created_at, updated_at";
 
 export function shapeVendor(row: Record<string, unknown>) {
   return {
@@ -14,6 +14,8 @@ export function shapeVendor(row: Record<string, unknown>) {
     vendorType: row.vendor_type,
     isActive: row.is_active,
     w9Status: row.w9_status,
+    w9ReceivedDate: row.w9_received_date,
+    w9ExpirationDate: row.w9_expiration_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

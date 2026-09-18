@@ -1,5 +1,5 @@
 export const REQUISITION_SELECT =
-  "id, requisition_number, title, status, requested_by_name, vendor_id, vendor_name, subtotal, tax_rate_percent, sales_tax, shipping_cost, grand_total, notes, work_order_id, crm_job_id, created_at, updated_at";
+  "id, requisition_number, title, status, requested_by_name, vendor_id, vendor_name, subtotal, tax_rate_percent, sales_tax, shipping_cost, discount_cost, discount_reduces_tax, grand_total, notes, work_order_id, crm_job_id, created_at, updated_at";
 
 export function shapeRequisition(row: Record<string, unknown>) {
   return {
@@ -14,6 +14,8 @@ export function shapeRequisition(row: Record<string, unknown>) {
     taxRatePercent: row.tax_rate_percent,
     salesTaxCents: row.sales_tax,
     shippingCostCents: row.shipping_cost,
+    discountCostCents: row.discount_cost,
+    discountReducesTax: row.discount_reduces_tax,
     grandTotalCents: row.grand_total,
     notes: row.notes,
     workOrderId: row.work_order_id,

@@ -45,6 +45,9 @@ export async function POST(request: Request) {
       website: body.website ?? null,
       notes: body.notes ?? null,
       vendor_type: body.vendorType ?? null,
+      w9_status: body.w9Status ?? "not_requested",
+      w9_received_date: body.w9ReceivedDate ?? null,
+      w9_expiration_date: body.w9ExpirationDate ?? null,
     })
     .select(VENDOR_SELECT)
     .single();

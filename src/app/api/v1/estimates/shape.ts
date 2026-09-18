@@ -1,5 +1,5 @@
 export const ESTIMATE_SELECT =
-  "id, estimate_number, client_id, description, stage, estimate_date, valid_until_date, subtotal_cents, discount_cents, tax_cents, total_cents, probability_bps, notes, created_at, updated_at";
+  "id, estimate_number, client_id, description, stage, estimate_date, valid_until_date, subtotal_cents, discount_cents, tax_cents, total_cents, probability_bps, notes, sales_rep_id, created_at, updated_at";
 
 export function shapeEstimate(row: Record<string, unknown>) {
   return {
@@ -16,6 +16,7 @@ export function shapeEstimate(row: Record<string, unknown>) {
     totalCents: row.total_cents,
     probabilityBps: row.probability_bps,
     notes: row.notes,
+    salesRepId: row.sales_rep_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
