@@ -137,24 +137,37 @@ export function JobProductStatusMenu({ product, onChange }: {
   );
 }
 
+/** Minimal shape JobProductsSection needs from a job's Services. */
+export interface JobProductServiceOption {
+  id: string;
+  name: string;
+}
+
 /**
  * Editable Products (materials) table for a job — used/billed qty can differ
  * (see CRMJobProduct.invoiceQty). Shared between the full JobDetail page and
  * the dispatch board's job popup so a fix or feature here reaches both.
+ *
+ * Every product belongs to a Service (mirrors Estimates, where a product is
+ * always attached to a service line rather than floating on its own) — the
+ * Add/Edit rows won't submit without one picked from `services`.
  */
-export function JobProductsSection({ jobId }: { jobId: string }) {
+export function JobProductsSection({ jobId, services }: { jobId: string; services: JobProductServiceOption[] }) {
   const { data: jobProducts = [] } = useCRMJobProducts(jobId);
   const addJobProduct = useAddCRMJobProduct();
   const updateJobProduct = useUpdateCRMJobProduct();
   const deleteJobProduct = useDeleteCRMJobProduct();
   const setJobProductStatus = useSetJobProductStatus();
   const { data: productCatalog = [] } = useProducts();
+  const serviceNameById = new Map(services.map((s) => [s.id, s.name]));
 
   const [addingProduct, setAddingProduct] = useState(false);
   const [newProductId, setNewProductId] = useState("");
+  const [newProductServiceId, setNewProductServiceId] = useState("");
   const [newProductQty, setNewProductQty] = useState("1");
   const [newProductPrice, setNewProductPrice] = useState("");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editProductServiceId, setEditProductServiceId] = useState("");
   const [editProductQty, setEditProductQty] = useState("");
   const [editProductInvoiceQty, setEditProductInvoiceQty] = useState("");
   const [editProductPrice, setEditProductPrice] = useState("");
@@ -170,6 +183,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
           <thead>
             <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <th className="px-4 py-3 text-left">Product</th>
+              <th className="px-4 py-3 text-left">Service</th>
               <th className="px-4 py-3 text-right">QTY</th>
               <th className="px-4 py-3 text-right">QTY Invoiced</th>
               <th className="px-4 py-3 text-right">Unit Price</th>
@@ -181,7 +195,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
           <tbody>
             {jobProducts.length === 0 && !addingProduct && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400 text-sm">
+                <td colSpan={8} className="px-4 py-6 text-center text-slate-400 text-sm">
                   No products on this job yet.
                 </td>
               </tr>
@@ -191,6 +205,14 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                 <td className="px-4 py-3 font-medium text-slate-800">{p.productName}</td>
                 {editingProductId === p.id ? (
                   <>
+                    <td className="px-2 py-2">
+                      <Select value={editProductServiceId} onValueChange={setEditProductServiceId}>
+                        <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
+                        <SelectContent>
+                          {services.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </td>
                     <td className="px-2 py-2 text-right">
                       <Input type="number" min="0" step="0.01" value={editProductQty}
                         onChange={(e) => setEditProductQty(e.target.value)}
@@ -222,6 +244,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                     <td className="px-2 py-2">
                       <div className="flex justify-end gap-1">
                         <button onClick={async () => {
+                          if (!editProductServiceId) { toast.error("Select which service this product belongs to"); return; }
                           const qty = parsePositive(editProductQty);
                           if (qty == null) { toast.error("Quantity must be greater than 0"); return; }
                           const invoiceQty = editProductInvoiceQty.trim() ? parseNonNegative(editProductInvoiceQty) : null;
@@ -231,6 +254,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                           try {
                             await updateJobProduct.mutateAsync({
                               id: p.id, jobId,
+                              jobServiceId: editProductServiceId,
                               qty,
                               invoiceQty,
                               unitPriceCents: Math.round(priceCents * 100),
@@ -251,6 +275,9 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                   </>
                 ) : (
                   <>
+                    <td className="px-4 py-3 text-slate-500">
+                      {p.jobServiceId ? (serviceNameById.get(p.jobServiceId) ?? "—") : <span className="text-amber-600">Unassigned</span>}
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums">{p.qty}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {p.invoiceQty != null && p.invoiceQty !== p.qty
@@ -282,6 +309,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                       <div className={cn("flex justify-end gap-1", p.status === "pending" ? "opacity-0 group-hover:opacity-100" : "opacity-0")}>
                         <button disabled={p.status !== "pending"} onClick={() => {
                           setEditingProductId(p.id);
+                          setEditProductServiceId(p.jobServiceId ?? "");
                           setEditProductQty(String(p.qty));
                           setEditProductInvoiceQty(p.invoiceQty != null ? String(p.invoiceQty) : "");
                           setEditProductPrice(String(p.unitPriceCents / 100));
@@ -318,6 +346,14 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                     </SelectContent>
                   </Select>
                 </td>
+                <td className="px-2 py-2">
+                  <Select value={newProductServiceId} onValueChange={setNewProductServiceId}>
+                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
+                    <SelectContent>
+                      {services.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </td>
                 <td className="px-2 py-2 text-right">
                   <Input type="number" min="0" step="0.01" value={newProductQty}
                     onChange={(e) => setNewProductQty(e.target.value)}
@@ -346,6 +382,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                       if (!newProductId) return;
                       const prod = productCatalog.find((p) => p.id === newProductId);
                       if (!prod) return;
+                      if (!newProductServiceId) { toast.error("Select which service this product belongs to"); return; }
                       const qty = parsePositive(newProductQty);
                       if (qty == null) { toast.error("Quantity must be greater than 0"); return; }
                       const price = newProductPrice.trim() ? parseNonNegative(newProductPrice) : null;
@@ -353,6 +390,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                       try {
                         await addJobProduct.mutateAsync({
                           jobId,
+                          jobServiceId: newProductServiceId,
                           productId: prod.id,
                           productName: prod.name,
                           qty,
@@ -360,7 +398,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
                           unitCostCents: prod.unitCost ?? null,
                         });
                         setAddingProduct(false);
-                        setNewProductId(""); setNewProductPrice(""); setNewProductQty("1");
+                        setNewProductId(""); setNewProductServiceId(""); setNewProductPrice(""); setNewProductQty("1");
                         toast.success("Product added");
                       } catch { toast.error("Failed to add product"); }
                     }} className="rounded p-1 hover:bg-green-50 text-green-600">
@@ -377,7 +415,7 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
           {jobProducts.length > 0 && (
             <tfoot>
               <tr className="border-t bg-slate-50">
-                <td colSpan={4} className="px-4 py-2 text-right text-xs font-semibold text-slate-500">Total</td>
+                <td colSpan={5} className="px-4 py-2 text-right text-xs font-semibold text-slate-500">Total</td>
                 <td className="px-4 py-2 text-right font-bold text-slate-800">
                   {formatCurrency(jobProducts.reduce((s, p) => s + p.unitPriceCents * (p.invoiceQty ?? p.qty), 0))}
                 </td>
@@ -392,9 +430,22 @@ export function JobProductsSection({ jobId }: { jobId: string }) {
       {!addingProduct && (
         <div>
           <Button size="sm" variant="outline" className="h-7 text-xs"
-            onClick={() => { setAddingProduct(true); setNewProductId(""); setNewProductPrice(""); setNewProductQty("1"); }}>
+            disabled={services.length === 0}
+            title={services.length === 0 ? "Add a service to this job first — every product must belong to one" : undefined}
+            onClick={() => {
+              setAddingProduct(true);
+              setNewProductId("");
+              // Default to the only service when there's exactly one — the
+              // common case — so the picker isn't extra friction every time.
+              setNewProductServiceId(services.length === 1 ? services[0]!.id : "");
+              setNewProductPrice("");
+              setNewProductQty("1");
+            }}>
             <Plus className="mr-1 h-3 w-3" /> Add Product
           </Button>
+          {services.length === 0 && (
+            <p className="mt-1 text-[11px] text-slate-400">Add a service to this job first — every product must belong to one.</p>
+          )}
         </div>
       )}
     </div>

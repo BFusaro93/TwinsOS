@@ -1436,7 +1436,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               )}
 
               {/* ── Products (materials) ── */}
-              <JobProductsSection jobId={job.id} />
+              <JobProductsSection jobId={job.id} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
             </div>
           )}
 

@@ -189,6 +189,13 @@ export interface CRMJob {
   services?: CRMJobService[];
   /** Populated only by useJobsList — the job's actual scheduled/generated visit occurrences. */
   visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null; jobServiceId: string | null }[];
+  /**
+   * job_service_id of every crm_job_services row on this job that has at
+   * least one active (not soft-deleted, not "not_used") product linked to
+   * it — powers the dispatch board's "this service has a product" icon.
+   * Populated only where the query embeds crm_job_products (useVisitsForDate).
+   */
+  serviceIdsWithProducts?: string[];
 }
 
 export interface NewJobFormValues {

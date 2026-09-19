@@ -4925,6 +4925,7 @@ export type Database = {
           invoice_line_item_id: string | null
           invoice_qty: number | null
           job_id: string
+          job_service_id: string | null
           notes: string | null
           org_id: string
           planned_qty: number | null
@@ -4945,6 +4946,7 @@ export type Database = {
           invoice_line_item_id?: string | null
           invoice_qty?: number | null
           job_id: string
+          job_service_id?: string | null
           notes?: string | null
           org_id?: string
           planned_qty?: number | null
@@ -4965,6 +4967,7 @@ export type Database = {
           invoice_line_item_id?: string | null
           invoice_qty?: number | null
           job_id?: string
+          job_service_id?: string | null
           notes?: string | null
           org_id?: string
           planned_qty?: number | null
@@ -5004,6 +5007,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["job_service_id"]
           },
           {
             foreignKeyName: "crm_job_products_org_id_fkey"
@@ -5169,6 +5186,7 @@ export type Database = {
           men_count: number
           notes_to_client: string | null
           notes_to_crew: string | null
+          notes_to_crew_updated_at: string | null
           order_num: number | null
           org_id: string
           paused_at: string | null
@@ -5214,6 +5232,7 @@ export type Database = {
           men_count?: number
           notes_to_client?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           order_num?: number | null
           org_id?: string
           paused_at?: string | null
@@ -5259,6 +5278,7 @@ export type Database = {
           men_count?: number
           notes_to_client?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           order_num?: number | null
           org_id?: string
           paused_at?: string | null
@@ -5399,6 +5419,7 @@ export type Database = {
           map_code: string | null
           notes: string | null
           notes_to_crew: string | null
+          notes_to_crew_updated_at: string | null
           org_id: string
           package_discount: string | null
           package_id: string | null
@@ -5475,6 +5496,7 @@ export type Database = {
           map_code?: string | null
           notes?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           org_id?: string
           package_discount?: string | null
           package_id?: string | null
@@ -5551,6 +5573,7 @@ export type Database = {
           map_code?: string | null
           notes?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           org_id?: string
           package_discount?: string | null
           package_id?: string | null
@@ -14483,6 +14506,17 @@ export type Database = {
         }
         Returns: number
       }
+      crm_append_visit_job_comment: {
+        Args: {
+          p_author_id: string
+          p_author_name: string
+          p_comment_id: string
+          p_created_at: string
+          p_text: string
+          p_visit_id: string
+        }
+        Returns: Json
+      }
       crm_apply_credit_to_invoice: {
         Args: {
           p_amount_cents: number
@@ -14872,3 +14906,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

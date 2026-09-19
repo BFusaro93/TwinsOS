@@ -1256,7 +1256,7 @@ function JobDetailSheet({
             {/* Products (materials) section — used vs. billed qty can differ, see JobProductsSection */}
             {job && (
               <div className="border-t px-4 py-3">
-                <JobProductsSection jobId={job.id} />
+                <JobProductsSection jobId={job.id} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
               </div>
             )}
           </div>
@@ -2956,14 +2956,23 @@ function VisitRow({
           being crammed/truncated into this column. */}
       {isVisible("icons") && (() => {
         const latestComment = visit.jobComments.length > 0 ? visit.jobComments[visit.jobComments.length - 1] : null;
+        // Whether the service(s) THIS visit actually covers have a product
+        // linked to them — not just "the job has products anywhere" (the old
+        // productTotalCents check, which is a stale snapshot that never
+        // updates once materials are added via the Products tab, and didn't
+        // distinguish which service on a multi-service job they belong to).
+        const serviceIdsWithProducts = visit.job?.serviceIdsWithProducts ?? [];
+        const hasLinkedProduct = visit.jobServiceId
+          ? serviceIdsWithProducts.includes(visit.jobServiceId)
+          : serviceIdsWithProducts.length > 0;
         return (
           <td className="px-2 py-2">
             <div className="flex items-center gap-1.5">
               {crewNoteBanner && (
                 <span title={crewNoteBanner} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
               )}
-              {(visit.job?.productTotalCents ?? 0) > 0 && (
-                <span title="Has products" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
+              {hasLinkedProduct && (
+                <span title="Service has a linked product" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
               )}
               {visit.job?.callAhead && visit.clientPhone && (
                 <a

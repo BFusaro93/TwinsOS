@@ -145,6 +145,13 @@ export function mapJob(row: any): CRMJob {
     salesRepName: row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null : null,
     ...mapJobPropertyFields(resolveJobProperty(row.client_properties, row.clients?.client_properties)),
     services: (row.crm_job_services ?? []).map(mapJobServiceFull),
+    serviceIdsWithProducts: Array.isArray(row.crm_job_products)
+      ? [...new Set(
+          (row.crm_job_products as { job_service_id: string | null; status: string; deleted_at: string | null }[])
+            .filter((p) => !p.deleted_at && p.status !== "not_used" && p.job_service_id)
+            .map((p) => p.job_service_id as string)
+        )]
+      : undefined,
     visits: row.crm_job_visits
       ? (row.crm_job_visits as { id: string; scheduled_date: string; status: string; deleted_at: string | null; job_service_id: string | null; crm_crews: { name: string } | null }[])
           .filter((v) => !v.deleted_at)
@@ -521,6 +528,13 @@ function mapJobFull(row: any): CRMJob {
     totalCents: row.total_cents ?? 0,
     notes: row.notes ?? null,
     services: (row.crm_job_services ?? []).map(mapJobServiceFull),
+    serviceIdsWithProducts: Array.isArray(row.crm_job_products)
+      ? [...new Set(
+          (row.crm_job_products as { job_service_id: string | null; status: string; deleted_at: string | null }[])
+            .filter((p) => !p.deleted_at && p.status !== "not_used" && p.job_service_id)
+            .map((p) => p.job_service_id as string)
+        )]
+      : undefined,
   };
 }
 
@@ -734,7 +748,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
           *,
           clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
+          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
@@ -2494,6 +2508,12 @@ export type JobProductStatus = "pending" | "used" | "invoiced" | "used_no_invoic
 export interface CRMJobProduct {
   id: string;
   jobId: string;
+  // Which Service this material belongs to — required on every new row (the
+  // Add Product form won't submit without one), mirroring how Estimates
+  // attach a product to a specific service line rather than letting it float
+  // on the job. Nullable in the DB only because rows created before this
+  // feature existed have no service to backfill onto.
+  jobServiceId: string | null;
   productId: string | null;
   productName: string;
   qty: number;
@@ -2512,6 +2532,7 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
   return {
     id: row.id as string,
     jobId: row.job_id as string,
+    jobServiceId: row.job_service_id as string | null,
     productId: row.product_id as string | null,
     productName: row.product_name as string,
     qty: Number(row.qty),
@@ -2548,6 +2569,9 @@ export function useAddCRMJobProduct() {
   return useMutation({
     mutationFn: async (p: {
       jobId: string;
+      // Required — every new job product must belong to a Service (see
+      // migration 20260919000000_job_products_require_service_link).
+      jobServiceId: string;
       productId: string | null;
       productName: string;
       qty: number;
@@ -2558,6 +2582,7 @@ export function useAddCRMJobProduct() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_products').insert({
         job_id: p.jobId,
+        job_service_id: p.jobServiceId,
         product_id: p.productId,
         product_name: p.productName,
         qty: p.qty,
@@ -2579,6 +2604,7 @@ export function useUpdateCRMJobProduct() {
     mutationFn: async (p: {
       id: string;
       jobId: string;
+      jobServiceId?: string;
       qty?: number;
       // undefined = leave unchanged; null = reset to "same as qty"
       invoiceQty?: number | null;
@@ -2606,6 +2632,7 @@ export function useUpdateCRMJobProduct() {
         // use-materials route also writes qty on a still-pending row (that
         // write is the ACTUAL-used figure), and a trigger couldn't tell the two
         // apart, so it would destroy the very snapshot it exists to keep.
+        ...(p.jobServiceId !== undefined && { job_service_id: p.jobServiceId }),
         ...(p.qty !== undefined && { qty: p.qty, planned_qty: p.qty }),
         ...(p.invoiceQty !== undefined && { invoice_qty: p.invoiceQty }),
         ...(p.unitPriceCents !== undefined && { unit_price_cents: p.unitPriceCents }),
