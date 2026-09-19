@@ -142,6 +142,13 @@ export function effectiveCrewId(
   return v.crewId ?? v.job?.crewId ?? null;
 }
 
+/**
+ * Bucket key for visits with no crew. Stop numbering, drag/drop and route
+ * optimization are all scoped per crew, so the crewless visits need a key of
+ * their own rather than being lumped in with some real crew's block.
+ */
+const UNASSIGNED_CREW_KEY = "unassigned";
+
 // How many people are actually on a crew for a given day — the crew's default
 // roster (crm_crew_members), with any same-day-only reassignments from the
 // Team Assignment dialog (crm_crew_daily_members) applied on top. Shared by
@@ -3276,6 +3283,9 @@ export function DispatchBoard() {
   const [driveTimeMap,       setDriveTimeMap]       = useState<Map<string, number>>(new Map());
   const [totalDriveMins,     setTotalDriveMins]     = useState<number | null>(null);
   const [shopLegMins,        setShopLegMins]        = useState<number | null>(null);
+  // How many crews the last optimize actually routed — each crew is solved as
+  // its own tour, so the banner totals are sums across that many routes.
+  const [routedCrewCount,    setRoutedCrewCount]    = useState(0);
   // Nearest-first leaves the shop and takes the closest stop each time;
   // furthest-first drives out to the far end and works back in, so the crew
   // finishes near the yard.
@@ -3384,59 +3394,133 @@ export function DispatchBoard() {
     (v.job?.services ?? []).some((s) => s.serviceId && chemicalServiceIds.has(s.serviceId))
   );
 
+  /**
+   * Each crew drives its own truck out of its own yard, so a route is only
+   * meaningful within a crew. Optimizing the whole board as one tour used to
+   * interleave crews — a MAINT1 stop could land between two TESTCREW stops —
+   * and because the tour had no single starting yard it wasn't anchored to a
+   * shop either. Route each crew's stops separately (in parallel) and splice
+   * each crew's result back into its own block, leaving every other crew's
+   * positions untouched — the same technique handleReorder uses for drags.
+   */
   async function handleOptimizeRoute() {
-    const targets = filtered.filter((v) => v.job?.serviceAddress);
-    if (targets.length < 2) {
-      toast.error("Need at least 2 visits with a service address to optimize. Try assigning visits to a crew first.");
+    const scope = routeScope();
+    const targets = displayVisits.filter((v) => v.job?.serviceAddress && scope.has(v.id));
+    const groups = new Map<string, typeof targets>();
+    for (const v of targets) {
+      const key = effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY;
+      const list = groups.get(key);
+      if (list) list.push(v); else groups.set(key, [v]);
+    }
+    // Unassigned stops share no yard and no truck, so there's no route to
+    // solve for them as a block — they keep their current position.
+    const routable = [...groups.entries()].filter(
+      ([key, list]) => key !== UNASSIGNED_CREW_KEY && list.length >= 2
+    );
+    if (routable.length === 0) {
+      toast.error(
+        scope.scoped
+          ? "Each crew needs at least 2 selected stops with a service address to optimize. Select more stops, or clear the selection to route the whole board."
+          : "Each crew needs at least 2 stops with a service address to optimize. Try assigning visits to a crew first."
+      );
       return;
     }
+
     setOptimizing(true);
     try {
-      const res = await fetch("/api/crm/route-optimize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // Only anchor on a shop when every stop belongs to the same crew —
-        // a mixed-crew list has no single starting yard, and guessing one
-        // would skew the tour toward whichever crew happened to come first.
-        body: JSON.stringify({
-          visitIds: targets.map((v) => v.id),
-          strategy: routeStrategy,
-          crewId: (() => {
-            const ids = new Set(targets.map((v) => v.crewId ?? v.job?.crewId ?? null));
-            return ids.size === 1 ? [...ids][0] : null;
-          })(),
-        }),
-      });
-      const data = await res.json() as {
-        orderedVisitIds?: string[];
-        driveTimes?: { visitId: string; minutesToNext: number }[];
-        totalDriveMinutes?: number;
-        shopLegMinutes?: number | null;
-        anchoredToShop?: boolean;
-        error?: string;
-      };
-      if (!res.ok || data.error) {
-        toast.error(data.error ?? "Route optimization failed");
+      const results = await Promise.all(
+        routable.map(async ([crewId, list]) => {
+          try {
+            const res = await fetch("/api/crm/route-optimize", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                visitIds: list.map((v) => v.id),
+                strategy: routeStrategy,
+                crewId,
+              }),
+            });
+            const data = await res.json() as {
+              orderedVisitIds?: string[];
+              driveTimes?: { visitId: string; minutesToNext: number }[];
+              totalDriveMinutes?: number;
+              shopLegMinutes?: number | null;
+              anchoredToShop?: boolean;
+              error?: string;
+            };
+            if (!res.ok || data.error) {
+              return { crewId, error: data.error ?? "Route optimization failed" };
+            }
+            return { crewId, data };
+          } catch {
+            return { crewId, error: "Failed to reach route optimizer" };
+          }
+        })
+      );
+
+      const failures = results.filter((r) => "error" in r && r.error) as { crewId: string; error: string }[];
+      const successes = results.filter((r) => "data" in r && r.data) as {
+        crewId: string;
+        data: {
+          orderedVisitIds?: string[];
+          driveTimes?: { visitId: string; minutesToNext: number }[];
+          totalDriveMinutes?: number;
+          shopLegMinutes?: number | null;
+          anchoredToShop?: boolean;
+        };
+      }[];
+
+      if (successes.length === 0) {
+        toast.error(failures[0]?.error ?? "Route optimization failed");
         return;
       }
-      setOptimizedOrder(data.orderedVisitIds ?? null);
+
+      // Per-crew queue of that crew's ids in their new order, then splice each
+      // queue back over the positions that crew already occupies. Visits the
+      // optimizer didn't place (no address, or a crew that wasn't routed)
+      // stay exactly where they are.
+      const queues = new Map<string, { ids: string[]; members: Set<string> }>();
+      for (const { crewId, data } of successes) {
+        const ordered = data.orderedVisitIds ?? [];
+        const placed = new Set(ordered);
+        const rest = (groups.get(crewId) ?? []).map((v) => v.id).filter((id) => !placed.has(id));
+        const ids = [...ordered, ...rest];
+        queues.set(crewId, { ids, members: new Set(ids) });
+      }
+      const pointers = new Map<string, number>();
+      const merged = displayVisits.map((v) => {
+        const key = effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY;
+        const queue = queues.get(key);
+        // Only the routed subset of a crew's block gets rewritten; a visit
+        // with no service address isn't in the queue and keeps its slot.
+        if (!queue || !queue.members.has(v.id)) return v.id;
+        const ptr = pointers.get(key) ?? 0;
+        pointers.set(key, ptr + 1);
+        return queue.ids[ptr] ?? v.id;
+      });
+      setOptimizedOrder(merged);
+
       const dtMap = new Map<string, number>();
-      for (const dt of data.driveTimes ?? []) dtMap.set(dt.visitId, dt.minutesToNext);
+      for (const { data } of successes) {
+        for (const dt of data.driveTimes ?? []) dtMap.set(dt.visitId, dt.minutesToNext);
+      }
       setDriveTimeMap(dtMap);
-      setTotalDriveMins(data.totalDriveMinutes ?? null);
-      setShopLegMins(data.shopLegMinutes ?? null);
-      const legLabel =
-        data.shopLegMinutes != null
-          ? routeStrategy === "furthest_first"
-            ? `, ${data.shopLegMinutes} min back to the shop`
-            : `, ${data.shopLegMinutes} min out from the shop`
-          : "";
+      setTotalDriveMins(successes.reduce((s, r) => s + (r.data.totalDriveMinutes ?? 0), 0));
+      const legs = successes
+        .map((r) => r.data.shopLegMinutes)
+        .filter((m): m is number => m != null);
+      setShopLegMins(legs.length > 0 ? legs.reduce((s, m) => s + m, 0) : null);
+      setRoutedCrewCount(successes.length);
+
+      const crewWord = successes.length === 1 ? "crew" : "crews";
+      const unanchored = successes.filter((r) => !r.data.anchoredToShop).length;
       toast.success(
-        `Route optimized — ${data.totalDriveMinutes} min between stops${legLabel}` +
-          (data.anchoredToShop ? "" : " (no crew starting address set, so the route isn't anchored to a shop)")
+        `Routed ${successes.length} ${crewWord} separately${scope.scoped ? " (selected stops only)" : ""}.` +
+          (unanchored > 0
+            ? ` ${unanchored} ${unanchored === 1 ? "crew has" : "crews have"} no starting address, so ${unanchored === 1 ? "its" : "their"} route isn't anchored to a shop.`
+            : "") +
+          (failures.length > 0 ? ` ${failures.length} failed: ${failures[0].error}` : "")
       );
-    } catch {
-      toast.error("Failed to reach route optimizer");
     } finally {
       setOptimizing(false);
     }
@@ -3447,6 +3531,7 @@ export function DispatchBoard() {
     setDriveTimeMap(new Map());
     setTotalDriveMins(null);
     setShopLegMins(null);
+    setRoutedCrewCount(0);
   }
 
   function isVisible(col: string) { return visibleKeys.includes(col); }
@@ -3579,13 +3664,13 @@ export function DispatchBoard() {
   const visitById = new Map(displayVisits.map((v) => [v.id, v]));
   const crewKeyOf = (id: string) => {
     const v = visitById.get(id);
-    return (v ? effectiveCrewIdOf(v) : null) ?? "unassigned";
+    return (v ? effectiveCrewIdOf(v) : null) ?? UNASSIGNED_CREW_KEY;
   };
   const crewOrderNumById = new Map<string, number>();
   {
     const counters = new Map<string, number>();
     for (const v of displayVisits) {
-      const key = effectiveCrewIdOf(v) ?? "unassigned";
+      const key = effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY;
       const next = (counters.get(key) ?? 0) + 1;
       counters.set(key, next);
       crewOrderNumById.set(v.id, next);
@@ -3694,22 +3779,89 @@ export function DispatchBoard() {
     setDragOverId(null);
   }
 
+  /**
+   * Rearranges each crew's stops independently and splices every crew's
+   * result back over exactly the positions that crew already occupies.
+   *
+   * A board-wide reorder is meaningless here: each crew drives its own truck
+   * on its own route, so reversing or zip-sorting the whole list interleaves
+   * crews and renumbers stops belonging to a different truck. `rearrange`
+   * therefore only ever sees one crew's ids and must return the same ids.
+   * Same technique handleReorder uses for a single drag and handleOptimizeRoute
+   * uses to merge its per-crew tours.
+   */
+  function reorderWithinCrews(
+    order: string[],
+    rearrange: (crewVisitIds: string[]) => string[],
+    inScope: (id: string) => boolean = () => true
+  ): string[] {
+    const byCrew = new Map<string, string[]>();
+    for (const id of order) {
+      if (!inScope(id)) continue;
+      const key = crewKeyOf(id);
+      const list = byCrew.get(key);
+      if (list) list.push(id); else byCrew.set(key, [id]);
+    }
+    const rearranged = new Map<string, string[]>();
+    for (const [key, ids] of byCrew) rearranged.set(key, rearrange(ids));
+    const pointers = new Map<string, number>();
+    return order.map((id) => {
+      // Out-of-scope stops hold their exact slot, so the result is always a
+      // permutation of `order` no matter how narrow the scope is.
+      if (!inScope(id)) return id;
+      const key = crewKeyOf(id);
+      const ptr = pointers.get(key) ?? 0;
+      pointers.set(key, ptr + 1);
+      // Falling back to the original id keeps this total even if a future
+      // `rearrange` ever returned a short list.
+      return rearranged.get(key)?.[ptr] ?? id;
+    });
+  }
+
+  /**
+   * Scope for the three route tools (Optimize, Reverse, Group Stops): the
+   * checked rows when there are any, otherwise everything the filters leave
+   * visible. Read through displayVisits rather than selectedIds directly, so
+   * a stale check on a row a filter has since hidden can't narrow a run down
+   * to nothing.
+   */
+  function routeScope(): { has: (id: string) => boolean; scoped: boolean } {
+    const ids = new Set(
+      displayVisits.filter((v) => selectedIds.has(v.id)).map((v) => v.id)
+    );
+    const scoped = ids.size > 0;
+    return { has: (id: string) => !scoped || ids.has(id), scoped };
+  }
+
+  // displayVisits is the visible set already ordered by any unsaved drag or
+  // optimize, so it — not manualOrder, which can outlive a filter change — is
+  // the right base for these two.
   function handleReverseRoute() {
-    const cur = manualOrder ?? displayVisits.map((v) => v.id);
-    setManualOrder([...cur].reverse());
+    const cur = displayVisits.map((v) => v.id);
+    const scope = routeScope();
+    setManualOrder(reorderWithinCrews(cur, (ids) => [...ids].reverse(), scope.has));
     if (optimizedOrder) clearOptimization();
-    toast.success("Route order reversed");
+    toast.success(
+      `Each crew's route order reversed${scope.scoped ? " (selected stops only)" : ""}`
+    );
   }
 
   function handleGroupStops() {
-    const sorted = [...displayVisits].sort((a, b) => {
-      const za = (a.job?.serviceZip ?? "").slice(0, 3);
-      const zb = (b.job?.serviceZip ?? "").slice(0, 3);
-      return za.localeCompare(zb);
-    });
-    setManualOrder(sorted.map((v) => v.id));
+    const cur = displayVisits.map((v) => v.id);
+    const scope = routeScope();
+    const zipAreaOf = (id: string) =>
+      (visitById.get(id)?.job?.serviceZip ?? "").slice(0, 3);
+    setManualOrder(
+      reorderWithinCrews(
+        cur,
+        (ids) => [...ids].sort((a, b) => zipAreaOf(a).localeCompare(zipAreaOf(b))),
+        scope.has
+      )
+    );
     if (optimizedOrder) clearOptimization();
-    toast.success("Stops grouped by zip code area");
+    toast.success(
+      `Stops grouped by zip code area within each crew${scope.scoped ? " (selected stops only)" : ""}`
+    );
   }
 
   function handleExportCSV() {
@@ -4061,11 +4213,11 @@ export function DispatchBoard() {
             <GripVertical className="h-3.5 w-3.5" />
             Manual Route
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse route order">
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse each crew's route order">
             <ArrowUpDown className="h-3.5 w-3.5" />
             Reverse
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group stops by zip area">
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group each crew's stops by zip area">
             <MapPin className="h-3.5 w-3.5" />
             Group Stops
           </Button>
@@ -4499,10 +4651,14 @@ export function DispatchBoard() {
         {optimizedOrder && totalDriveMins !== null && (
           <span className="ml-auto flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-blue-700 font-medium">
             <Route className="h-3 w-3" />
-            Route optimized · {routeStrategy === "furthest_first" ? "furthest first" : "nearest first"} ·{" "}
+            Route optimized · {routedCrewCount} {routedCrewCount === 1 ? "crew" : "crews"} ·{" "}
+            {routeStrategy === "furthest_first" ? "furthest first" : "nearest first"} ·{" "}
             {totalDriveMins} min between stops
             {shopLegMins !== null && (
-              <> · {shopLegMins} min {routeStrategy === "furthest_first" ? "back to shop" : "out from shop"}</>
+              <>
+                {" "}· {shopLegMins} min{" "}
+                {routeStrategy === "furthest_first" ? "back to shop" : "out from shop"}
+              </>
             )}
           </span>
         )}
