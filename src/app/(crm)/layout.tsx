@@ -92,22 +92,24 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 print:h-auto print:overflow-visible">
       <RealtimeSync />
       <SettingsLoader />
 
       {/* Docked sidebar — lg+ only. Below that (phones and portrait tablets)
           the 260px rail leaves too little room for the content beside it, so it
-          becomes the drawer below. */}
+          becomes the drawer below. Hidden for print so a page that prints
+          itself in place (e.g. Daily Load List) doesn't drag the app shell
+          into the printout. */}
       {!isCrewApp && (
-        <div className="hidden h-full lg:flex">
+        <div className="hidden h-full lg:flex print:hidden">
           <CRMSidebar />
         </div>
       )}
 
       {/* Drawer sidebar — phones and portrait tablets */}
       {!isCrewApp && sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden print:hidden">
           <div
             className="absolute inset-0 bg-black/50 touch-none"
             onClick={() => setSidebarOpen(false)}
@@ -120,11 +122,13 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TrialBanner />
-        <TopBar sidebarToggle={!isCrewApp} />
-        <QuickAddOverlay />
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
+        <div className="print:hidden">
+          <TrialBanner />
+          <TopBar sidebarToggle={!isCrewApp} />
+          <QuickAddOverlay />
+        </div>
+        <main className="flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0">{children}</main>
       </div>
     </div>
   );
