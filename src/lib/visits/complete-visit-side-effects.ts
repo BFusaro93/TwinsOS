@@ -314,20 +314,31 @@ export async function applyVisitCompletionSideEffects(
             ? [{ name: visitInvoiceDescription ?? j.invoice_description ?? "Service", description: visitInvoiceDescription ?? j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents, total_cents: j.rate_cents, service_date: visitDate, is_taxable: false }]
             : [];
 
-        // Sweep in unresolved (pending) Products/materials the office called for
-        // on this job. This auto-invoice path (fired on visit completion) used
-        // to bill services only, silently leaving materials off every
-        // automatically generated invoice and stuck on "Pending" forever — see
-        // the manual "Create Invoice" buttons in DispatchBoard.tsx / JobDetail.tsx
-        // for the same sweep. Swept at most once: each included row is flipped
-        // out of 'pending' below, so a job with several visits (or a second
-        // visit appending to the same open period invoice) can't re-bill the
-        // same material twice.
+        // Sweep in unresolved Products/materials the office called for on this
+        // job. This auto-invoice path (fired on visit completion) used to bill
+        // services only, silently leaving materials off every automatically
+        // generated invoice and stuck on "Pending" forever — see the manual
+        // "Create Invoice" buttons in DispatchBoard.tsx / JobDetail.tsx for the
+        // same sweep. Swept at most once: each included row is flipped to
+        // 'invoiced' below, so a job with several visits (or a second visit
+        // appending to the same open period invoice) can't re-bill the same
+        // material twice.
+        //
+        // BOTH billable statuses are swept, not just 'pending'. 'used' means the
+        // crew recorded actual usage and inventory is already decremented, but
+        // the material is still to be billed (see JobDetail.tsx's
+        // BILLABLE_JOB_PRODUCT_STATUSES and
+        // 20260918120000_job_products_used_status_and_crew_guard.sql). Filtering
+        // 'pending' alone would re-create the bug that status split up to fix:
+        // the crew confirms 10 bags of mulch, the visit completes, and the
+        // material silently never reaches the customer's invoice. Flipping
+        // 'used' -> 'invoiced' does NOT double-decrement stock, because
+        // set_job_product_status treats both as used states.
         const { data: pendingProductRows } = await supabase
           .from("crm_job_products")
           .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents")
           .eq("job_id", j.id)
-          .eq("status", "pending")
+          .in("status", ["pending", "used"])
           .is("deleted_at", null);
         type PendingProductRow = {
           id: string;
