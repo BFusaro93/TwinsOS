@@ -458,17 +458,18 @@ export function InvoicesList({ clientId }: Props) {
     setBulkEmailOpen(true);
   }
 
-  // Opens each selected invoice's real server-rendered PDF in its own tab and
-  // prints it, mirroring InvoiceDetail's single-invoice handlePrint exactly
-  // (including the lock + draft->printed side effect) — this used to be a
-  // bare window.print() on the list page itself, which had no per-invoice
-  // formatting at all and printed the dashboard chrome along with it.
+  // Opens one combined PDF of every selected invoice's real server-rendered
+  // page and prints it — a single tab instead of one popup per invoice.
+  // Still applies the same lock + draft->printed side effect InvoiceDetail's
+  // single-invoice handlePrint does, since printing this way is just as much
+  // "sent to the client on paper" as printing one at a time.
   function bulkPrintSelected() {
     const selected = allInvoices.filter((i) => selectedIds.has(i.id));
     if (selected.length === 0) return;
+    const ids = selected.map((i) => i.id).join(",");
+    const win = window.open(`/api/crm/invoices/bulk-pdf?ids=${ids}`, "_blank");
+    if (win) win.addEventListener("load", () => win.print(), { once: true });
     for (const inv of selected) {
-      const win = window.open(`/api/crm/invoices/${inv.id}/pdf`, "_blank");
-      if (win) win.addEventListener("load", () => win.print(), { once: true });
       const wasDraft = inv.status === "draft";
       void Promise.all([
         setLock({ id: inv.id, locked: true }),

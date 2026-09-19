@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import {
   Document,
   Page,
@@ -893,6 +894,23 @@ export function InvoiceDocument({
   return (
     <Document title={`Invoice #${invoice.invoiceNumber}`} author={org.name}>
       {renderLayout(layoutKey, invoice, org)}
+    </Document>
+  );
+}
+
+/** Combines several invoices' pages into a single PDF — used by the
+ *  Invoices list's "Print Selected" bulk action instead of opening one
+ *  popup window per invoice. Each invoice keeps its own resolved layout. */
+export function InvoiceDocumentMulti({
+  items,
+}: {
+  items: { invoice: InvoicePDFData; org: OrgPDFData; layoutKey?: InvoicePDFLayoutKey }[];
+}) {
+  return (
+    <Document title="Invoices" author={items[0]?.org.name}>
+      {items.map((item, i) => (
+        <Fragment key={i}>{renderLayout(item.layoutKey ?? "default", item.invoice, item.org)}</Fragment>
+      ))}
     </Document>
   );
 }

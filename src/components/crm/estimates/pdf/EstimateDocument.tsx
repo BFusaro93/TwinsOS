@@ -430,7 +430,10 @@ function LineItemSections({
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData; org: OrgPDFData }) {
+/** The Page(s) for a single estimate, with no <Document> wrapper — split out
+ *  from EstimateDocument so EstimateDocumentMulti can put several estimates'
+ *  pages inside one shared <Document> for a combined PDF. */
+function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgPDFData }) {
   const accentColor = org.brandColor || "#60ab45";
 
   const clientAddressLine2 = [estimate.clientCity, estimate.clientState, estimate.clientZip]
@@ -450,7 +453,7 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
     : [];
 
   return (
-    <Document title={`Estimate #${estimate.estimateNumber}`} author={org.name}>
+    <>
       <Page size="LETTER" style={S.page}>
 
         {/* ── header ─────────────────────────────────────────────────── */}
@@ -679,6 +682,27 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
           </View>
         </Page>
       )}
+    </>
+  );
+}
+
+export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData; org: OrgPDFData }) {
+  return (
+    <Document title={`Estimate #${estimate.estimateNumber}`} author={org.name}>
+      <EstimatePages estimate={estimate} org={org} />
+    </Document>
+  );
+}
+
+/** Combines several estimates' pages into a single PDF — used by the
+ *  Estimates list's "Print Selected" bulk action instead of opening one
+ *  popup window per estimate. */
+export function EstimateDocumentMulti({ items }: { items: { estimate: EstimatePDFData; org: OrgPDFData }[] }) {
+  return (
+    <Document title="Estimates" author={items[0]?.org.name}>
+      {items.map((item, i) => (
+        <EstimatePages key={i} estimate={item.estimate} org={item.org} />
+      ))}
     </Document>
   );
 }
