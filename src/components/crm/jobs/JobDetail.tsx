@@ -43,7 +43,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCompanyDate, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -1877,18 +1877,22 @@ function VisitRow({
   return (
     <>
       <tr className="group border-b last:border-0 hover:bg-slate-50">
+        {/* DATE is always the SCHEDULED date. It used to switch to completed_at
+            once a visit was completed, which meant one header carried two
+            different meanings and the job page disagreed with the dispatch
+            board about the very same visit — a stop scheduled Mon Sep 21 and
+            completed late on the 18th read "Fri, Sep 18" here and "09/21" on
+            the board. When it was actually serviced is shown next to the
+            status instead, where it reads as a qualifier rather than a
+            reschedule. */}
         <td className="px-4 py-3 text-slate-700">
-          {visit.status === "completed" && visit.completedAt
-            ? new Date(visit.completedAt).toLocaleDateString("en-US", {
-                weekday: "short", month: "short", day: "numeric",
-              })
-            : serviceWindow
-              ? serviceWindow
-              : visit.scheduledDate
-                ? new Date(visit.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
-                    weekday: "short", month: "short", day: "numeric",
-                  })
-                : "—"}
+          {serviceWindow
+            ? serviceWindow
+            : visit.scheduledDate
+              ? new Date(visit.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
+                  weekday: "short", month: "short", day: "numeric",
+                })
+              : "—"}
         </td>
         <td className="px-4 py-3 text-slate-600">{visitServiceName}</td>
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
@@ -1905,6 +1909,14 @@ function VisitRow({
             <VisitStatusIcon status={visit.status} className="h-3 w-3" />
             {visit.status}
           </Badge>
+          {/* completed_at is an instant, so it must be read in the company's
+              timezone — rendering it in the viewer's would show a different
+              service date to someone looking from another timezone. */}
+          {visit.status === "completed" && visit.completedAt && (
+            <p className="mt-0.5 text-[10px] text-slate-400">
+              {formatCompanyDate(visit.completedAt)}
+            </p>
+          )}
         </td>
         <td className="px-4 py-3 text-xs max-w-xs">
           <div className="flex flex-col gap-0.5">

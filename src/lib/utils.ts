@@ -74,6 +74,35 @@ export function formatDateShort(isoString: string | null | undefined): string {
   return `${mm}/${dd}/${yy}`;
 }
 
+/**
+ * The timezone the business operates in. "Today", "this service day" and any
+ * date derived from a timestamp mean the company's day, not the day the
+ * viewer's browser happens to be in — a manager checking the schedule from
+ * another timezone must see the same dates the crew and the office see.
+ * The reports layer already pinned to this (see the Daily Load List); this is
+ * the shared home for it now that a second caller needs the same rule.
+ */
+export const COMPANY_TIME_ZONE = "America/New_York";
+
+/**
+ * Formats an INSTANT (a timestamptz such as completed_at) as the calendar date
+ * it fell on in the company's operating timezone.
+ *
+ * Distinct from formatDate, which is for values that are already date-only:
+ * passing a timestamp to that renders it in the viewer's local timezone, so a
+ * visit completed at 00:53 UTC shows as one date in Boston and the previous
+ * date on the west coast.
+ */
+export function formatCompanyDate(
+  isoString: string | null | undefined,
+  opts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" }
+): string {
+  if (!isoString) return "—";
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", { ...opts, timeZone: COMPANY_TIME_ZONE }).format(d);
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")
