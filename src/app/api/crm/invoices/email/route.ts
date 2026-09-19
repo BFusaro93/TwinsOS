@@ -7,7 +7,7 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
+import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
@@ -36,13 +36,6 @@ function fmtDate(d: string | null) {
 
 function isValidEmail(e: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
-}
-
-function resolveMergeTags(template: string, vars: Record<string, string>): string {
-  return template.replace(/\[(\w+)\]/g, (match) => {
-    const key = match.toLowerCase();
-    return vars[key] ?? match;
-  });
 }
 
 export async function POST(req: NextRequest) {
@@ -151,6 +144,17 @@ export async function POST(req: NextRequest) {
   });
   const viewOnlineUrl = shareToken ? buildInvoiceViewUrl(shareToken) : null;
 
+  // The Documents block-builder's picker for docType "invoice_email" offers a
+  // second vocabulary (INVOICE_TAGS in crm-documents.ts) beyond the legacy
+  // quick-insert list (INVOICE_EMAIL_MERGE_TAGS) this route was originally
+  // built for. A template authored in the block-builder and selected via
+  // InvoiceEmailDialog's "Documents → Invoice Email" picker carries those
+  // tag names, so every one of them needs a real value here too — aliases of
+  // the equivalent legacy field where the underlying data is the same.
+  const invoiceLogoUrl = (pdfTemplate?.logo_url as string) || (org?.customizations as Record<string, unknown> | undefined)?.logoDataUrl as string | undefined;
+  const paymentLinkHtml = viewOnlineUrl
+    ? `<a href="${viewOnlineUrl}" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>`
+    : "";
   const mergeVars: Record<string, string> = {
     "[clientfirstname]":    firstName,
     "[clientlastname]":     lastName,
@@ -159,11 +163,18 @@ export async function POST(req: NextRequest) {
     "[invoicenumber]":      String(inv.invoice_number ?? "—"),
     "[invoicedate]":        fmtDate(inv.invoice_date),
     "[duedate]":            fmtDate(inv.due_date),
+    "[invoiceduedate]":     fmtDate(inv.due_date),
+    "[invoicesubtotal]":    formatCents((inv.subtotal_cents as number) ?? 0),
+    "[invoicetax]":         formatCents((inv.tax_cents as number) ?? 0),
     "[invoicetotal]":       formatCents(inv.total_cents ?? 0),
     "[balancedue]":         formatCents(inv.balance_cents ?? 0),
+    "[invoicebalance]":     formatCents(inv.balance_cents ?? 0),
     "[salesrepname]":       orgName,
     "[companyphonenumber]": orgPhone,
     "[viewinvoiceonline]":  viewOnlineUrl ?? "",
+    "[paymentlink]":        paymentLinkHtml,
+    "[invoicelogo]":        invoiceLogoUrl ? `<img src="${invoiceLogoUrl}" alt="${orgName}" style="max-height:48px" />` : "",
+    "[invoicegrid]":        "",
   };
 
   const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);

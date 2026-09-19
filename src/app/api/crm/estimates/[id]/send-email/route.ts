@@ -9,7 +9,7 @@ import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, Estima
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { complexityFactor } from "@/lib/estimate-calc";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
+import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
@@ -25,14 +25,13 @@ async function getNextVersionNumber(supabase: any, estimateId: string): Promise<
   return (count ?? 0) + 1;
 }
 
-function resolveMergeTags(
-  template: string,
-  vars: Record<string, string>,
-): string {
-  return template.replace(/\[(\w+)\]/g, (match) => {
-    const key = match.toLowerCase();
-    return vars[key] ?? match;
-  });
+function fmtDate(d: string | null) {
+  if (!d) return "—";
+  return new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatCents(cents: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
 export async function POST(
@@ -164,23 +163,54 @@ export async function POST(
   const lastName = clientDisplayName.split(" ").slice(1).join(" ") ?? "";
   const salesRep = est.sales_rep as { first_name?: string; last_name?: string } | null;
   const salesRepName = salesRep ? `${salesRep.first_name ?? ""} ${salesRep.last_name ?? ""}`.trim() || orgName : orgName;
-  const total = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
-    .format((est.total_cents ?? 0) / 100);
+  const total = formatCents((est.total_cents as number) ?? 0);
   const quoteDate = new Date(est.created_at).toLocaleDateString("en-US", {
     month: "long", day: "numeric", year: "numeric",
   });
+  const quoteLinkHtml = `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`;
+
+  // The Documents block-builder's picker for docType "estimate" offers a
+  // second vocabulary (ESTIMATE_TAGS in crm-documents.ts) that uses
+  // "estimate*" names instead of this route's legacy "quote*" names — a
+  // template authored with the block-builder's own suggested tags would
+  // otherwise ship to clients with literal "[estimatenumber]" etc. text.
+  // These are aliases/derived values of the same underlying estimate data,
+  // kept alongside the quote* tags rather than replacing them.
+  const subtotalCents = (est.subtotal_cents as number) ?? 0;
+  const discountCents = (est.discount_cents as number) ?? 0;
+  const discountPct = est.discount_type === "percent"
+    ? `${((est.discount_value as number ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%`
+    : (subtotalCents > 0 ? `${((discountCents / subtotalCents) * 100).toFixed(2).replace(/\.00$/, "")}%` : "0%");
+  const numInstallments = (est.num_installments as number) ?? 1;
+  const depositRequiredCents = (est.deposit_required_cents as number) ?? 0;
+  const balanceCents = Math.max(0, ((est.total_cents as number) ?? 0) - depositRequiredCents);
+  const installmentAmountCents = numInstallments > 1 ? Math.floor(balanceCents / numInstallments) : balanceCents;
 
   const mergeVars: Record<string, string> = {
     "[clientfirstname]":    firstName,
     "[clientlastname]":     lastName,
     "[clientfullname]":     clientDisplayName,
     "[companyname]":        orgName,
-    "[quotelink]":          `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`,
+    "[quotelink]":          quoteLinkHtml,
     "[quotenumber]":        String(est.estimate_number).padStart(5, "0"),
     "[quotedate]":          quoteDate,
     "[quotetotal]":         total,
     "[salesrepname]":       salesRepName,
     "[companyphonenumber]": orgPhone,
+    "[estimatenumber]":              String(est.estimate_number).padStart(5, "0"),
+    "[estimatedate]":                quoteDate,
+    "[estimatevaliduntil]":          fmtDate(est.valid_until as string | null),
+    "[estimatesubtotal]":            formatCents(subtotalCents),
+    "[estimatetotal]":               total,
+    "[estimatetotallessdiscounts]":  total,
+    "[estimatediscountpct]":         discountPct,
+    "[estimatediscountamt]":         formatCents(discountCents),
+    "[estimatenotes]":               (est.notes as string | null) ?? "",
+    "[estimatelink]":                quoteLinkHtml,
+    "[estimatelinkurl]":             proposalUrl,
+    "[installmentcount]":            String(numInstallments),
+    "[installmentamount]":           formatCents(installmentAmountCents),
+    "[estimategrid]":                "",
   };
 
   const resolvedSubject = resolveMergeTags(body.subject, mergeVars);
