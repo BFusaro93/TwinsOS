@@ -8,6 +8,8 @@ export type AuditAction =
   | "price_updated"
   | "vendor_changed"
   | "image_uploaded"
+  | "archived"
+  | "unarchived"
   | "deleted";
 
 export type AuditRecordType =
@@ -33,7 +35,11 @@ export type AuditRecordType =
   | "contract"
   | "service"
   | "package"
-  | "job_visit";
+  | "job_visit"
+  | "employee"
+  | "role"
+  | "discount"
+  | "overhead_settings";
 
 export interface AuditEntry extends BaseRecord {
   recordType: AuditRecordType;
