@@ -14,7 +14,7 @@ import {
   useReturnVisitToWaitingList,
   useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
-import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
+import { useCreateInvoiceFromJob, useInvoiceForVisit } from "@/lib/hooks/use-invoices";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 // Property-scoped defs, NOT the client-level ones: the property values these
 // columns render come from crm_property_custom_field_values, which keys off
@@ -448,6 +448,7 @@ function JobDetailSheet({
   const { mutateAsync: updateVisit } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
+  const { data: existingInvoice } = useInvoiceForVisit(visit.id);
   const { currentUser } = useCurrentUserStore();
 
   const job  = visit.job;
@@ -730,6 +731,15 @@ function JobDetailSheet({
   }
 
   async function handleInvoice() {
+    // Belt-and-suspenders against the button somehow firing anyway (e.g. a
+    // stale render before the query resolves) — visit.status === "completed"
+    // auto-invoices in the background, and this manual button previously had
+    // no idempotency check at all, so a second click created a duplicate,
+    // numberless invoice missing the products swept into the first one.
+    if (existingInvoice) {
+      router.push(`/crm/accounting/invoices/${existingInvoice.id}`);
+      return;
+    }
     try {
       const serviceDate = visit.scheduledDate ?? todayLocalISODate();
       // invoiceDescription is authored via a rich-text editor on the Service
@@ -830,7 +840,9 @@ function JobDetailSheet({
                   disabled={invoicing}
                 >
                   <FileText className="mr-1 h-3 w-3" />
-                  Invoice
+                  {existingInvoice
+                    ? `View Invoice${existingInvoice.invoiceNumber != null ? ` #${existingInvoice.invoiceNumber}` : ""}`
+                    : "Invoice"}
                 </Button>
               )}
             </div>

@@ -1569,6 +1569,64 @@ export function usePaymentAllocations(paymentId: string | undefined) {
   });
 }
 
+// Whether a visit has already produced an invoice line — same idempotency
+// check applyVisitCompletionSideEffects() uses (crm_invoice_line_items.visit_id
+// is tagged on the first line of whatever invoice a visit's completion billed
+// into, whichever completion path got there first). The manual "Create
+// Invoice" button in DispatchBoard/JobDetail has no other guard against
+// re-invoicing an already-billed visit, which double-bills the client with a
+// numberless duplicate invoice — this is what that button checks before
+// deciding whether to invoice or just link to the existing one.
+export function useInvoiceForVisit(visitId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["crm-invoices", "for-visit", visitId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_invoice_line_items")
+        .select("invoice_id, crm_invoices(id, invoice_number)")
+        .eq("visit_id", visitId)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const invoice = (data as { crm_invoices: { id: string; invoice_number: number | null } | null }).crm_invoices;
+      return invoice ? { id: invoice.id, invoiceNumber: invoice.invoice_number } : null;
+    },
+    enabled: !!visitId,
+  });
+}
+
+// Whether a job already has an invoice at all — mirrors
+// applyVisitCompletionSideEffects()'s "job_already_invoiced" guard for
+// one_time/waiting_list jobs with no per-service visit split. JobDetail.tsx's
+// job-level "Invoice" button bills every pending service/product on the job
+// in one shot and had no check against re-running that after the job was
+// already invoiced (by either that same button or the visit-completion
+// auto-invoice), so a second click re-billed the whole job as a duplicate.
+export function useInvoiceForJob(jobId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["crm-invoices", "for-job", jobId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_invoices")
+        .select("id, invoice_number")
+        .eq("crm_job_id", jobId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return { id: (data as { id: string }).id, invoiceNumber: (data as { invoice_number: number | null }).invoice_number };
+    },
+    enabled: !!jobId,
+  });
+}
+
 // ── create invoice from a completed job ───────────────────────────────────────
 
 export function useCreateInvoiceFromJob() {

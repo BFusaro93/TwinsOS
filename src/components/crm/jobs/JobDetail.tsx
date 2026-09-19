@@ -22,7 +22,7 @@ import {
   useCRMJobProducts,
 } from "@/lib/hooks/use-crm-jobs";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
-import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
+import { useCreateInvoiceFromJob, useInvoiceForJob } from "@/lib/hooks/use-invoices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -166,6 +166,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const createVisit = useCreateVisit();
   const updateStatus = useUpdateJobStatus();
   const createInvoice = useCreateInvoiceFromJob();
+  const { data: existingInvoice } = useInvoiceForJob(jobId);
 
   const updateJobService = useUpdateJobService();
   const addJobService = useAddJobService();
@@ -464,6 +465,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
   async function handleInvoice() {
     if (!job) return;
+    // Belt-and-suspenders against the button somehow firing anyway (e.g. a
+    // stale render before the query resolves) — this had no idempotency
+    // check at all, so a second click re-billed the whole job as a
+    // duplicate, numberless invoice.
+    if (existingInvoice) {
+      router.push(`/crm/accounting/invoices/${existingInvoice.id}`);
+      return;
+    }
     setInvoicing(true);
     try {
       const today = todayLocalISODate();
@@ -662,7 +671,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               disabled={invoicing}
               onClick={handleInvoice}>
               <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500" />
-              {invoicing ? "Creating…" : "Invoice"}
+              {invoicing
+                ? "Creating…"
+                : existingInvoice
+                  ? `View Invoice${existingInvoice.invoiceNumber != null ? ` #${existingInvoice.invoiceNumber}` : ""}`
+                  : "Invoice"}
             </Button>
           )}
           <div className="ml-1 h-5 w-px bg-slate-200" />
