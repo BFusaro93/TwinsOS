@@ -1,5 +1,6 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import { buildResult, col } from "@/lib/reports/helpers";
+import { isoNy } from "@/lib/reports/ny-date";
 
 // ============================================================
 // Tickets section — pre-built reports.
@@ -13,7 +14,10 @@ export const TICKET_REPORTS: PrebuiltReportDef[] = [
     description: "Shows open tickets whose due date has already passed.",
     filters: [],
     run: async ({ supabase }) => {
-      const today = new Date().toISOString().slice(0, 10);
+      // UTC "today" is tomorrow's date after 8pm Eastern, which listed tickets
+      // due TODAY as already past due. The ticket-past-due cron that emails
+      // about the same tickets uses isoNy; these two must agree.
+      const today = isoNy(new Date());
       const { data, error } = await supabase
         .from("crm_tickets")
         .select("ticket_number, subject, category, assigned_to, due_date, clients(display_name)")

@@ -243,6 +243,33 @@ export function todayLocalISODate(): string {
   return toLocalISODate(new Date());
 }
 
+/**
+ * "YYYY-MM-DD" for an instant as it appears on the COMPANY's calendar
+ * (COMPANY_TIME_ZONE), regardless of where the viewer or the server is.
+ *
+ * Use this — not toLocalISODate — for anything operational: which service day
+ * the dispatch board opens on, what date an auto-created invoice carries, what
+ * "today" means in a report. toLocalISODate answers "what day is it where this
+ * browser is", which is a different (and usually wrong) question: a manager
+ * checking the board from Denver at 11pm MT must still see the crew's day, and
+ * server code has no local day at all — Vercel's Node runtime is UTC, where
+ * "today" flips at 8pm Eastern.
+ */
+export function toCompanyISODate(d: Date): string {
+  // en-CA formats as YYYY-MM-DD, which is already the wire format.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: COMPANY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/** Today's date on the company's calendar as "YYYY-MM-DD". */
+export function todayCompanyISODate(): string {
+  return toCompanyISODate(new Date());
+}
+
 /** Local calendar date `days` from today (negative = past) as "YYYY-MM-DD". */
 export function localISODateFromToday(days: number): string {
   const d = new Date();

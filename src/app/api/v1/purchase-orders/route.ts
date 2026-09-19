@@ -3,6 +3,7 @@ import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { PURCHASE_ORDER_SELECT, PO_LINE_ITEM_SELECT, shapePurchaseOrder, shapePoLineItem } from "./shape";
 import { createPurchaseOrderSchema } from "./validation";
+import { isoNy } from "@/lib/reports/ny-date";
 
 /** GET /api/v1/purchase-orders — list the org's purchase orders. Requires scope "purchase_orders:read". */
 export async function GET(request: Request) {
@@ -154,7 +155,9 @@ export async function POST(request: Request) {
     .insert({
       org_id: auth.orgId,
       po_number: poNumber,
-      po_date: body.poDate ?? new Date().toISOString().slice(0, 10),
+      // Default to the company's calendar day, not UTC's — an integration
+      // POSTing a PO at 9pm Eastern would otherwise get tomorrow's po_date.
+      po_date: body.poDate ?? isoNy(new Date()),
       invoice_number: body.invoiceNumber ?? null,
       status: "requested",
       vendor_id: body.vendorId,

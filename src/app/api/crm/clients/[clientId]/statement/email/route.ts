@@ -9,6 +9,7 @@ import type { OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import { buildAccountStatementData } from "@/lib/invoices/account-statement-data";
 import { orgEmailFrom, mapSendError, buildClientMergeVars, resolveMergeTags } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { isoNy } from "@/lib/reports/ny-date";
 
 const log = logger.child("email-statement");
 
@@ -22,7 +23,11 @@ const DEFAULT_BODY = `<p>Hi [clientfirstname],</p>
 <p>Thank you,<br>[companyname]<br>[companyphonenumber]</p>`;
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  // The statement's "as of" date must be the company's calendar day. This runs
+  // on Vercel, whose Node runtime is UTC, so toISOString() would date a
+  // statement pulled at 9pm Eastern as tomorrow — and at month end, put it in
+  // the wrong month from the balances it was computed against.
+  return isoNy(new Date());
 }
 
 function isValidEmail(e: string) {

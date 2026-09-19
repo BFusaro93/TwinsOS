@@ -44,7 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime, formatDateShort, todayLocalISODate, formatHours } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort, todayCompanyISODate, formatHours } from "@/lib/utils";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
@@ -748,7 +748,7 @@ function JobDetailSheet({
       return;
     }
     try {
-      const serviceDate = visit.scheduledDate ?? todayLocalISODate();
+      const serviceDate = visit.scheduledDate ?? todayCompanyISODate();
       // invoiceDescription is authored via a rich-text editor on the Service
       // (and carried down onto the job/visit) — stripHtml() it before it
       // reaches an actual generated invoice, or a client-facing invoice
@@ -787,7 +787,7 @@ function JobDetailSheet({
         jobId: visit.jobId,
         clientId: visit.clientId,
         description: masterDescription ?? serviceName,
-        invoiceDate: visit.scheduledDate ?? todayLocalISODate(),
+        invoiceDate: visit.scheduledDate ?? todayCompanyISODate(),
         lineItems,
         subtotalCents,
         taxRateBps: 0,
@@ -3205,10 +3205,10 @@ export function DispatchBoard() {
   const urlRouter    = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
-  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayLocalISODate());
+  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayCompanyISODate());
   useEffect(() => {
     const current = searchParams.get("date");
-    const isToday = selectedDate === todayLocalISODate();
+    const isToday = selectedDate === todayCompanyISODate();
     // Keep the URL clean on the default day; otherwise mirror the selection.
     if ((isToday && current === null) || current === selectedDate) return;
     const params = new URLSearchParams(searchParams.toString());

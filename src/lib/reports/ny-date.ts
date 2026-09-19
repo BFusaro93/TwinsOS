@@ -10,7 +10,14 @@
 // depending on time of day and DST.
 // ============================================================
 
-const NY_TZ = "America/New_York";
+import { COMPANY_TIME_ZONE } from "@/lib/utils";
+
+// Single source of truth — this module predates COMPANY_TIME_ZONE and used to
+// carry its own copy of the literal. Two copies of "the timezone the business
+// operates in" is one copy too many: whoever makes this per-org later has to
+// find every one of them, and a mismatch between the report layer and the UI
+// layer is invisible until a boundary date disagrees.
+const NY_TZ = COMPANY_TIME_ZONE;
 
 /** {year, month (0-based), day} of `d` as they appear in America/New_York. */
 export function nyDateParts(d: Date): { year: number; month: number; day: number } {
@@ -58,4 +65,21 @@ export function mondayOfYmd(dateStr: string): string {
   const dow = anchor.getUTCDay(); // 0 = Sun .. 6 = Sat
   const diff = dow === 0 ? -6 : 1 - dow;
   return shiftYmd(dateStr, diff);
+}
+
+/**
+ * A `Date` sitting at the HOST's local midnight of the company's current
+ * calendar day.
+ *
+ * The visit generators do all their recurrence arithmetic with local
+ * components (getDay/getDate/setDate) and format with a local-component
+ * toISODate, which is self-consistent — but only if the Date they start from
+ * is the right DAY. Seeding them with `new Date()` uses the host's day, and
+ * the host is UTC on Vercel, so after 8pm Eastern every generator started from
+ * tomorrow. This keeps the local-component convention those callers rely on
+ * while fixing which day it begins at.
+ */
+export function companyTodayAsLocalMidnight(): Date {
+  const { year, month, day } = nyDateParts(new Date());
+  return new Date(year, month, day);
 }
