@@ -14,6 +14,7 @@ import {
   useAddJobsToStormEvent,
 } from "@/lib/hooks/use-snow-dispatch";
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
+import { printSnowRouteSheets } from "@/lib/print";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -655,10 +656,14 @@ function SnowPrintDialog({
           )}
         </div>
         <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between">
-          <p className="text-[11px] text-slate-400">Uses your browser&apos;s print dialog</p>
+          <p className="text-[11px] text-slate-400">Opens your browser&apos;s print dialog in a new window</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
-            <Button size="sm" className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={() => window.print()}>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+              onClick={() => printSnowRouteSheets(`${event?.name ?? ""} (${event?.eventDate ?? ""})`, crews, visits)}
+            >
               <Printer className="mr-1.5 h-3.5 w-3.5" />Print
             </Button>
           </div>

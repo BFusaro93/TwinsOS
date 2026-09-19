@@ -1113,3 +1113,198 @@ export function printRouteSheets(
 
   openPrintWindow(html);
 }
+
+function snowRouteTable(cv: CRMJobVisit[]): string {
+  const rows = cv.map((v, i) => {
+    const job = v.job;
+    const addr = [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", ");
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(v.clientName ?? "—")}</td>
+        <td>${escapeHtml(addr || "—")}</td>
+        <td>&#9744; Snowing &#9744; Freezing Rain &#9744; Clear</td>
+        <td>&#9744; Ice &#9744; Slush &#9744; Dry</td>
+        <td style="text-align:center">&#9744;</td>
+        <td></td>
+      </tr>`;
+  }).join("");
+  return `
+    <table class="rs-compact-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Client</th><th>Address</th><th>Weather Conditions</th>
+          <th>Site Conditions</th><th style="text-align:center">Full Plow</th><th style="text-align:center">Salt (bags)</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/**
+ * Prints snow route sheets in a separate window — mirrors DispatchBoard's
+ * printRouteSheets but for storm-event visits, which have their own
+ * weather/site-condition/salt columns instead of the landscaping route
+ * sheet's fields.
+ */
+export function printSnowRouteSheets(
+  eventLabel: string,
+  crews: { id: string; name: string }[],
+  visits: CRMJobVisit[]
+): void {
+  const { brandColor } = useSettingsStore.getState();
+
+  const byCrew = crews
+    .map((c) => ({ crew: c, visits: visits.filter((v) => v.crewId === c.id) }))
+    .filter((x) => x.visits.length > 0);
+  const unassigned = visits.filter((v) => !v.crewId);
+
+  const sections = [
+    ...byCrew.map(({ crew, visits: cv }) => `
+      <div class="rs-section">
+        <div class="rs-crew-header"><h2>${escapeHtml(crew.name)}</h2><span class="rs-date">${cv.length} stop${cv.length !== 1 ? "s" : ""}</span></div>
+        ${snowRouteTable(cv)}
+      </div>`),
+    ...(unassigned.length > 0 ? [`
+      <div class="rs-section">
+        <div class="rs-crew-header"><h2>Unassigned</h2><span class="rs-date">${unassigned.length} stop${unassigned.length !== 1 ? "s" : ""}</span></div>
+        ${snowRouteTable(unassigned)}
+      </div>`] : []),
+  ];
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Print Route Sheets — ${escapeHtml(eventLabel)}</title>
+  <style>${buildStyles(brandColor)}${ROUTE_SHEET_STYLES}</style>
+</head>
+<body>
+  ${sections.join("") || `<p style="color:#94a3b8;">No visits to print.</p>`}
+</body>
+</html>`;
+
+  openPrintWindow(html);
+}
+
+// ── damage case ──────────────────────────────────────────────────────────────
+
+export function printDamageCase(
+  damageCase: {
+    caseNumber: string;
+    caseType: string;
+    status: string;
+    customerName: string;
+    propertyAddress: string | null;
+    dateOfIncident: string;
+    description: string;
+    resolutionNotes: string | null;
+    totalCost: number;
+  },
+  expenses: Array<{ expenseDate: string; vendorName: string | null; description: string; amount: number }>
+): void {
+  const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
+
+  const addressLines = [
+    companyAddress.street,
+    [companyAddress.city, companyAddress.state, companyAddress.zip].filter(Boolean).join(", "),
+    companyAddress.phone,
+  ].filter(Boolean);
+
+  const headerHtml = buildHeaderHtml({
+    logoDataUrl,
+    orgName,
+    addressLines,
+    docTitle: "Damage Case",
+    docNumber: damageCase.caseNumber,
+    docDate: formatDateStr(damageCase.dateOfIncident),
+  });
+
+  const metaItems: Array<{ label: string; value: string }> = [
+    { label: "Customer", value: damageCase.customerName },
+    { label: "Status", value: formatStatus(damageCase.status) },
+    { label: "Type", value: formatStatus(damageCase.caseType) },
+    { label: "Date of Incident", value: formatDateStr(damageCase.dateOfIncident) },
+  ];
+  if (damageCase.propertyAddress) {
+    metaItems.push({ label: "Property Address", value: damageCase.propertyAddress });
+  }
+
+  const metaHtml = metaItems
+    .map(
+      (m) => `
+    <div class="meta-item">
+      <span class="meta-label">${escapeHtml(m.label)}</span>
+      <span class="meta-value">${escapeHtml(m.value)}</span>
+    </div>
+  `
+    )
+    .join("");
+
+  const descriptionHtml = damageCase.description
+    ? `<div class="section-title">Description</div><div class="description-block">${escapeHtml(damageCase.description)}</div>`
+    : "";
+
+  const expensesHtml = expenses.length > 0 ? `
+  <div class="section-title">Expenses</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Date</th>
+        <th>Vendor</th>
+        <th>Description</th>
+        <th class="text-right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${expenses.map((e, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${formatDateStr(e.expenseDate)}</td>
+        <td>${e.vendorName ? escapeHtml(e.vendorName) : "—"}</td>
+        <td>${escapeHtml(e.description)}</td>
+        <td class="text-right">${formatMoney(e.amount)}</td>
+      </tr>
+      `).join("")}
+    </tbody>
+  </table>
+  <div class="totals-wrapper">
+    <div class="totals-box">
+      <div class="totals-row grand">
+        <span class="totals-label">Total Cost</span>
+        <span class="totals-value">${formatMoney(damageCase.totalCost)}</span>
+      </div>
+    </div>
+  </div>
+  ` : "";
+
+  const notesHtml = damageCase.resolutionNotes
+    ? `<div class="section-title">Resolution Notes</div><div class="notes-block">${escapeHtml(damageCase.resolutionNotes)}</div>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Damage Case ${escapeHtml(damageCase.caseNumber)}</title>
+  <style>${buildStyles(brandColor)}</style>
+</head>
+<body>
+  <div class="accent-bar"></div>
+  ${headerHtml}
+  <hr class="divider"/>
+
+  <div class="section-title">Details</div>
+  <div class="meta-grid">
+    ${metaHtml}
+  </div>
+
+  ${descriptionHtml}
+
+  ${expensesHtml}
+
+  ${notesHtml}
+</body>
+</html>`;
+
+  openPrintWindow(html);
+}

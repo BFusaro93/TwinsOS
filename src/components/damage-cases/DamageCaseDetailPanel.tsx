@@ -27,6 +27,7 @@ import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
+import { printDamageCase } from "@/lib/print";
 import type { DamageCaseStatus } from "@/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -125,7 +126,17 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => printDamageCase(data, expenses.map((e) => ({
+              expenseDate: e.expenseDate,
+              vendorName: e.vendorName,
+              description: e.description,
+              amount: e.amount,
+            })))}
+          >
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
