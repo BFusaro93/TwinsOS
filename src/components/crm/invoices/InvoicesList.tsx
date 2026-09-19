@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   useInvoices,
   useUpdateInvoiceStatus,
+  useSetInvoiceLock,
   useBulkImportInvoices,
   voidBlockedMessage,
 } from "@/lib/hooks/use-invoices";
@@ -247,6 +248,7 @@ export function InvoicesList({ clientId }: Props) {
   const effectiveClientId = clientId ?? (searchParams.get("clientId") || undefined);
   const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(effectiveClientId);
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
+  const { mutateAsync: setLock } = useSetInvoiceLock();
   const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
@@ -454,6 +456,26 @@ export function InvoicesList({ clientId }: Props) {
   function bulkEmailSelected() {
     if (selectedIds.size === 0) return;
     setBulkEmailOpen(true);
+  }
+
+  // Opens each selected invoice's real server-rendered PDF in its own tab and
+  // prints it, mirroring InvoiceDetail's single-invoice handlePrint exactly
+  // (including the lock + draft->printed side effect) — this used to be a
+  // bare window.print() on the list page itself, which had no per-invoice
+  // formatting at all and printed the dashboard chrome along with it.
+  function bulkPrintSelected() {
+    const selected = allInvoices.filter((i) => selectedIds.has(i.id));
+    if (selected.length === 0) return;
+    for (const inv of selected) {
+      const win = window.open(`/api/crm/invoices/${inv.id}/pdf`, "_blank");
+      if (win) win.addEventListener("load", () => win.print(), { once: true });
+      const wasDraft = inv.status === "draft";
+      void Promise.all([
+        setLock({ id: inv.id, locked: true }),
+        wasDraft ? updateStatus({ id: inv.id, status: "printed" }) : Promise.resolve(),
+      ]).catch(() => {});
+    }
+    toast.info(`Opening ${selected.length} invoice${selected.length !== 1 ? "s" : ""} to print…`);
   }
 
   const chargeInvoice = useChargeAutopayInvoice();
@@ -720,7 +742,7 @@ export function InvoicesList({ clientId }: Props) {
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!someSelected}
-                onSelect={() => { toast.info("Opening print view…"); window.print(); }}
+                onSelect={bulkPrintSelected}
               >
                 Print Selected
               </DropdownMenuItem>

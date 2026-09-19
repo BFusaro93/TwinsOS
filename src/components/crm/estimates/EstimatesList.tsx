@@ -261,6 +261,20 @@ export function EstimatesList({ clientId }: Props) {
     }
   }
 
+  // Opens each selected estimate's real server-rendered PDF in its own tab
+  // and prints it, mirroring EstimateDetail's single-estimate Print button —
+  // this used to be a bare window.print() on the list page itself, which had
+  // no per-estimate formatting and printed the dashboard chrome along with it.
+  function bulkPrintSelected() {
+    const targets = (estimates ?? []).filter((e) => selectedIds.has(e.id));
+    if (targets.length === 0) return;
+    for (const e of targets) {
+      const win = window.open(`/api/crm/estimates/${e.id}/pdf`, "_blank");
+      if (win) win.addEventListener("load", () => win.print(), { once: true });
+    }
+    toast.info(`Opening ${targets.length} estimate${targets.length !== 1 ? "s" : ""} to print…`);
+  }
+
   const visibleColumns = clientId
     ? ESTIMATE_COLUMNS.filter((c) => c.key !== "client" && visibleKeys.includes(c.key))
     : ESTIMATE_COLUMNS.filter((c) => visibleKeys.includes(c.key));
@@ -394,7 +408,7 @@ export function EstimatesList({ clientId }: Props) {
               )}
               <DropdownMenuItem
                 disabled={!someSelected}
-                onSelect={() => { toast.info("Opening print view…"); window.print(); }}
+                onSelect={bulkPrintSelected}
               >
                 Print Selected
               </DropdownMenuItem>
