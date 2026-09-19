@@ -95,7 +95,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CRMJob, CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
-import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
+import { useCrews, useCrewDailyMembers, useCrewDailyMembersRange, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
@@ -110,6 +110,10 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 // handing VisitRow a fresh [] every render, which would otherwise defeat any
 // memoization keyed on this array's identity.
 const EMPTY_MEMBER_TIMES: CrewMemberTime[] = [];
+
+// Same stable-empty-array reasoning as EMPTY_MEMBER_TIMES, for per-day crew
+// headcount overrides.
+const EMPTY_DAILY_OVERRIDES: { id: string; member_id: string; crew_id: string }[] = [];
 
 // Formats a "HH:MM" / "HH:MM:SS" 24h time string (the shape a native
 // <input type="time"> value/DB `time` column uses) into "3:00 PM" for
@@ -2389,6 +2393,7 @@ function VisitRow({
   allVisits,
   drivingCrewIds,
   customFieldDefs,
+  dailyOverrides,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -2425,6 +2430,9 @@ function VisitRow({
   drivingCrewIds: Set<string>;
   /** Org custom-field definitions (Settings), for the dynamic trailing columns. */
   customFieldDefs: PropertyCustomFieldDef[];
+  /** This visit's own scheduledDate slice of the board's batched per-day crew
+   * headcount overrides — see dailyOverridesByDate in DispatchBoard. */
+  dailyOverrides: { id: string; member_id: string; crew_id: string }[];
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -2489,11 +2497,12 @@ function VisitRow({
   const endButtonRef = useRef<HTMLButtonElement>(null);
 
   const { data: richCrewsForSize } = useCrews(false);
-  // Must key off this visit's own date, not the board's global selectedDate —
-  // on a multi-day (From/To range) view, a visit from day 2+ of the range
-  // would otherwise resolve its headcount override against day 1's roster.
-  // JobDetailSheet does this correctly (useCrewDailyMembers(visit.scheduledDate)).
-  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(visit.scheduledDate);
+  // dailyOverrides is keyed off this visit's own date via the prop (see
+  // dailyOverridesByDate in DispatchBoard), not the board's global
+  // selectedDate — on a multi-day (From/To range) view, a visit from day 2+
+  // of the range would otherwise resolve its headcount override against day
+  // 1's roster. JobDetailSheet does this correctly too (useCrewDailyMembers(visit.scheduledDate)).
+  const dailyOverridesForSize = dailyOverrides;
   const upsertMemberTime = useUpsertCrewMemberTime();
 
   // Does the crew actually on this visit have different punch times from each
@@ -3301,6 +3310,20 @@ export function DispatchBoard() {
   // visible row would be its own N+1 problem.
   const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
   const { data: drivingCrewIds = new Set<string>() } = useDrivingCrewIds(selectedDate);
+  // Batched by date range, not per-row — every VisitRow needs the headcount
+  // override for its own visit date (which can differ from the board's
+  // selectedDate on a multi-day From/To view), and firing one
+  // useCrewDailyMembers query per distinct date among the visible rows was
+  // its own N+1 (Sentry-flagged repeating spans on this route).
+  const { data: allDailyOverrides = [] } = useCrewDailyMembersRange(selectedDate, effectiveEnd ?? selectedDate);
+  const dailyOverridesByDate = useMemo(() => {
+    const m = new Map<string, { id: string; member_id: string; crew_id: string }[]>();
+    for (const o of allDailyOverrides) {
+      const list = m.get(o.work_date);
+      if (list) list.push(o); else m.set(o.work_date, [o]);
+    }
+    return m;
+  }, [allDailyOverrides]);
   // Remembered per-(crew, weekday) stop order, used to seed a day that has
   // never been saved so a recurring route doesn't have to be re-dragged weekly.
   const { data: rememberedOrder } = useCrewRouteOrder(selectedDate, effectiveEnd);
@@ -4750,6 +4773,7 @@ export function DispatchBoard() {
                   allVisits={allVisits}
                   drivingCrewIds={drivingCrewIds}
                   customFieldDefs={customFieldDefs}
+                  dailyOverrides={dailyOverridesByDate.get(visit.scheduledDate) ?? EMPTY_DAILY_OVERRIDES}
                 />
               ))
             )}
