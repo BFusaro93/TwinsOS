@@ -139,7 +139,13 @@ export async function POST(
     client_id: clientId,
     activity_type: "email",
     subject: resolvedSubject,
-    body: `Sent to ${client.primary_email}`,
+    // Record which rule the send was made under. A service notice may
+    // legitimately reach a client who opted out of marketing, so "why did an
+    // opted-out client get this?" has to be answerable from the timeline
+    // rather than from guesswork.
+    body: isBulk
+      ? `Sent to ${client.primary_email} (bulk, ${purpose})`
+      : `Sent to ${client.primary_email}`,
     sent_to: client.primary_email,
     resend_message_id: resendId,
     occurred_at: new Date().toISOString(),
