@@ -32,19 +32,24 @@ const HTML_SAFE_MERGE_TAG_KEYS = new Set([
 
 export function resolveMergeTags(
   template: string,
-  vars: Record<string, string>
+  vars: Record<string, string>,
+  options?: { preserveUnresolvedKnownTags?: boolean }
 ): string {
   return template.replace(/\[(\w+)\]/g, (match) => {
     const key = match.toLowerCase();
     if (key in vars) {
       return HTML_SAFE_MERGE_TAG_KEYS.has(key) ? vars[key] : escapeHtml(vars[key]);
     }
-    // A recognized Documents merge-tag name this call just didn't provide a
-    // value for (e.g. a send path that only resolves a handful of tags, fed
-    // a template built with the full picker) — degrade to blank so it never
-    // ships to a real recipient as literal "[tag]" syntax. Anything NOT a
-    // known tag name is left alone — most likely genuine bracket text the
-    // author typed (e.g. "[12 months]"), not an unresolved placeholder.
+    // `preserveUnresolvedKnownTags` is for populating an editable draft
+    // (no real record attached yet) — leave the tag as literal "[tag]" text
+    // so a later, real resolve pass (the send route's own resolver) still
+    // has something to substitute. Without it (the default), a recognized
+    // Documents merge-tag name this call just didn't provide a value for
+    // degrades to blank so it never ships to a real recipient as literal
+    // "[tag]" syntax. Anything NOT a known tag name is always left alone —
+    // most likely genuine bracket text the author typed (e.g. "[12 months]"),
+    // not an unresolved placeholder.
+    if (options?.preserveUnresolvedKnownTags) return match;
     return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
   });
 }
@@ -177,14 +182,19 @@ export function addParagraphSpacing(html: string): string {
 
 export function renderBlocksToHtml(
   blocks: RenderableBlock[],
-  mergeVars: Record<string, string>
+  mergeVars: Record<string, string>,
+  options?: { preserveUnresolvedKnownTags?: boolean }
 ): string {
-  const rows = blocks.map((block) => renderBlock(block, mergeVars)).join("\n");
+  const rows = blocks.map((block) => renderBlock(block, mergeVars, options)).join("\n");
   return `<div style="max-width:600px;margin:0 auto;font-family:Verdana,Arial,sans-serif;color:#1e293b;">${rows}</div>`;
 }
 
-function renderBlock(block: RenderableBlock, mergeVars: Record<string, string>): string {
-  const content = block.content ? resolveMergeTags(block.content, mergeVars) : "";
+function renderBlock(
+  block: RenderableBlock,
+  mergeVars: Record<string, string>,
+  options?: { preserveUnresolvedKnownTags?: boolean }
+): string {
+  const content = block.content ? resolveMergeTags(block.content, mergeVars, options) : "";
   const spacedContent = addParagraphSpacing(content);
 
   switch (block.blockType) {

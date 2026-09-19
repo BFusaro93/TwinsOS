@@ -193,7 +193,7 @@ function CampaignDialog({
   // values so the user can see what a real send will look like.
   useEffect(() => {
     if (!templateDetail) return;
-    const html = renderBlocksToHtml(templateDetail.blocks, {});
+    const html = renderBlocksToHtml(templateDetail.blocks, {}, { preserveUnresolvedKnownTags: true });
     setForm((p) => ({
       ...p,
       body: html,
