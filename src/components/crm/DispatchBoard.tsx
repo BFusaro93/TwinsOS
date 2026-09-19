@@ -2690,26 +2690,26 @@ function VisitRow({
 
       {/* Client (+ address below, like the Jobs screen — City/Zip stay in
           their own columns since they're used for routing) */}
-      <td className="min-w-[140px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
+      <td className="min-w-[200px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-1">
           {visit.effectiveHighPriority && (
             <span title="High priority" className="shrink-0"><Flame className="h-3 w-3 text-red-500" /></span>
           )}
           <Link
             href={`/crm/clients/${visit.clientId}`}
-            className="block truncate max-w-[140px] font-medium text-brand-600 hover:underline"
+            className="block truncate max-w-[200px] font-medium text-brand-600 hover:underline"
           >
             {visit.clientName ?? "—"}
           </Link>
         </div>
         {job?.serviceAddress && (
-          <p className="truncate max-w-[140px] text-[10px] text-slate-400">{job.serviceAddress}</p>
+          <p className="truncate max-w-[200px] text-[10px] text-slate-400">{job.serviceAddress}</p>
         )}
       </td>
 
       {/* Service */}
       {isVisible("service") && (
-        <td className="min-w-[110px] px-2 py-2">
+        <td className="px-2 py-2">
           <span className={cn(
             "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold border truncate max-w-[110px]",
             serviceColor
@@ -2754,7 +2754,7 @@ function VisitRow({
               type="button"
               onClick={() => onEditTimes(visit)}
               title="Crew members have different clock-in times — open Edit Job Times"
-              className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
+              className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
             >
               Multiple times
             </button>
@@ -2786,13 +2786,13 @@ function VisitRow({
                       if (document.activeElement === endButtonRef.current) setEditingEnd(true);
                     }, 0);
                   }}
-                  className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
                 />
               ) : (
                 <button
                   type="button"
                   onClick={() => setEditingStart(true)}
-                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
                 >
                   {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 italic">—</span>}
                 </button>
@@ -2823,7 +2823,7 @@ function VisitRow({
                   type="button"
                   onClick={() => onEditTimes(visit)}
                   title="Crew members have different clock-out times — open Edit Job Times"
-                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
                 >
                   Multiple times
                 </button>
@@ -2840,14 +2840,14 @@ function VisitRow({
                     setEndTouched(false);
                     void saveVisitTime("end_time", endVal);
                   }}
-                  className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
                 />
               ) : (
                 <button
                   type="button"
                   ref={endButtonRef}
                   onClick={() => setEditingEnd(true)}
-                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
                 >
                   {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 italic">—</span>}
                 </button>
@@ -4522,8 +4522,8 @@ export function DispatchBoard() {
               </th>
               <th className="w-10 px-1 py-2.5">#</th>
               <th className="w-8  px-2 py-2.5">St</th>
-              <th className="min-w-[140px] px-2 py-2.5">Client</th>
-              {isVisible("service")  && <th className="min-w-[110px] px-2 py-2.5">Service</th>}
+              <th className="min-w-[200px] px-2 py-2.5">Client</th>
+              {isVisible("service")  && <th className="px-2 py-2.5">Service</th>}
               {isVisible("date")     && <th className="px-2 py-2.5">Date</th>}
               {isVisible("city")     && <th className="px-2 py-2.5">City</th>}
               {isVisible("zip")      && <th className="px-2 py-2.5">Zip</th>}
