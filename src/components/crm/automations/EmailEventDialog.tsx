@@ -87,7 +87,7 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   useEffect(() => {
     if (!selectedDocTemplate) return;
     if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
-    setBody(renderBlocksToHtml(selectedDocTemplate.blocks, {}));
+    setBody(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
     setDocTemplateId("");
   }, [selectedDocTemplate]);
 

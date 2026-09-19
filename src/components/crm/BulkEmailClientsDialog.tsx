@@ -78,7 +78,7 @@ export function BulkEmailClientsDialog({
   useEffect(() => {
     if (!selectedDocTemplate) return;
     if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
-    setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}));
+    setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
   }, [selectedDocTemplate]);
 
   // Auto-select the org's default "client" document template on open.
