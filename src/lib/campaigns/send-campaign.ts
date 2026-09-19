@@ -113,6 +113,12 @@ export async function sendCampaignEmails(
     .eq("org_id", orgId)
     .is("deleted_at", null)
     .eq("do_not_market", false)
+    // A hard bounce is tracked separately from the marketing opt-out now (see
+    // 20260919010000_client_email_bounce_suppression.sql). The Resend webhook
+    // used to fold bounces into do_not_market, so this filter caught them for
+    // free; it no longer does, and a campaign must never re-send to an address
+    // that already bounced.
+    .is("email_bounced_at", null)
     .not("primary_email", "is", null);
 
   if (campaign.target_segment === "custom") {

@@ -9,12 +9,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
-import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
+import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import Link from "next/link";
 import { toast } from "sonner";
 
-type Recipient = { id: string; name: string; email: string | null; doNotMarket: boolean };
+type EmailPurpose = "marketing" | "service";
+
+type Recipient = {
+  id: string;
+  name: string;
+  email: string | null;
+  doNotMarket: boolean;
+  /** Hard bounce — a dead address, not a preference. Blocks BOTH purposes. */
+  emailBouncedAt: string | null;
+};
 
 // This is a one-to-many commercial send, so it is throttled the same way the
 // campaign sender is (src/lib/campaigns/send-campaign.ts): 5 concurrent sends
@@ -38,24 +48,46 @@ export function BulkEmailClientsDialog({
   clientIds: string[];
 }) {
   const qc = useQueryClient();
-  const { data: templates = [] } = useEmailTemplates("general");
+  // Email content templates live in Documents (doc type "client") — the same
+  // block-based builder used for invoice-email templates — rather than the
+  // old plain subject+body records, so all email templates live in one place.
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  const templates = useMemo(
+    () => allDocTemplates.filter((t) => t.docType === "client" && t.status === "active"),
+    [allDocTemplates]
+  );
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+  // Defaults to the restrictive option: a sender has to consciously declare a
+  // message a service notice before opted-out clients are included.
+  const [purpose, setPurpose] = useState<EmailPurpose>("marketing");
   const richTextRef = useRef<RichTextEditorHandle>(null);
 
-  // Picking a template fills the fields once, from the click — deliberately not
-  // an effect keyed on `templates`, which is a fresh array identity on every
-  // refetch and so re-applied the template over whatever the user had since
-  // typed into the subject/body.
   function applyTemplate(templateId: string) {
     setSelectedTemplateId(templateId);
-    const tpl = templates.find((t) => t.id === templateId);
-    if (tpl) { setSubject(tpl.subject); setBodyHtml(tpl.bodyHtml); }
   }
+
+  // Once the chosen document template's blocks load, fill in subject/body —
+  // merge tags are left unresolved for the send route's own resolver, same
+  // as InvoiceEmailDialog.
+  useEffect(() => {
+    if (!selectedDocTemplate) return;
+    if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
+    setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}));
+  }, [selectedDocTemplate]);
+
+  // Auto-select the org's default "client" document template on open.
+  useEffect(() => {
+    if (open && templates.length > 0 && !selectedTemplateId) {
+      const def = templates.find((t) => t.isDefault) ?? templates[0];
+      if (def) setSelectedTemplateId(def.id);
+    }
+  }, [open, templates, selectedTemplateId]);
 
   // The caller builds `clientIds` inline, so it's a new array on every parent
   // render — keying the fetch off its identity re-ran the query continuously
@@ -72,7 +104,7 @@ export function BulkEmailClientsDialog({
       const { data } = await supabase
         .from("clients")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .select("id, display_name, primary_email, do_not_market" as any)
+        .select("id, display_name, primary_email, do_not_market, email_bounced_at" as any)
         .in("id", ids)
         .is("deleted_at", null);
       if (cancelled) return;
@@ -84,6 +116,7 @@ export function BulkEmailClientsDialog({
           name: r.display_name as string,
           email: (r.primary_email as string | null) ?? null,
           doNotMarket: (r.do_not_market as boolean | null) ?? false,
+          emailBouncedAt: (r.email_bounced_at as string | null) ?? null,
         }))
       );
       setLoading(false);
@@ -91,12 +124,37 @@ export function BulkEmailClientsDialog({
     return () => { cancelled = true; };
   }, [open, clientIdsKey]);
 
-  // A selection blast is commercial mail, so Do Not Market applies here the
-  // same as it does to a campaign — the send route enforces it too, this just
-  // tells the sender up front who is being left out and why.
-  const withEmail = useMemo(() => recipients.filter((r) => !!r.email && !r.doNotMarket), [recipients]);
+  // Three different reasons a selected client may not get the email, and they
+  // are NOT interchangeable:
+  //
+  //   no address  — nothing to send to.
+  //   bounced     — the address hard-bounced. A deliverability fact, so it
+  //                 blocks both purposes; re-sending hurts domain reputation.
+  //   opted out   — a marketing preference. Blocks commercial mail only; a
+  //                 service notice about already-contracted work may still go
+  //                 (CAN-SPAM exempts transactional/relationship mail).
+  //
+  // The send route enforces all three itself — this just tells the sender up
+  // front who is being left out and why, per the purpose they picked.
   const withoutEmail = useMemo(() => recipients.filter((r) => !r.email), [recipients]);
-  const optedOut = useMemo(() => recipients.filter((r) => !!r.email && r.doNotMarket), [recipients]);
+  const bounced = useMemo(
+    () => recipients.filter((r) => !!r.email && !!r.emailBouncedAt),
+    [recipients]
+  );
+  const optedOut = useMemo(
+    () => recipients.filter((r) => !!r.email && !r.emailBouncedAt && r.doNotMarket),
+    [recipients]
+  );
+  const withEmail = useMemo(
+    () =>
+      recipients.filter(
+        (r) =>
+          !!r.email &&
+          !r.emailBouncedAt &&
+          (purpose === "service" || !r.doNotMarket)
+      ),
+    [recipients, purpose]
+  );
 
   function handleOpenChange(o: boolean) {
     if (!o) {
@@ -105,6 +163,7 @@ export function BulkEmailClientsDialog({
       setSubject("");
       setBodyHtml("");
       setRecipients([]);
+      setPurpose("marketing");
     }
   }
 
@@ -114,7 +173,11 @@ export function BulkEmailClientsDialog({
       return;
     }
     if (withEmail.length === 0) {
-      toast.error("None of the selected clients can be emailed (no address on file, or opted out of marketing)");
+      toast.error(
+        purpose === "service"
+          ? "None of the selected clients can be emailed (no address on file, or the address has bounced)"
+          : "None of the selected clients can be emailed (no address on file, bounced, or opted out of marketing)"
+      );
       return;
     }
     setSending(true);
@@ -127,7 +190,7 @@ export function BulkEmailClientsDialog({
             fetch(`/api/crm/clients/${r.id}/send-email`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ subject, bodyHtml, bulk: true }),
+              body: JSON.stringify({ subject, bodyHtml, bulk: true, purpose }),
             }).then(async (res) => {
               if (!res.ok) {
                 const json = await res.json().catch(() => ({}));
@@ -175,13 +238,41 @@ export function BulkEmailClientsDialog({
                     {withoutEmail.length} skipped (no email on file): {withoutEmail.map((r) => r.name).join(", ")}
                   </p>
                 )}
-                {optedOut.length > 0 && (
+                {bounced.length > 0 && (
+                  <p className="text-xs text-amber-600">
+                    {bounced.length} skipped (email bounced): {bounced.map((r) => r.name).join(", ")}
+                  </p>
+                )}
+                {purpose === "marketing" && optedOut.length > 0 && (
                   <p className="text-xs text-amber-600">
                     {optedOut.length} skipped (Do Not Market): {optedOut.map((r) => r.name).join(", ")}
                   </p>
                 )}
+                {purpose === "service" && optedOut.length > 0 && (
+                  <p className="text-xs text-slate-500">
+                    Includes {optedOut.length} client{optedOut.length === 1 ? "" : "s"} who opted out of
+                    marketing — allowed for a service notice.
+                  </p>
+                )}
               </>
             )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Purpose</Label>
+            <Select value={purpose} onValueChange={(v) => setPurpose(v as EmailPurpose)}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="marketing">Marketing / promotional</SelectItem>
+                <SelectItem value="service">Service notice (about their scheduled work)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-400">
+              {purpose === "marketing"
+                ? "Skips clients marked Do Not Market and adds an unsubscribe footer."
+                : "Reaches clients who opted out of marketing, with no unsubscribe footer — only for notices about work they have already contracted. Bounced addresses are still skipped."}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Template</Label>
@@ -199,8 +290,8 @@ export function BulkEmailClientsDialog({
             ) : (
               <p className="text-xs text-slate-400">
                 No templates yet —{" "}
-                <Link href="/crm/settings?tab=crm" className="text-brand-600 hover:underline" target="_blank">
-                  create one in Settings → Clients → Email Templates
+                <Link href="/crm/settings/documents" className="text-brand-600 hover:underline" target="_blank">
+                  create one in Documents with type &quot;Client&quot;
                 </Link>
                 , or just write a one-off message below.
               </p>

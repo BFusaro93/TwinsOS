@@ -1473,6 +1473,7 @@ export type Database = {
           deleted_at: string | null
           display_name: string
           do_not_market: boolean
+          email_bounced_at: string | null
           first_name: string | null
           gate_lock_code: string | null
           gross_sqft: number | null
@@ -1548,6 +1549,7 @@ export type Database = {
           deleted_at?: string | null
           display_name: string
           do_not_market?: boolean
+          email_bounced_at?: string | null
           first_name?: string | null
           gate_lock_code?: string | null
           gross_sqft?: number | null
@@ -1623,6 +1625,7 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string
           do_not_market?: boolean
+          email_bounced_at?: string | null
           first_name?: string | null
           gate_lock_code?: string | null
           gross_sqft?: number | null

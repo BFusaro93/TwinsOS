@@ -40,7 +40,7 @@ export async function resolveEmailStepContent(
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
-    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id, do_not_market")
+    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id, do_not_market, email_bounced_at")
     .eq("id", params.clientId)
     .single();
 
@@ -49,6 +49,12 @@ export async function resolveEmailStepContent(
   // used the unsubscribe link should stop getting automation emails too,
   // not just campaign blasts.
   if (client.do_not_market) return { error: "client has opted out of marketing emails (do_not_market)" };
+  // Separate from the opt-out: the address itself hard-bounced. The Resend
+  // webhook used to record that as do_not_market, so the check above caught it
+  // implicitly; it now lands in its own column and has to be checked here too,
+  // or automations would resume mailing dead addresses.
+  // See 20260919010000_client_email_bounce_suppression.sql.
+  if (client.email_bounced_at) return { error: "client's email address has hard-bounced (email_bounced_at)" };
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
   const toEmails = new Set<string>();
