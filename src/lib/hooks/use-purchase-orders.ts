@@ -332,16 +332,28 @@ async function logCatalogNameConflict(
   poNumber: string,
 ) {
   if (existingName === incomingName) return;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("audit_log").insert({
-    record_type: recordType,
-    record_id: recordId,
-    action: "name_conflict",
-    changed_by_name: "System",
-    description: `Import name conflict on ${poNumber} (not applied): catalog has "${existingName}", import line used "${incomingName}"`,
-    field_changed: "name",
-    old_value: existingName,
-    new_value: incomingName,
+
+  // Written through the SECURITY DEFINER RPC rather than inserted directly:
+  // audit_log no longer accepts writes from a browser client, because a
+  // client-side insert could name anyone as the actor. The RPC stamps the
+  // signed-in user itself, which is also more honest than the "System" this
+  // used to claim — a person ran the import.
+  const { data: record } = await supabase
+    .from(recordType === "product" ? "product_items" : "parts")
+    .select("org_id")
+    .eq("id", recordId)
+    .single();
+  if (!record?.org_id) return;
+
+  await supabase.rpc("insert_audit_entry", {
+    p_org_id: record.org_id as string,
+    p_record_type: recordType,
+    p_record_id: recordId,
+    p_action: "name_conflict",
+    p_description: `Import name conflict on ${poNumber} (not applied): catalog has "${existingName}", import line used "${incomingName}"`,
+    p_field_changed: "name",
+    p_old_value: existingName,
+    p_new_value: incomingName,
   });
 }
 

@@ -204,6 +204,8 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           crm_rpt_client_phone_list: "Client Phone List",
           crm_rpt_client_timeline: "Client Timeline Report",
           crm_rpt_lead_timeline: "Lead Timeline Report",
+          admin_rpt_audit_log: "Audit Log",
+          admin_rpt_security_audit: "Security & Access Audit",
         },
       },
       crm_reports_cont: {
