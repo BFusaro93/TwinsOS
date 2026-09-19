@@ -58,7 +58,17 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: client } = await (supabase as any)
     .from("clients")
-    .select("id, display_name, primary_email, balance_outstanding_cents, do_not_market, email_bounced_at, unsubscribe_token")
+    .select(`
+      id, display_name, first_name, last_name, primary_email, phones,
+      account_number, invoice_delivery, balance_outstanding_cents,
+      billing_address, billing_city, billing_state, billing_zip,
+      service_address, service_city, service_state, service_zip,
+      turf_sqft, gross_sqft, mulch_bed_sqft, yards_of_mulch,
+      linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew,
+      referred_by, do_not_market, email_bounced_at, unsubscribe_token,
+      sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name),
+      referring_client:referred_by_client_id(display_name)
+    `)
     .eq("id", clientId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
@@ -91,11 +101,45 @@ export async function POST(
     .eq("id", profile.org_id)
     .single();
 
+  const salesRep = client.sales_rep as { first_name: string; last_name: string } | null;
+  const referringClient = client.referring_client as { display_name: string } | null;
+
   const clientForMerge = {
     displayName: client.display_name,
+    firstName: client.first_name,
+    lastName: client.last_name,
     balanceOutstandingCents: client.balance_outstanding_cents,
+    primaryEmail: client.primary_email,
+    phones: client.phones,
+    accountNumber: client.account_number,
+    invoiceDelivery: client.invoice_delivery,
+    billingAddress: client.billing_address,
+    billingCity: client.billing_city,
+    billingState: client.billing_state,
+    billingZip: client.billing_zip,
+    serviceAddress: client.service_address,
+    serviceCity: client.service_city,
+    serviceState: client.service_state,
+    serviceZip: client.service_zip,
+    turfSqft: client.turf_sqft,
+    grossSqft: client.gross_sqft,
+    mulchBedSqft: client.mulch_bed_sqft,
+    yardsOfMulch: client.yards_of_mulch,
+    linearFtPerimeter: client.linear_ft_perimeter,
+    linearFtEdging: client.linear_ft_edging,
+    gateLockCode: client.gate_lock_code,
+    notesToCrew: client.notes_to_crew,
+    salesRepName: salesRep ? `${salesRep.first_name} ${salesRep.last_name}`.trim() : null,
+    referringClientName: referringClient?.display_name ?? client.referred_by ?? null,
   };
-  const orgForMerge = { name: org?.name ?? null, addressPhone: org?.address?.phone ?? null };
+  const orgForMerge = {
+    name: org?.name ?? null,
+    addressPhone: org?.address?.phone ?? null,
+    addressStreet: org?.address?.street ?? null,
+    addressCity: org?.address?.city ?? null,
+    addressState: org?.address?.state ?? null,
+    addressZip: org?.address?.zip ?? null,
+  };
 
   // Two separate maps: the subject is plain text delivered verbatim to an
   // inbox, never rendered as HTML, so it must use raw (unescaped) values —

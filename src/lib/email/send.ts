@@ -88,11 +88,51 @@ export function mapSendError(
 interface ClientForMergeVars {
   displayName: string | null;
   balanceOutstandingCents?: number | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  primaryEmail?: string | null;
+  phones?: { phone: string; type: string }[] | null;
+  accountNumber?: string | null;
+  invoiceDelivery?: string | null;
+  billingAddress?: string | null;
+  billingCity?: string | null;
+  billingState?: string | null;
+  billingZip?: string | null;
+  serviceAddress?: string | null;
+  serviceCity?: string | null;
+  serviceState?: string | null;
+  serviceZip?: string | null;
+  turfSqft?: number | null;
+  grossSqft?: number | null;
+  mulchBedSqft?: number | null;
+  yardsOfMulch?: number | null;
+  linearFtPerimeter?: number | null;
+  linearFtEdging?: number | null;
+  gateLockCode?: string | null;
+  notesToCrew?: string | null;
+  /** "Firstname Lastname" of the linked crm_employees rep — resolved by the caller, this fn does no DB lookups. */
+  salesRepName?: string | null;
+  /** Display name of the linked referring client, falling back to the free-text `referred_by` (e.g. "Google", "Yard Sign") — resolved by the caller. */
+  referringClientName?: string | null;
 }
 
 interface OrgForMergeVars {
   name: string | null;
   addressPhone?: string | null;
+  addressStreet?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
+  addressZip?: string | null;
+}
+
+const INVOICE_DELIVERY_LABELS: Record<string, string> = {
+  email: "Email",
+  print: "Print",
+  both: "Email & Print",
+};
+
+function formatSqft(n: number | null | undefined): string {
+  return n == null ? "" : new Intl.NumberFormat("en-US").format(n);
 }
 
 /**
@@ -114,10 +154,13 @@ export function buildClientMergeVars(
 
   // Compute names/split from the raw value, then escape only at the point
   // of exposure below — escaping first would corrupt the split (e.g. an
-  // embedded "&" becoming "&amp;" before the space-split runs).
+  // embedded "&" becoming "&amp;" before the space-split runs). Prefer the
+  // client's real first_name/last_name columns when the caller supplied
+  // them; fall back to splitting display_name for callers that don't (or
+  // for clients that only ever had a free-text display name).
   const rawDisplayName = client.displayName ?? "";
-  const rawFirstName = rawDisplayName.split(" ")[0] ?? rawDisplayName;
-  const rawLastName = rawDisplayName.split(" ").slice(1).join(" ");
+  const rawFirstName = client.firstName ?? rawDisplayName.split(" ")[0] ?? rawDisplayName;
+  const rawLastName = client.lastName ?? rawDisplayName.split(" ").slice(1).join(" ");
   const balance = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
     .format((client.balanceOutstandingCents ?? 0) / 100);
 
@@ -126,6 +169,14 @@ export function buildClientMergeVars(
   const lastName = esc(rawLastName);
   const companyName = esc(org.name ?? "Your Service Provider");
   const companyPhone = esc(org.addressPhone ?? "");
+  const companyAddress = esc(org.addressStreet ?? "");
+  const companyCity = esc(org.addressCity ?? "");
+  const companyState = esc(org.addressState ?? "");
+  const companyZip = esc(org.addressZip ?? "");
+
+  const phoneOfType = (type: string) => esc(client.phones?.find((p) => p.type === type)?.phone ?? "");
+  const referringClient = esc(client.referringClientName ?? "");
+  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   return {
     "[clientfirstname]": firstName,
@@ -140,6 +191,37 @@ export function buildClientMergeVars(
     "[clientname]": displayName,
     "[companyphone]": companyPhone,
     "[clientaccountbalance]": balance,
+    "[clientemail]": esc(client.primaryEmail ?? ""),
+    "[clienthomephone]": phoneOfType("home"),
+    "[clientworkphone]": phoneOfType("work"),
+    "[clientcellphone]": phoneOfType("cell"),
+    "[clientotherphone]": phoneOfType("other"),
+    "[clientfax]": phoneOfType("fax"),
+    "[accountnumber]": esc(client.accountNumber ?? ""),
+    "[howwebillyou]": esc(INVOICE_DELIVERY_LABELS[client.invoiceDelivery ?? ""] ?? ""),
+    "[salesperson]": esc(client.salesRepName ?? ""),
+    "[referringclient]": referringClient,
+    "[billingaddress1]": esc(client.billingAddress ?? ""),
+    "[billingcity]": esc(client.billingCity ?? ""),
+    "[billingstate]": esc(client.billingState ?? ""),
+    "[billingzip]": esc(client.billingZip ?? ""),
+    "[physicaladdress1]": esc(client.serviceAddress ?? ""),
+    "[physicalcity]": esc(client.serviceCity ?? ""),
+    "[physicalstate]": esc(client.serviceState ?? ""),
+    "[physicalzip]": esc(client.serviceZip ?? ""),
+    "[turfsqft]": formatSqft(client.turfSqft),
+    "[grosssqft]": formatSqft(client.grossSqft),
+    "[mulchbedsqft]": formatSqft(client.mulchBedSqft),
+    "[yardsofmulch]": formatSqft(client.yardsOfMulch),
+    "[linearfeetperimeter]": formatSqft(client.linearFtPerimeter),
+    "[linearfeetedging]": formatSqft(client.linearFtEdging),
+    "[gatecode]": esc(client.gateLockCode ?? ""),
+    "[notestocrew]": esc(client.notesToCrew ?? ""),
+    "[companyaddress]": companyAddress,
+    "[companycity]": companyCity,
+    "[companystate]": companyState,
+    "[companyzip]": companyZip,
+    "[today]": today,
   };
 }
 
