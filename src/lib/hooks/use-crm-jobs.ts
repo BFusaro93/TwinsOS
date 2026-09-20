@@ -8,8 +8,11 @@ import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { roundHours, formatMonthDay, todayLocalISODate } from "@/lib/utils";
 import { isoNy } from "@/lib/reports/ny-date";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { logger } from "@/lib/logger";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
+
+const log = logger.child("use-crm-jobs");
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -446,13 +449,14 @@ export function useUpdateJobStatus() {
       if (resolvedClientId) {
         const label = status.replace(/_/g, " ");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("client_activity").insert({
+        const { error: activityError } = await (supabase as any).from("client_activity").insert({
           client_id: resolvedClientId,
           activity_type: "job",
           subject: `Job ${label}`,
           ref_id: id,
           ref_table: "crm_jobs",
         });
+        if (activityError) log.error("client_activity insert failed", { jobId: id, error: activityError.message });
       }
 
       return { scheduledDate, resolvedClientId, status };

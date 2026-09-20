@@ -7,6 +7,9 @@ import { notifyStaffOfNewTicket, ticketLink } from "@/lib/ticket-notify";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 import { orgEmailFrom } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("portal/tickets");
 
 // subject/body/category/clientName below all originate from the anonymous
 // portal user's own POST body — interpolating them unescaped into the
@@ -107,7 +110,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to create ticket" }, { status: 500 });
   }
 
-  await supabase.from("client_activity").insert({
+  const { error: activityError } = await supabase.from("client_activity").insert({
     org_id: ctx.orgId,
     client_id: ctx.clientId,
     activity_type: "ticket",
@@ -117,6 +120,7 @@ export async function POST(req: Request) {
     ref_id: ticket.id,
     ref_table: "crm_tickets",
   });
+  if (activityError) log.error("client_activity insert failed", { ticketId: ticket.id, error: activityError.message });
 
   // Staff-facing bell + gated email — separate from the rep/support-email
   // notice sent below, which is a fixed, unconditional "someone should look

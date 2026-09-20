@@ -4,7 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import type { CRMTicket, NewTicketFormValues, TicketStatus } from "@/types/crm-tickets";
+
+const log = logger.child("use-tickets");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTicket(row: any): CRMTicket {
@@ -100,7 +103,7 @@ export function useCreateTicket() {
       const ticket = mapTicket(data);
       if (values.clientId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("client_activity").insert({
+        const { error: activityError } = await (supabase as any).from("client_activity").insert({
           client_id: values.clientId,
           activity_type: "ticket",
           subject: values.subject || `${values.type} ticket`,
@@ -109,6 +112,7 @@ export function useCreateTicket() {
           ref_id: ticket.id,
           ref_table: "crm_tickets",
         });
+        if (activityError) log.error("client_activity insert failed", { ticketId: ticket.id, error: activityError.message });
       }
       return ticket;
     },
