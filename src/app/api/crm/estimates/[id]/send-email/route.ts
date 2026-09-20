@@ -9,7 +9,8 @@ import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, Estima
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { complexityFactor } from "@/lib/estimate-calc";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
+import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
+import { escapeHtml } from "@/lib/utils/escape-html";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
@@ -25,14 +26,60 @@ async function getNextVersionNumber(supabase: any, estimateId: string): Promise<
   return (count ?? 0) + 1;
 }
 
-function resolveMergeTags(
-  template: string,
-  vars: Record<string, string>,
-): string {
-  return template.replace(/\[(\w+)\]/g, (match) => {
-    const key = match.toLowerCase();
-    return vars[key] ?? match;
-  });
+function fmtCents(cents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+}
+
+// Builds the [estimategrid] merge tag's value — an HTML table of the
+// estimate's line items, the same rows the attached PDF prints (see
+// pdfLineItems below). Registered as HTML-safe in document-template-renderer
+// so it isn't double-escaped when substituted into the email body.
+function buildEstimateGridHtml(lineItems: EstimatePDFLineItem[]): string {
+  if (lineItems.length === 0) return "";
+  const rows = lineItems.map((li) => {
+    if (li.rowType === "section") {
+      return `<tr><td colspan="3" style="padding:10px 4px 4px;font-weight:700;border-bottom:1px solid #e2e8f0">${escapeHtml(li.sectionName ?? "")}</td></tr>`;
+    }
+    const desc = escapeHtml(li.serviceName || li.estimateDesc || "");
+    return `<tr>
+      <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9">${desc}</td>
+      <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${li.qty}${li.unitType ? " " + escapeHtml(li.unitType) : ""}</td>
+      <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${fmtCents(li.totalCents)}</td>
+    </tr>`;
+  }).join("");
+  return `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+    <thead><tr style="text-align:left;border-bottom:2px solid #e2e8f0">
+      <th style="padding:6px 4px">Description</th>
+      <th style="padding:6px 4px;text-align:right">Qty</th>
+      <th style="padding:6px 4px;text-align:right">Total</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// [installmentcount] / [installmentamount] — count and per-installment amount
+// for the estimate's payment plan. For an even installment plan this is the
+// balance (after deposit) split evenly; for a milestone plan, milestones can
+// carry different amounts, so this reports their average.
+function computeInstallmentSummary(
+  est: {
+    total_cents: number | null;
+    payment_plan_type: string | null;
+    num_installments: number | null;
+    deposit_required_cents: number | null;
+  },
+  milestones: { amountCents: number }[]
+): { count: number; amountCents: number } {
+  const totalCents = est.total_cents ?? 0;
+  if (est.payment_plan_type === "milestones") {
+    if (milestones.length === 0) return { count: 1, amountCents: totalCents };
+    const sum = milestones.reduce((s, m) => s + m.amountCents, 0);
+    return { count: milestones.length, amountCents: Math.round(sum / milestones.length) };
+  }
+  const numInstallments = est.num_installments ?? 1;
+  if (numInstallments <= 1) return { count: 1, amountCents: totalCents };
+  const balanceCents = Math.max(0, totalCents - (est.deposit_required_cents ?? 0));
+  return { count: numInstallments, amountCents: Math.round(balanceCents / numInstallments) };
 }
 
 export async function POST(
@@ -170,27 +217,6 @@ export async function POST(
     month: "long", day: "numeric", year: "numeric",
   });
 
-  const mergeVars: Record<string, string> = {
-    "[clientfirstname]":    firstName,
-    "[clientlastname]":     lastName,
-    "[clientfullname]":     clientDisplayName,
-    "[companyname]":        orgName,
-    "[quotelink]":          `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`,
-    "[quotenumber]":        String(est.estimate_number).padStart(5, "0"),
-    "[quotedate]":          quoteDate,
-    "[quotetotal]":         total,
-    "[salesrepname]":       salesRepName,
-    "[companyphonenumber]": orgPhone,
-  };
-
-  const resolvedSubject = resolveMergeTags(body.subject, mergeVars);
-  const resolvedBody    = addParagraphSpacing(resolveMergeTags(body.bodyHtml, mergeVars));
-
-  // "Include PDF" — the template's setting, forwarded by the send dialog.
-  // Defaults to true (PDF attached) to preserve prior behavior when no
-  // template is selected.
-  const includePdf = body.includePdf !== false;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineItems = ((est.estimate_line_items ?? []) as any[])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -198,8 +224,8 @@ export async function POST(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 
-  // Render the estimate PDF for attachment — same pipeline as the "Preview"/
-  // "Print" buttons (src/app/api/crm/estimates/[id]/pdf/route.ts).
+  // Also used below (PDF attachment) — same pipeline as the "Preview"/"Print"
+  // buttons (src/app/api/crm/estimates/[id]/pdf/route.ts).
   const milestones: EstimatePDFMilestone[] = (est.estimate_milestones ?? [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((m: any) => !m.deleted_at)
@@ -232,6 +258,40 @@ export async function POST(
       totalCents: li.total_cents ?? 0,
       tier: li.tier ?? null,
     }));
+
+  const installmentSummary = computeInstallmentSummary(
+    {
+      total_cents: est.total_cents as number | null,
+      payment_plan_type: est.payment_plan_type as string | null,
+      num_installments: est.num_installments as number | null,
+      deposit_required_cents: est.deposit_required_cents as number | null,
+    },
+    milestones
+  );
+
+  const mergeVars: Record<string, string> = {
+    "[clientfirstname]":    firstName,
+    "[clientlastname]":     lastName,
+    "[clientfullname]":     clientDisplayName,
+    "[companyname]":        orgName,
+    "[estimatelink]":       `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`,
+    "[estimatenumber]":     String(est.estimate_number).padStart(5, "0"),
+    "[estimatedate]":       quoteDate,
+    "[estimatetotal]":      total,
+    "[estimategrid]":       buildEstimateGridHtml(pdfLineItems),
+    "[installmentcount]":   String(installmentSummary.count),
+    "[installmentamount]":  fmtCents(installmentSummary.amountCents),
+    "[salesrepname]":       salesRepName,
+    "[companyphonenumber]": orgPhone,
+  };
+
+  const resolvedSubject = resolveMergeTags(body.subject, mergeVars);
+  const resolvedBody    = addParagraphSpacing(resolveMergeTags(body.bodyHtml, mergeVars));
+
+  // "Include PDF" — the template's setting, forwarded by the send dialog.
+  // Defaults to true (PDF attached) to preserve prior behavior when no
+  // template is selected.
+  const includePdf = body.includePdf !== false;
 
   // Customer-facing photos — download and base64-embed since storage signed
   // URLs expire before the attachment would ever be opened.
