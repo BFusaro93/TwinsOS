@@ -11,7 +11,7 @@ import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-temp
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
-import { orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("email-invoice");
@@ -68,9 +68,17 @@ export async function POST(req: NextRequest) {
     .from("crm_invoices")
     .select(`
       *,
-      clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
+      clients(
+        display_name, first_name, last_name, primary_email, phones, account_number,
+        invoice_delivery, balance_outstanding_cents, referred_by, referred_by_client_id,
+        billing_address, billing_city, billing_state, billing_zip,
+        service_address, service_city, service_state, service_zip,
+        turf_sqft, gross_sqft, mulch_bed_sqft, yards_of_mulch,
+        linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew
+      ),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text),
+      sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name, last_name)
     `)
     .eq("id", invoiceId)
     .is("deleted_at", null)
@@ -93,7 +101,8 @@ export async function POST(req: NextRequest) {
     ? await (supabase as any).from("organizations").select("name, brand_color, address, customizations").eq("id", profile.org_id).single()
     : { data: null };
   const orgName = org?.name ?? "Your Service Provider";
-  const orgPhone = ((org?.address as Record<string, string>) ?? {}).phone ?? "";
+  const orgAddr = (org?.address as Record<string, string>) ?? {};
+  const orgPhone = orgAddr.phone ?? "";
 
   // Resolve which PDF template to render — an explicit choice for this send
   // wins, then the invoice's own pinned template, then the org default.
@@ -129,8 +138,6 @@ export async function POST(req: NextRequest) {
     (inv.crm_invoice_line_items ?? []).sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order);
 
   const clientDisplayName = (inv.clients?.display_name as string) ?? "";
-  const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
-  const lastName = clientDisplayName.split(" ").slice(1).join(" ") ?? "";
 
   // Computed here (not just where the PDF is built below) so the "View &
   // Pay Online" link/button can appear in the actual email body too --
@@ -144,22 +151,77 @@ export async function POST(req: NextRequest) {
   });
   const viewOnlineUrl = shareToken ? buildInvoiceViewUrl(shareToken) : null;
 
+  // The invoice's own sales rep (crm_invoices.sales_rep_id → crm_employees),
+  // not the org name — [salesperson]/[salesrepname] previously always showed
+  // the company name regardless of who actually sold/owns the account.
+  const salesRep = inv.sales_rep as { first_name?: string; last_name?: string } | null;
+  const salesRepName = salesRep ? `${salesRep.first_name ?? ""} ${salesRep.last_name ?? ""}`.trim() || orgName : orgName;
+
+  // referred_by_client_id (an existing client referred this one) wins over
+  // the freetext referred_by (non-client sources like "Google"/"Yard Sign").
+  let referringClientName = (inv.clients?.referred_by as string | null) ?? "";
+  if (inv.clients?.referred_by_client_id) {
+    const { data: referrer } = await supabase
+      .from("clients")
+      .select("display_name")
+      .eq("id", inv.clients.referred_by_client_id as string)
+      .maybeSingle();
+    if (referrer?.display_name) referringClientName = referrer.display_name as string;
+  }
+
   // The Documents block-builder's picker for docType "invoice_email" offers a
   // second vocabulary (INVOICE_TAGS in crm-documents.ts) beyond the legacy
   // quick-insert list (INVOICE_EMAIL_MERGE_TAGS) this route was originally
-  // built for. A template authored in the block-builder and selected via
-  // InvoiceEmailDialog's "Documents → Invoice Email" picker carries those
-  // tag names, so every one of them needs a real value here too — aliases of
-  // the equivalent legacy field where the underlying data is the same.
+  // built for, plus the full COMMON tag set (client/billing/property/company/
+  // system tags — see MERGE_TAGS_BY_TYPE.invoice_email). Reuse the same
+  // buildClientMergeVars helper the client/marketing send routes use for that
+  // shared vocabulary, rather than re-deriving client/company field
+  // resolution a third time. escape: false — the final resolveMergeTags call
+  // below already HTML-escapes every non-HTML-safe tag at substitution time.
   const invoiceLogoUrl = (pdfTemplate?.logo_url as string) || (org?.customizations as Record<string, unknown> | undefined)?.logoDataUrl as string | undefined;
   const paymentLinkHtml = viewOnlineUrl
     ? `<a href="${viewOnlineUrl}" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>`
     : "";
   const mergeVars: Record<string, string> = {
-    "[clientfirstname]":    firstName,
-    "[clientlastname]":     lastName,
-    "[clientfullname]":     clientDisplayName,
-    "[companyname]":        orgName,
+    ...buildClientMergeVars(
+      {
+        displayName: clientDisplayName,
+        firstName: inv.clients?.first_name ?? null,
+        lastName: inv.clients?.last_name ?? null,
+        primaryEmail: inv.clients?.primary_email ?? null,
+        phones: inv.clients?.phones ?? null,
+        accountNumber: inv.clients?.account_number ?? null,
+        invoiceDelivery: inv.clients?.invoice_delivery ?? null,
+        balanceOutstandingCents: inv.clients?.balance_outstanding_cents ?? null,
+        billingAddress: inv.clients?.billing_address ?? null,
+        billingCity: inv.clients?.billing_city ?? null,
+        billingState: inv.clients?.billing_state ?? null,
+        billingZip: inv.clients?.billing_zip ?? null,
+        serviceAddress: inv.clients?.service_address ?? null,
+        serviceCity: inv.clients?.service_city ?? null,
+        serviceState: inv.clients?.service_state ?? null,
+        serviceZip: inv.clients?.service_zip ?? null,
+        turfSqft: inv.clients?.turf_sqft ?? null,
+        grossSqft: inv.clients?.gross_sqft ?? null,
+        mulchBedSqft: inv.clients?.mulch_bed_sqft ?? null,
+        yardsOfMulch: inv.clients?.yards_of_mulch ?? null,
+        linearFtPerimeter: inv.clients?.linear_ft_perimeter ?? null,
+        linearFtEdging: inv.clients?.linear_ft_edging ?? null,
+        gateLockCode: inv.clients?.gate_lock_code ?? null,
+        notesToCrew: inv.clients?.notes_to_crew ?? null,
+        salesRepName,
+        referringClientName,
+      },
+      {
+        name: orgName,
+        addressPhone: orgPhone,
+        addressStreet: orgAddr.street ?? null,
+        addressCity: orgAddr.city ?? null,
+        addressState: orgAddr.state ?? null,
+        addressZip: orgAddr.zip ?? null,
+      },
+      { escape: false }
+    ),
     "[invoicenumber]":      String(inv.invoice_number ?? "—"),
     "[invoicedate]":        fmtDate(inv.invoice_date),
     "[duedate]":            fmtDate(inv.due_date),
@@ -169,8 +231,7 @@ export async function POST(req: NextRequest) {
     "[invoicetotal]":       formatCents(inv.total_cents ?? 0),
     "[balancedue]":         formatCents(inv.balance_cents ?? 0),
     "[invoicebalance]":     formatCents(inv.balance_cents ?? 0),
-    "[salesrepname]":       orgName,
-    "[companyphonenumber]": orgPhone,
+    "[salesrepname]":       salesRepName,
     "[viewinvoiceonline]":  viewOnlineUrl ?? "",
     "[paymentlink]":        paymentLinkHtml,
     "[invoicelogo]":        invoiceLogoUrl ? `<img src="${invoiceLogoUrl}" alt="${orgName}" style="max-height:48px" />` : "",
