@@ -127,6 +127,38 @@ export interface EntityFieldConfig {
 
 export type RequiredFieldsConfig = Record<string, EntityFieldConfig[]>;
 
+/**
+ * Folds an org's saved requirements onto the built-in catalog.
+ *
+ * `loadFromRemote` used to replace `requiredFields` wholesale with whatever
+ * was in organizations.customizations, which meant a field added to the
+ * catalog later was invisible to every org that had ever hit Save — the row
+ * never appeared in Settings → Required Fields, so it could never be turned
+ * on. Worse, an org whose saved config had an empty array for an entity (the
+ * real Twins Lawn Service org has `client: []`) lost that entity's rows
+ * entirely and every isRequired() check on it silently returned false.
+ *
+ * The org's own choice of requirement always wins; built-ins it has never
+ * seen come in at their catalog default, and custom fields it added are kept.
+ */
+export function mergeRequiredFields(saved: RequiredFieldsConfig): RequiredFieldsConfig {
+  const merged: RequiredFieldsConfig = {};
+  const entities = new Set([...Object.keys(DEFAULT_REQUIRED_FIELDS), ...Object.keys(saved)]);
+  for (const entity of entities) {
+    const defaults = DEFAULT_REQUIRED_FIELDS[entity] ?? [];
+    const savedFields = saved[entity] ?? [];
+    const savedByField = new Map(savedFields.map((f) => [f.field, f]));
+    merged[entity] = [
+      ...defaults.map((d) => ({
+        ...d,
+        requirement: savedByField.get(d.field)?.requirement ?? d.requirement,
+      })),
+      ...savedFields.filter((f) => !defaults.some((d) => d.field === f.field)),
+    ];
+  }
+  return merged;
+}
+
 const DEFAULT_REQUIRED_FIELDS: RequiredFieldsConfig = {
   purchase_order: [
     { field: "vendor",        label: "Vendor",        requirement: "required", isBuiltIn: true },
@@ -160,9 +192,15 @@ const DEFAULT_REQUIRED_FIELDS: RequiredFieldsConfig = {
     { field: "mileage",       label: "Mileage",       requirement: "optional", isBuiltIn: true },
   ],
   client: [
-    { field: "primary_phone",  label: "Phone",           requirement: "optional", isBuiltIn: true },
-    { field: "primary_email",  label: "Email",           requirement: "optional", isBuiltIn: true },
-    { field: "source",        label: "Source",          requirement: "optional", isBuiltIn: true },
+    { field: "primary_phone",   label: "Phone",           requirement: "optional", isBuiltIn: true },
+    { field: "primary_email",   label: "Email",           requirement: "optional", isBuiltIn: true },
+    // The address a crew is dispatched to. Left optional by default on
+    // purpose: leads captured from a web form or a phone call are name +
+    // phone, and a commercial parent account (a property manager's HQ) has
+    // no serviceable address of its own — its children and properties do.
+    // Orgs that only ever create serviceable clients can flip it to required.
+    { field: "service_address", label: "Service Address", requirement: "optional", isBuiltIn: true },
+    { field: "source",          label: "Source",          requirement: "optional", isBuiltIn: true },
   ],
   ticket: [
     { field: "client",      label: "Client",       requirement: "optional", isBuiltIn: true },
@@ -588,7 +626,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       ...(data.locations !== undefined    && { locations: data.locations }),
       ...(data.vendorTypes !== undefined  && { vendorTypes: data.vendorTypes }),
       ...(data.filterFields !== undefined && { filterFields: data.filterFields }),
-      ...(data.requiredFields !== undefined && { requiredFields: data.requiredFields }),
+      ...(data.requiredFields !== undefined && { requiredFields: mergeRequiredFields(data.requiredFields) }),
       ...(data.breakevenLaborRateCents !== undefined && { breakevenLaborRateCents: data.breakevenLaborRateCents }),
       ...(data.burdenedLaborRateCents !== undefined && { burdenedLaborRateCents: data.burdenedLaborRateCents }),
     })),

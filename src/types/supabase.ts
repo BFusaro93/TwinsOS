@@ -1273,6 +1273,8 @@ export type Database = {
       client_properties: {
         Row: {
           address: string | null
+          address_verdict: string | null
+          address_verified_at: string | null
           city: string | null
           client_id: string
           country: string | null
@@ -1302,6 +1304,8 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          address_verdict?: string | null
+          address_verified_at?: string | null
           city?: string | null
           client_id: string
           country?: string | null
@@ -1331,6 +1335,8 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          address_verdict?: string | null
+          address_verified_at?: string | null
           city?: string | null
           client_id?: string
           country?: string | null
@@ -1449,6 +1455,8 @@ export type Database = {
         Row: {
           account_number: string | null
           account_type: string
+          address_verdict: string | null
+          address_verified_at: string | null
           autopay_enabled: boolean
           balance_credits_cents: number
           balance_outstanding_cents: number
@@ -1525,6 +1533,8 @@ export type Database = {
         Insert: {
           account_number?: string | null
           account_type?: string
+          address_verdict?: string | null
+          address_verified_at?: string | null
           autopay_enabled?: boolean
           balance_credits_cents?: number
           balance_outstanding_cents?: number
@@ -1601,6 +1611,8 @@ export type Database = {
         Update: {
           account_number?: string | null
           account_type?: string
+          address_verdict?: string | null
+          address_verified_at?: string | null
           autopay_enabled?: boolean
           balance_credits_cents?: number
           balance_outstanding_cents?: number
@@ -3266,6 +3278,8 @@ export type Database = {
       }
       crm_crews: {
         Row: {
+          address_verdict: string | null
+          address_verified_at: string | null
           code: string | null
           color: string | null
           created_at: string
@@ -3291,6 +3305,8 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          address_verdict?: string | null
+          address_verified_at?: string | null
           code?: string | null
           color?: string | null
           created_at?: string
@@ -3316,6 +3332,8 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          address_verdict?: string | null
+          address_verified_at?: string | null
           code?: string | null
           color?: string | null
           created_at?: string

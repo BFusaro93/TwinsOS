@@ -34,9 +34,10 @@ import { formatCurrency, roundHours } from "@/lib/utils";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
-import { Plus, X } from "lucide-react";
+import { AlertTriangle, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { JobType, BudgetMethod } from "@/types/crm-jobs";
+import { resolveStopAddress } from "@/lib/utils/stop-address";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -416,7 +417,35 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const productTotalCents = productRows.reduce((s, p) => s + p.qty * p.unitPriceCents, 0);
 
   const effectiveClientId = defaultClientId ?? selectedClientId;
-  const effectiveClientName = (clients ?? []).find((c) => c.id === effectiveClientId)?.displayName ?? "";
+  const effectiveClient = (clients ?? []).find((c) => c.id === effectiveClientId);
+  const effectiveClientName = effectiveClient?.displayName ?? "";
+  /**
+   * A job for a client with no address anywhere produces a stop the crew
+   * can't navigate to and the route optimizer has to skip — it silently sits
+   * wherever the board happened to put it. Resolved through the same helper
+   * the dispatch board and /api/crm/route-optimize use, so this warns about
+   * exactly the stops those two will have a problem with, and stays quiet
+   * when a fallback source covers it.
+   *
+   * Deliberately a warning, not a block: scheduling before the address is
+   * known is legitimate (a new commercial account, a job sold over the phone).
+   * Orgs that want it enforced set Service Address to required under
+   * Settings → Required Fields, which gates it at client creation instead.
+   */
+  const clientHasNoAddress =
+    !!effectiveClient &&
+    !resolveStopAddress({
+      client: {
+        service_address: effectiveClient.serviceAddress,
+        service_city: effectiveClient.serviceCity,
+        service_state: effectiveClient.serviceState,
+        service_zip: effectiveClient.serviceZip,
+        billing_address: effectiveClient.billingAddress,
+        billing_city: effectiveClient.billingCity,
+        billing_state: effectiveClient.billingState,
+        billing_zip: effectiveClient.billingZip,
+      },
+    });
   const { data: clientProjects } = useClientProjects(effectiveClientId, effectiveClientName);
   const brandColor = orgSettings?.brandColor ?? "#1e1e1e";
 
@@ -620,6 +649,17 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
             </div>
+
+            {clientHasNoAddress && (
+              <div className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <strong>{effectiveClientName}</strong> has no service address on file. The crew
+                  won&apos;t have an address to navigate to, and this stop will be skipped by Optimize
+                  Route. Add one on the client record — you can still create the job now.
+                </span>
+              </div>
+            )}
 
             {/* Type-specific fields */}
             {jobType === "recurring" && (
