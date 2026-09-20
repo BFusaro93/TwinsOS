@@ -6,7 +6,8 @@ import type {
 } from "@/types/crm-reports";
 import { computeTotals } from "@/lib/reports/engine";
 import type { ReportParams } from "@/lib/reports/definition-types";
-import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { ymd } from "@/lib/time/zone";
+import { isoInZone, zoneDateParts } from "@/lib/time/zone";
 import type { InvoiceStatus } from "@/types/crm-invoices";
 
 // ============================================================
@@ -32,13 +33,16 @@ export const ALL_TIME_RANGE_PARAM = "all";
  * Explicit `from`/`to` always win. With neither given, `range=all` means an
  * unbounded window; otherwise the report's own `preset` applies.
  *
- * All "today"/month/year boundaries are computed against the calendar date
- * as it appears in America/New_York (this org's operating timezone), not
- * the server's local/UTC date — see `src/lib/reports/ny-date.ts`.
+ * All "today"/month/year boundaries are computed against the calendar date as
+ * it appears in the ORG's own timezone, not the server's local/UTC date and
+ * not the viewer's. `timeZone` is required rather than defaulted: a silent
+ * fallback here would give a Pacific tenant Eastern month boundaries and
+ * nothing would look wrong until a month-end number disagreed.
  */
 export function resolveDateRange(
   params: ReportParams,
-  preset: DateRangePreset = "this_month"
+  preset: DateRangePreset = "this_month",
+  timeZone: string
 ): { from: string | null; to: string | null } {
   let from = params.from || null;
   let to = params.to || null;
@@ -47,17 +51,17 @@ export function resolveDateRange(
   }
   if (!from && !to && preset !== "all_time") {
     const now = new Date();
-    to = isoNy(now);
-    const { year, month } = nyDateParts(now);
+    to = isoInZone(now, timeZone);
+    const { year, month } = zoneDateParts(now, timeZone);
     if (preset === "this_month") {
       from = ymd(year, month, 1);
     } else if (preset === "last_month") {
       from = ymd(year, month - 1, 1);
       to = ymd(year, month, 0);
     } else if (preset === "last_30") {
-      from = isoNy(new Date(now.getTime() - 30 * 86400000));
+      from = isoInZone(new Date(now.getTime() - 30 * 86400000), timeZone);
     } else if (preset === "last_90") {
-      from = isoNy(new Date(now.getTime() - 90 * 86400000));
+      from = isoInZone(new Date(now.getTime() - 90 * 86400000), timeZone);
     } else if (preset === "this_year") {
       from = ymd(year, 0, 1);
     }
@@ -73,9 +77,10 @@ export function resolveDateRange(
 export function dateRangeFilters(
   column: string,
   params: ReportParams,
+  timeZone: string,
   opts: { preset?: DateRangePreset; datetime?: boolean } = {}
 ): AnalysisFilter[] {
-  const { from, to } = resolveDateRange(params, opts.preset ?? "this_month");
+  const { from, to } = resolveDateRange(params, opts.preset ?? "this_month", timeZone);
   const filters: AnalysisFilter[] = [];
   if (from) filters.push({ column, op: "gte", value: from });
   if (to) {

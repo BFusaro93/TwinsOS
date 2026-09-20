@@ -8,7 +8,7 @@ import {
   eqFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
-import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import type { AnalysisFilter } from "@/types/crm-reports";
 
 // ============================================================
@@ -44,7 +44,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       { key: "stage", label: "Stage", type: "select", options: STAGE_OPTIONS },
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_estimates",
       columns: [
         "stage",
@@ -63,7 +63,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         "reason",
       ],
       filters: [
-        ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),
+        ...dateRangeFilters("estimate_date", params, timeZone, { preset: "this_year" }),
         ...eqFilter("stage", params.stage),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
@@ -84,7 +84,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
     notes: [EXCLUDE_LOST_LINES_NOTE],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_estimate_line_items",
       columns: [
         "service_name",
@@ -102,7 +102,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
         EXCLUDE_LOST_LINES,
-        ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),
+        ...dateRangeFilters("estimate_date", params, timeZone, { preset: "this_year" }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
@@ -122,13 +122,13 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
     notes: [EXCLUDE_LOST_LINES_NOTE],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_estimate_line_items",
       columns: [],
       filters: [
         { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
         EXCLUDE_LOST_LINES,
-        ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),
+        ...dateRangeFilters("estimate_date", params, timeZone, { preset: "this_year" }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
       groupBy: ["service_name"],
@@ -149,8 +149,8 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
     description:
       "Compares each accepted estimate's value against what was actually invoiced and paid.",
     filters: [dateRangeFilterDef("Estimate Date", "this_year")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
       let query = supabase
         .from("estimates")
         .select("id, estimate_number, estimate_date, total_cents, clients:client_id(display_name)")
@@ -244,8 +244,8 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "Won = accepted or invoiced. Draft estimates were never presented to a client and are excluded from both counts and amounts.",
     ],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
       let query = supabase
         .from("estimates")
         .select("stage, total_cents, sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
@@ -314,10 +314,10 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
     name: "Sales Activity (Last 7 Days)",
     description: "Shows estimates created or sent per day over the last 7 days.",
     filters: [],
-    run: async ({ supabase }) => {
+    run: async ({ supabase, timeZone }) => {
       // estimate_date is a plain date entered on the org's (NY) calendar, so
       // the 7-day window is anchored to today's NY date, not the server's UTC day.
-      const todayNy = isoNy(new Date());
+      const todayNy = todayInZone(timeZone);
       const startIso = shiftYmd(todayNy, -6);
 
       const { data, error } = await supabase

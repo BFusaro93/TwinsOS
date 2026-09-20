@@ -43,7 +43,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCompanyDate, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -1814,6 +1815,9 @@ function VisitRow({
   onSkip: (reason: string) => Promise<void>;
   onDispatch: (date: string, crewId: string | null) => Promise<void>;
 }) {
+  // completed_at is an instant; render it on the ORG's clock so the same
+  // visit doesn't read as a different day to someone in another timezone.
+  const { format: formatOrgDate } = useOrgDates();
   // Package visits are tied to a specific service row that carries its own
   // date window (e.g. "Fert 2 of 5" is due anytime 8/1–8/31) — show that
   // window instead of just the single day this visit happens to be scheduled
@@ -1914,7 +1918,7 @@ function VisitRow({
               service date to someone looking from another timezone. */}
           {visit.status === "completed" && visit.completedAt && (
             <p className="mt-0.5 text-[10px] text-slate-400">
-              {formatCompanyDate(visit.completedAt)}
+              {formatOrgDate(visit.completedAt)}
             </p>
           )}
         </td>

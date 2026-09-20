@@ -9,7 +9,7 @@ import {
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 // ============================================================
 // Second-wave reports — SA parity gaps identified after the
@@ -75,8 +75,8 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in Eastern time.",
     ],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "all_time");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "all_time", timeZone);
 
       interface FormRow {
         id: string;
@@ -177,7 +177,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Completed Between", "this_month"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
         "sales_rep",
@@ -192,7 +192,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "status", op: "eq", value: "completed" },
-        ...dateRangeFilters("completed_at", params, { datetime: true }),
+        ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
@@ -207,7 +207,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     name: "Custom Package Renewal Report",
     description: "A list of packages with a renewal setting, ready to renew.",
     filters: [],
-    run: async ({ supabase }) => {
+    run: async ({ supabase, timeZone }) => {
       const { data, error } = await supabase
         .from("crm_jobs")
         .select(
@@ -264,7 +264,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Contract budgeted-to-date vs. invoiced-to-date revenue for each active contract.",
     filters: [],
-    run: async ({ supabase }) => {
+    run: async ({ supabase, timeZone }) => {
       const { data: contracts, error } = await supabase
         .from("crm_contracts")
         .select(
@@ -315,7 +315,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       const monthKeys = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
       // "This month" as it appears in America/New_York — a server running in
       // UTC would otherwise flip to next month at 8pm ET on the last day.
-      const todayNy = isoNy(new Date());
+      const todayNy = todayInZone(timeZone);
       const monthIndex = (ymdStr: string) => {
         const [y, m] = ymdStr.split("-").map(Number);
         return y * 12 + (m - 1); // months since year 0 — comparable/iterable
@@ -493,9 +493,9 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Projects budgeted man hours and revenue for the next 12 months from currently scheduled visits.",
     filters: [],
-    run: async ({ supabase }) => {
-      // Calendar dates in America/New_York, not UTC.
-      const today = isoNy(new Date());
+    run: async ({ supabase, timeZone }) => {
+      // Calendar dates on the org's own clock, not UTC.
+      const today = todayInZone(timeZone);
       const horizonStr = shiftYmd(today, 365);
 
       interface Row {

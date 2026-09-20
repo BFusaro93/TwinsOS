@@ -6,7 +6,7 @@ import {
   dateRangeFilters,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 
 // ============================================================
 // Chemical Tracking section — pesticide/fertilizer application
@@ -26,7 +26,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
       "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied. The two can be in different units (e.g. Chemical Amount in ounces, Solution Amount in gallons) — see Unit of Measure vs. Solution Unit of Measure.",
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_chemical_applications",
       columns: [
         "service_date",
@@ -60,7 +60,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         // crm_chemical_applications.used = actually applied (a compliance
         // record must not list planned-but-unapplied product).
         { column: "used", op: "eq", value: true },
-        ...dateRangeFilters("service_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("service_date", params, timeZone, { preset: "this_month" }),
       ],
       groupBy: [],
       aggregates: [],
@@ -78,14 +78,14 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "Includes visits in Scheduled or Dispatched status only; in-progress and completed visits are excluded.",
     ],
-    run: async ({ supabase, params }) => {
+    run: async ({ supabase, params, timeZone }) => {
       const { from, to } = (() => {
         const now = new Date();
         let f = params.from || null;
         let t = params.to || null;
         if (!f && !t) {
-          t = isoNy(now);
-          const { year, month } = nyDateParts(now);
+          t = isoInZone(now, timeZone);
+          const { year, month } = zoneDateParts(now, timeZone);
           f = ymd(year, month, 1);
         }
         return { from: f, to: t };

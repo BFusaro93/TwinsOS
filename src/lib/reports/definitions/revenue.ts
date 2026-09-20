@@ -45,7 +45,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
     filters: [dateRangeFilterDef("Invoice Date", "this_month")],
     notes: ["Excludes line items on draft and void invoices."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_invoice_line_items",
       columns: [
         "client_name",
@@ -60,7 +60,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...issuedInvoiceFilter(),
-        ...dateRangeFilters("invoice_date", params),
+        ...dateRangeFilters("invoice_date", params, timeZone),
       ],
       groupBy: [],
       aggregates: [],
@@ -75,8 +75,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows payments received per day, broken out by payment method.",
     filters: [dateRangeFilterDef("Payment Date", "this_month")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
       let query = supabase
         .from("crm_payments")
         .select("payment_date, method, amount_cents, refunded_amount_cents, unused_amount_cents")
@@ -159,8 +159,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       "Only card payments carry a fee — ACH payments are always fee-free by design.",
       "A fee of $0 on a card payment means the fee was waived or the balance was under the settings threshold.",
     ],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
       let query = supabase
         .from("crm_payments")
         .select(
@@ -216,12 +216,12 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     description: "Totals invoiced revenue by billing postal code.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
     notes: ["Excludes draft and void invoices."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
       columns: [],
       filters: [
         ...issuedInvoiceFilter(),
-        ...dateRangeFilters("invoice_date", params, { preset: "this_year" }),
+        ...dateRangeFilters("invoice_date", params, timeZone, { preset: "this_year" }),
       ],
       groupBy: ["billing_zip"],
       aggregates: [
@@ -240,8 +240,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows invoiced revenue per service line item, broken out by month.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
       // Rule A (issued invoices only) and the soft-delete guard are applied on
       // the joined parent; `!inner` drops line items whose invoice fails them.
       let query = supabase
@@ -309,7 +309,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Completed Between", "this_month"),
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
         "scheduled_date",
@@ -326,7 +326,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         "sales_rep",
       ],
       filters: [
-        ...dateRangeFilters("completed_at", params, { datetime: true }),
+        ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
         { column: "status", op: "eq", value: "completed" },
         ...eqFilter("crew_name", params.crew),
       ],
@@ -343,12 +343,12 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     description:
       "Totals completed-visit revenue and man-hours by sales rep.",
     filters: [dateRangeFilterDef("Completed Between", "this_month")],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [],
       filters: [
         { column: "status", op: "eq", value: "completed" },
-        ...dateRangeFilters("completed_at", params, { datetime: true }),
+        ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
       ],
       groupBy: ["sales_rep"],
       aggregates: [
@@ -368,10 +368,10 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       "Totals sold jobs per sales rep — job count, service, product, and job totals.",
     filters: [dateRangeFilterDef("Date Sold", "this_month")],
     notes: ["Based on the job's Date Sold."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_jobs",
       columns: [],
-      filters: [...dateRangeFilters("date_sold", params)],
+      filters: [...dateRangeFilters("date_sold", params, timeZone)],
       groupBy: ["sales_rep"],
       aggregates: [
         { column: "*", fn: "count" },
@@ -393,7 +393,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Date Sold", "this_month"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_jobs",
       columns: [
         "date_sold",
@@ -406,7 +406,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         "total_cents",
       ],
       filters: [
-        ...dateRangeFilters("date_sold", params),
+        ...dateRangeFilters("date_sold", params, timeZone),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
@@ -421,8 +421,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     name: "Invoices and Payments",
     description: "Compares invoiced revenue to payments collected, month by month.",
     filters: [dateRangeFilterDef("Date Range", "this_year")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
 
       let invQuery = supabase
         .from("crm_invoices")
@@ -495,8 +495,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     name: "Credit Card Charges",
     description: "Shows credit card payments received, including processing fees where applicable.",
     filters: [dateRangeFilterDef("Payment Date", "this_month")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
       let query = supabase
         .from("crm_payments")
         .select(
