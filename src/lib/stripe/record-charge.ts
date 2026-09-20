@@ -1,9 +1,10 @@
 import type Stripe from "stripe";
 import { getStripeForOrg } from "@/lib/stripe/server";
 import { methodForPaymentIntent, decodeAllocations } from "@/lib/stripe/crm-payments";
-import { isoNy } from "@/lib/reports/ny-date";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("stripe record charge");
 
@@ -193,7 +194,7 @@ async function recordSingleInvoiceCharge({
       client_id: clientId,
       amount_cents: balanceCents,
       unused_amount_cents: overpaidCents,
-      payment_date: isoNy(new Date()),
+      payment_date: todayInZone(await getOrgTimeZone(db, orgId)),
       method,
       memo:
         overpaidCents > 0
@@ -336,7 +337,7 @@ async function recordMultiInvoiceCharge({
       client_id: clientId,
       amount_cents: totalCents,
       unused_amount_cents: overpaidCents,
-      payment_date: isoNy(new Date()),
+      payment_date: todayInZone(await getOrgTimeZone(db, orgId)),
       method,
       memo:
         overpaidCents > 0

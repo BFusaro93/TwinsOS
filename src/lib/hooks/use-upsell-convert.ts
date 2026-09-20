@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { recalcEstimateTotals } from "@/lib/hooks/use-estimates";
 // getBreakevenRateCents lives alongside computeLineItem — same module, same maths.
-import { isoNy } from "@/lib/reports/ny-date";
 import type { CRMTicket } from "@/types/crm-tickets";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 /**
  * Turns a crew-submitted upsell ticket into a draft estimate in one click.
@@ -39,6 +40,8 @@ import type { CRMTicket } from "@/types/crm-tickets";
  * starting over — so a half-finished conversion heals on the next click.
  */
 export function useCreateEstimateFromUpsell() {
+  // The estimate is dated on the org's calendar, not the converting user's.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
 
   return useMutation({
@@ -87,7 +90,7 @@ export function useCreateEstimateFromUpsell() {
           created_by: user?.id ?? null,
           client_id: ticket.clientId,
           description,
-          estimate_date: isoNy(new Date()),
+          estimate_date: todayInZone(orgTimeZone),
           stage: "draft",
           overhead_rate_bps: overheadRow?.flat_overhead_rate_bps ?? 0,
           upsell_ticket_id: ticket.id,

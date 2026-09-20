@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { methodForCardBrand } from "@/lib/stripe/crm-payments";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("crm payments webhook");
 
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
       client_id: clientId,
       amount_cents: balanceCents,
       unused_amount_cents: overpaidCents,
-      payment_date: isoNy(new Date()),
+      payment_date: todayInZone(await getOrgTimeZone(supabase, orgId)),
       method: methodForCardBrand(cardBrand),
       memo: overpaidCents > 0
         ? "Paid online via card (exceeds invoice balance — excess credited to account)"
