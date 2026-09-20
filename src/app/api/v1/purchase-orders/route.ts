@@ -3,7 +3,8 @@ import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { PURCHASE_ORDER_SELECT, PO_LINE_ITEM_SELECT, shapePurchaseOrder, shapePoLineItem } from "./shape";
 import { createPurchaseOrderSchema } from "./validation";
-import { isoNy } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 /** GET /api/v1/purchase-orders — list the org's purchase orders. Requires scope "purchase_orders:read". */
 export async function GET(request: Request) {
@@ -155,9 +156,11 @@ export async function POST(request: Request) {
     .insert({
       org_id: auth.orgId,
       po_number: poNumber,
-      // Default to the company's calendar day, not UTC's — an integration
-      // POSTing a PO at 9pm Eastern would otherwise get tomorrow's po_date.
-      po_date: body.poDate ?? isoNy(new Date()),
+      // Default to the OWNING ORG's calendar day, not UTC's — an integration
+      // POSTing a PO in the evening would otherwise get tomorrow's po_date.
+      // po_date deliberately has no DB-side default (it is nullable, and the
+      // PO CSV import writes NULL on purpose), so it is resolved here.
+      po_date: body.poDate ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
       invoice_number: body.invoiceNumber ?? null,
       status: "requested",
       vendor_id: body.vendorId,

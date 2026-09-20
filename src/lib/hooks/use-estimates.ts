@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
@@ -13,6 +12,8 @@ import type {
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { recalcEstimateTotals as recalcEstimateTotalsShared } from "@/lib/estimate-calc";
 import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -293,6 +294,9 @@ export function useCreateEstimate() {
 }
 
 export function useBulkImportEstimates() {
+  // Imported rows without a date mean "today" on the ORG's calendar, not
+  // the importer's laptop or the UTC server.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
@@ -315,7 +319,7 @@ export function useBulkImportEstimates() {
           created_by: user?.id ?? null,
           client_id: clientId,
           description,
-          estimate_date: r.estimateDate?.trim() || isoNy(new Date()),
+          estimate_date: r.estimateDate?.trim() || todayInZone(orgTimeZone),
           valid_until_date: r.validUntilDate?.trim() || null,
           po_number: r.poNumber?.trim() || null,
           stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { computeLineItem, getBreakevenRateCents, recalcEstimateTotals } from "@/lib/estimate-calc";
 import { ESTIMATE_SELECT, ESTIMATE_LINE_ITEM_SELECT, shapeEstimate, shapeEstimateLineItem } from "./shape";
 import { createEstimateSchema } from "./validation";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 /**
  * GET /api/v1/estimates — list the org's estimates. Requires scope
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
       org_id: auth.orgId,
       client_id: body.clientId,
       description: body.description ?? service.name,
-      estimate_date: body.estimateDate ?? isoNy(new Date()),
+      estimate_date: body.estimateDate ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
       valid_until_date: body.validUntilDate ?? null,
       stage: "draft",
       overhead_rate_bps: overheadRow?.flat_overhead_rate_bps ?? 0,
