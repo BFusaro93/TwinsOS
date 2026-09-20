@@ -100,7 +100,7 @@ export function InvoiceEmailDialog({
   useEffect(() => {
     if (!selectedDocTemplate) return;
     if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
-    setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}));
+    setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
     setIncludePdf(selectedDocTemplate.includePdf);
   }, [selectedDocTemplate]);
 
