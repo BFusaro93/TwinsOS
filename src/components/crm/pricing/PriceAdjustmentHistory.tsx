@@ -11,6 +11,7 @@ import {
 } from "@/lib/hooks/use-bulk-pricing";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 function signedCurrency(cents: number): string {
   const sign = cents > 0 ? "+" : cents < 0 ? "−" : "";
@@ -30,17 +31,16 @@ export function PriceAdjustmentHistory() {
   const orgTimeZone = useOrgTimeZone();
   const { data: runs = [], isLoading } = usePriceAdjustments();
   const revert = useRevertPriceAdjustment();
+  const [confirm, confirmDialog] = useConfirm();
 
-  function handleRevert(id: string, name: string, lineCount: number) {
-    if (
-      !confirm(
-        `Undo "${name}"?\n\n` +
-          `This restores the original price on up to ${lineCount} line${lineCount !== 1 ? "s" : ""}. ` +
-          `Lines you have re-priced by hand since the run are left as they are.`
-      )
-    ) {
-      return;
-    }
+  async function handleRevert(id: string, name: string, lineCount: number) {
+    const confirmed = await confirm({
+      title: `Undo "${name}"?`,
+      description: `This restores the original price on up to ${lineCount} line${lineCount !== 1 ? "s" : ""}. Lines you have re-priced by hand since the run are left as they are.`,
+      confirmLabel: "Undo",
+      destructive: true,
+    });
+    if (!confirmed) return;
     revert.mutate(id, {
       onSuccess: ({ reverted, skipped }) => {
         // The skip count is the whole point of surfacing this: it means a
@@ -145,6 +145,7 @@ export function PriceAdjustmentHistory() {
           ))}
         </tbody>
       </table>
+      {confirmDialog}
     </div>
   );
 }
