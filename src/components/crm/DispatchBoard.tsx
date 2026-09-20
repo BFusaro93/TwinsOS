@@ -3383,26 +3383,24 @@ export function DispatchBoard() {
     const ids = [...selectedIds];
     const label = STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
     try {
-      let results: Response[];
       if (status === "completed") {
-        // Use the complete route so the parent job status is also updated
-        results = await Promise.all(
+        // Use the complete route so the parent job status, invoicing and
+        // activity/automation side effects also run for each visit — not a
+        // simple field update, so it can't go through bulk-update.
+        const results = await Promise.all(
           ids.map((id) => fetch(`/api/crm/visits/${id}/complete`, { method: "POST" }))
         );
+        if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
       } else {
-        const body: Record<string, unknown> = { status };
-        if (status === "skipped" || status === "cancelled") body.skip_reason = reason?.trim() || null;
-        results = await Promise.all(
-          ids.map((id) =>
-            fetch(`/api/crm/visits/${id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            })
-          )
-        );
+        const updates: Record<string, unknown> = { status };
+        if (status === "skipped" || status === "cancelled") updates.skip_reason = reason?.trim() || null;
+        const res = await fetch("/api/crm/visits/bulk-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, updates }),
+        });
+        if (!res.ok) throw new Error("One or more updates failed");
       }
-      if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
       await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -4519,16 +4517,12 @@ export function DispatchBoard() {
                     onSelect={async () => {
                       const ids = [...selectedIds];
                       try {
-                        const results = await Promise.all(
-                          ids.map((id) =>
-                            fetch(`/api/crm/visits/${id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ crew_id: null }),
-                            })
-                          )
-                        );
-                        if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                        const res = await fetch("/api/crm/visits/bulk-update", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ ids, updates: { crew_id: null } }),
+                        });
+                        if (!res.ok) throw new Error("One or more updates failed");
                         await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                         setSelectedIds(new Set());
                         toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
@@ -4546,16 +4540,12 @@ export function DispatchBoard() {
                       onSelect={async () => {
                         const ids = [...selectedIds];
                         try {
-                          const results = await Promise.all(
-                            ids.map((id) =>
-                              fetch(`/api/crm/visits/${id}`, {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ crew_id: c.id }),
-                              })
-                            )
-                          );
-                          if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                          const res = await fetch("/api/crm/visits/bulk-update", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ ids, updates: { crew_id: c.id } }),
+                          });
+                          if (!res.ok) throw new Error("One or more updates failed");
                           await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                           setSelectedIds(new Set());
                           toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
