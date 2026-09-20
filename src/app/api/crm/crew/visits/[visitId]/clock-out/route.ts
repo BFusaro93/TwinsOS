@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("crew/clock-out");
 
@@ -79,7 +80,8 @@ export async function POST(
   // than its static schedule assumed. Non-fatal — a failure here shouldn't block
   // the clock-out response.
   try {
-    await recalcNextPackageVisitDate(supabase, data?.job_service_id as string | null, isoNy(new Date(now)));
+    await recalcNextPackageVisitDate(supabase, data?.job_service_id as string | null,
+      isoInZone(new Date(now), await getOrgTimeZone(supabase, existing.org_id as string)));
   } catch (err) {
     console.error("[crew/clock-out] package min_days recalc failed:", err);
   }

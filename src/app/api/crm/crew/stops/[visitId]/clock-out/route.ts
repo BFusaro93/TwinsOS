@@ -4,10 +4,11 @@ import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { allocateStopHours } from "@/lib/utils/visit-hours";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("crew/stops/clock-out");
 
@@ -227,7 +228,8 @@ export async function POST(
   // completed later than its static schedule assumed. Non-fatal.
   for (const row of openRows) {
     try {
-      await recalcNextPackageVisitDate(supabase, row.job_service_id, isoNy(new Date(now)));
+      await recalcNextPackageVisitDate(supabase, row.job_service_id,
+        isoInZone(new Date(now), await getOrgTimeZone(supabase, row.org_id as string)));
     } catch (err) {
       console.error("[crew/stops/clock-out] package min_days recalc failed:", err);
     }

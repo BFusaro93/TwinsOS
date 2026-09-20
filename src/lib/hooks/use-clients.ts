@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { todayLocalISODate } from "@/lib/utils";
-import { isoNy } from "@/lib/reports/ny-date";
 import { logger } from "@/lib/logger";
 import type { BulkImportResult } from "@/lib/csv";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import type {
   Client,
   ClientContact,
@@ -682,6 +683,8 @@ export function useBulkImportClients() {
 }
 
 export function useUpdateClient() {
+  // client_since is the conversion DATE — the org's day, not the browser's.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Client> }) => {
@@ -740,7 +743,7 @@ export function useUpdateClient() {
           referred_by: updates.referredBy,
           referred_by_client_id: updates.referredByClientId,
           // Empty string from the date input means "cleared", not a date.
-          client_since: updates.clientSince || (leadConverting ? isoNy(new Date()) : null),
+          client_since: updates.clientSince || (leadConverting ? todayInZone(orgTimeZone) : null),
           priority: updates.priority ?? null,
           is_taxable: updates.isTaxable,
           turf_sqft: updates.turfSqft ?? null,
@@ -1148,6 +1151,8 @@ export function useBulkImportLeads() {
 }
 
 export function useConvertLeadToClient() {
+  // client_since is the conversion DATE — the org's day, not the browser's.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
@@ -1162,7 +1167,7 @@ export function useConvertLeadToClient() {
       // here — reports measure "new clients" and "days to convert" off it.
       const { data: updated, error } = await supabase
         .from("clients")
-        .update({ status: "active", client_since: isoNy(new Date()) })
+        .update({ status: "active", client_since: todayInZone(orgTimeZone) })
         .eq("id", id)
         .eq("status", "lead")
         .select("id");

@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient } from "@/lib/supabase/server";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 export async function GET() {
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = await createClient();
-  const today = isoNy(new Date());
+  // The customer's portal shows the SERVICE PROVIDER's day — a customer in
+  // another timezone must see the same schedule the crew works to.
+  const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
 
   const [invoicesRes, visitsRes, estimatesRes] = await Promise.all([
     supabase

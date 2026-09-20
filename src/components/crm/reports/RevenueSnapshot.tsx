@@ -12,8 +12,9 @@ import {
   netPaymentCents,
 } from "@/lib/reports/helpers";
 import { isClientStatus } from "@/lib/reports/client-status";
-import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,8 @@ function monthKeyOf(ymdStr: string): string {
 }
 
 export function useReportData(options: { enabled?: boolean } = {}) {
+  // Month/"today" boundaries belong to the org, not the reader's browser.
+  const orgTimeZone = useOrgTimeZone();
   return useQuery({
     queryKey: ["crm-reports"],
     enabled: options.enabled ?? true,
@@ -83,8 +86,8 @@ export function useReportData(options: { enabled?: boolean } = {}) {
       // Every boundary is a calendar date as it reads in America/New_York (the
       // org's operating timezone), not the browser's or UTC.
       const now = new Date();
-      const todayDate = isoNy(now);
-      const { year: nyYear, month: nyMonth } = nyDateParts(now);
+      const todayDate = isoInZone(now, orgTimeZone);
+      const { year: nyYear, month: nyMonth } = zoneDateParts(now, orgTimeZone);
       const ytdStartDate = ymd(nyYear, 0, 1);
       const monthStartDate = ymd(nyYear, nyMonth, 1);
       const sixMonthsStartDate = ymd(nyYear, nyMonth - 5, 1);
@@ -165,7 +168,7 @@ export function useReportData(options: { enabled?: boolean } = {}) {
       ).length;
       // created_at is a timestamptz — reduce it to its NY calendar date first.
       const jobsThisMonth = jobs.filter(
-        (j: { created_at: string }) => isoNy(new Date(j.created_at)) >= monthStartDate
+        (j: { created_at: string }) => isoInZone(new Date(j.created_at), orgTimeZone) >= monthStartDate
       ).length;
 
       // Estimates — YTD by estimate_date. Close rate is won ÷ decided, where

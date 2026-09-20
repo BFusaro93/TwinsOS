@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { alreadyBilledReason, billedInPeriod, planContractBilling } from "@/lib/contract-billing";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import type {
   CRMContract,
   CRMContractNote,
@@ -271,8 +272,9 @@ export function isValidContractStatusTransition(from: ContractStatus, to: Contra
  * question than this fix covers.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function cancelFutureContractVisits(supabase: any, contractId: string) {
-  const todayStr = isoNy(new Date());
+async function cancelFutureContractVisits(supabase: any, contractId: string, orgId: string) {
+  // "Future" is relative to the org's day, not the browser's.
+  const todayStr = todayInZone(await getOrgTimeZone(supabase, orgId));
   const { data: visits, error } = await supabase
     .from("crm_job_visits")
     .select("id, job_comments, status, crm_jobs!inner(contract_id)")
@@ -348,12 +350,12 @@ export function useUpdateContractStatus() {
             : {}),
         })
         .eq("id", id)
-        .select("client_id")
+        .select("client_id, org_id")
         .single();
       if (error) throw error;
 
       if (status === "cancelled") {
-        await cancelFutureContractVisits(supabase, id);
+        await cancelFutureContractVisits(supabase, id, data.org_id as string);
       }
 
       return { clientId: data?.client_id as string | undefined, status, skipped: false as const };

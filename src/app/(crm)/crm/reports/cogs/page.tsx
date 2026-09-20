@@ -5,9 +5,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
-import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import type { COGSReportRow } from "@/app/api/crm/reports/cogs/route";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
 function pctOf(numerator: number, denominator: number) {
   return denominator > 0 ? Math.round((numerator / denominator) * 1000) / 10 : 0;
@@ -17,10 +18,10 @@ function ratioOf(numerator: number, denominator: number) {
   return denominator > 0 ? Math.round(numerator / denominator) : 0;
 }
 
-function defaultDateRange() {
+function defaultDateRange(timeZone: string) {
   const now = new Date();
-  const { year, month } = nyDateParts(now);
-  return { from: ymd(year, month, 1), to: isoNy(now) };
+  const { year, month } = zoneDateParts(now, timeZone);
+  return { from: ymd(year, month, 1), to: isoInZone(now, timeZone) };
 }
 
 function OverUnderCell({ cents }: { cents: number }) {
@@ -92,7 +93,9 @@ async function fetchReport(params: URLSearchParams): Promise<{ rows: COGSReportR
 }
 
 export default function COGSReportPage() {
-  const [defaults] = useState(defaultDateRange);
+  // Month-to-date on the ORG's calendar, not the reader's.
+  const orgTimeZone = useOrgTimeZone();
+  const [defaults] = useState(() => defaultDateRange(orgTimeZone));
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
 
