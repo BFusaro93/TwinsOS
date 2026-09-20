@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { getDataset, getDatasetField } from "@/lib/reports/datasets";
 import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";
-import { shiftYmd } from "@/lib/reports/ny-date";
+import { shiftYmd } from "@/lib/time/zone";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import type {

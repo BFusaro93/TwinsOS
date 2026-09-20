@@ -54,7 +54,7 @@ export async function GET(
   // crm_job_products has no resolved-at column; updated_at is set by the
   // same write that moves the row out of 'pending', so it's the closest
   // thing to "when was this recorded". Compared in NY, matching every other
-  // date boundary in this codebase (see isoNy).
+  // date boundary in this codebase (see lib/time/zone).
   const timeZone = await getOrgTimeZone(supabase, visit.org_id as string);
   const serviceDate = (visit.scheduled_date as string | null) ?? todayInZone(timeZone);
 

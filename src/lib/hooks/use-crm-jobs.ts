@@ -9,6 +9,7 @@ import { roundHours, formatMonthDay, todayLocalISODate } from "@/lib/utils";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
+import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -257,10 +258,21 @@ type WaitingListRow = {
   service_zip: string | null;
   clients?: {
     display_name: string | null;
+    service_address: string | null;
+    service_city: string | null;
+    service_state: string | null;
+    service_zip: string | null;
     billing_address: string | null;
     billing_city: string | null;
     billing_state: string | null;
     billing_zip: string | null;
+  } | null;
+  /** The job's linked property (crm_jobs.property_id), for the stop-address fallback. */
+  client_properties?: {
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
   } | null;
   crm_job_visits?: { id: string; deleted_at: string | null; job_service_id: string | null; status: string }[] | null;
   crm_job_services?: { id: string }[] | null;
@@ -277,10 +289,10 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         .from("crm_jobs")
         .select(`
           *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
+          clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews(name),
           sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
-          client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
+          client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
           crm_job_services(*),
           crm_job_visits(id, deleted_at, job_service_id, status)
         `)
@@ -327,10 +339,13 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       return (rows.map((row) => ({
         ...mapJob({
           ...row,
-          service_address: row.service_address ?? row.clients?.billing_address ?? null,
-          service_city:    row.service_city    ?? row.clients?.billing_city    ?? null,
-          service_state:   row.service_state   ?? row.clients?.billing_state   ?? null,
-          service_zip:     row.service_zip     ?? row.clients?.billing_zip     ?? null,
+          // The stop's routable address, resolved exactly the way
+          // /api/crm/route-optimize and /api/crm/jobs/geocode resolve it.
+          ...stopAddressJobFields(resolveStopAddress({
+            job: row,
+            property: embeddedOne(row.client_properties),
+            client: row.clients,
+          })),
         }),
         clientName: row.clients?.display_name ?? null,
       }))) as CRMJob[];
@@ -726,11 +741,15 @@ export function mapVisit(row: any): CRMJobVisit {
       // fallback (see resolveJobProperty) — everything else about the client is
       // already mapped onto the visit itself above.
       clients: { client_properties: row.clients?.client_properties },
-      // Fall back to client billing address when job has no service address set
-      service_address: row.crm_jobs.service_address ?? row.clients?.billing_address ?? null,
-      service_city:    row.crm_jobs.service_city    ?? row.clients?.billing_city    ?? null,
-      service_state:   row.crm_jobs.service_state   ?? row.clients?.billing_state   ?? null,
-      service_zip:     row.crm_jobs.service_zip     ?? row.clients?.billing_zip     ?? null,
+      // The stop's routable address, resolved exactly the way
+      // /api/crm/route-optimize and /api/crm/jobs/geocode resolve it — so a
+      // stop the board shows an address for is one Optimize can actually
+      // route, and one the crew navigates to the same place for.
+      ...stopAddressJobFields(resolveStopAddress({
+        job: row.crm_jobs,
+        property: embeddedOne(row.crm_jobs.client_properties),
+        client: row.clients,
+      })),
     }) : undefined,
   };
 }
@@ -745,9 +764,9 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         .from('crm_job_visits')
         .select(`
           *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
+          clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
+          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })

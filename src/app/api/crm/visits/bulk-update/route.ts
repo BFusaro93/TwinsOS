@@ -12,6 +12,7 @@ const BulkUpdateSchema = z.object({
     status: z.string().optional(),
     crew_id: z.string().uuid().nullable().optional(),
     priority: z.number().int().optional(),
+    skip_reason: z.string().max(500).nullable().optional(),
   }),
 });
 
@@ -75,6 +76,11 @@ export async function POST(request: Request) {
     }
     if (updates.status === "dispatched" && row.status !== "dispatched") {
       rows.push({ ...base, subject: `Visit dispatched ${formatMonthDay(updates.scheduled_date ?? row.scheduled_date)}` });
+    }
+    if ((updates.status === "skipped" || updates.status === "cancelled") && row.status !== updates.status) {
+      const reason = updates.skip_reason?.trim();
+      const subject = `Visit ${updates.status} ${formatMonthDay(updates.scheduled_date ?? row.scheduled_date)}`;
+      rows.push({ ...base, subject: reason ? `${subject}: ${reason}` : subject });
     }
     return rows;
   });

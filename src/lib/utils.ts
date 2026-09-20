@@ -200,7 +200,7 @@ export function relativeTime(isoString: string): string {
  * `new Date().toISOString().slice(0, 10)` is the UTC date, which after ~8 PM
  * Eastern is already tomorrow — every `<input type="date">` default and every
  * client-side "today" comparison must use this instead. (Server/report code
- * uses the America/New_York helpers in src/lib/reports/ny-date.ts.)
+ * uses the org-zone helpers in src/lib/time/zone.ts.)
  */
 export function toLocalISODate(d: Date): string {
   const y = d.getFullYear();

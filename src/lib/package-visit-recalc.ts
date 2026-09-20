@@ -1,4 +1,4 @@
-import { shiftYmd } from "@/lib/reports/ny-date";
+import { shiftYmd } from "@/lib/time/zone";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
 
