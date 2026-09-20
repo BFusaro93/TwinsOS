@@ -96,3 +96,57 @@ Found 2026-08-28 building scheduled report emails ([report_schedules](supabase/m
 
 ## Cleanup — dead ConditionField union members
 - [ ] `client_type`, `client_status`, `job_type` (as a condition field), `job_status`, `tag` (as a condition field), `property_city`, `revenue_ytd`, `last_job_date` in [crm-automations.ts](src/types/crm-automations.ts)'s `ConditionField` type are leftover "Legacy" entries — not in the `CONDITION_GROUPS` picklist (unselectable in the UI) and not referenced anywhere in the evaluator. Harmless but dead; safe to delete next time this file is touched.
+
+## Address verification at point of entry — BUILT 2026-09-19
+Spec written and built the same day, after the Optimize Route fix ([stop-address.ts](src/lib/utils/stop-address.ts)). Prompted by two PROD jobs reading `100/200 Northgate Pkwy, Plymouth MN` against clients reading `100/200 Northgate Dr, Marlborough MA` — different states, and nothing in the app could tell you which was real.
+
+**Decisions taken:**
+- **Provider: Address Validation API, falling back to Geocoding.** Address Validation reports per-component confirmation; it is a separate API in Google Cloud and **was enabled 2026-09-19**, so it is now the live path. The Geocoding fallback stays for orgs that have not enabled it, labelled `source: "geocode"` so the UI never overstates the weaker check.
+- **Entitlement: one shared resolver.** [google-maps-key.ts](src/lib/google-maps-key.ts) now serves route-optimize, jobs/geocode and address/verify. This fixed a live inconsistency: `/api/crm/jobs/geocode` read `customizations.google_maps_api_key` directly, so an Enterprise org entitled to the platform key had working route optimization and silently no map pins.
+- **Advisory, never blocking.** Rural and new-construction addresses legitimately fail, and Google being down is not the user's problem to solve mid-form.
+
+**Built:**
+- [x] [`POST /api/crm/address/verify`](src/app/api/crm/address/verify/route.ts) — server-side, key never reaches the browser.
+- [x] Migration [20260919030000](supabase/migrations/20260919030000_address_verification_columns.sql) — `address_verdict` + `address_verified_at` on `clients`, `client_properties`, `crm_crews`. **Applied to PROD and TEST.**
+- [x] Wired on blur at all three entry points, sharing [AddressSuggestion](src/components/shared/AddressSuggestion.tsx) so they can't drift into describing the same verdict differently: client service address (New Client + Edit Client), property address, crew starting address.
+- [x] Verdicts persist through the existing saves, and only when the check ran against the address actually being saved.
+- [x] **Nominatim deleted.** `geocodeAddress()` in CrewsList was the last non-Google caller; its usage policy wants an identifying User-Agent and ~1 req/sec, which a per-blur browser call did not meet.
+- [x] Backfill report — [`rpt_address_verification`](supabase/migrations/20260919040000_rpt_address_verification.sql) view + an "Address Verification" entry under Client reports. **Applied to PROD and TEST.** Registered in `crm_run_report`'s whitelist by rewriting the live definition rather than restating the function, so every other guard in it survives by construction (see the price-run permission regression).
+
+**Verified against live Address Validation responses:**
+
+| typed | verdict | what the user sees |
+|---|---|---|
+| `100 Northgate Pkwy, Marlborough, MA` | `unconfirmed_and_suspicious` | warning — **this is the bug it was built to catch** |
+| `100 Northgate Dr, Marlborough, MA` | `unconfirmed_and_suspicious` | warning — *neither* spelling is real |
+| `99999 Nonexistent Fakestreet Blvd` | `unconfirmed_and_suspicious` | warning |
+| `14 Birchwood Ln, Millbury, MA` | `unconfirmed_but_plausible` | suggests `14 Birchwood Dr` — a real correction in live data |
+| `455 Main St, Worcester, MA` | `confirmed` | "Address confirmed" |
+| `1600 Amphitheatre Parkway, Mountain View, CA` | `confirmed` | "Address confirmed" |
+
+**`hasUnconfirmedComponents` is a trap and is not used.** Measured live it is `true` for 455 Main St Worcester *and* for Google's own 1600 Amphitheatre Parkway, because an unconfirmed street *number* is routine. Keying on it flagged every address in the system. The real discriminator is whether the **`route` component is CONFIRMED**, backed up by `validationGranularity === "OTHER"` and `possibleNextAction === "FIX"` — all three agree on every case measured. That collapses to the same fact the Geocoding fallback reads off a missing `route` component, so the two providers stay consistent.
+
+Two calibration details, both found by measurement: `hasInferredComponents` is **not** consulted (Google infers ZIP+4 on essentially every US address, so requiring its absence left nothing reaching `confirmed`), and the normalized zip is truncated to 5 digits (Google returns `01608-1821`, which would otherwise put a pointless "did you mean" under a correct address). A `confirmed` verdict also suppresses the suggestion line, so Google preferring `Pkwy` over `Parkway` does not nag.
+
+- [ ] **Not exercised end-to-end in the browser** — TEST has no Google key at all (`GOOGLE_MAPS_PLATFORM_API_KEY` absent from `.env.local.test`, no `google_maps_api_key` on the TEST org), so the route 422s at key resolution there. The request/response handling was verified by calling Google directly with the one org key that exists and replaying the real responses through the verdict mapping.
+- [x] **Address Validation API enabled** 2026-09-19. Billed separately from Geocoding — watch the first invoice.
+- [ ] Out of scope, still: billing addresses (mail deliverability is a different question from routability) and the portal's self-service address edit.
+
+## Timezone date defaults — APPLIED 2026-09-20 (defaults only)
+[20260919020000_company_timezone_date_defaults.sql](supabase/migrations/20260919020000_company_timezone_date_defaults.sql) was committed but applied to neither database. The three column defaults are now live on **PROD and TEST**: `crm_invoices.invoice_date`, `crm_payments.payment_date`, `project_change_orders.requested_date` all default to `(now() at time zone 'America/New_York')::date` instead of falling back to `current_date`, which on Supabase is the UTC day and reads as tomorrow after 8pm Eastern.
+
+**The function half was deliberately NOT applied, and has been removed from the file.** It restated `create_invoice_from_milestone()` with a hardcoded `America/New_York`. Both databases already had a newer per-org implementation:
+
+```
+create_invoice_from_milestone -> public.org_today(v_org_id)
+org_today(uuid)    -> (now() at time zone org_timezone(p_org_id))::date
+org_timezone(uuid) -> coalesce(organizations.timezone, 'America/New_York')
+```
+
+`org_timezone` falls back to exactly the constant the migration hardcoded, so the live version does everything the migration did *and* honours a per-org timezone. Applying it would have been a silent regression — the same guard-loss pattern that cost this repo the price-run permission check. A column DEFAULT cannot reference another column, so it cannot call `org_today(org_id)`; the constant is the only option there, which is why the defaults half was still needed.
+
+## Drift — per-org timezone exists in both DBs with no migration
+Found 2026-09-20. `org_today(uuid)`, `org_timezone(uuid)`, `my_today()`, `my_timezone()` and `organizations.timezone` are live on **both** PROD and TEST, and `create_invoice_from_milestone()` depends on `org_today`. **No migration in this repo creates any of them** (`grep -rl "org_today" supabase/migrations` returns nothing).
+
+- [ ] Write the migration that creates them, from the live definitions, so the repo can rebuild a database. Today `npx supabase db reset` — or any new environment — produces a schema where `create_invoice_from_milestone()` fails on a missing function. This is also why `src/types/supabase.ts` was missing `rpt_audit_log`, `fn_audit_format_change`, `org_today`, `org_timezone`, `my_today`, `my_timezone` and `organizations.timezone` until a regeneration picked them up.
+- [ ] Decide whether `organizations.timezone` should be surfaced in Settings. It exists and is honoured by the DB layer, but `COMPANY_TIME_ZONE` in `src/lib/utils.ts` is still a hardcoded Eastern constant on the app side, so the two halves disagree for any org that sets it. See the timezone-semantics note.
