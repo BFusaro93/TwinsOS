@@ -39,7 +39,10 @@ export type AuditRecordType =
   | "employee"
   | "role"
   | "discount"
-  | "overhead_settings";
+  | "overhead_settings"
+  | "crew"
+  | "schedule"
+  | "automation";
 
 export interface AuditEntry extends BaseRecord {
   recordType: AuditRecordType;

@@ -43,6 +43,8 @@ import { TagsEventDialog } from "./TagsEventDialog";
 import { IfBranchEventDialog } from "./IfBranchEventDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 
 interface Props {
   automationId: string;
@@ -207,63 +209,91 @@ export function AutomationBuilder({ automationId }: Props) {
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Event palette sidebar */}
-        <div className="flex w-48 shrink-0 flex-col border-r bg-slate-50 p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-            Events
-          </p>
-          {canModify && EVENT_PALETTE.filter(({ type }) => type !== "tags" || canAddTags).map(({ type, label, icon: Icon }) => (
-            <button
-              key={type}
-              onClick={() => handleAddEvent(type)}
-              disabled={!focusedSequenceId || createEvent.isPending}
-              className="flex cursor-grab items-center gap-2 rounded p-2 text-sm text-slate-700 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-              title={focusedSequenceId ? `Add ${label}` : "Select a sequence first"}
+      <Tabs defaultValue="builder" className="flex flex-1 flex-col overflow-hidden">
+        <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-4 py-0 h-10 gap-0">
+          {[
+            { value: "builder", label: "Builder" },
+            { value: "audit", label: "Audit Trail" },
+          ].map((t) => (
+            <TabsTrigger
+              key={t.value}
+              value={t.value}
+              className="h-full rounded-none border-b-2 border-transparent px-3 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
-              <Icon className="h-4 w-4 shrink-0" />
-              {label}
-            </button>
+              {t.label}
+            </TabsTrigger>
           ))}
-          {canModify && !focusedSequenceId && (
-            <p className="mt-3 text-[10px] text-slate-400 leading-tight">
-              Click a sequence to select it, then add events.
-            </p>
-          )}
-          {!canModify && (
-            <p className="mt-3 text-[10px] text-slate-400 leading-tight">
-              You don&apos;t have permission to modify automations.
-            </p>
-          )}
-        </div>
+        </TabsList>
 
-        {/* Sequences canvas */}
-        <div className="flex flex-1 gap-4 overflow-x-auto p-4">
-          {(sequences ?? []).map((seq) => (
-            <SequenceColumn
-              key={seq.id}
-              sequence={seq}
-              isFocused={focusedSequenceId === seq.id}
-              onFocus={() => setFocusedSequenceId(seq.id)}
-              onRulesClick={() => setRulesSequenceId(seq.id)}
-              onEventClick={(ev) => setEditingEvent(ev)}
-            />
-          ))}
+        {/* Body */}
+        <TabsContent
+          value="builder"
+          className="mt-0 flex-1 overflow-hidden data-[state=active]:flex"
+        >
+          <div className="flex flex-1 overflow-hidden">
+            {/* Event palette sidebar */}
+            <div className="flex w-48 shrink-0 flex-col border-r bg-slate-50 p-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                Events
+              </p>
+              {canModify && EVENT_PALETTE.filter(({ type }) => type !== "tags" || canAddTags).map(({ type, label, icon: Icon }) => (
+                <button
+                  key={type}
+                  onClick={() => handleAddEvent(type)}
+                  disabled={!focusedSequenceId || createEvent.isPending}
+                  className="flex cursor-grab items-center gap-2 rounded p-2 text-sm text-slate-700 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                  title={focusedSequenceId ? `Add ${label}` : "Select a sequence first"}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {label}
+                </button>
+              ))}
+              {canModify && !focusedSequenceId && (
+                <p className="mt-3 text-[10px] text-slate-400 leading-tight">
+                  Click a sequence to select it, then add events.
+                </p>
+              )}
+              {!canModify && (
+                <p className="mt-3 text-[10px] text-slate-400 leading-tight">
+                  You don&apos;t have permission to modify automations.
+                </p>
+              )}
+            </div>
 
-          {/* Add sequence */}
-          {canModify && (
-            <button
-              onClick={handleAddSequence}
-              disabled={createSequence.isPending}
-              className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-8 text-sm text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Plus className="h-5 w-5" />
-              Add Sequence
-            </button>
-          )}
-        </div>
-      </div>
+            {/* Sequences canvas */}
+            <div className="flex flex-1 gap-4 overflow-x-auto p-4">
+              {(sequences ?? []).map((seq) => (
+                <SequenceColumn
+                  key={seq.id}
+                  sequence={seq}
+                  isFocused={focusedSequenceId === seq.id}
+                  onFocus={() => setFocusedSequenceId(seq.id)}
+                  onRulesClick={() => setRulesSequenceId(seq.id)}
+                  onEventClick={(ev) => setEditingEvent(ev)}
+                />
+              ))}
+
+              {/* Add sequence */}
+              {canModify && (
+                <button
+                  onClick={handleAddSequence}
+                  disabled={createSequence.isPending}
+                  className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-8 text-sm text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus className="h-5 w-5" />
+                  Add Sequence
+                </button>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="audit" className="mt-0 flex-1 overflow-y-auto">
+          {/* The sequences, triggers and conditions under this automation all
+              roll their entries up here, so this is the whole rule's history. */}
+          <AuditTrailTab recordType="automation" recordId={automationId} />
+        </TabsContent>
+      </Tabs>
 
       {/* Rules dialog */}
       {rulesSequenceId && (
