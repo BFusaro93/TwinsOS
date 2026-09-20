@@ -29,6 +29,12 @@ const HTML_SAFE_MERGE_TAG_KEYS = new Set([
   "[estimategrid]",
   "[paymentlink]",
   "[invoicegrid]",
+  // Chemical Application Notice route: a <ul>/<li> list of products applied
+  // and a <br><br>-joined block of the catalog's own route-sheet care
+  // instructions — org-authored content assembled server-side, not
+  // client-controlled freeform text.
+  "[products]",
+  "[careinstructions]",
 ]);
 
 export function resolveMergeTags(
