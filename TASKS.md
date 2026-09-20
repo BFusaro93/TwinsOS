@@ -132,21 +132,21 @@ Two calibration details, both found by measurement: `hasInferredComponents` is *
 - [x] **Address Validation API enabled** 2026-09-19. Billed separately from Geocoding — watch the first invoice.
 - [ ] Out of scope, still: billing addresses (mail deliverability is a different question from routability) and the portal's self-service address edit.
 
-## Timezone date defaults — APPLIED 2026-09-20 (defaults only)
-[20260919020000_company_timezone_date_defaults.sql](supabase/migrations/20260919020000_company_timezone_date_defaults.sql) was committed but applied to neither database. The three column defaults are now live on **PROD and TEST**: `crm_invoices.invoice_date`, `crm_payments.payment_date`, `project_change_orders.requested_date` all default to `(now() at time zone 'America/New_York')::date` instead of falling back to `current_date`, which on Supabase is the UTC day and reads as tomorrow after 8pm Eastern.
+## Timezone date defaults — resolved upstream, my change reverted
+Worked on 2026-09-20 from a branch cut before the per-org timezone work landed on `main`. **Everything here was superseded; the net repo change is zero and both databases are back to main's intended state.** Recorded because the failure mode is worth not repeating.
 
-**The function half was deliberately NOT applied, and has been removed from the file.** It restated `create_invoice_from_milestone()` with a hardcoded `America/New_York`. Both databases already had a newer per-org implementation:
+What happened: [20260919020000](supabase/migrations/20260919020000_company_timezone_date_defaults.sql) looked like an unapplied migration, so its three column defaults were applied to PROD and TEST. But `main` had already moved on — [20260919030000_org_timezone.sql](supabase/migrations/20260919030000_org_timezone.sql) **explicitly drops those exact defaults** (lines 124–126) and replaces them with BEFORE INSERT triggers calling `public.org_today(new.org_id)`, because a column DEFAULT cannot reference another column.
 
-```
-create_invoice_from_milestone -> public.org_today(v_org_id)
-org_today(uuid)    -> (now() at time zone org_timezone(p_org_id))::date
-org_timezone(uuid) -> coalesce(organizations.timezone, 'America/New_York')
-```
+**The bug that created:** a column DEFAULT is evaluated *before* a BEFORE ROW trigger fires, so `new.invoice_date` was never null, the trigger's `if new.<col> is null` guard never passed, and every org was silently pinned to Eastern — the precise behaviour the per-org work existed to remove. Reverted on both databases; verified no defaults remain and the three `org_today` triggers are in place.
 
-`org_timezone` falls back to exactly the constant the migration hardcoded, so the live version does everything the migration did *and* honours a per-org timezone. Applying it would have been a silent regression — the same guard-loss pattern that cost this repo the price-run permission check. A column DEFAULT cannot reference another column, so it cannot call `org_today(org_id)`; the constant is the only option there, which is why the defaults half was still needed.
+**Lessons, both already paid for once in this repo:**
+- Diff a migration's `create or replace function` against the LIVE definition before applying it. The live one is sometimes newer — that check is what stopped this branch from also reverting `create_invoice_from_milestone()` from `org_today(v_org_id)` back to a hardcoded Eastern constant.
+- A migration file existing and being unapplied does not mean it *should* be applied. Check whether a later migration supersedes it.
+- `git fetch origin main` before deciding anything about migration state. This branch was cut at `388b42d0`; by the time it was pushed, `main` had three per-org timezone commits and nine new migrations.
 
-## Drift — per-org timezone exists in both DBs with no migration
-Found 2026-09-20. `org_today(uuid)`, `org_timezone(uuid)`, `my_today()`, `my_timezone()` and `organizations.timezone` are live on **both** PROD and TEST, and `create_invoice_from_milestone()` depends on `org_today`. **No migration in this repo creates any of them** (`grep -rl "org_today" supabase/migrations` returns nothing).
+- [ ] `COMPANY_TIME_ZONE` in `src/lib/utils.ts` — worth confirming the per-org work covered the app side, since the DB half now honours `organizations.timezone`.
 
-- [ ] Write the migration that creates them, from the live definitions, so the repo can rebuild a database. Today `npx supabase db reset` — or any new environment — produces a schema where `create_invoice_from_milestone()` fails on a missing function. This is also why `src/types/supabase.ts` was missing `rpt_audit_log`, `fn_audit_format_change`, `org_today`, `org_timezone`, `my_today`, `my_timezone` and `organizations.timezone` until a regeneration picked them up.
-- [ ] Decide whether `organizations.timezone` should be surfaced in Settings. It exists and is honoured by the DB layer, but `COMPANY_TIME_ZONE` in `src/lib/utils.ts` is still a hardcoded Eastern constant on the app side, so the two halves disagree for any org that sets it. See the timezone-semantics note.
+## Migration numbering collisions
+`main` already carries two colliding pairs from concurrent sessions — `20260919030000` (`org_timezone` and `server_insert_audit_cannot_forge_actor`) and `20260919040000` (`fix_org_today_default_triggers` and `security_advisor_cleanup`). This branch's two migrations originally collided with both and were renumbered to `20260919070000` / `20260919080000`.
+
+- [ ] Nothing enforces uniqueness. `git fetch` and check `ls supabase/migrations | tail` before choosing a version number.
