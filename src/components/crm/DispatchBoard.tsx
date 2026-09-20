@@ -3771,7 +3771,21 @@ export function DispatchBoard() {
   }
 
   async function handleSaveOrder() {
-    const changedOrder = manualOrder ?? displayVisits.map((v) => v.id);
+    // Only ever save ids that belong to the visit set currently loaded for
+    // this date/range. clearPendingOrder() should already have dropped a
+    // manualOrder left over from another day, but this is the last gate before
+    // an RPC that matches on id and org alone: a single foreign id here would
+    // renumber a visit on a different date, write a crm_crew_route_order row
+    // against that date's weekday, and push a real visit off the end of the
+    // list so it kept a now-colliding priority.
+    const loadedIds = new Set(allVisits.map((v) => v.id));
+    const changedOrder = (manualOrder ?? displayVisits.map((v) => v.id)).filter((id) => loadedIds.has(id));
+    if (changedOrder.length === 0) {
+      toast.error("Nothing to save — the visits this order applied to are no longer on the board.");
+      setManualOrder(null);
+      clearOptimization();
+      return;
+    }
     // manualOrder/displayVisits are built from `filtered` — if a crew/status/
     // search filter is active, visits it hides never appear in changedOrder
     // at all. Assigning sequential priorities 1..N over changedOrder alone

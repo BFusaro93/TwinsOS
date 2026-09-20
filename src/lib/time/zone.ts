@@ -115,14 +115,7 @@ export function todayInZoneAsLocalMidnight(timeZone: string): Date {
 
 /** The hour (0-23) that instant `d` falls on in `timeZone`. */
 export function hourInZone(d: Date, timeZone: string): number {
-  return parseInt(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hour: "numeric",
-      hour12: false,
-    }).format(d),
-    10
-  );
+  return zoneWallParts(d, timeZone).hour;
 }
 
 /**
@@ -161,3 +154,51 @@ export const SELECTABLE_TIME_ZONES: { value: string; label: string }[] = [
   { value: "Pacific/Honolulu",   label: "Hawaii (Honolulu)" },
   { value: "America/Puerto_Rico", label: "Atlantic (Puerto Rico)" },
 ];
+
+/** Wall-clock parts of `d` in `timeZone`, including the hour. */
+function zoneWallParts(
+  d: Date,
+  timeZone: string
+): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  // "24" shows up for midnight with hour12:false in some environments.
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour") % 24,
+    minute: get("minute"),
+    second: get("second"),
+  };
+}
+
+/** How far `timeZone` is from UTC (ms) at instant `d` — negative behind UTC. */
+function zoneOffsetMs(d: Date, timeZone: string): number {
+  const p = zoneWallParts(d, timeZone);
+  const wall = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second, d.getUTCMilliseconds());
+  return wall - d.getTime();
+}
+
+/**
+ * The ISO instant of midnight (start of today) in `timeZone`.
+ *
+ * The offset is re-derived at the midnight guess itself, not just at `now`,
+ * so a DST-transition day — where the offset changes at 2 AM local — still
+ * lands on the true local midnight rather than an hour either side of it.
+ */
+export function startOfTodayInZoneIso(now: Date, timeZone: string): string {
+  const { year, month, day } = zoneWallParts(now, timeZone);
+  const wallMidnight = Date.UTC(year, month - 1, day);
+  const guess = new Date(wallMidnight - zoneOffsetMs(now, timeZone));
+  return new Date(wallMidnight - zoneOffsetMs(guess, timeZone)).toISOString();
+}

@@ -10,6 +10,7 @@ import {
   useRevertPriceAdjustment,
 } from "@/lib/hooks/use-bulk-pricing";
 import { toast } from "sonner";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
 function signedCurrency(cents: number): string {
   const sign = cents > 0 ? "+" : cents < 0 ? "−" : "";
@@ -24,6 +25,9 @@ function describe(method: string, amount: number): string {
 }
 
 export function PriceAdjustmentHistory() {
+  // applied_at is an instant — read it back on the org's wall clock, not the
+  // viewer's, so two people looking at the same run agree on when it ran.
+  const orgTimeZone = useOrgTimeZone();
   const { data: runs = [], isLoading } = usePriceAdjustments();
   const revert = useRevertPriceAdjustment();
 
@@ -112,7 +116,7 @@ export function PriceAdjustmentHistory() {
               </td>
               <td className="px-4 py-3 text-xs text-slate-500">
                 {new Date(r.appliedAt).toLocaleString("en-US", {
-                  timeZone: "America/New_York",
+                  timeZone: orgTimeZone,
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}

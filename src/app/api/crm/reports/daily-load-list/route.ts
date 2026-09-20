@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { computeDailyLoadList } from "@/lib/reports/materials/daily-load-list";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
-/** "Today" is the company's operating day. The report page derives its initial
- *  date the same way (REPORT_TIME_ZONE there) so a manager in another timezone
- *  and this route never disagree about which day "no ?date=" means. */
-function todayNy(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
+/** "Today" is the ORG's operating day. The report page derives its initial
+ *  date from the same org timezone, so a manager in another timezone and this
+ *  route never disagree about which day "no ?date=" means. */
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
@@ -29,7 +28,7 @@ export async function GET(request: NextRequest) {
   });
   if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const date = request.nextUrl.searchParams.get("date") || todayNy();
+  const date = request.nextUrl.searchParams.get("date") || todayInZone(await getMyTimeZone(supabase));
 
   try {
     const result = await computeDailyLoadList(supabase, date);

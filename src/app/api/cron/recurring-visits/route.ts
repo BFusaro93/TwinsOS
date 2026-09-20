@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { companyTodayAsLocalMidnight } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
 /**
  * GET /api/cron/recurring-visits — called daily by Vercel Cron at 06:00 UTC
@@ -197,11 +199,25 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const today = companyTodayAsLocalMidnight();
-  const windowEnd = addDays(today, LOOKAHEAD_DAYS);
+  // Each job's generation window starts on ITS OWN org's today, resolved in
+  // the loop below. The PREFETCH of existing visits still has to be a single
+  // query, so it is widened by a day on each side: no US zone is more than a
+  // calendar day away from any other, so this is guaranteed to cover every
+  // org's window. Over-fetching here only costs a few rows; under-fetching
+  // would silently re-insert visits that already exist.
+  const defaultToday = companyTodayAsLocalMidnight();
+  const fromStr = toISODate(addDays(defaultToday, -1));
+  const toStr   = toISODate(addDays(defaultToday, LOOKAHEAD_DAYS + 1));
 
-  const fromStr = toISODate(today);
-  const toStr   = toISODate(windowEnd);
+  const orgTodayCache = new Map<string, Date>();
+  async function orgTodayFor(orgId: string): Promise<Date> {
+    let hit = orgTodayCache.get(orgId);
+    if (!hit) {
+      hit = todayInZoneAsLocalMidnight(await getOrgTimeZone(supabase, orgId));
+      orgTodayCache.set(orgId, hit);
+    }
+    return hit;
+  }
 
   // ── fetch active recurring and package jobs ───────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -304,6 +320,9 @@ export async function GET(request: Request) {
     priority: number; notes_to_crew: string | null; man_count: number | null;
   }[]) {
 
+    const today = await orgTodayFor(job.org_id);
+    const windowEnd = addDays(today, LOOKAHEAD_DAYS);
+
     // Respect recurrence_end if set
     const effectiveEnd = job.recurrence_end
       ? new Date(Math.min(windowEnd.getTime(), new Date(job.recurrence_end).getTime()))
@@ -373,7 +392,8 @@ export async function GET(request: Request) {
   }
 
   console.info(
-    `[recurring-visits] ${today.toISOString()} — window ${fromStr}→${toStr}: ` +
+    `[recurring-visits] ${new Date().toISOString()} — prefetch ${fromStr}→${toStr}, ` +
+    `${orgTodayCache.size} org calendar(s): ` +
     `${totalInserted} visits created, ${skippedPastEnd} jobs past recurrence_end`
   );
 

@@ -7,6 +7,8 @@ import {
   isBillingDueOn,
   planContractBilling,
 } from "@/lib/contract-billing";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
 /**
  * GET /api/cron/contract-invoices — called daily by Vercel Cron at 08:00 UTC
@@ -64,7 +66,25 @@ export async function GET(request: Request) {
   );
 
   const now = new Date();
-  const todayDay = now.getDate();
+
+  // Each contract bills on ITS OWN org's calendar. The billing-day rule
+  // compares a day-of-month, so an org whose date has already rolled over on
+  // the UTC server (or hasn't yet) would otherwise bill a day early or late —
+  // and at a month boundary, in the wrong month entirely.
+  //
+  // isBillingDueOn/planContractBilling both read local Date components, so
+  // handing them a Date at the org's local midnight makes them org-correct
+  // without changing contract-billing.ts itself.
+  const orgTodayCache = new Map<string, { str: string; date: Date }>();
+  async function orgToday(orgId: string): Promise<{ str: string; date: Date }> {
+    let hit = orgTodayCache.get(orgId);
+    if (!hit) {
+      const tz = await getOrgTimeZone(supabase, orgId);
+      hit = { str: todayInZone(tz), date: todayInZoneAsLocalMidnight(tz) };
+      orgTodayCache.set(orgId, hit);
+    }
+    return hit;
+  }
 
   // ── fetch candidates ──────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,8 +110,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: fetchErr.message }, { status: 500 });
   }
 
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(todayDay).padStart(2, "0")}`;
-
   // Filter to contracts due today for their own billing_frequency (see
   // isBillingDueOn — for `monthly` this is the unchanged day-of-month rule),
   // that have actually started, and whose end_date (if any) hasn't passed —
@@ -99,11 +117,15 @@ export async function GET(request: Request) {
   // when its end_date arrives, so this cron is the only backstop against
   // billing past a lapsed term.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dueTodayContracts = ((contracts ?? []) as any[]).filter((c) => {
-    if (c.start_date && c.start_date > todayStr) return false;
-    if (c.end_date && c.end_date < todayStr) return false;
-    return isBillingDueOn(c, now);
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dueTodayContracts: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const c of ((contracts ?? []) as any[])) {
+    const { str: todayStr, date: todayDate } = await orgToday(c.org_id);
+    if (c.start_date && c.start_date > todayStr) continue;
+    if (c.end_date && c.end_date < todayStr) continue;
+    if (isBillingDueOn(c, todayDate)) dueTodayContracts.push(c);
+  }
 
   if (dueTodayContracts.length === 0) {
     return NextResponse.json({ generated: 0, message: "No contracts due today." });
@@ -117,7 +139,8 @@ export async function GET(request: Request) {
     // the hand-rolled month math here used to: the configured billing day
     // clamped to the (advance-shifted) target month, and that month's first
     // and last day as the window. See src/lib/contract-billing.ts.
-    const plan = planContractBilling(contract, now, { billNow: false });
+    const { date: contractToday } = await orgToday(contract.org_id);
+    const plan = planContractBilling(contract, contractToday, { billNow: false });
 
     // Cheap first pass — for a non-monthly cadence, last_billed_date landing
     // inside this period already proves the period is billed, without a
@@ -252,7 +275,11 @@ export async function GET(request: Request) {
   const created = results.filter((r) => r.status === "created").length;
   const skipped = results.filter((r) => r.status === "skipped").length;
 
-  console.info(`[contract-invoices] ${now.toISOString()} — day ${todayDay} (${ordinal(todayDay)}): ${created} created, ${skipped} skipped`);
+  console.info(
+    `[contract-invoices] ${now.toISOString()} — ${dueTodayContracts.length} due across ` +
+    `${orgTodayCache.size} org(s) [${[...orgTodayCache.values()].map((v) => `${v.str} (${ordinal(v.date.getDate())})`).join(", ")}]: ` +
+    `${created} created, ${skipped} skipped`
+  );
 
   return NextResponse.json({ generated: created, skipped, results });
 }

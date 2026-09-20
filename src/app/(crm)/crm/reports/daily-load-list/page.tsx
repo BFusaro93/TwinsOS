@@ -1,28 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DailyLoadListResult, DailyLoadListCrewGroup } from "@/lib/reports/materials/daily-load-list";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 function fmtQty(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
 /**
- * "Today" for this report is the company's operating day, not the reader's.
- * The API route defaults an omitted ?date= to America/New_York; deriving the
- * picker's initial value from the browser's own timezone instead meant a
- * manager in Pacific at 10pm Monday saw Monday while the same URL with no
- * ?date= returned Tuesday. Both sides now agree.
+ * "Today" for this report is the ORG's operating day, not the reader's. The
+ * API route defaults an omitted ?date= to the same org timezone; deriving the
+ * picker's initial value from the browser's own instead meant a manager in
+ * Pacific at 10pm Monday saw Monday while the same URL with no ?date=
+ * returned Tuesday. Both sides read the org's clock.
  */
-const REPORT_TIME_ZONE = "America/New_York";
-
-function todayForReport(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: REPORT_TIME_ZONE });
-}
 
 function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
   return (
@@ -116,7 +113,17 @@ function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
 }
 
 export default function DailyLoadListReportPage() {
-  const [date, setDate] = useState(todayForReport());
+  const orgTimeZone = useOrgTimeZone();
+  const [date, setDate] = useState(todayInZone(orgTimeZone));
+  // The org settings query can resolve after this mounts, so the initial
+  // value above may have been computed from the fallback zone. Re-snap to the
+  // org's today once the real zone lands — but only while the picker is still
+  // showing a default, never overriding a day the user chose.
+  const touched = useRef(false);
+  useEffect(() => {
+    if (touched.current) return;
+    setDate(todayInZone(orgTimeZone));
+  }, [orgTimeZone]);
 
   const { data, isLoading, error } = useQuery<DailyLoadListResult>({
     queryKey: ["crm-daily-load-list-report", date],
@@ -139,7 +146,7 @@ export default function DailyLoadListReportPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" />
+          <Input type="date" value={date} onChange={(e) => { touched.current = true; setDate(e.target.value); }} className="w-40" />
           <Button variant="outline" size="sm" onClick={() => window.print()}>
             <Printer className="mr-1.5 h-3.5 w-3.5" />
             Print

@@ -22,10 +22,10 @@ function monthKey(dateStr: string): string {
   return dateStr.slice(0, 7);
 }
 
-/** UTC offset (minutes) that America/New_York is at the given instant. */
-function nyOffsetMinutes(utcMs: number): number {
+/** UTC offset (minutes) that `timeZone` is at the given instant. */
+function zoneOffsetMinutes(utcMs: number, timeZone: string): number {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
+    timeZone,
     hourCycle: "h23",
     year: "numeric",
     month: "numeric",
@@ -48,19 +48,20 @@ function nyOffsetMinutes(utcMs: number): number {
 
 /**
  * The instant (ISO, UTC) at which a "YYYY-MM-DD" calendar day starts or ends
- * in America/New_York — for bounding a timestamptz column by a local day.
+ * in `timeZone` — for bounding a timestamptz column by a local day.
  * PostgREST compares timestamptz literals in the DB session's timezone
- * (UTC), so a bare `2026-09-06 00:00:00` would be 8pm the night before, ET.
+ * (UTC), so a bare `2026-09-06 00:00:00` would be the evening before in any
+ * negative-offset zone.
  */
-function nyDayBoundIso(ymdStr: string, edge: "start" | "end"): string {
+function zoneDayBoundIso(ymdStr: string, edge: "start" | "end", timeZone: string): string {
   const [y, m, d] = ymdStr.split("-").map(Number);
   const wallAsUtc =
     edge === "start"
       ? Date.UTC(y, m - 1, d, 0, 0, 0, 0)
       : Date.UTC(y, m - 1, d, 23, 59, 59, 999);
   // Two passes so a DST transition on this very day resolves correctly.
-  let utc = wallAsUtc - nyOffsetMinutes(wallAsUtc) * 60000;
-  utc = wallAsUtc - nyOffsetMinutes(utc) * 60000;
+  let utc = wallAsUtc - zoneOffsetMinutes(wallAsUtc, timeZone) * 60000;
+  utc = wallAsUtc - zoneOffsetMinutes(utc, timeZone) * 60000;
   return new Date(utc).toISOString();
 }
 
@@ -105,8 +106,8 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           .is("deleted_at", null)
           // crm_form_responses.status CHECK: on_hold | completed | spam | ignored
           .not("status", "in", '("spam","ignored")');
-        if (from) respQuery = respQuery.gte("created_at", nyDayBoundIso(from, "start"));
-        if (to) respQuery = respQuery.lte("created_at", nyDayBoundIso(to, "end"));
+        if (from) respQuery = respQuery.gte("created_at", zoneDayBoundIso(from, "start", timeZone));
+        if (to) respQuery = respQuery.lte("created_at", zoneDayBoundIso(to, "end", timeZone));
         return respQuery;
       });
 
