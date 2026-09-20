@@ -71,6 +71,19 @@ export const CHEMICAL_EMAIL_MERGE_TAGS = [
 
 export type ChemicalMergeTag = typeof CHEMICAL_EMAIL_MERGE_TAGS[number]["tag"];
 
+// Merge tags supported by the automation "Text Message" event's SMS body
+// (resolveSmsStepContent in lib/automations/sequence-sms.ts) — that editor has
+// no tag picker at all today, so authors type tags from memory; keep this in
+// sync with that resolver's mergeTags map exactly.
+export const SMS_EVENT_MERGE_TAGS = [
+  { tag: "[clientfirstname]", label: "Client First Name" },
+  { tag: "[clientfullname]",  label: "Client Full Name" },
+  { tag: "[companyname]",     label: "Company Name" },
+  { tag: "[meetingdate]",     label: "Meeting Date" },
+  { tag: "[meetingtime]",     label: "Meeting Time" },
+  { tag: "[meetinglocation]", label: "Meeting Location" },
+] as const;
+
 // Merge tags supported in general-purpose client email templates (Settings →
 // Clients → Email Templates, used by the Dispatch Board / Waiting List bulk
 // "Email Selected Clients" action) — must match buildClientMergeVars exactly,
@@ -89,18 +102,40 @@ export type GeneralMergeTag = typeof GENERAL_EMAIL_MERGE_TAGS[number]["tag"];
 
 // Merge tags supported in the Send Invoice email template
 export const INVOICE_EMAIL_MERGE_TAGS = [
+  { tag: "[clientname]",         label: "Client Name" },
   { tag: "[clientfirstname]",    label: "Client First Name" },
   { tag: "[clientlastname]",     label: "Client Last Name" },
   { tag: "[clientfullname]",     label: "Client Full Name" },
+  { tag: "[clientemail]",        label: "Client Email" },
+  { tag: "[nameoninvoice]",      label: "Name on Invoice" },
+  { tag: "[clientaccountbalance]", label: "Client Account Balance" },
+  { tag: "[howwebillyou]",       label: "How We Bill You" },
+  { tag: "[salesperson]",        label: "Sales Person" },
+  { tag: "[referringclient]",    label: "Referring Client" },
+  { tag: "[billingaddress1]",    label: "Billing Address" },
+  { tag: "[billingcity]",        label: "Billing City" },
+  { tag: "[billingstate]",       label: "Billing State" },
+  { tag: "[billingzip]",         label: "Billing Zip" },
   { tag: "[companyname]",        label: "Company Name" },
+  { tag: "[companyaddress]",     label: "Company Address" },
+  { tag: "[companycity]",        label: "Company City" },
+  { tag: "[companystate]",       label: "Company State" },
+  { tag: "[companyzip]",         label: "Company Zip" },
+  { tag: "[companyphonenumber]", label: "Company Phone" },
+  { tag: "[invoicelogo]",        label: "Company Logo" },
+  { tag: "[today]",              label: "Today's Date" },
   { tag: "[invoicenumber]",      label: "Invoice Number" },
   { tag: "[invoicedate]",        label: "Invoice Date" },
   { tag: "[duedate]",            label: "Due Date" },
+  { tag: "[invoiceduedate]",     label: "Invoice Due Date" },
+  { tag: "[invoicesubtotal]",    label: "Invoice Subtotal" },
+  { tag: "[invoicetax]",         label: "Invoice Tax" },
   { tag: "[invoicetotal]",       label: "Invoice Total" },
   { tag: "[balancedue]",         label: "Balance Due" },
+  { tag: "[invoicebalance]",     label: "Balance Due" },
   { tag: "[salesrepname]",       label: "Sales Rep Name" },
-  { tag: "[companyphonenumber]", label: "Company Phone" },
   { tag: "[viewinvoiceonline]",  label: "View Invoice Online Link" },
+  { tag: "[paymentlink]",        label: "Pay Now Button" },
 ] as const;
 
 export type InvoiceMergeTag = typeof INVOICE_EMAIL_MERGE_TAGS[number]["tag"];

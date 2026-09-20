@@ -171,11 +171,33 @@ const INVOICE_TAGS: MergeTag[] = [
 
 const COMMON = [...CLIENT_TAGS, ...BILLING_TAGS, ...PROPERTY_TAGS, ...COMPANY_TAGS, ...SYSTEM_TAGS];
 
+// invoice_email's own subset of the shared tags — only ones the invoice send
+// route (src/app/api/crm/invoices/email/route.ts) actually has real data for.
+// Property/zone measurements aren't tied to an invoice (crm_invoices has no
+// property_id), per-contact phone/fax/title fields don't exist on `clients`
+// itself, [creditcardending]/[creditcardexpiration] have no backing column
+// anywhere (card data lives only in Stripe, never stored raw), and the
+// form/opt-in/opt-out/portal-signup links are marketing-flow tags with no
+// invoice-send equivalent. Offering any of these here would leave a
+// real-looking merge tag that always resolves blank.
+const INVOICE_EMAIL_COMMON_TAGS: MergeTag[] = [
+  ...CLIENT_TAGS.filter((t) => [
+    "[clientname]", "[clientfirstname]", "[clientlastname]", "[clientemail]",
+    "[nameoninvoice]", "[clientaccountbalance]", "[howwebillyou]", "[salesperson]", "[referringclient]",
+  ].includes(t.tag)),
+  ...BILLING_TAGS.filter((t) => t.tag !== "[billingaddress2]"),
+  ...COMPANY_TAGS.filter((t) => [
+    "[companyname]", "[companyaddress]", "[companycity]", "[companystate]", "[companyzip]",
+    "[companyphone]", "[invoicelogo]",
+  ].includes(t.tag)),
+  ...SYSTEM_TAGS.filter((t) => t.tag === "[today]"),
+];
+
 export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
   client:        COMMON,
   marketing:     COMMON,
   estimate:      [...COMMON, ...ESTIMATE_TAGS],
-  invoice_email: [...COMMON, ...INVOICE_TAGS],
+  invoice_email: [...INVOICE_EMAIL_COMMON_TAGS, ...INVOICE_TAGS],
   chemical:      COMMON,
   text_message:  COMMON,
 };

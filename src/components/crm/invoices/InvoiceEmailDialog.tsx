@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
-import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
+import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { INVOICE_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
@@ -136,10 +136,19 @@ export function InvoiceEmailDialog({
       .replace(/\[invoicenumber\]/gi,   invoiceNumber != null ? String(invoiceNumber) : "—")
       .replace(/\[invoicedate\]/gi,     new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
       .replace(/\[duedate\]/gi,         fmtDate(dueDate))
+      .replace(/\[invoiceduedate\]/gi,  fmtDate(dueDate))
       .replace(/\[invoicetotal\]/gi,    formatCurrency(totalCents))
       .replace(/\[balancedue\]/gi,      formatCurrency(balanceCents))
+      .replace(/\[invoicebalance\]/gi,  formatCurrency(balanceCents))
       .replace(/\[salesrepname\]/gi,    "Your Rep")
-      .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
+      .replace(/\[companyphonenumber\]/gi, "(555) 000-0000")
+      .replace(/\[paymentlink\]/gi,     '<a href="#" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>')
+      // Any other recognized Documents tag this preview doesn't have real
+      // invoice/client data for (billing address, company address, sales
+      // person, etc.) — fall back to the same sample values used by the
+      // Documents template preview/test-send, so Preview never shows raw
+      // "[tag]" text either, matching what the real send route now does.
+      .replace(/\[(\w+)\]/gi, (match) => SAMPLE_MERGE_VALUES[match.toLowerCase()] ?? match);
   }
 
   async function handleSend() {

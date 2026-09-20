@@ -7,7 +7,7 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
+import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
@@ -36,13 +36,6 @@ function fmtDate(d: string | null) {
 
 function isValidEmail(e: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
-}
-
-function resolveMergeTags(template: string, vars: Record<string, string>): string {
-  return template.replace(/\[(\w+)\]/g, (match) => {
-    const key = match.toLowerCase();
-    return vars[key] ?? match;
-  });
 }
 
 export async function POST(req: NextRequest) {
@@ -75,9 +68,10 @@ export async function POST(req: NextRequest) {
     .from("crm_invoices")
     .select(`
       *,
-      clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
+      clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, balance_outstanding_cents, referred_by, referred_by_client_id),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text),
+      sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name, last_name)
     `)
     .eq("id", invoiceId)
     .is("deleted_at", null)
@@ -100,7 +94,9 @@ export async function POST(req: NextRequest) {
     ? await (supabase as any).from("organizations").select("name, brand_color, address, customizations").eq("id", profile.org_id).single()
     : { data: null };
   const orgName = org?.name ?? "Your Service Provider";
-  const orgPhone = ((org?.address as Record<string, string>) ?? {}).phone ?? "";
+  const orgAddr = (org?.address as Record<string, string>) ?? {};
+  const orgPhone = orgAddr.phone ?? "";
+  const orgLogoUrl = (org?.customizations as Record<string, unknown>)?.logoDataUrl as string | undefined;
 
   // Resolve which PDF template to render — an explicit choice for this send
   // wins, then the invoice's own pinned template, then the org default.
@@ -151,19 +147,64 @@ export async function POST(req: NextRequest) {
   });
   const viewOnlineUrl = shareToken ? buildInvoiceViewUrl(shareToken) : null;
 
+  // The invoice's own sales rep (crm_invoices.sales_rep_id → crm_employees),
+  // not the org name — [salesrepname] previously always showed the company
+  // name regardless of who actually sold/owns the account.
+  const salesRep = inv.sales_rep as { first_name?: string; last_name?: string } | null;
+  const salesRepName = salesRep ? `${salesRep.first_name ?? ""} ${salesRep.last_name ?? ""}`.trim() || orgName : orgName;
+
+  // referred_by_client_id (an existing client referred this one) wins over
+  // the freetext referred_by (non-client sources like "Google"/"Yard Sign").
+  let referringClientName = (inv.clients?.referred_by as string | null) ?? "";
+  if (inv.clients?.referred_by_client_id) {
+    const { data: referrer } = await supabase
+      .from("clients")
+      .select("display_name")
+      .eq("id", inv.clients.referred_by_client_id as string)
+      .maybeSingle();
+    if (referrer?.display_name) referringClientName = referrer.display_name as string;
+  }
+
+  const deliveryLabels: Record<string, string> = { email: "Email", print: "Print", both: "Email & Print" };
+  const howWeBillYou = deliveryLabels[(inv.clients?.invoice_delivery as string) ?? ""] ?? "";
+
   const mergeVars: Record<string, string> = {
+    "[clientname]":         clientDisplayName,
     "[clientfirstname]":    firstName,
     "[clientlastname]":     lastName,
     "[clientfullname]":     clientDisplayName,
+    "[clientemail]":        (inv.clients?.primary_email as string | null) ?? "",
+    "[nameoninvoice]":      clientDisplayName,
+    "[clientaccountbalance]": formatCents((inv.clients?.balance_outstanding_cents as number) ?? 0),
+    "[howwebillyou]":       howWeBillYou,
+    "[salesperson]":        salesRepName,
+    "[referringclient]":    referringClientName,
+    "[billingaddress1]":    (inv.clients?.billing_address as string | null) ?? "",
+    "[billingcity]":        (inv.clients?.billing_city as string | null) ?? "",
+    "[billingstate]":       (inv.clients?.billing_state as string | null) ?? "",
+    "[billingzip]":         (inv.clients?.billing_zip as string | null) ?? "",
     "[companyname]":        orgName,
+    "[companyaddress]":     orgAddr.street ?? "",
+    "[companycity]":        orgAddr.city ?? "",
+    "[companystate]":       orgAddr.state ?? "",
+    "[companyzip]":         orgAddr.zip ?? "",
+    "[invoicelogo]":        orgLogoUrl ? `<img src="${orgLogoUrl}" alt="${orgName}" style="max-height:60px" />` : "",
+    "[today]":              new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
     "[invoicenumber]":      String(inv.invoice_number ?? "—"),
     "[invoicedate]":        fmtDate(inv.invoice_date),
     "[duedate]":            fmtDate(inv.due_date),
+    "[invoiceduedate]":     fmtDate(inv.due_date),
+    "[invoicesubtotal]":    formatCents(inv.subtotal_cents ?? 0),
+    "[invoicetax]":         formatCents(inv.tax_cents ?? 0),
     "[invoicetotal]":       formatCents(inv.total_cents ?? 0),
     "[balancedue]":         formatCents(inv.balance_cents ?? 0),
-    "[salesrepname]":       orgName,
+    "[invoicebalance]":     formatCents(inv.balance_cents ?? 0),
+    "[salesrepname]":       salesRepName,
     "[companyphonenumber]": orgPhone,
     "[viewinvoiceonline]":  viewOnlineUrl ?? "",
+    "[paymentlink]":        viewOnlineUrl
+      ? `<a href="${viewOnlineUrl}" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>`
+      : "",
   };
 
   const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);

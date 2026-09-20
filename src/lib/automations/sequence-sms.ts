@@ -1,4 +1,5 @@
 import { sendClientSms } from "@/lib/sms/send";
+import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -58,7 +59,15 @@ export async function resolveSmsStepContent(
     "[meetinglocation]": meetingLocation,
   };
   const resolve = (template: string) =>
-    template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);
+    template.replace(/\[(\w+)\]/gi, (match) => {
+      const key = match.toLowerCase();
+      if (key in mergeTags) return mergeTags[key];
+      // A typo'd/guessed tag name (no [tag] picker exists in the SMS event
+      // editor, so authors type these from memory) that happens to match a
+      // real Documents merge tag this narrower SMS resolver doesn't support
+      // — degrade to blank instead of texting a client literal "[tag]" text.
+      return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
+    });
 
   return {
     toPhone: client.primary_phone as string,
