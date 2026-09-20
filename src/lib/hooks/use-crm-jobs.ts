@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { roundHours, formatMonthDay, todayLocalISODate } from "@/lib/utils";
+import { roundHours, formatMonthDay } from "@/lib/utils";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
@@ -1309,6 +1311,7 @@ export function useGenerateVisits() {
 }
 
 export function useCreateClientJob() {
+  const createJobOrgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: NewClientJobFormValues) => {
@@ -1349,7 +1352,7 @@ export function useCreateClientJob() {
           po_number: values.poNumber || null,
           // Date Sold drives the Sales by Date Sold / Approved Sales by Sales Rep
           // reports — never leave it null (the DB trigger also backstops this).
-          date_sold: values.dateSold || todayLocalISODate(),
+          date_sold: values.dateSold || todayInZone(createJobOrgTimeZone),
           when_to_invoice: values.whenToInvoice || null,
           invoice_separately: values.invoiceSeparately,
           call_ahead: values.callAhead,
@@ -2223,8 +2226,6 @@ export function useUpdateJob() {
 // ── schedules ─────────────────────────────────────────────────────────────────
 
 import type { CRMSchedule } from '@/types/crm-jobs';
-import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
-import { isoInZone, todayInZone } from "@/lib/time/zone";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSchedule(row: any): CRMSchedule {
@@ -2805,9 +2806,14 @@ export function useClientServiceHistory() {
 // schedule. Returns an empty set for any other date without querying.
 
 export function useDrivingCrewIds(date: string) {
+  // The dispatch board passes the ORG's selected day. Gating on the browser's
+  // day instead meant that for any viewer whose own date differs from the
+  // org's — the whole point of per-org timezones — this never matched and the
+  // "driving now" indicator silently never loaded.
+  const orgTimeZone = useOrgTimeZone();
   return useQuery<Set<string>>({
     queryKey: ["driving-crew-ids", date],
-    enabled: date === todayLocalISODate(),
+    enabled: date === todayInZone(orgTimeZone),
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

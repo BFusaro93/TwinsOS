@@ -15,6 +15,8 @@ import type { InvoiceStatus } from "@/types/crm-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { RevenueSnapshot, canViewRevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-slate-100 text-slate-600",
@@ -77,7 +79,10 @@ export function MyDay() {
   const { can, isLoading: permsLoading } = usePermissions();
   const showRevenueSnapshot = !permsLoading && canViewRevenueSnapshot(can);
 
-  const today = todayLocalISODate();
+  // "My Day" is the org's day — a manager opening this from another timezone
+  // must see the same day the crews are working.
+  const orgTimeZone = useOrgTimeZone();
+  const today = todayInZone(orgTimeZone);
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
   const overdueCount = (openTickets ?? []).filter(

@@ -34,6 +34,8 @@ import { useNotificationPrefs } from "@/lib/hooks/use-notification-prefs";
 import { createClient } from "@/lib/supabase/client";
 import type { AppNotification, NotificationEntityType } from "@/types/notification";
 import { recordPath } from "@/lib/notifications/record-links";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 // A comment_mention notification's entity_type is the CommentRecordType the
 // comment was left on (ticket, work_order, po, requisition, ...) — map each
@@ -113,6 +115,9 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
 }
 
 export function NotificationsBell() {
+  // Due-soon windows are the org's days, not the reader's — two people in
+  // different timezones should get the same "due this week" list.
+  const orgTimeZone = useOrgTimeZone();
   const router = useRouter();
   const { setSelectedRequisitionId, setSelectedPOId } = usePOStore();
   const { setSelectedWorkOrderId, setSelectedPMScheduleId } = useCMMSStore();
@@ -154,8 +159,8 @@ export function NotificationsBell() {
   const { readIds, markRead, markAllRead: markAllReadIds } = useNotificationReads(
     useMemo(() => {
       // We only need the IDs list for pruning — compute cheaply without full objects
-      const todayIso = todayLocalISODate();
-      const weekFromNowIso = localISODateFromToday(7);
+      const todayIso = todayInZone(orgTimeZone);
+      const weekFromNowIso = shiftYmd(todayIso, 7);
       return [
         ...(notifPrefs?.inAppApprovalRequired !== false ? requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`) : []),
         ...(notifPrefs?.inAppPoApprovalRequired !== false ? purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`) : []),
@@ -167,13 +172,13 @@ export function NotificationsBell() {
         ...(notifPrefs?.inAppNewMaintenanceRequest !== false ? maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`) : []),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
-    }, [requisitions, purchaseOrders, estimates, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id, notifPrefs])
+    }, [requisitions, purchaseOrders, estimates, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id, notifPrefs, orgTimeZone])
   );
 
   // Derive notifications from live data
   const notifications = useMemo<AppNotification[]>(() => {
-    const todayIso = todayLocalISODate();
-    const weekFromNowIso = localISODateFromToday(7);
+    const todayIso = todayInZone(orgTimeZone);
+    const weekFromNowIso = shiftYmd(todayIso, 7);
 
     const items: AppNotification[] = [];
 
@@ -407,7 +412,7 @@ export function NotificationsBell() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, estimates, maintenanceRequests, dbNotifications, currentUser, readIds, notifPrefs]);
+  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, estimates, maintenanceRequests, dbNotifications, currentUser, readIds, notifPrefs, orgTimeZone]);
 
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 

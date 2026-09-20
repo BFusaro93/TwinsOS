@@ -46,6 +46,8 @@ import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { cn, formatDate, matchesFilter, todayLocalISODate, localISODateFromToday } from "@/lib/utils";
 import type { WorkOrder, WorkOrderStatus, WorkOrderPriority } from "@/types";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -155,9 +157,11 @@ function UpcomingMaintenanceView({
   isLoading: boolean;
   onRowClick: (wo: WorkOrder) => void;
 }) {
-  const todayStr   = todayLocalISODate();
-  const weekOut    = localISODateFromToday(7);
-  const monthOut   = localISODateFromToday(30);
+  // Due/overdue buckets are measured on the ORG's calendar, not the viewer's.
+  const orgTimeZone = useOrgTimeZone();
+  const todayStr   = todayInZone(orgTimeZone);
+  const weekOut    = shiftYmd(todayStr, 7);
+  const monthOut   = shiftYmd(todayStr, 30);
 
   const recurring = workOrders.filter((wo) => wo.isRecurring);
   const active    = recurring.filter((wo) => wo.status !== "done");
@@ -333,6 +337,7 @@ function UpcomingMaintenanceView({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function WorkOrderListPage() {
+  const pageOrgTimeZone = useOrgTimeZone();
   const { data: workOrders, isLoading } = useWorkOrders();
   const { selectedWorkOrderId, setSelectedWorkOrderId } = useCMMSStore();
   const searchParams = useSearchParams();
@@ -383,8 +388,9 @@ export function WorkOrderListPage() {
   const col = (key: string) => visibleKeys.includes(key);
   const all = workOrders ?? [];
 
-  // Today's date string (YYYY-MM-DD) for future WO filtering
-  const todayDateStr = todayLocalISODate();
+  // Today's date string (YYYY-MM-DD) for future WO filtering — the org's day,
+  // so a WO starting today isn't hidden as "future" for a viewer further west.
+  const todayDateStr = todayInZone(pageOrgTimeZone);
   const sheetWO = sheetWOId ? (all.find((wo) => wo.id === sheetWOId) ?? null) : null;
 
   // Derive filter options from live data

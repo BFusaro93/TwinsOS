@@ -15,12 +15,16 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { cn, formatDate, getInitials, getAvatarColor, todayLocalISODate, localISODateFromToday } from "@/lib/utils";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import type { Vehicle } from "@/types";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 type ServiceBucket = "overdue" | "due-soon" | "ok" | "untracked";
 
-function getVehicleBucket(v: Vehicle, currentMiles?: number | null): ServiceBucket {
-  const todayStr = todayLocalISODate();
-  const monthOut = localISODateFromToday(30);
+// Overdue / due-soon are measured against the ORG's day, not the reader's —
+// a van isn't overdue in one timezone and fine in another.
+function getVehicleBucket(v: Vehicle, timeZone: string, currentMiles?: number | null): ServiceBucket {
+  const todayStr = todayInZone(timeZone);
+  const monthOut = shiftYmd(todayStr, 30);
 
   const hasDates = !!(v.nextOilChangeDue || v.nextInspectionStickerDue);
   const hasMileage = v.nextOilChangeMileage != null && currentMiles != null;
@@ -34,13 +38,14 @@ function getVehicleBucket(v: Vehicle, currentMiles?: number | null): ServiceBuck
   return "ok";
 }
 
-function dateCell(dateStr: string | null, dueMileage?: number | null, currentMiles?: number | null): React.ReactNode {
+function dateCell(dateStr: string | null, timeZone: string, dueMileage?: number | null, currentMiles?: number | null): React.ReactNode {
   if (!dateStr && dueMileage == null) return <span className="text-slate-300">—</span>;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = todayLocalISODate();
-  const monthOut = localISODateFromToday(30);
+  const todayStr = todayInZone(timeZone);
+  const monthOut = shiftYmd(todayStr, 30);
+  // Day-count label is computed from the org's today, parsed at local midnight
+  // so the subtraction stays on whole days.
+  const today = new Date(`${todayStr}T00:00:00`);
 
   const dateColor = dateStr
     ? dateStr < todayStr ? "text-red-600" : dateStr < monthOut ? "text-amber-600" : "text-green-700"
@@ -123,7 +128,8 @@ export function ServiceRemindersView({
   onRowClick: (v: Vehicle) => void;
   currentMilesMap: Map<string, number>;
 }) {
-  const bucket = (v: Vehicle) => getVehicleBucket(v, currentMilesMap.get(v.id));
+  const orgTimeZone = useOrgTimeZone();
+  const bucket = (v: Vehicle) => getVehicleBucket(v, orgTimeZone, currentMilesMap.get(v.id));
   const tracked   = vehicles.filter((v) => bucket(v) !== "untracked");
   const untracked = vehicles.filter((v) => bucket(v) === "untracked");
   const overdue   = tracked.filter((v) => bucket(v) === "overdue");
@@ -165,12 +171,12 @@ export function ServiceRemindersView({
         <TableCell className="text-sm text-slate-600">{v.assignedCrew ?? "—"}</TableCell>
         <TableCell>
           {v.nextOilChangeDue || v.nextOilChangeMileage != null
-            ? dateCell(v.nextOilChangeDue, v.nextOilChangeMileage, currentMiles)
+            ? dateCell(v.nextOilChangeDue, orgTimeZone, v.nextOilChangeMileage, currentMiles)
             : <span className="text-slate-300">—</span>}
         </TableCell>
         <TableCell>
           {v.nextInspectionStickerDue
-            ? dateCell(v.nextInspectionStickerDue)
+            ? dateCell(v.nextInspectionStickerDue, orgTimeZone)
             : <span className="text-slate-300">—</span>}
         </TableCell>
         <TableCell>

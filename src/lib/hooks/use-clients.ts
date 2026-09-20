@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type { AddressVerdict } from "@/types/address-verification";
-import { todayLocalISODate } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import type { BulkImportResult } from "@/lib/csv";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
@@ -515,6 +514,7 @@ export function useUpdateClientPropertyZones() {
 // ── mutations ─────────────────────────────────────────────────────────────────
 
 export function useCreateClient() {
+  const createOrgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: NewClientFormValues) => {
@@ -546,9 +546,9 @@ export function useCreateClient() {
           // New Client dialog can create the record as a Lead instead of
           // jumping straight to Active (defaults to active for back-compat).
           status: values.status ?? "active",
-          // Local calendar date — toISOString() is UTC and reads as tomorrow
-          // after ~8 PM Eastern. Leads have no client_since until converted.
-          client_since: (values.status ?? "active") === "lead" ? null : todayLocalISODate(),
+          // client_since is a business DATE on the org's calendar, not the
+          // browser's. Leads have no client_since until converted.
+          client_since: (values.status ?? "active") === "lead" ? null : todayInZone(createOrgTimeZone),
         })
         .select()
         .single();
@@ -599,6 +599,7 @@ async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
 }
 
 export function useBulkImportClients() {
+  const importOrgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
@@ -656,7 +657,7 @@ export function useBulkImportClients() {
             service_state: r.serviceState?.trim() || null,
             service_zip: r.serviceZip?.trim() || null,
             source: r.source?.trim() || null,
-            client_since: todayLocalISODate(),
+            client_since: todayInZone(importOrgTimeZone),
           };
 
           const { data: newClient, error } = await supabase

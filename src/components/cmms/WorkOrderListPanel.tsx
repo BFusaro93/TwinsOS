@@ -11,6 +11,8 @@ import { useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useSettingsStore } from "@/stores";
 import { CalendarDays, ChevronDown, GitBranch } from "lucide-react";
 import type { WorkOrder } from "@/types";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 interface WorkOrderListPanelProps {
   workOrders: WorkOrder[];
@@ -101,6 +103,8 @@ function AssigneeMultiSelect({
 }
 
 export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrderListPanelProps) {
+  // "Future" is relative to the org's day, not the reader's browser.
+  const orgTimeZone = useOrgTimeZone();
   const { data: employees = [] } = useSelectableEmployees();
   const users = employees.map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const { mutate: updateWO } = useUpdateWorkOrder();
@@ -126,7 +130,7 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
         const label = wo.assetName ?? wo.title;
         const initials = getInitials(label);
         const avatarColor = getAvatarColor(label);
-        const todayStr = todayLocalISODate();
+        const todayStr = todayInZone(orgTimeZone);
         const isFutureWO = !!wo.startDate && wo.startDate > todayStr && wo.status !== "done" && wo.status !== "skipped";
 
         return (
