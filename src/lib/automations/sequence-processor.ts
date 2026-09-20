@@ -2,6 +2,7 @@ import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPa
 import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
+import { fetchCardExpiryContext, type CardExpiryContext } from "./card-expiry-context";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,6 +76,24 @@ export async function processDueEnrollment(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const eventConfig = (currentEvent.config ?? {}) as Record<string, any>;
 
+  // Only the credit_card_about_to_expire trigger's own enrollments get real
+  // [creditcardending]/[creditcardexpiration] values — check the sequence's
+  // trigger type before ever calling Stripe, so every other trigger type
+  // (the vast majority of enrollments) pays no extra query or API call.
+  let cardExpiryContext: CardExpiryContext | null = null;
+  if ((currentEvent.event_type === "email" || currentEvent.event_type === "text_message") && client_id) {
+    const { data: trigger } = await adminClient
+      .from("crm_sequence_triggers")
+      .select("id")
+      .eq("sequence_id", sequence_id)
+      .eq("trigger_type", "credit_card_about_to_expire")
+      .limit(1)
+      .maybeSingle();
+    if (trigger) {
+      cardExpiryContext = await fetchCardExpiryContext(adminClient, client_id);
+    }
+  }
+
   if (currentEvent.event_type === "wait") {
     // `currentEvent` here IS the due wait step (this branch is only reached
     // when a wait becomes "current" — i.e. two or more `wait` steps are
@@ -124,6 +143,7 @@ export async function processDueEnrollment(
       bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
       toSelection: eventConfig.to,
       fromSelection: eventConfig.from,
+      cardExpiryContext,
     });
     if ("error" in built) {
       await logSequenceExecution(adminClient, {
@@ -209,6 +229,7 @@ export async function processDueEnrollment(
       clientId: client_id!,
       meetingId: meeting_id ?? null,
       bodyTemplate: eventConfig.message ?? "",
+      cardExpiryContext,
     });
     if ("error" in built) {
       await logSequenceExecution(adminClient, {

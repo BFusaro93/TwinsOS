@@ -1,4 +1,6 @@
 import { sendClientSms } from "@/lib/sms/send";
+import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
+import type { CardExpiryContext } from "./card-expiry-context";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -11,7 +13,14 @@ interface ResolvedSmsContent {
 /** Resolves a text-message step's [mergetag] placeholders against the client/org context. */
 export async function resolveSmsStepContent(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; meetingId?: string | null; bodyTemplate: string }
+  params: {
+    orgId: string;
+    clientId: string;
+    meetingId?: string | null;
+    bodyTemplate: string;
+    /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
+    cardExpiryContext?: CardExpiryContext | null;
+  }
 ): Promise<ResolvedSmsContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
@@ -57,8 +66,20 @@ export async function resolveSmsStepContent(
     "[meetingtime]": meetingTime,
     "[meetinglocation]": meetingLocation,
   };
+  if (params.cardExpiryContext) {
+    mergeTags["[creditcardending]"] = params.cardExpiryContext.last4;
+    mergeTags["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
+  }
   const resolve = (template: string) =>
-    template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);
+    template.replace(/\[(\w+)\]/gi, (match) => {
+      const key = match.toLowerCase();
+      if (key in mergeTags) return mergeTags[key];
+      // Same reasoning as sequence-email.ts's resolver: a recognized
+      // Documents merge tag this narrower automation resolver doesn't know
+      // how to fill in degrades to blank instead of shipping literal
+      // "[tag]" text to a real client's phone.
+      return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
+    });
 
   return {
     toPhone: client.primary_phone as string,
