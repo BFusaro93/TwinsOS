@@ -3384,13 +3384,18 @@ export function DispatchBoard() {
     const label = STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
     try {
       if (status === "completed") {
-        // Use the complete route so the parent job status, invoicing and
-        // activity/automation side effects also run for each visit — not a
-        // simple field update, so it can't go through bulk-update.
-        const results = await Promise.all(
-          ids.map((id) => fetch(`/api/crm/visits/${id}/complete`, { method: "POST" }))
-        );
-        if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+        // Bulk-complete runs the full per-visit completion (job status,
+        // invoicing, activity/automation side effects) server-side for every
+        // id in one request — not a simple field update, so it can't go
+        // through bulk-update, but it no longer needs one fetch per visit.
+        const res = await fetch("/api/crm/visits/bulk-complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) throw new Error("One or more updates failed");
+        const summary = await res.json() as { completed: number; failed: { id: string; error: string }[] };
+        if (summary.failed.length > 0) throw new Error("One or more updates failed");
       } else {
         const updates: Record<string, unknown> = { status };
         if (status === "skipped" || status === "cancelled") updates.skip_reason = reason?.trim() || null;
