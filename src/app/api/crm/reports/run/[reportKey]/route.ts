@@ -5,6 +5,7 @@ import { getReport } from "@/lib/reports/registry";
 import { runAnalysis } from "@/lib/reports/engine";
 import { REPORT_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
 import { getCrewRunnableScope, isCrewCaller } from "@/lib/reports/crew-dashboard-access";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
 
 /**
  * Executes a pre-built Report Center report by key. Filter values arrive as
@@ -66,15 +67,19 @@ export async function GET(
   });
 
   try {
+    // Resolved once for the whole request: every date boundary this report
+    // computes is the ORG's day, not the UTC server's.
+    const timeZone = await getMyTimeZone(supabase);
     if (def.run) {
       const result = await def.run({
         supabase: supabase as unknown as SupabaseClient,
         params: reportParams,
+        timeZone,
       });
       return NextResponse.json({ ...result, notes: result.notes ?? def.notes });
     }
     if (def.analysis) {
-      const config = def.analysis(reportParams);
+      const config = def.analysis(reportParams, timeZone);
       const result = await runAnalysis(
         supabase as unknown as SupabaseClient,
         config

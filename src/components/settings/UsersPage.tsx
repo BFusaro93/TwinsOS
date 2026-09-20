@@ -38,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 const AVATAR_COLORS = [
   "bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500",
@@ -612,6 +613,7 @@ function ResetPasswordDialog({ user, onOpenChange }: ResetPasswordDialogProps) {
 // ---------------------------------------------------------------------------
 
 export function UsersPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const { currentUser } = useCurrentUserStore();
   const isAdmin = currentUser.role === "admin";
   const { data: rawUsers = [], isLoading } = useUsers();
@@ -687,10 +689,13 @@ export function UsersPage() {
     updateRole({ userId, role: newRole });
   }
 
-  function handleDeactivate(userId: string) {
-    const confirmed = window.confirm(
-      "Are you sure you want to deactivate this user? They will lose access to the platform."
-    );
+  async function handleDeactivate(userId: string) {
+    const confirmed = await confirm({
+      title: "Deactivate this user?",
+      description: "They will immediately lose access to the platform. You can reactivate them later.",
+      confirmLabel: "Deactivate",
+      destructive: true,
+    });
     if (!confirmed) return;
     deactivate(userId, {
       onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to deactivate user"),
@@ -875,7 +880,7 @@ export function UsersPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-slate-400 hover:text-red-500"
-                            onClick={() => handleDeactivate(user.id)}
+                            onClick={() => void handleDeactivate(user.id)}
                             aria-label={`Deactivate ${user.name}`}
                             title="Deactivate user"
                           >
@@ -935,6 +940,7 @@ export function UsersPage() {
         user={resetPasswordUser}
         onOpenChange={(open) => { if (!open) setResetPasswordUser(null); }}
       />
+      {confirmDialog}
     </div>
   );
 }

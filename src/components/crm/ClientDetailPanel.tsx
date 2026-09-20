@@ -137,6 +137,7 @@ import {
 } from "lucide-react";
 import type { Client, ClientContact, ClientProperty, ContactPhone, PhoneType } from "@/types/crm";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -256,12 +257,18 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 // invoice-level default_payment_method preference above).
 
 function SavedPaymentMethodSection({ client }: { client: Client }) {
+  const [confirm, confirmDialog] = useConfirm();
   const [dialogOpen, setDialogOpen] = useState(false);
   const removeMethod = useRemoveSavedPaymentMethod();
   const setAutopayEnabled = useSetAutopayEnabled();
 
   async function handleRemove() {
-    if (!confirm("Remove the saved payment method for this client? Autopay will stop until a new one is added.")) return;
+    if (!(await confirm({
+      title: "Remove the saved payment method for this client?",
+      description: "Autopay will stop until a new one is added.",
+      confirmLabel: "Remove",
+      destructive: true,
+    }))) return;
     try {
       await removeMethod.mutateAsync({ clientId: client.id });
       toast.success("Payment method removed");
@@ -329,6 +336,7 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
         onOpenChange={setDialogOpen}
         onSaved={() => toast.success("Payment method saved")}
       />
+      {confirmDialog}
     </div>
   );
 }
@@ -1420,6 +1428,7 @@ function ContactDialog({
   onOpenChange: (o: boolean) => void;
   contact?: ClientContact | null;
 }) {
+  const [confirm, confirmDialog] = useConfirm();
   const isEditing = !!contact;
   const { mutateAsync: addContact, isPending: isAdding } = useAddClientContact();
   const { mutateAsync: updateContact, isPending: isUpdating } = useUpdateClientContact();
@@ -1516,7 +1525,11 @@ function ContactDialog({
 
   async function handleDelete() {
     if (!contact) return;
-    if (!confirm(`Remove ${contact.firstName}${contact.lastName ? ` ${contact.lastName}` : ""} as a contact?`)) return;
+    if (!(await confirm({
+      title: `Remove ${contact.firstName}${contact.lastName ? ` ${contact.lastName}` : ""} as a contact?`,
+      confirmLabel: "Remove Contact",
+      destructive: true,
+    }))) return;
     try {
       await deleteContact({ id: contact.id, clientId });
       toast.success("Contact removed");
@@ -1632,6 +1645,7 @@ function ContactDialog({
             <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
           </div>
         </DialogFooter>
+        {confirmDialog}
       </DialogContent>
     </Dialog>
   );
@@ -1878,6 +1892,7 @@ function jobBorderColor(job: CRMJob): string {
 // ── HomeTab ───────────────────────────────────────────────────────────────────
 
 function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; isLead?: boolean; onSwitchTab?: (tab: string) => void }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
   const [jobFilter, setJobFilter] = useState<"active" | "completed">("active");
   const [clientVisitsModal, setClientVisitsModal] = useState<"upcoming" | "history" | null>(null);
@@ -2163,7 +2178,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                           <DropdownMenuItem
                             className="text-red-600 focus:text-red-600"
                             onClick={async () => {
-                              if (!confirm("Cancel this job?")) return;
+                              if (!(await confirm({ title: "Cancel this job?", confirmLabel: "Cancel Job", cancelLabel: "Keep Job", destructive: true }))) return;
                               try {
                                 await updateJobStatus.mutateAsync({ id: job.id, status: "cancelled", scheduledDate: job.scheduledDate ?? "", clientId });
                                 toast.success("Job cancelled");
@@ -2443,6 +2458,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
         onOpenJob={(id) => { setClientVisitsModal(null); setJobEditMode(false); setSelectedJobId(id); }}
       />
     )}
+    {confirmDialog}
     </>
   );
 }

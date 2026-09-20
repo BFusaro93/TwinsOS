@@ -8,7 +8,7 @@ import {
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import { isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
-import { nyDateParts, shiftYmd, ymd } from "@/lib/reports/ny-date";
+import { shiftYmd, ymd, zoneDateParts } from "@/lib/time/zone";
 
 // ============================================================
 // Lead section — pre-built reports.
@@ -18,11 +18,13 @@ import { nyDateParts, shiftYmd, ymd } from "@/lib/reports/ny-date";
 // for both lead statuses — see src/lib/reports/client-status.ts.
 // ============================================================
 
-/** The America/New_York calendar date of a date or timestamptz string. */
-function toNyDay(value: string | null): string | null {
+/** The calendar date a value falls on in the org's timezone. A date-only
+ *  string is already a calendar date and passes through untouched; a
+ *  timestamptz has to be resolved against a zone before it means a day. */
+function toOrgDay(value: string | null, timeZone: string): string | null {
   if (!value) return null;
   if (value.length === 10) return value;
-  const { year, month, day } = nyDateParts(new Date(value));
+  const { year, month, day } = zoneDateParts(new Date(value), timeZone);
   return ymd(year, month, day);
 }
 
@@ -68,8 +70,8 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
     // Bespoke: the declarative engine can't compare two columns
     // (client_since > created_at), and that comparison is what separates a
     // lead that later converted from an account created straight as a client.
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
       interface Row {
         display_name: string | null;
@@ -96,13 +98,13 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
 
       const resultRows = rows
         .filter((r) => {
-          const created = toNyDay(r.created_at);
+          const created = toOrgDay(r.created_at, timeZone);
           if (!created) return false;
           if (from && created < from) return false;
           if (to && created > to) return false;
           if (isLeadStatus(r.status)) return true;
           // Converted later than the day it was created → it started as a lead.
-          const since = toNyDay(r.client_since);
+          const since = toOrgDay(r.client_since, timeZone);
           return !!since && since > created;
         })
         .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
@@ -199,8 +201,8 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
     description: "Shows leads that were closed without converting, grouped by reason.",
     filters: [dateRangeFilterDef("Closed Between", "this_year")],
     notes: ["Leads closed without ever converting to a client (status = lost)."],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
       let query = supabase
         .from("clients")
         .select("cancellation_reason, closed_at")
@@ -260,7 +262,7 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
       "New Leads counts accounts created that month; totals are as of month end.",
       "Client Total = accounts that had converted (Client Since) by month end, are/were clients, and had not been cancelled by then. Lead Total = accounts created by month end that were still a lead at month end (open, converted later, or lost later).",
     ],
-    run: async ({ supabase, params }) => {
+    run: async ({ supabase, params, timeZone }) => {
       const year = parseInt(params.year || "", 10) || new Date().getFullYear();
 
       interface Row {
@@ -272,21 +274,22 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
       const rows = await fetchAllClients<Row>(supabase, "status, created_at, client_since, closed_at");
 
       const resultRows = MONTH_LABELS.map((label, m) => {
-        // Month edges as NY calendar dates; timestamps are reduced to their
-        // NY date before comparing so the boundary isn't off by the UTC offset.
+        // Month edges as calendar dates on the org's clock; timestamps are
+        // reduced to their org-calendar date before comparing, so the boundary
+        // isn't off by the UTC offset.
         const monthStart = ymd(year, m, 1);
         const monthEnd = ymd(year, m + 1, 0);
 
         const inMonth = (value: string | null): boolean => {
-          const d = toNyDay(value);
+          const d = toOrgDay(value, timeZone);
           return !!d && d >= monthStart && d <= monthEnd;
         };
         const onOrBeforeEnd = (value: string | null): boolean => {
-          const d = toNyDay(value);
+          const d = toOrgDay(value, timeZone);
           return !!d && d <= monthEnd;
         };
         const afterEnd = (value: string | null): boolean => {
-          const d = toNyDay(value);
+          const d = toOrgDay(value, timeZone);
           return !!d && d > monthEnd;
         };
 

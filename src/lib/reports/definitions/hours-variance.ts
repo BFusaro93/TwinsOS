@@ -1,6 +1,6 @@
 import type { PrebuiltReportDef, ReportHeaderVisual } from "@/lib/reports/definition-types";
 import { dateRangeFilterDef, dateRangeFilters, eqFilter } from "@/lib/reports/helpers";
-import { isoNy, mondayOfYmd, nyDateParts, shiftYmd, ymd } from "@/lib/reports/ny-date";
+import { isoInZone, mondayOfYmd, shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import type { AnalysisFilter } from "@/types/crm-reports";
 
 // ============================================================
@@ -13,7 +13,7 @@ import type { AnalysisFilter } from "@/types/crm-reports";
 //
 // All "today"/week/month boundaries are computed against the calendar date
 // as it appears in America/New_York (this org's operating timezone), not
-// the server's local/UTC date — see `src/lib/reports/ny-date.ts`.
+// the server's local/UTC date — see `src/lib/time/zone.ts`.
 // ============================================================
 
 // Matches the color-coding on the legacy SA export: over-budget (actual ran
@@ -122,7 +122,7 @@ function avbReport(
   key: string,
   label: string,
   description: string,
-  range: () => { from: string; to: string }
+  range: (timeZone: string) => { from: string; to: string }
 ): PrebuiltReportDef {
   return {
     key,
@@ -135,15 +135,15 @@ function avbReport(
     // Fixed date window recomputed on every run — safe to schedule daily
     // (unlike the custom-range variant below, which would go stale).
     schedulable: true,
-    headerVisuals: () => {
-      const { from, to } = range();
+    headerVisuals: (_params, timeZone) => {
+      const { from, to } = range(timeZone);
       return avbHeaderVisuals([
         { column: "scheduled_date", op: "gte", value: from },
         { column: "scheduled_date", op: "lte", value: to },
       ]);
     },
-    analysis: () => {
-      const { from, to } = range();
+    analysis: (_params, timeZone) => {
+      const { from, to } = range(timeZone);
       return {
         dataset: "rpt_job_visits",
         columns: AVB_COLUMNS,
@@ -167,8 +167,8 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "avb-hours-today",
     "Today",
     "Shows today's visits with budgeted vs actual hours and revenue, grouped by crew.",
-    () => {
-      const today = isoNy(new Date());
+    (timeZone) => {
+      const today = todayInZone(timeZone);
       return { from: today, to: today };
     }
   ),
@@ -176,8 +176,8 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "avb-hours-yesterday",
     "Yesterday",
     "Shows yesterday's visits with budgeted vs actual hours and revenue, grouped by crew.",
-    () => {
-      const yesterday = shiftYmd(isoNy(new Date()), -1);
+    (timeZone) => {
+      const yesterday = shiftYmd(todayInZone(timeZone), -1);
       return { from: yesterday, to: yesterday };
     }
   ),
@@ -185,8 +185,8 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "avb-hours-week-to-date",
     "Week to Date",
     "Shows this week's visits (Monday through today) with budgeted vs actual hours and revenue, grouped by crew.",
-    () => {
-      const today = isoNy(new Date());
+    (timeZone) => {
+      const today = todayInZone(timeZone);
       return { from: mondayOfYmd(today), to: today };
     }
   ),
@@ -194,8 +194,8 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "avb-hours-last-week",
     "Last Week",
     "Shows last week's visits (Monday through Sunday) with budgeted vs actual hours and revenue, grouped by crew.",
-    () => {
-      const lastMonday = shiftYmd(mondayOfYmd(isoNy(new Date())), -7);
+    (timeZone) => {
+      const lastMonday = shiftYmd(mondayOfYmd(todayInZone(timeZone)), -7);
       return { from: lastMonday, to: shiftYmd(lastMonday, 6) };
     }
   ),
@@ -203,10 +203,10 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "avb-hours-month-to-date",
     "Month to Date",
     "Shows this month's visits (the 1st through today) with budgeted vs actual hours and revenue, grouped by crew.",
-    () => {
+    (timeZone) => {
       const now = new Date();
-      const { year, month } = nyDateParts(now);
-      return { from: ymd(year, month, 1), to: isoNy(now) };
+      const { year, month } = zoneDateParts(now, timeZone);
+      return { from: ymd(year, month, 1), to: isoInZone(now, timeZone) };
     }
   ),
   {
@@ -224,17 +224,17 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
       "Defaults to month to date (the 1st through today) — pick your own From/To dates to run any range.",
     ],
     formatRules: AVB_FORMAT_RULES,
-    headerVisuals: (params) =>
+    headerVisuals: (params, timeZone) =>
       avbHeaderVisuals([
-        ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
         ...eqFilter("crew_name", params.crew),
       ]),
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: AVB_COLUMNS,
       filters: [
         AVB_STATUS_FILTER,
-        ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
         ...eqFilter("crew_name", params.crew),
       ],
       groupBy: ["crew_name"],

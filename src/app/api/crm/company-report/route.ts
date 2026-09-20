@@ -5,6 +5,7 @@ import { computeCompanyReport } from "@/lib/company-report/compute";
 import { generateCompanyReportFlags } from "@/lib/company-report/flags";
 import { computeLandscaptKpiActuals } from "@/lib/kpi/landscapt-kpi-compute";
 import type { CompanyReportData } from "@/types/company-report";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
 
 const log = logger.child("api/crm/company-report");
 
@@ -40,7 +41,7 @@ export async function GET() {
     const year = now.getFullYear();
 
     const [report, kpiActuals, targets] = await Promise.all([
-      computeCompanyReport(supabase, now),
+      computeCompanyReport(supabase, await getMyTimeZone(supabase), now),
       computeLandscaptKpiActuals(supabase, year),
       loadKpiTargets(supabase, String(year)),
     ]);

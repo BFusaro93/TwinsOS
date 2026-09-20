@@ -639,7 +639,7 @@ async function computeCollections(supabase: Client): Promise<CollectionsSection>
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
-export async function computeCompanyReport(supabase: Client, now = new Date()): Promise<CompanyReportData> {
+export async function computeCompanyReport(supabase: Client, timeZone: string, now = new Date()): Promise<CompanyReportData> {
   // E-16: "as of" dates are the Eastern-time calendar date, never the UTC one.
   const nowStr = isoNy(now);
   const { year } = nyDateParts(now);
@@ -684,7 +684,7 @@ export async function computeCompanyReport(supabase: Client, now = new Date()): 
   const operations = unwrap(operationsResult, "operations", emptyOps);
   const collections = unwrap(collectionsResult, "collections", emptyCollections);
 
-  const ytdLabel = `Jan 1 – ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}, ${year}`;
+  const ytdLabel = `Jan 1 – ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone })}, ${year}`;
 
   const data: CompanyReportData = {
     generatedAt: new Date().toISOString(),

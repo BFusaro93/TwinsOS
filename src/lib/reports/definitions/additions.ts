@@ -9,7 +9,7 @@ import {
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 // ============================================================
 // Second-wave reports — SA parity gaps identified after the
@@ -22,10 +22,10 @@ function monthKey(dateStr: string): string {
   return dateStr.slice(0, 7);
 }
 
-/** UTC offset (minutes) that America/New_York is at the given instant. */
-function nyOffsetMinutes(utcMs: number): number {
+/** UTC offset (minutes) that `timeZone` is at the given instant. */
+function zoneOffsetMinutes(utcMs: number, timeZone: string): number {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
+    timeZone,
     hourCycle: "h23",
     year: "numeric",
     month: "numeric",
@@ -48,19 +48,20 @@ function nyOffsetMinutes(utcMs: number): number {
 
 /**
  * The instant (ISO, UTC) at which a "YYYY-MM-DD" calendar day starts or ends
- * in America/New_York — for bounding a timestamptz column by a local day.
+ * in `timeZone` — for bounding a timestamptz column by a local day.
  * PostgREST compares timestamptz literals in the DB session's timezone
- * (UTC), so a bare `2026-09-06 00:00:00` would be 8pm the night before, ET.
+ * (UTC), so a bare `2026-09-06 00:00:00` would be the evening before in any
+ * negative-offset zone.
  */
-function nyDayBoundIso(ymdStr: string, edge: "start" | "end"): string {
+function zoneDayBoundIso(ymdStr: string, edge: "start" | "end", timeZone: string): string {
   const [y, m, d] = ymdStr.split("-").map(Number);
   const wallAsUtc =
     edge === "start"
       ? Date.UTC(y, m - 1, d, 0, 0, 0, 0)
       : Date.UTC(y, m - 1, d, 23, 59, 59, 999);
   // Two passes so a DST transition on this very day resolves correctly.
-  let utc = wallAsUtc - nyOffsetMinutes(wallAsUtc) * 60000;
-  utc = wallAsUtc - nyOffsetMinutes(utc) * 60000;
+  let utc = wallAsUtc - zoneOffsetMinutes(wallAsUtc, timeZone) * 60000;
+  utc = wallAsUtc - zoneOffsetMinutes(utc, timeZone) * 60000;
   return new Date(utc).toISOString();
 }
 
@@ -75,8 +76,8 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in Eastern time.",
     ],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "all_time");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "all_time", timeZone);
 
       interface FormRow {
         id: string;
@@ -105,8 +106,8 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           .is("deleted_at", null)
           // crm_form_responses.status CHECK: on_hold | completed | spam | ignored
           .not("status", "in", '("spam","ignored")');
-        if (from) respQuery = respQuery.gte("created_at", nyDayBoundIso(from, "start"));
-        if (to) respQuery = respQuery.lte("created_at", nyDayBoundIso(to, "end"));
+        if (from) respQuery = respQuery.gte("created_at", zoneDayBoundIso(from, "start", timeZone));
+        if (to) respQuery = respQuery.lte("created_at", zoneDayBoundIso(to, "end", timeZone));
         return respQuery;
       });
 
@@ -177,7 +178,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Completed Between", "this_month"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
         "sales_rep",
@@ -192,7 +193,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "status", op: "eq", value: "completed" },
-        ...dateRangeFilters("completed_at", params, { datetime: true }),
+        ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
@@ -207,7 +208,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     name: "Custom Package Renewal Report",
     description: "A list of packages with a renewal setting, ready to renew.",
     filters: [],
-    run: async ({ supabase }) => {
+    run: async ({ supabase, timeZone }) => {
       const { data, error } = await supabase
         .from("crm_jobs")
         .select(
@@ -264,7 +265,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Contract budgeted-to-date vs. invoiced-to-date revenue for each active contract.",
     filters: [],
-    run: async ({ supabase }) => {
+    run: async ({ supabase, timeZone }) => {
       const { data: contracts, error } = await supabase
         .from("crm_contracts")
         .select(
@@ -315,7 +316,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       const monthKeys = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
       // "This month" as it appears in America/New_York — a server running in
       // UTC would otherwise flip to next month at 8pm ET on the last day.
-      const todayNy = isoNy(new Date());
+      const todayNy = todayInZone(timeZone);
       const monthIndex = (ymdStr: string) => {
         const [y, m] = ymdStr.split("-").map(Number);
         return y * 12 + (m - 1); // months since year 0 — comparable/iterable
@@ -493,9 +494,9 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Projects budgeted man hours and revenue for the next 12 months from currently scheduled visits.",
     filters: [],
-    run: async ({ supabase }) => {
-      // Calendar dates in America/New_York, not UTC.
-      const today = isoNy(new Date());
+    run: async ({ supabase, timeZone }) => {
+      // Calendar dates on the org's own clock, not UTC.
+      const today = todayInZone(timeZone);
       const horizonStr = shiftYmd(today, 365);
 
       interface Row {
