@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Pencil, Star, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -24,13 +22,6 @@ import {
   useUpdateChemicalLookupItem,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useCustomFieldDefs } from "@/lib/hooks/use-rate-matrix";
-import {
-  useEmailTemplates,
-  useUpsertEmailTemplate,
-  useDeleteEmailTemplate,
-} from "@/lib/hooks/use-email-templates";
-import { CHEMICAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
-import type { CRMEmailTemplate } from "@/types/crm-proposals";
 import type { ChemicalConditionsDisplay, ChemicalLookupType, ChemicalUnitClass } from "@/types/chemical-tracking";
 
 function Section({
@@ -412,235 +403,19 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
 
 // ── Client Notice Email templates ────────────────────────────────────────────
 
-type NoticeFormState = {
-  id?: string;
-  name: string;
-  subject: string;
-  bodyHtml: string;
-  isDefault: boolean;
-};
-
-const EMPTY_NOTICE_FORM: NoticeFormState = { name: "", subject: "", bodyHtml: "", isDefault: false };
-
 function NoticeEmailTemplatesEditor() {
-  const { data: templates = [], isLoading } = useEmailTemplates("chemical_application");
-  const upsert = useUpsertEmailTemplate();
-  const deleteMutation = useDeleteEmailTemplate();
-
-  const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState<NoticeFormState>(EMPTY_NOTICE_FORM);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-
-  function openNew() {
-    setForm(EMPTY_NOTICE_FORM);
-    setFormOpen(true);
-  }
-
-  function openEdit(t: CRMEmailTemplate) {
-    setForm({ id: t.id, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml, isDefault: t.isDefault });
-    setFormOpen(true);
-  }
-
-  function cancel() {
-    setForm(EMPTY_NOTICE_FORM);
-    setFormOpen(false);
-  }
-
-  async function save() {
-    if (!form.name.trim()) { toast.error("Name is required."); return; }
-    if (!form.subject.trim()) { toast.error("Subject is required."); return; }
-    try {
-      await upsert.mutateAsync({
-        id: form.id,
-        name: form.name,
-        subject: form.subject,
-        bodyHtml: form.bodyHtml,
-        isDefault: form.isDefault,
-        templateType: "chemical_application",
-      });
-      toast.success(form.id ? "Template updated." : "Template created.");
-      cancel();
-    } catch {
-      toast.error("Failed to save template.");
-    }
-  }
-
-  async function handleDelete(t: CRMEmailTemplate) {
-    if (!window.confirm(`Delete "${t.name}"? This cannot be undone.`)) return;
-    try {
-      await deleteMutation.mutateAsync(t.id);
-      toast.success("Template deleted.");
-      if (form.id === t.id) cancel();
-    } catch {
-      toast.error("Failed to delete template.");
-    }
-  }
-
-  async function markDefault(t: CRMEmailTemplate) {
-    try {
-      await upsert.mutateAsync({
-        id: t.id, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml,
-        isDefault: true, templateType: "chemical_application",
-      });
-      toast.success(`"${t.name}" set as default.`);
-    } catch {
-      toast.error("Failed to update default.");
-    }
-  }
-
-  function insertMergeTag(tag: string) {
-    const ta = bodyRef.current;
-    if (!ta) { setForm((f) => ({ ...f, bodyHtml: f.bodyHtml + tag })); return; }
-    const start = ta.selectionStart ?? ta.value.length;
-    const end = ta.selectionEnd ?? ta.value.length;
-    const next = ta.value.slice(0, start) + tag + ta.value.slice(end);
-    setForm((f) => ({ ...f, bodyHtml: next }));
-    requestAnimationFrame(() => {
-      ta.selectionStart = start + tag.length;
-      ta.selectionEnd = start + tag.length;
-      ta.focus();
-    });
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
-          Sent to the client after a chemical application is logged (mirrors the paper notice
-          left on-site).
-        </p>
-        {!formOpen && (
-          <Button size="sm" onClick={openNew}>New Template</Button>
-        )}
-      </div>
-
-      {formOpen && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-800">
-            {form.id ? "Edit Template" : "New Template"}
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="ce-name">Name</Label>
-              <Input
-                id="ce-name"
-                placeholder="e.g. Application Notice"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ce-subject">Subject</Label>
-              <Input
-                id="ce-subject"
-                placeholder="e.g. Notice of Treatment from [companyname]"
-                value={form.subject}
-                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="ce-body">Body (HTML supported)</Label>
-            <textarea
-              id="ce-body"
-              ref={bodyRef}
-              rows={10}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              placeholder="<p>Hi [clientfirstname],</p>"
-              value={form.bodyHtml}
-              onChange={(e) => setForm((f) => ({ ...f, bodyHtml: e.target.value }))}
-            />
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              <span className="text-xs text-slate-400 self-center">Insert:</span>
-              {CHEMICAL_EMAIL_MERGE_TAGS.map(({ tag, label }) => (
-                <button
-                  key={tag}
-                  type="button"
-                  title={label}
-                  onClick={() => insertMergeTag(tag)}
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200 transition-colors font-mono"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="ce-default"
-              checked={form.isDefault}
-              onCheckedChange={(v) => setForm((f) => ({ ...f, isDefault: !!v }))}
-            />
-            <Label htmlFor="ce-default" className="cursor-pointer">Set as default template</Label>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" onClick={save} disabled={upsert.isPending}>
-              {upsert.isPending ? "Saving…" : "Save"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={cancel}>Cancel</Button>
-          </div>
-        </div>
-      )}
-
-      {isLoading && <p className="text-sm text-slate-400">Loading templates…</p>}
-
-      {!isLoading && templates.length === 0 && !formOpen && (
-        <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
-          <p className="text-sm text-slate-400">
-            No email templates yet. Create one to use when sending application notices.
-          </p>
-        </div>
-      )}
-
-      {!isLoading && templates.length > 0 && (
-        <div className="rounded-lg border border-slate-200 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium">Name</th>
-                <th className="px-4 py-2 text-left font-medium hidden sm:table-cell">Subject</th>
-                <th className="px-4 py-2 text-left font-medium">Status</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {templates.map((t) => (
-                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-slate-800">{t.name}</td>
-                  <td className="px-4 py-3 text-slate-500 hidden sm:table-cell max-w-xs truncate">{t.subject}</td>
-                  <td className="px-4 py-3">
-                    {t.isDefault ? (
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">Default</Badge>
-                    ) : (
-                      <button
-                        type="button"
-                        title="Set as default"
-                        onClick={() => markDefault(t)}
-                        className="text-slate-300 hover:text-amber-400 transition-colors"
-                      >
-                        <Star className="h-4 w-4" />
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(t)} title="Edit">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="icon" variant="ghost" className="h-7 w-7 text-red-400 hover:text-red-600"
-                        onClick={() => handleDelete(t)} title="Delete" disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
+      <p className="text-sm text-slate-600">
+        Build and edit client notice email templates in <span className="font-medium">Documents</span> — create a
+        document with type &quot;Chemical&quot;, and it&apos;ll show up in the template picker when sending an
+        application notice.
+      </p>
+      <Link href="/crm/settings/documents" className="w-fit">
+        <Button size="sm" variant="outline" className="h-8 text-xs">
+          Go to Documents
+        </Button>
+      </Link>
     </div>
   );
 }

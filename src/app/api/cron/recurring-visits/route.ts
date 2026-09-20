@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
+import { companyTodayAsLocalMidnight } from "@/lib/reports/ny-date";
 
 /**
  * GET /api/cron/recurring-visits — called daily by Vercel Cron at 06:00 UTC
@@ -196,8 +197,7 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = companyTodayAsLocalMidnight();
   const windowEnd = addDays(today, LOOKAHEAD_DAYS);
 
   const fromStr = toISODate(today);

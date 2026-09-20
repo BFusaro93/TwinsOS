@@ -85,7 +85,7 @@ const BLOCK_PALETTE: BlockDef[] = [
   { type: "image",      icon: <ImageIcon className="h-4 w-4" />,   defaultContent: "",                                      useRichText: false },
   { type: "divider",    icon: <MinusSquare className="h-4 w-4" />, defaultContent: "",                                      useRichText: false },
   { type: "spacer",     icon: <Move className="h-4 w-4" />,        defaultContent: "",                                      useRichText: false },
-  { type: "signature",  icon: <Signature className="h-4 w-4" />,   defaultContent: "<p>[companyname]<br>[companyphone]<br>[companyemail]</p>", useRichText: true },
+  { type: "signature",  icon: <Signature className="h-4 w-4" />,   defaultContent: "<p>[companyname]<br>[companyphone]</p>", useRichText: true },
   { type: "button",     icon: <AlignCenter className="h-4 w-4" />, defaultContent: "View Your Document",                   useRichText: false },
 ];
 

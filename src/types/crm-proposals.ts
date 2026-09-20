@@ -26,29 +26,19 @@ export interface EstimateEmail {
   emailType: "estimate" | "confirmation";
 }
 
-export interface CRMEmailTemplate {
-  id: string;
-  orgId: string;
-  name: string;
-  subject: string;
-  bodyHtml: string;
-  templateType: "estimate" | "confirmation" | "invoice" | "chemical_application" | "general";
-  isDefault: boolean;
-  includePdf: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // Merge tags supported in email templates
 export const EMAIL_MERGE_TAGS = [
   { tag: "[clientfirstname]",  label: "Client First Name" },
   { tag: "[clientlastname]",   label: "Client Last Name" },
   { tag: "[clientfullname]",   label: "Client Full Name" },
   { tag: "[companyname]",      label: "Company Name" },
-  { tag: "[quotelink]",        label: "View Proposal Link" },
-  { tag: "[quotenumber]",      label: "Estimate Number" },
-  { tag: "[quotedate]",        label: "Estimate Date" },
-  { tag: "[quotetotal]",       label: "Estimate Total" },
+  { tag: "[estimatelink]",     label: "View Proposal Link" },
+  { tag: "[estimatenumber]",   label: "Estimate Number" },
+  { tag: "[estimatedate]",     label: "Estimate Date" },
+  { tag: "[estimatetotal]",    label: "Estimate Total" },
+  { tag: "[installmentcount]",  label: "# of Installments" },
+  { tag: "[installmentamount]", label: "Installment Amount" },
+  { tag: "[estimategrid]",     label: "Line Items Table" },
   { tag: "[salesrepname]",     label: "Sales Rep Name" },
   { tag: "[companyphonenumber]", label: "Company Phone" },
 ] as const;
@@ -80,9 +70,40 @@ export const GENERAL_EMAIL_MERGE_TAGS = [
   { tag: "[clientfirstname]",    label: "Client First Name" },
   { tag: "[clientlastname]",     label: "Client Last Name" },
   { tag: "[clientfullname]",     label: "Client Full Name" },
-  { tag: "[companyname]",        label: "Company Name" },
-  { tag: "[companyphonenumber]", label: "Company Phone" },
+  { tag: "[clientemail]",        label: "Client Email" },
+  { tag: "[clienthomephone]",    label: "Client Home Phone" },
+  { tag: "[clientworkphone]",    label: "Client Work Phone" },
+  { tag: "[clientcellphone]",    label: "Client Cell Phone" },
+  { tag: "[clientotherphone]",   label: "Client Other Phone" },
+  { tag: "[clientfax]",          label: "Client Fax" },
+  { tag: "[accountnumber]",      label: "Account Number" },
   { tag: "[accountbalance]",     label: "Account Balance" },
+  { tag: "[howwebillyou]",       label: "How We Bill You" },
+  { tag: "[salesperson]",        label: "Sales Person" },
+  { tag: "[referringclient]",    label: "Referring Client" },
+  { tag: "[billingaddress1]",    label: "Billing Address" },
+  { tag: "[billingcity]",        label: "Billing City" },
+  { tag: "[billingstate]",       label: "Billing State" },
+  { tag: "[billingzip]",         label: "Billing Zip" },
+  { tag: "[physicaladdress1]",   label: "Property Address" },
+  { tag: "[physicalcity]",       label: "Property City" },
+  { tag: "[physicalstate]",      label: "Property State" },
+  { tag: "[physicalzip]",        label: "Property Zip" },
+  { tag: "[turfsqft]",           label: "Turf Sq. Ft." },
+  { tag: "[grosssqft]",          label: "Gross Sq. Ft." },
+  { tag: "[mulchbedsqft]",       label: "Mulch Bed Sq. Ft." },
+  { tag: "[yardsofmulch]",       label: "Yards of Mulch" },
+  { tag: "[linearfeetperimeter]",label: "Linear Feet of Perimeter" },
+  { tag: "[linearfeetedging]",   label: "Linear Feet of Edging" },
+  { tag: "[gatecode]",           label: "Gate / Lock Code" },
+  { tag: "[notestocrew]",        label: "Notes to Crew" },
+  { tag: "[companyname]",        label: "Company Name" },
+  { tag: "[companyaddress]",     label: "Company Address" },
+  { tag: "[companycity]",        label: "Company City" },
+  { tag: "[companystate]",       label: "Company State" },
+  { tag: "[companyzip]",         label: "Company Zip" },
+  { tag: "[companyphonenumber]", label: "Company Phone" },
+  { tag: "[today]",              label: "Today's Date" },
 ] as const;
 
 export type GeneralMergeTag = typeof GENERAL_EMAIL_MERGE_TAGS[number]["tag"];

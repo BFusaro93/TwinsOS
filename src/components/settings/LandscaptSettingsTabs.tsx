@@ -37,8 +37,6 @@ import {
 } from "@/lib/hooks/use-crm-discounts";
 import type { DiscountType } from "@/types/crm-discounts";
 import { formatCurrency } from "@/lib/utils";
-import { EmailTemplatesEditor } from "@/components/crm/settings/EmailTemplatesEditor";
-import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import {
   Select as UISelect,
   SelectContent as UISelectContent,
@@ -696,13 +694,19 @@ function CRMTab() {
       <AccordionSection title="Custom Client Fields" count={0} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
         <CustomFieldDefsEditor />
       </AccordionSection>
-      <AccordionSection title="Email Templates" count={0} defaultOpen={false} description="General-purpose templates for one-off client emails, e.g. the Dispatch Board / Waiting List &quot;Email Selected Clients&quot; bulk action">
-        <EmailTemplatesEditor
-          templateType="general"
-          description="These templates only support client/company merge tags below — not estimate- or invoice-specific ones."
-          mergeTags={GENERAL_EMAIL_MERGE_TAGS}
-          emptyMessage="No email templates yet. Create one to reuse when emailing clients in bulk."
-        />
+      <AccordionSection title="Email Templates" defaultOpen={false} description="Templates used when emailing clients now live in Documents, alongside every other template type.">
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
+          <p className="text-sm text-slate-600">
+            Build and edit client email templates in <span className="font-medium">Documents</span> — create a
+            document with type &quot;Client&quot;, and it&apos;ll show up in the template picker for the Dispatch
+            Board / Waiting List &quot;Email Selected Clients&quot; bulk action.
+          </p>
+          <Link href="/crm/settings/documents" className="w-fit">
+            <Button size="sm" variant="outline" className="h-8 text-xs">
+              Go to Documents
+            </Button>
+          </Link>
+        </div>
       </AccordionSection>
     </div>
   );

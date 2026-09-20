@@ -1,6 +1,7 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import { buildResult, col } from "@/lib/reports/helpers";
 import type { AnalysisFilter } from "@/types/crm-reports";
+import { isoNy } from "@/lib/reports/ny-date";
 
 // ============================================================
 // Schedule Lists section — pre-built reports.
@@ -14,7 +15,10 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
     description: "Shows scheduled upcoming jobs that aren't tied to a signed contract.",
     filters: [],
     run: async ({ supabase }) => {
-      const today = new Date().toISOString().slice(0, 10);
+      // "Upcoming" means upcoming on the company's calendar. toISOString() is
+      // UTC, which after 8pm Eastern is already tomorrow — that dropped the
+      // current service day's jobs off this list every evening.
+      const today = isoNy(new Date());
       const { data, error } = await supabase
         .from("crm_jobs")
         .select(

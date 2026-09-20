@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Plus, RefreshCw, TrendingUp, Truck, Package, Trash2 } from "lucide-react";
+import { ArrowRight, Archive, ArchiveRestore, Plus, RefreshCw, TrendingUp, Truck, Package, Trash2 } from "lucide-react";
 import { useAuditLog, useMultiRecordAuditLog } from "@/lib/hooks/use-audit-log";
 import type { AuditAction, AuditRecordType, AuditEntry } from "@/types";
 
@@ -42,6 +42,16 @@ const ACTION_CONFIG: Record<
     label: "Image Uploaded",
     color: "bg-slate-100 text-slate-600",
     Icon: RefreshCw,
+  },
+  archived: {
+    label: "Archived",
+    color: "bg-slate-100 text-slate-600",
+    Icon: Archive,
+  },
+  unarchived: {
+    label: "Unarchived",
+    color: "bg-slate-100 text-slate-600",
+    Icon: ArchiveRestore,
   },
   deleted: {
     label: "Deleted",

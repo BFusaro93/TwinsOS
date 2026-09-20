@@ -15,7 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
+import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { CHEMICAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 
 const DEFAULT_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
@@ -43,7 +44,10 @@ interface Props {
 }
 
 export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: Props) {
-  const { data: templates = [] } = useEmailTemplates("chemical_application");
+  // Email content templates live in Documents (doc type "chemical") — the
+  // same block-based builder used for invoice-email/client templates.
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  const templates = allDocTemplates.filter((t) => t.docType === "chemical" && t.status === "active");
 
   const { data: visitInfo } = useQuery({
     queryKey: ["visit-client-info", visitId],
@@ -67,6 +71,7 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
   const clientEmail = visitInfo?.clientEmail ?? null;
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
   const [subject, setSubject]   = useState(DEFAULT_SUBJECT);
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_TEMPLATE_BODY);
   const [sending, setSending]   = useState(false);
@@ -74,16 +79,20 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const [ccInput, setCcInput]   = useState("");
 
+  // Once the chosen document template's blocks load, fill in subject/body —
+  // merge tags are left unresolved for the send route's own resolver, same
+  // as InvoiceEmailDialog / BulkEmailClientsDialog.
   useEffect(() => {
-    if (!selectedTemplateId) return;
-    const tpl = templates.find((t) => t.id === selectedTemplateId);
-    if (tpl) { setSubject(tpl.subject); setBodyHtml(tpl.bodyHtml); }
-  }, [selectedTemplateId, templates]);
+    if (!selectedDocTemplate) return;
+    if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
+    setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
+  }, [selectedDocTemplate]);
 
+  // Auto-select the org's default "chemical" document template on open.
   useEffect(() => {
     if (open && templates.length > 0 && !selectedTemplateId) {
-      const def = templates.find((t) => t.isDefault);
-      if (def) { setSelectedTemplateId(def.id); setSubject(def.subject); setBodyHtml(def.bodyHtml); }
+      const def = templates.find((t) => t.isDefault) ?? templates[0];
+      if (def) setSelectedTemplateId(def.id);
     }
   }, [open, templates, selectedTemplateId]);
 

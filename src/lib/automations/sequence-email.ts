@@ -3,6 +3,7 @@ import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { computeWaitFireAt } from "./sequence-enrollment";
+import type { CardExpiryContext } from "./card-expiry-context";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -36,6 +37,8 @@ export async function resolveEmailStepContent(
     bodyTemplate: string;
     toSelection?: string[];
     fromSelection?: string;
+    /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
+    cardExpiryContext?: CardExpiryContext | null;
   }
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
@@ -160,6 +163,10 @@ export async function resolveEmailStepContent(
     "[meetingtitle]": meetingTitle,
     "[salesrepname]": salesRepName,
   };
+  if (params.cardExpiryContext) {
+    mergeTags["[creditcardending]"] = params.cardExpiryContext.last4;
+    mergeTags["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
+  }
   const resolve = (template: string) =>
     template.replace(/\[(\w+)\]/gi, (match) => {
       const key = match.toLowerCase();
