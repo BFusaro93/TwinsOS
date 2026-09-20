@@ -18,7 +18,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
-import { INVOICE_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
+import { MERGE_TAGS_BY_TYPE } from "@/types/crm-documents";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
 
@@ -136,8 +136,13 @@ export function InvoiceEmailDialog({
       .replace(/\[invoicenumber\]/gi,   invoiceNumber != null ? String(invoiceNumber) : "—")
       .replace(/\[invoicedate\]/gi,     new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
       .replace(/\[duedate\]/gi,         fmtDate(dueDate))
+      .replace(/\[invoiceduedate\]/gi,  fmtDate(dueDate))
       .replace(/\[invoicetotal\]/gi,    formatCurrency(totalCents))
       .replace(/\[balancedue\]/gi,      formatCurrency(balanceCents))
+      .replace(/\[invoicebalance\]/gi,  formatCurrency(balanceCents))
+      .replace(/\[invoicesubtotal\]/gi, formatCurrency(totalCents))
+      .replace(/\[invoicetax\]/gi,      formatCurrency(0))
+      .replace(/\[paymentlink\]/gi,     "#")
       .replace(/\[salesrepname\]/gi,    "Your Rep")
       .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
   }
@@ -252,7 +257,7 @@ export function InvoiceEmailDialog({
               />
               {/* Merge tag reference */}
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {INVOICE_EMAIL_MERGE_TAGS.map((mt) => (
+                {MERGE_TAGS_BY_TYPE.invoice_email.map((mt) => (
                   <button
                     key={mt.tag}
                     type="button"

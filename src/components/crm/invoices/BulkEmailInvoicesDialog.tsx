@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
-import { INVOICE_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
+import { MERGE_TAGS_BY_TYPE } from "@/types/crm-documents";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { DEFAULT_INVOICE_SUBJECT, DEFAULT_INVOICE_TEMPLATE_BODY } from "./InvoiceEmailDialog";
 
@@ -170,7 +170,7 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
               minHeight={180}
             />
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {INVOICE_EMAIL_MERGE_TAGS.map((mt) => (
+              {MERGE_TAGS_BY_TYPE.invoice_email.map((mt) => (
                 <button
                   key={mt.tag}
                   type="button"
