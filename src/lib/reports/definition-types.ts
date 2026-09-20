@@ -29,7 +29,7 @@ export interface ReportContext {
    * the ORG's, not the UTC server's and not the viewer's. Resolved once by the
    * run route and handed down, so a definition never has to look it up — pass
    * it to the helpers in lib/time/zone rather than reaching for the
-   * default-bound shims in lib/reports/ny-date.
+   * helpers in lib/time/zone.
    */
   timeZone: string;
 }

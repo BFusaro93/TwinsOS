@@ -16,7 +16,7 @@ export const TICKET_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, timeZone }) => {
       // UTC "today" is tomorrow's date after 8pm Eastern, which listed tickets
       // due TODAY as already past due. The ticket-past-due cron that emails
-      // about the same tickets uses isoNy; these two must agree.
+      // about the same tickets resolves the org's zone too; they must agree.
       const today = todayInZone(timeZone);
       const { data, error } = await supabase
         .from("crm_tickets")
