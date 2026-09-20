@@ -43,9 +43,6 @@ function dateCell(dateStr: string | null, timeZone: string, dueMileage?: number 
 
   const todayStr = todayInZone(timeZone);
   const monthOut = shiftYmd(todayStr, 30);
-  // Day-count label is computed from the org's today, parsed at local midnight
-  // so the subtraction stays on whole days.
-  const today = new Date(`${todayStr}T00:00:00`);
 
   const dateColor = dateStr
     ? dateStr < todayStr ? "text-red-600" : dateStr < monthOut ? "text-amber-600" : "text-green-700"
@@ -53,7 +50,14 @@ function dateCell(dateStr: string | null, timeZone: string, dueMileage?: number 
 
   const daysLabel = (() => {
     if (!dateStr) return null;
-    const diff = Math.floor((new Date(dateStr).getTime() - today.getTime()) / 86400000);
+    // Both sides parsed the SAME way. `new Date("2026-09-19")` is UTC midnight
+    // while a local-midnight "today" is not, so subtracting them was short by
+    // the UTC offset — enough for Math.floor to drop a whole day anywhere west
+    // of Greenwich. A vehicle due today rendered "1d overdue" right beside a
+    // bucket that correctly said "due within 30 days".
+    const diff = Math.round(
+      (new Date(`${dateStr}T00:00:00`).getTime() - new Date(`${todayStr}T00:00:00`).getTime()) / 86400000
+    );
     if (diff < 0)  return `${Math.abs(diff)}d overdue`;
     if (diff === 0) return "Today";
     if (diff <= 30) return `${diff}d`;
