@@ -13,12 +13,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Camera, ImagePlus, Trash2, Eye, EyeOff } from "lucide-react";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 interface Props {
   estimateId: string;
 }
 
 export function EstimatePhotosTab({ estimateId }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: photos = [], isLoading } = useEstimatePhotos(estimateId);
   const upload = useUploadEstimatePhoto(estimateId);
   const updateCaption = useUpdateEstimatePhotoCaption(estimateId);
@@ -137,7 +139,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                 </button>
                 <button
                   onClick={async () => {
-                    if (!confirm("Remove this photo?")) return;
+                    if (!(await confirm({ title: "Remove this photo?", confirmLabel: "Remove", destructive: true }))) return;
                     await remove.mutateAsync(photo.id);
                     toast.success("Photo removed");
                   }}
@@ -171,6 +173,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
           )}
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

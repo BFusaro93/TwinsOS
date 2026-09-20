@@ -36,6 +36,7 @@ import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -638,6 +639,7 @@ function CrewDialog({
 type ActiveFilter = "active" | "inactive" | "all";
 
 export function CrewsList() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: crews, isLoading } = useCrews(false);
   const { mutateAsync: update } = useUpdateCrew();
   const { can } = useGate();
@@ -659,7 +661,12 @@ export function CrewsList() {
   });
 
   async function handleDeactivate(id: string, name: string) {
-    if (!confirm(`Deactivate crew "${name}"?`)) return;
+    if (!(await confirm({
+      title: `Deactivate crew "${name}"?`,
+      description: "The crew stops appearing on the dispatch board. Its history is preserved.",
+      confirmLabel: "Deactivate",
+      destructive: true,
+    }))) return;
     try {
       await update({ id, updates: { is_active: false } });
       toast.success(`${name} deactivated`);
@@ -791,7 +798,7 @@ export function CrewsList() {
                       {crew.isActive ? (
                         <button
                           className="text-sm text-slate-700 hover:text-red-600 transition-colors"
-                          onClick={() => handleDeactivate(crew.id, crew.name)}
+                          onClick={() => void handleDeactivate(crew.id, crew.name)}
                         >
                           Active
                         </button>
@@ -821,6 +828,7 @@ export function CrewsList() {
           }}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

@@ -65,6 +65,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileSignature } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 const CONTRACT_STATUSES: ContractStatus[] = ["draft", "sent", "signed", "active", "expired", "cancelled"];
 
@@ -1180,6 +1181,7 @@ interface Props { clientId?: string; }
 type ActiveFilter = "active" | "inactive" | "all";
 
 export function ContractsList({ clientId }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canAdd = can("contract_add");
   const canEdit = can("contract_edit");
@@ -1297,7 +1299,7 @@ export function ContractsList({ clientId }: Props) {
   }
 
   async function handleDelete(c: CRMContract) {
-    if (!confirm(`Delete "${c.title}"?`)) return;
+    if (!(await confirm({ title: `Delete "${c.title}"?`, confirmLabel: "Delete Contract", destructive: true }))) return;
     try { await del(c.id); toast.success("Deleted"); }
     catch { toast.error("Failed to delete"); }
   }
@@ -1548,7 +1550,7 @@ export function ContractsList({ clientId }: Props) {
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     {canDelete && (
                       <button
-                        onClick={() => handleDelete(c)}
+                        onClick={() => void handleDelete(c)}
                         className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1575,6 +1577,7 @@ export function ContractsList({ clientId }: Props) {
         defaultClientId={clientId}
         clients={clients ?? []}
       />
+      {confirmDialog}
     </div>
   );
 }
