@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { roundHours, formatMonthDay, todayLocalISODate } from "@/lib/utils";
-import { isoNy } from "@/lib/reports/ny-date";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
@@ -1779,6 +1778,8 @@ export function useEstimateJobs(estimateId: string | null | undefined) {
 }
 
 export function useCreateJobsFromEstimate() {
+  // Date Sold is the org's calendar day for the acceptance instant.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -1888,7 +1889,7 @@ export function useCreateJobsFromEstimate() {
             .maybeSingle();
           acceptedAt = (tokenRow as { accepted_at: string | null } | null)?.accepted_at ?? null;
         }
-        resolvedDateSold = acceptedAt ? isoNy(new Date(acceptedAt)) : todayLocalISODate();
+        resolvedDateSold = acceptedAt ? isoInZone(new Date(acceptedAt), orgTimeZone) : todayInZone(orgTimeZone);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2203,6 +2204,8 @@ export function useUpdateJob() {
 // ── schedules ─────────────────────────────────────────────────────────────────
 
 import type { CRMSchedule } from '@/types/crm-jobs';
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSchedule(row: any): CRMSchedule {

@@ -1,4 +1,6 @@
-import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
+import { shiftYmd } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone } from "@/lib/time/zone";
 
 /**
  * Recalculates the next package-sequenced visit's date after an earlier visit in the
@@ -123,11 +125,13 @@ export async function checkPackageMinDaysViolation(
 ): Promise<string | null> {
   const { data: visit } = await supabase
     .from("crm_job_visits")
-    .select("job_service_id, job_id")
+    .select("job_service_id, job_id, org_id")
     .eq("id", visitId)
     .maybeSingle();
-  const moved = visit as { job_service_id: string | null; job_id: string } | null;
+  const moved = visit as { job_service_id: string | null; job_id: string; org_id: string } | null;
   if (!moved?.job_service_id) return null;
+
+  const timeZone = await getOrgTimeZone(supabase, moved.org_id);
 
   type Step = { id: string; sort_order: number; min_days: number | null; service_name: string | null };
   const { data: stepRows } = await supabase
@@ -163,8 +167,10 @@ export async function checkPackageMinDaysViolation(
     }
     return null;
   }
+  // completed_at is an instant; which SERVICE DAY it counts as is the org's
+  // call, not the server's.
   const baselineOf = (v: NeighbourVisit) =>
-    v.status === "completed" && v.completed_at ? isoNy(new Date(v.completed_at)) : v.scheduled_date;
+    v.status === "completed" && v.completed_at ? isoInZone(new Date(v.completed_at), timeZone) : v.scheduled_date;
   const label = (step: Step, no: number) => `Step ${no}${step.service_name ? ` (${step.service_name})` : ""}`;
   const myNo = idx + 1;
 

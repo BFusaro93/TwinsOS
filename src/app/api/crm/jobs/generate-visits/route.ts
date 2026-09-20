@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { companyTodayAsLocalMidnight } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
 const LOOKAHEAD_DAYS = 14;
 /** Hard cap on visits inserted per call — a weekly job through year end is
@@ -168,7 +169,9 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
     return NextResponse.json({ generated: 0, message: "Job is on hold." });
   }
 
-  const today = companyTodayAsLocalMidnight();
+  // The job's own org_id isn't resolved until later; the session's org is the
+  // same tenant for this route (the job is fetched under the caller's RLS).
+  const today = todayInZoneAsLocalMidnight(await getOrgTimeZone(supabase, sessionOrgId));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jobAny = job as any;
 

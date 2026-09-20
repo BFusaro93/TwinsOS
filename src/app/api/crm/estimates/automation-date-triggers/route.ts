@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
@@ -37,7 +36,9 @@ async function handleRun(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const todayStr = isoNy(new Date());
+  // Triggers are evaluated per org below; UTC is at or ahead of every US zone,
+  // so this bound over-selects rather than missing a row.
+  const utcToday = new Date().toISOString().slice(0, 10);
 
   const { data: triggers } = await supabase
     .from("crm_sequence_triggers")
@@ -70,7 +71,7 @@ async function handleRun(request: Request) {
         .in("stage", ["sent", "quote"])
         .is("deleted_at", null)
         .not("valid_until_date", "is", null)
-        .gte("valid_until_date", todayStr)
+        .gte("valid_until_date", utcToday)
         .lte("valid_until_date", windowEnd.toISOString().split("T")[0]);
       matches = data ?? [];
     } else {

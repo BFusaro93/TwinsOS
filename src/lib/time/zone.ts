@@ -202,3 +202,17 @@ export function startOfTodayInZoneIso(now: Date, timeZone: string): string {
   const guess = new Date(wallMidnight - zoneOffsetMs(now, timeZone));
   return new Date(wallMidnight - zoneOffsetMs(guess, timeZone)).toISOString();
 }
+
+/**
+ * The first day of the month ("YYYY-MM-01") that instant `d` falls in, on
+ * `timeZone`'s calendar.
+ *
+ * This is a billing-period KEY, so every writer and reader of a given period
+ * must derive it the same way. Computing it from the UTC month means that on
+ * the evening of a month's last day the key has already advanced — usage gets
+ * written under next month while the org is still in this one.
+ */
+export function monthStartInZone(d: Date, timeZone: string): string {
+  const { year, month } = zoneDateParts(d, timeZone);
+  return ymd(year, month, 1);
+}

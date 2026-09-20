@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -123,6 +124,15 @@ export async function resolveApiKey(request: Request, db: AdminClient = adminCli
   if (!looked.ok) return looked;
   const { keyRow } = looked;
 
+  // Checked on every call, not just at key-creation time, so an org that
+  // cancels the api_access add-on (or downgrades off a plan that bundles
+  // it) is actually cut off — an existing key/token would otherwise keep
+  // working forever. No rate-limit charge or last_used_at bump below this
+  // point for a request that gets rejected here.
+  if (!(await orgHasAddon(db, keyRow.org_id, "api_access"))) {
+    return { ok: false, status: 403, error: "API access isn't included on your plan. Add it in Settings → Subscription." };
+  }
+
   const scopes = keyRow.scopes ?? [];
 
   // api_key_rate_limits.api_key_id is a FK into api_keys(id), so the
@@ -167,6 +177,9 @@ export async function resolveApiKey(request: Request, db: AdminClient = adminCli
 export async function peekApiKeyScopes(request: Request, db: AdminClient = adminClient()): Promise<ApiAuthResult> {
   const looked = await lookupApiKey(request, db);
   if (!looked.ok) return looked;
+  if (!(await orgHasAddon(db, looked.keyRow.org_id, "api_access"))) {
+    return { ok: false, status: 403, error: "API access isn't included on your plan. Add it in Settings → Subscription." };
+  }
   return { ok: true, orgId: looked.keyRow.org_id, keyId: looked.keyRow.id, scopes: looked.keyRow.scopes ?? [] };
 }
 

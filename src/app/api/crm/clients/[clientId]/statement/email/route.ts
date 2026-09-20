@@ -9,7 +9,8 @@ import type { OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import { buildAccountStatementData } from "@/lib/invoices/account-statement-data";
 import { orgEmailFrom, mapSendError, buildClientMergeVars, resolveMergeTags } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
-import { isoNy } from "@/lib/reports/ny-date";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("email-statement");
 
@@ -22,12 +23,13 @@ const DEFAULT_BODY = `<p>Hi [clientfirstname],</p>
 
 <p>Thank you,<br>[companyname]<br>[companyphonenumber]</p>`;
 
-function todayISO(): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function todayISO(supabase: any): Promise<string> {
   // The statement's "as of" date must be the company's calendar day. This runs
   // on Vercel, whose Node runtime is UTC, so toISOString() would date a
   // statement pulled at 9pm Eastern as tomorrow — and at month end, put it in
   // the wrong month from the balances it was computed against.
-  return isoNy(new Date());
+  return todayInZone(await getMyTimeZone(supabase));
 }
 
 function isValidEmail(e: string) {
@@ -82,7 +84,7 @@ export async function POST(
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
 
-  const today = todayISO();
+  const today = await todayISO(supabase);
   const statementDate = body.statementDate || today;
   const periodFrom = body.periodFrom || "2000-01-01";
   const periodTo = body.periodTo || today;

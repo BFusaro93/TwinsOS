@@ -1,15 +1,18 @@
 import { redirect } from "next/navigation";
-import { isoNy } from "@/lib/reports/ny-date";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient } from "@/lib/supabase/server";
 import PortalServicesPage from "@/components/portal/PortalServicesPage";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 export default async function ServicesPage() {
   const ctx = await getPortalContext();
   if (!ctx) redirect("/portal/login");
 
   const supabase = await createClient();
-  const today = isoNy(new Date());
+  // The customer's portal shows the SERVICE PROVIDER's day — a customer in
+  // another timezone must see the same schedule the crew works to.
+  const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
 
   const [upcomingRes, completedRes] = await Promise.all([
     supabase

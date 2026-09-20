@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { mapVisit } from "./use-crm-jobs";
 import type { CRMJobVisit } from "@/types/crm-jobs";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 // "per_event"/"per_event_per_inch" bill the whole STORM, not each dispatch
 // within it — a job with 2 visits during one storm (e.g. morning + afternoon
@@ -118,6 +119,8 @@ export interface SnowInvoiceVisitInput {
 }
 
 export function useGenerateSnowInvoices() {
+  // Falls back to the org's day when a group somehow has no service date.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (
@@ -150,7 +153,7 @@ export function useGenerateSnowInvoices() {
 
         const distinctJobIds = new Set(billableVisits.map((v) => v.jobId));
         const singleJobId = distinctJobIds.size === 1 ? [...distinctJobIds][0] : null;
-        const invoiceDate = billableVisits[0]?.serviceDate ?? isoNy(new Date());
+        const invoiceDate = billableVisits[0]?.serviceDate ?? todayInZone(orgTimeZone);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: newInvoice, error: invErr } = await (supabase as any)

@@ -7,14 +7,16 @@ import { AccountStatementDocument } from "@/components/crm/invoices/pdf/AccountS
 import type { AccountStatementPDFData } from "@/components/crm/invoices/pdf/AccountStatementDocument";
 import type { OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import { buildAccountStatementData } from "@/lib/invoices/account-statement-data";
-import { isoNy } from "@/lib/reports/ny-date";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
-function todayISO(): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function todayISO(supabase: any): Promise<string> {
   // The statement's "as of" date must be the company's calendar day. This runs
   // on Vercel, whose Node runtime is UTC, so toISOString() would date a
   // statement pulled at 9pm Eastern as tomorrow — and at month end, put it in
   // the wrong month from the balances it was computed against.
-  return isoNy(new Date());
+  return todayInZone(await getMyTimeZone(supabase));
 }
 
 export async function GET(
@@ -34,7 +36,7 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const searchParams = req.nextUrl.searchParams;
-  const today = todayISO();
+  const today = await todayISO(supabase);
   const statementDate = searchParams.get("date") || today;
   const periodFrom = searchParams.get("from") || "2000-01-01";
   const periodTo = searchParams.get("to") || today;

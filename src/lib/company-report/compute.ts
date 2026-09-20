@@ -19,7 +19,7 @@ import type {
   TicketBreakdown,
 } from "@/types/company-report";
 import { runAnalysis } from "@/lib/reports/engine";
-import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 
 // ============================================================
@@ -78,12 +78,12 @@ function monthLabel(year: number, month0: number, isCurrent: boolean): string {
 
 /**
  * The trailing 3 calendar months ending with the current month (today = MTD).
- * "Today" and the month boundaries are the calendar date in America/New_York
+ * "Today" and the month boundaries are calendar dates in the ORG's timezone
  * (E-16: the server's UTC date rolled the header to "Sep 7" at 9:50 PM ET on
  * Sep 6 and would have leaked tomorrow's boundary into every MTD window).
  */
-function trailingMonths(now: Date): MonthWindow[] {
-  const today = nyDateParts(now);
+function trailingMonths(now: Date, timeZone: string): MonthWindow[] {
+  const today = zoneDateParts(now, timeZone);
   const windows: MonthWindow[] = [];
   for (let i = 2; i >= 0; i--) {
     // ymd() normalises month underflow (e.g. month -1 → December of last year).
@@ -92,7 +92,7 @@ function trailingMonths(now: Date): MonthWindow[] {
     const isCurrent = i === 0;
     const from = ymd(year, month0, 1);
     // Day 0 of the next month = last day of this month.
-    const to = isCurrent ? isoNy(now) : ymd(year, month0 + 1, 0);
+    const to = isCurrent ? isoInZone(now, timeZone) : ymd(year, month0 + 1, 0);
     windows.push({ label: monthLabel(year, month0, isCurrent), from, to, isCurrent });
   }
   return windows;
@@ -641,10 +641,10 @@ async function computeCollections(supabase: Client): Promise<CollectionsSection>
 
 export async function computeCompanyReport(supabase: Client, timeZone: string, now = new Date()): Promise<CompanyReportData> {
   // E-16: "as of" dates are the Eastern-time calendar date, never the UTC one.
-  const nowStr = isoNy(now);
-  const { year } = nyDateParts(now);
+  const nowStr = isoInZone(now, timeZone);
+  const { year } = zoneDateParts(now, timeZone);
   const ytdFrom = ymd(year, 0, 1);
-  const months = trailingMonths(now);
+  const months = trailingMonths(now, timeZone);
 
   const areas: Array<[string, () => Promise<unknown>]> = [
     ["sales", () => computeSales(supabase, months, ytdFrom, nowStr)],
