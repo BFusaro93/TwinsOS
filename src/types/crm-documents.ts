@@ -155,6 +155,17 @@ const INVOICE_TAGS: MergeTag[] = [
   { tag: "[invoicegrid]",         label: "Invoice Line Items",       group: "Invoice" },
 ];
 
+// ── Chemical application tags ─────────────────────────────────────────────────
+
+const CHEMICAL_TAGS: MergeTag[] = [
+  { tag: "[applicationdate]",   label: "Application Date",                          group: "Chemical" },
+  { tag: "[applicatorname]",    label: "Applicator Name",                           group: "Chemical" },
+  { tag: "[applicatorlicense]", label: "Applicator License #",                      group: "Chemical" },
+  { tag: "[products]",          label: "Products Applied (name, EPA #, amount)",    group: "Chemical" },
+  { tag: "[conditions]",        label: "Weather Conditions",                        group: "Chemical" },
+  { tag: "[careinstructions]",  label: "Post-Application Care Instructions",        group: "Chemical" },
+];
+
 // ── Shared base (all doc types) ───────────────────────────────────────────────
 
 const COMMON = [...CLIENT_TAGS, ...BILLING_TAGS, ...PROPERTY_TAGS, ...COMPANY_TAGS, ...SYSTEM_TAGS];
@@ -164,7 +175,7 @@ export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
   marketing:     COMMON,
   estimate:      [...COMMON, ...ESTIMATE_TAGS],
   invoice_email: [...COMMON, ...INVOICE_TAGS],
-  chemical:      COMMON,
+  chemical:      [...COMMON, ...CHEMICAL_TAGS],
   text_message:  COMMON,
 };
 
