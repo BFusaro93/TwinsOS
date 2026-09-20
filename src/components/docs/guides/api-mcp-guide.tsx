@@ -14,13 +14,13 @@ const RESOURCES: [string, string][] = [
   ["Estimates", "Read, Write*"],
   ["Jobs", "Read, Write"],
   ["Invoices", "Read"],
-  ["Contracts", "Read"],
+  ["Contracts", "Read, Write*"],
   ["Assets", "Read, Write"],
   ["Work Orders", "Read, Write"],
   ["PM Schedules", "Read, Write"],
   ["Parts", "Read, Write"],
-  ["Requisitions", "Read, Write"],
-  ["Purchase Orders", "Read"],
+  ["Requisitions", "Read, Write*"],
+  ["Purchase Orders", "Read, Write*"],
   ["Vendors", "Read, Write"],
   ["Products", "Read, Write"],
   ["Projects", "Read, Write"],
@@ -86,6 +86,16 @@ export function ApiMcpGuide() {
       </Section>
 
       <Section id="creating-a-key" title="Creating a key">
+        <Callout>
+          <strong>Requires the API Access entitlement.</strong> The public API/MCP server is gated
+          behind the <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">api_access</code>{" "}
+          add-on — bundled on Enterprise, purchasable standalone on Starter/Equipt/Growth from{" "}
+          <strong>Settings → Subscription</strong>. Without it, <strong>Create Key</strong> returns a 403
+          (&quot;API access isn&apos;t included on your plan&quot;) and no key is created. This is
+          checked live, not just at creation time: if the org later cancels the add-on or downgrades
+          off a plan that bundles it, every key and MCP connection it already issued stops working on
+          its very next request — a 403 with the same message, not just a block on new keys.
+        </Callout>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
             Go to <strong>Master Account Settings → Integrations</strong> and find the{" "}
@@ -143,14 +153,39 @@ export function ApiMcpGuide() {
           </tbody>
         </Table>
         <p>
-          A few of these are intentionally read-only end to end — <strong>Invoices</strong>,{" "}
-          <strong>Contracts</strong>, and <strong>Purchase Orders</strong> have no create or update
-          endpoint at all, by any key, under any scope. <strong>Estimates</strong> is a narrower case:
-          it offers a <em>Write</em> scope, but the only thing that scope unlocks is adding a single
-          catalog-priced line to an existing estimate — every dollar figure is still computed by the
-          app&apos;s own budget engine, never supplied by the caller, and there is no update or
-          full-estimate-build path via the API. Full estimate authoring stays a human, in-app action.
+          <strong>Invoices</strong> is intentionally read-only end to end — no create or update
+          endpoint exists, by any key, under any scope. The ones marked <strong>Write*</strong> above
+          are deliberately narrower than a normal create/update pair:
         </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Requisitions</strong> and <strong>Purchase Orders</strong> can only be{" "}
+            <em>created</em> — there is no update endpoint for either. A created requisition lands in{" "}
+            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">draft</code>; a
+            created PO always lands at <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">requested</code>{" "}
+            — the same starting point the app&apos;s own &quot;New PO&quot; dialog produces. Neither can
+            be advanced, approved, or rejected via the API under any scope: the DB itself blocks setting
+            a PO to approved/rejected without a resolved approval chain, so approval only ever happens
+            in-app.
+          </li>
+          <li>
+            <strong>Contracts</strong> can also only be <em>created</em>, no update. This one exists to
+            record an agreement already executed outside the app (e.g. signed via DocuSign) — it accepts
+            a historical <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">signedAt</code>/
+            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">signedBy</code>, unlike
+            the app&apos;s own contract UI. It defaults to status <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">draft</code>,
+            which does not bill anyone — a caller has to pass an explicit <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">signed</code>/
+            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">active</code> status to
+            start real invoicing on that contract&apos;s billing cadence.
+          </li>
+          <li>
+            <strong>Estimates</strong> offers a <em>Write</em> scope, but the only thing it unlocks is
+            adding a single catalog-priced line to a new estimate — every dollar figure is still
+            computed by the app&apos;s own budget engine, never supplied by the caller, and there is no
+            update or full-estimate-build path via the API. Full estimate authoring stays a human,
+            in-app action.
+          </li>
+        </ul>
         <p>
           For the full mapping of REST verb → required scope → MCP tool name, per endpoint, see{" "}
           <GuideLink href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
@@ -388,7 +423,12 @@ export function ApiMcpGuide() {
           Keys are rate-limited per minute. A request — REST or MCP — that exceeds the limit gets back
           a <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">429</code>. A request
           for a scope the key wasn&apos;t granted is rejected before it reaches any business logic,
-          rather than returning partial or filtered data.
+          rather than returning partial or filtered data. Every request also re-checks the org&apos;s{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">api_access</code>{" "}
+          entitlement first (see <a href="#creating-a-key" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">Creating a key</a>{" "}
+          above) — a <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">403</code> from
+          a key that used to work almost always means the add-on lapsed, not a scope or credential
+          problem.
         </p>
         <p>
           <strong>Revoking</strong> a key (from the same Public API Keys card) takes effect

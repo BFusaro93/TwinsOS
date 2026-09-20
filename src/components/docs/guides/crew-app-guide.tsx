@@ -44,6 +44,7 @@ export function CrewAppGuide() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#signing-in">Signing in, and what a crew can see</TOCLink>
           <TOCLink href="#my-schedule">My Schedule — the day&apos;s stops</TOCLink>
+          <TOCLink href="#materials-called-for">Materials called for</TOCLink>
           <TOCLink href="#drive-time">Drive time</TOCLink>
           <TOCLink href="#working-a-stop">Working a stop</TOCLink>
           <TOCLink href="#hours">How your hours are worked out</TOCLink>
@@ -96,7 +97,36 @@ export function CrewAppGuide() {
         </Callout>
         <p>
           Tapping a card opens the stop: the address (tap it for directions), the client&apos;s phone
-          (tap to call), any notes the office left, the list of services, and the buttons below.
+          (tap to call), any notes the office left, the list of services, the buttons below, and — when
+          the office called for specific materials on the job — a <strong>Materials called for</strong>{" "}
+          card (see below).
+        </p>
+      </Section>
+
+      <Section id="materials-called-for" title="Materials called for">
+        <p>
+          When the office has planned specific products for a job (the <strong>Products</strong> section
+          on the Job record, or on the dispatch board&apos;s job popup), the stop shows a{" "}
+          <strong>Materials called for</strong> card listing each one with the quantity the office
+          planned. This is separate from <strong>Request Materials</strong> below — it&apos;s not the
+          crew asking for something, it&apos;s the crew confirming what was already ordered for them.
+        </p>
+        <p>For each material still pending, the crew can:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Confirm or edit the quantity</strong> and tap <strong>Mark Used</strong> — the
+            field starts pre-filled with the planned quantity, but the crew can correct it if less (or
+            more) actually went down. The planned quantity itself is never overwritten, only what
+            actually got used.
+          </li>
+          <li>
+            <strong>Not Used</strong> — the material wasn&apos;t needed at this stop after all.
+          </li>
+        </ul>
+        <p>
+          Once resolved, the row becomes read-only and shows what was recorded. The web crew stop page
+          (for crews working from a browser tab instead of the app) has the identical card and does the
+          same thing against the same underlying job — either side works from the same planned list.
         </p>
       </Section>
 
@@ -138,9 +168,11 @@ export function CrewAppGuide() {
         </p>
         <Callout>
           If the office left <strong>notes for the crew</strong> on the job, the stop asks the crew to{" "}
-          <strong>Acknowledge</strong> them. That&apos;s a record that the note was actually read, which
-          is worth having when the note was &quot;gate code changed&quot; or &quot;dog in the back
-          yard&quot;.
+          <strong>Acknowledge</strong> them — and <strong>Start Job is disabled until they do</strong>.
+          It&apos;s not just a record that the note was read, it&apos;s a hard gate: a crew can&apos;t
+          clock in on a stop with an unread &quot;gate code changed&quot; or &quot;dog in the back
+          yard&quot; note. If the office edits the note after it was already acknowledged, the gate
+          reopens — acknowledging again is what re-enables Start Job.
         </Callout>
       </Section>
 

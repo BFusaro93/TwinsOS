@@ -115,8 +115,19 @@ const SECTIONS: ReportSection[] = [
         description: "For every product (chemical or general material): quantity needed for outstanding scheduled and waiting-list jobs, amount on hand, amount on order, and the resulting shortfall — with the ability to create a Requisition or PO directly from a shortfall.",
         notes: [
           "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
+          "Chemical demand is the concentrate amount to stock or order, not the raw \"applied X per area\" rate — when a rate is configured with a diluted/mixed unit (e.g. 1 gallon of finished spray-mix per 1,000 sq ft), the report resolves the rate's dilution settings and the org's unit conversions to back out the concentrate, the same calculation the Daily Load List report uses. It used to report the mixed-solution figure directly, overstating purchasing needs by the full dilution ratio.",
           "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product, less any quantity already received against those PO lines.",
           "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Only job products still marked Pending count — products already marked Invoiced or Used are excluded, since their quantity has already come out of on-hand.",
+        ],
+        fullPage: true,
+      },
+      {
+        name: "Daily Load List",
+        description: "What each crew needs to load on the truck for a given day — chemicals (concentrate amount and finished spray-mix volume) and general materials, grouped by crew.",
+        notes: [
+          "Defaults to the org's current operating day. Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate × an Area Custom Field on the property — the same estimate Materials Needed uses.",
+          "Mix volume is the total finished spray solution (e.g. gallons of mix), computed from the product's default rate's dilution settings — it only appears when that rate has a Mixed with Water/Product ratio configured with convertible units.",
+          "Crew is the visit's crew override if set, otherwise the job's default crew; visits/jobs with no crew assigned appear under Unassigned. A row that can't be reduced to one unit (e.g. stops recorded in different units) says why instead of printing a number.",
         ],
         fullPage: true,
       },
@@ -472,6 +483,30 @@ const SECTIONS: ReportSection[] = [
         filters: "Invoice Date, Sales Rep",
         notes: ["Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Amounts exclude sales tax."],
       },
+      {
+        name: "Audit Log",
+        description: "Every recorded change across Equipt and Landscapt — who changed what, when, and from what value to what.",
+        filters: "Date, Category, Record Type, Changed By, Action",
+        notes: [
+          "Entries are written by database triggers, not the app, so they cover every path a change can arrive through — the UI, the API, an automation, or an import.",
+          "Changed By reads \"system\" when the change came from a background job (a contract renewal, a scheduled invoice run) rather than a signed-in person.",
+        ],
+      },
+      {
+        name: "Security & Access Audit",
+        description: "Permission, user, credential, and approval-chain changes only — the review you want before an audit or after someone leaves.",
+        filters: "Date (defaults to last 90 days), Changed By",
+        notes: [
+          "Covers user profiles and roles, permission sets, API keys, third-party integrations, OAuth tokens, and approval flows.",
+          "Secret values (API keys, hashes, tokens) are never recorded — an entry says the credential changed, never what it changed to.",
+          "A user moving between organizations is recorded against the organization they left, so it stays visible here.",
+        ],
+      },
+      {
+        name: "Change Activity by User",
+        description: "How many changes each person made, broken down by record type — useful for spotting an unexpected burst of edits.",
+        filters: "Date, Category",
+      },
     ],
   },
   {
@@ -679,8 +714,12 @@ export function ReportsReferenceGuide() {
             <strong>AR Write-off</strong> entries are excluded, and amounts are net of refunds.
           </li>
           <li>
-            <strong>Eastern time.</strong> Every date and time filter (Today, Month to Date, a custom
-            From/To, a bare date) is evaluated on Eastern calendar days, and hours columns on
+            <strong>The org's own clock, not the viewer's.</strong> Every date and time filter
+            (Today, Month to Date, a custom From/To, a bare date) is evaluated on that org's
+            configured operating timezone (<code>organizations.timezone</code>, set under
+            Settings &gt; Organization) — every existing org defaults to America/New_York, but a
+            due/overdue window or a "today" figure now follows whatever zone the org has chosen,
+            not the browser's zone and not a hardcoded Eastern assumption. Hours columns on
             visit-based reports are man-hours (crew hours × number of men).
           </li>
           <li>

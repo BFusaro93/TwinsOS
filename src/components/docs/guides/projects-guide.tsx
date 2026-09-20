@@ -14,7 +14,7 @@ const PROJECT_FIELDS: [string, string][] = [
   ["Address / City / State / Zip", "Job site location."],
   ["Status", "Sold, Scheduled, In Progress, On Hold, Complete, or Canceled."],
   ["Start Date / End Date", "End Date defaults to \"TBD\" until set."],
-  ["Contract Price", "What the customer is paying — used to compute margin/net profit once costs are in."],
+  ["Contract Price", "The editable field here is the ORIGINAL contract price. The Revised Contract Price shown elsewhere (Analysis, Change Orders, Milestone billing) is derived — original plus every approved change order — and is maintained by the database, not editable directly."],
   ["Budget Hours", "Planned labor hours, compared against Actual Hours for a variance once logged."],
   ["Notes", "Optional free text."],
 ];
@@ -23,9 +23,12 @@ const PROJECT_TABS: [string, string, string][] = [
   ["Details", "Purchasing & CRM", "Status flow, budget vs. actual hours, labor rates, and the Contract Price / Cost / Net Profit summary."],
   ["Materials", "Purchasing", "Every Requisition, PO, or direct line item assigned to this project, with running Subtotal / Sales Tax / Shipping / Total."],
   ["Other Costs", "Purchasing", "Subcontractor costs entered manually — Materials, Labor, or Other — each with an optional linked Vendor."],
-  ["Milestones", "CRM", "Currently a placeholder: \"Sub-jobs and milestones … will appear here.\" Jobs are assigned to a project from the Dispatch Board or a Job's detail panel, not from this tab."],
-  ["Billing", "CRM", "Invoices and payments for the project's linked Client, filtered by type (All / Invoice / Payment / Credit). Requires the project to have a Client ID — without one this tab shows nothing rather than unrelated org-wide billing."],
-  ["Analysis", "CRM", "Total Invoiced, Total Payments, and Amount Due for the linked client, alongside the project overview."],
+  ["Milestone", "CRM", "A real, working billing-schedule editor — percentages of the Revised Contract Price, each invoiced independently. Invoicing a milestone creates a draft invoice on the project and marks the matching milestone on the source Estimate as invoiced (they're the same schedule). Requires the project to have a Client ID, or it shows a \"link to a client first\" message instead."],
+  ["Change Orders", "CRM", "Its own tab, not folded into Milestone. Full create / approve / reject / reverse workflow with statuses draft, pending_approval, approved, and rejected. Approving one raises the Revised Contract Price by the change order's amount and, per its chosen billing treatment (spread across remaining milestones, its own new milestone, added to the final milestone, or left off the schedule), adjusts only the milestones not yet invoiced — anything already billed stays put. Reversing an approved change order undoes exactly that (contract price and schedule both drop back); it's blocked once a milestone it touched has already been invoiced."],
+  ["Billing", "CRM", "Invoices, payments, and credits scoped to this project specifically — not every invoice on the linked client — filtered by type (All / Invoice / Payment / Credit). Requires the project to have a Client ID; without one this tab shows nothing rather than unrelated org-wide billing."],
+  ["Analysis", "CRM", "Project-scoped Original Contract, Revised Contract, Invoiced, Payments, Amount Due, and Remaining to Bill, plus Budgeted vs. Actual Man Hours and Budgeted Labor Cost. Voided invoices are excluded from Invoiced."],
+  ["Notes & Attachments", "CRM", "Despite the name, just a free-text notes field saved to the project record today — there's no attachment upload here."],
+  ["Audit Trail", "CRM", "Not built yet — the tab renders a static \"Audit trail coming soon\" placeholder."],
   ["Comments & History", "Purchasing", "Comment thread plus the full audit trail for the project record."],
   ["Files", "Purchasing", "Attachments."],
 ];
@@ -219,27 +222,54 @@ export function ProjectsGuide() {
 
       <Section id="crm-view" title="The CRM view of a Project">
         <p>
-          Opening the same project from <strong>CRM &gt; Scheduling &gt; Projects</strong> shows
-          Details and Materials/Other Costs as before, plus three CRM-oriented tabs: Milestones,
-          Billing, and Analysis.
+          Opening the same project from <strong>CRM &gt; Scheduling &gt; Projects</strong> does not
+          show the Purchasing tabs at all — it has its own, entirely separate set of six tabs:{" "}
+          <strong>Milestone</strong>, <strong>Change Orders</strong>, <strong>Billing</strong>,{" "}
+          <strong>Analysis</strong>, <strong>Notes &amp; Attachments</strong>, and{" "}
+          <strong>Audit Trail</strong>. Same underlying <code>projects</code> row, completely
+          different tab strip.
         </p>
         <p>
-          <strong>Milestones</strong> is currently a placeholder — the CRM Projects list surfaces it
-          as a future home for sub-jobs, with a note that jobs get assigned to a project from the
-          Dispatch Board or a Job&apos;s own detail panel, not from this tab.
+          <strong>Milestone</strong> is a real, working billing-schedule editor, not a placeholder —
+          it defines what percentage of the Revised Contract Price gets invoiced and when.
+          Invoicing a milestone from here creates a draft invoice on the project <em>and</em> marks
+          the matching milestone on the Estimate the project came from as invoiced, since the
+          project&apos;s schedule and the estimate&apos;s schedule are the same rows. It requires the
+          project to have a Client ID; without one it shows a message asking you to link a client
+          first instead of the editor.
+        </p>
+        <p>
+          <strong>Change Orders</strong> is its own tab alongside Milestone, not folded into it. It
+          runs scope changes through a real approve/reject/reverse workflow (statuses: draft,
+          pending approval, approved, rejected). Approving a change order raises the Revised
+          Contract Price by its amount and, based on the billing treatment chosen when it was
+          created — spread across the remaining milestones, given its own new milestone, rolled
+          into the final milestone, or left off the schedule entirely — adjusts only the milestones
+          that haven&apos;t been invoiced yet. Anything already billed is left exactly as it was.
+          Reversing an approved change order runs the inverse through the same guarded path, and is
+          refused once a milestone it touched has already gone out on an invoice.
         </p>
         <p>
           <strong>Billing</strong> and <strong>Analysis</strong> both depend on the project having a
           <strong> Client ID</strong> set — a link to a CRM Client record, separate from the project&apos;s
           free-text customer name field. Without a Client ID, Billing shows nothing at all (by
           design, so it doesn&apos;t show unrelated org-wide activity), and Analysis has no invoices or
-          payments to total.
+          payments to total. Both are scoped to <em>this project&apos;s</em> invoices and payments
+          specifically — not every invoice the linked client has — since billing-by-client used to
+          pull unrelated invoices into a project&apos;s numbers.
+        </p>
+        <p>
+          <strong>Notes &amp; Attachments</strong> is, today, just a notes textarea saved to the
+          project — no file upload exists under that tab yet. <strong>Audit Trail</strong> is a
+          static &quot;coming soon&quot; placeholder with nothing wired up behind it.
         </p>
         <Callout>
-          A project&apos;s <strong>Contract Price</strong> is entered manually on the project — it is
-          not derived from actual Invoices. Billing/Analysis show real invoice and payment activity
-          for the linked client alongside it, but nothing here keeps Contract Price in sync with
-          what&apos;s actually been invoiced.
+          A project&apos;s <strong>Contract Price</strong> as shown on Billing/Analysis/Milestone is the{" "}
+          <em>Revised</em> Contract Price — a derived value, original contract plus every approved
+          change order, maintained by the database. The only field you edit directly is the
+          Original Contract Price, on the New/Edit Project dialog. It is still not derived from
+          actual Invoices — invoicing and payment activity shown on Billing/Analysis doesn&apos;t feed
+          back into either contract figure.
         </Callout>
       </Section>
 

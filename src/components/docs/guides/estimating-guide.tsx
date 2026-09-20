@@ -41,10 +41,12 @@ export function EstimatingGuide() {
         </h2>
         <div className="flex flex-col gap-1">
           <TOCLink href="#creating">Creating an estimate</TOCLink>
+          <TOCLink href="#estimate-builder">Estimate Builder: drafting line-item text from a transcript</TOCLink>
           <TOCLink href="#stage-vs-approval">Stage vs. approval status</TOCLink>
           <TOCLink href="#budget-methods">Manual vs. production-rate budgeting</TOCLink>
           <TOCLink href="#worked-example">A worked example, start to finish</TOCLink>
           <TOCLink href="#why-snapshot">Why budget method is snapshotted per-line</TOCLink>
+          <TOCLink href="#complexity-and-rate-matrix">Complexity multiplier &amp; Rate Matrix pricing</TOCLink>
           <TOCLink href="#reading-the-grid">Reading the line-item grid</TOCLink>
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
           <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
@@ -75,6 +77,41 @@ export function EstimatingGuide() {
           From there you&rsquo;re in the estimate detail view, where line items, direct costs, and
           the summary panel all live.
         </p>
+      </Section>
+
+      <Section id="estimate-builder" title="Estimate Builder: drafting line-item text from a transcript">
+        <p>
+          <strong>Tools → Estimate Builder</strong> is a small AI-assisted writing aid, separate from
+          the estimate detail view itself. It takes a sales-visit transcript and turns it into
+          draft line-item wording you copy into a real estimate &mdash; it does not create or touch
+          any estimate record on its own.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Upload a transcript file (<strong>.txt</strong> or <strong>.vtt</strong>) or paste
+            transcript text directly. For a <strong>.vtt</strong> file, the tool automatically
+            strips the <code>WEBVTT</code> header, speaker-id lines, and timestamp lines before
+            showing you the cleaned text.
+          </li>
+          <li>
+            Click <strong>Generate Proposal</strong>. The transcript is sent to an AI model that
+            drafts professional, client-ready line-item descriptions &mdash; grouped by service
+            type, with locations, quantities, and exclusions called out, and any ambiguous point
+            (like whether weed killer was discussed) flagged inline for you to resolve.
+          </li>
+          <li>
+            Click <strong>Copy to Clipboard</strong> and paste the wording into the appropriate
+            line item on the actual estimate you&rsquo;re building.
+          </li>
+        </ol>
+        <Callout>
+          <strong>This is a text draft, not a finished estimate.</strong> The tool never sets
+          pricing, never submits anything, and never creates or modifies an{" "}
+          <code>Estimate</code> record &mdash; it only produces description text sitting in the
+          browser tab until you manually copy it in. Always check scope, quantities, and pricing
+          against what was actually measured/quoted before pasting it in, and resolve any
+          clarification flags in the output first.
+        </Callout>
       </Section>
 
       <Section id="stage-vs-approval" title="Stage vs. approval status">
@@ -184,6 +221,13 @@ export function EstimatingGuide() {
           Edit the Cost field directly at any point and that override sticks &mdash; the
           breakeven-rate auto-fill only ever applies while Cost is still exactly $0.
         </p>
+        <p>
+          The <strong>B.Hrs</strong> cell has its own calculator popover for building that number
+          up instead of guessing: enter Men and Hrs:Min to compose budgeted hours (e.g. 2 men for
+          2:30 = 5.0 hrs), or give it a target man-hour rate &mdash; defaulting to the org&rsquo;s
+          breakeven labor rate &mdash; and it solves for whichever of Cost or B.Hrs you leave it to
+          fill in.
+        </p>
       </Section>
 
       <Section id="why-snapshot" title="Why budget method is snapshotted per-line">
@@ -205,6 +249,46 @@ export function EstimatingGuide() {
           exactly what it meant when it was sent, and a service&rsquo;s settings can be tuned going
           forward without touching history.
         </p>
+      </Section>
+
+      <Section id="complexity-and-rate-matrix" title="Complexity multiplier & Rate Matrix pricing">
+        <p>
+          Two more inputs can override the plain manual/production-rate math above. Both are
+          snapshotted onto the line item the moment it&rsquo;s added or adjusted &mdash; same
+          historical-integrity reasoning as budget method, above.
+        </p>
+        <p>
+          <strong>Complexity multiplier.</strong> Every line item has a{" "}
+          <strong>Complexity</strong> popover (the icon next to the line&rsquo;s notes button) set
+          from <strong>50% to 200%</strong>, defaulting to 100% (no adjustment). It scales the
+          line&rsquo;s <strong>Rate and Cost together</strong>, which is why it doesn&rsquo;t move
+          GM% &mdash; a harder job costs and prices proportionally more without silently changing
+          margin. It also scales the <em>effective</em> hours used for cost, dashboards, and the
+          total-hours column. Critically, the hours you see and edit on the line
+          (&ldquo;B.Hrs&rdquo;) always stay the plain, unscaled number you typed or that production
+          rate derived &mdash; complexity is applied fresh every time something re-reads the line,
+          never baked back into the stored hours. That matters in practice: dial complexity up to
+          150%, then back down to 100%, and the line returns exactly to where it started instead of
+          drifting.
+        </p>
+        <p>
+          <strong>Rate Matrix.</strong> A service can have banded pricing rows configured against
+          one of a property&rsquo;s custom fields (e.g. price breaks by Turf Sq Ft ranges). If the
+          estimate has a <strong>property</strong> attached and that property has a value for the
+          field a service&rsquo;s matrix is keyed on, adding that service looks up the matching
+          band and uses <em>its</em> rate, budgeted hours, and cost instead of the service&rsquo;s
+          flat production rate &mdash; the line is recorded as Manual budget method going forward,
+          since its hours came from the matrix rather than a formula. No property on the estimate,
+          no matrix rows configured on the service, or no value on that field, and the line falls
+          through to the ordinary manual/production-rate behavior with nothing different. Like
+          everything else here, the match is looked up once at add-time, not re-resolved later if
+          the property&rsquo;s field value or the matrix rows change.
+        </p>
+        <Callout>
+          Complexity and Rate Matrix are independent of each other and of budget method &mdash; a
+          Rate Matrix line still gets its own Complexity multiplier on top of whatever the matched
+          band set.
+        </Callout>
       </Section>
 
       <Section id="reading-the-grid" title="Reading the line-item grid">

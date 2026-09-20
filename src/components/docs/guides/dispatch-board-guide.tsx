@@ -51,7 +51,9 @@ export function DispatchBoardGuide() {
           <TOCLink href="#actual-hours">How actual hours are calculated</TOCLink>
           <TOCLink href="#worked-example">Worked example</TOCLink>
           <TOCLink href="#columns">Board columns</TOCLink>
+          <TOCLink href="#products">Products (materials) on a visit</TOCLink>
           <TOCLink href="#filters-search">Filters, search, and routing</TOCLink>
+          <TOCLink href="#bulk-actions">Bulk actions on selected visits</TOCLink>
           <TOCLink href="#route-order">Stop order and Optimize Route</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
         </div>
@@ -63,6 +65,12 @@ export function DispatchBoardGuide() {
           the week strip at the top to jump between days. It&apos;s built for a dispatcher planning today&apos;s
           work and for reviewing what actually happened once crews are done.
         </p>
+        <Callout>
+          &quot;Today&quot; is the org&apos;s day, not the browser&apos;s. The default date is derived
+          from your organization&apos;s configured timezone (Settings), so a dispatcher on the road in a
+          different timezone still lands on the same day the crews are actually working — the same rule
+          the Jobs list, daily load list, and job-costing reports use.
+        </Callout>
       </Section>
 
       <Section id="jobs-and-visits" title="Jobs vs. visits">
@@ -300,7 +308,8 @@ export function DispatchBoardGuide() {
       <Section id="columns" title="Board columns">
         <p>
           Which columns are visible is configurable per user via the column-visibility control on the
-          board toolbar. The full set:
+          board toolbar, and that choice is now remembered — it&apos;s saved to your profile, so it
+          survives a reload instead of resetting to the default set every time.
         </p>
         <Table>
           <thead>
@@ -318,6 +327,44 @@ export function DispatchBoardGuide() {
             ))}
           </tbody>
         </Table>
+        <p>
+          Beyond that fixed set, the column-visibility control also offers a second, SA-style block of
+          optional columns pulled from the client&apos;s and property&apos;s own records rather than the
+          visit: <strong>Priority</strong>, <strong>Sales Rep</strong>, <strong>Notes to Crew</strong>,{" "}
+          <strong>Gate/Lock Code</strong>, <strong>Turf Sq. Ft.</strong>, <strong>Mulch Bed Sq. Ft.</strong>,{" "}
+          <strong>Gross Sq. Ft.</strong>, <strong>Linear Ft. of Perimeter</strong>,{" "}
+          <strong>Linear Ft. of Edging</strong>, <strong>Yards of Mulch</strong>, and{" "}
+          <strong>Parking Lot Sq. Ft.</strong> Any org custom field defined under Settings → Custom
+          Client Fields shows up here too, as its own trailing column named after the field (with its
+          unit in parentheses if it has one). These are all off by default — turn on only the ones your
+          crews actually take off of. The same set is available on the Waiting List for consistency.
+        </p>
+        <Callout>
+          <strong>The Totals row adds up what it can.</strong> Turning on Men, Qty, or any of the numeric
+          extra/custom-field columns above makes the board&apos;s Totals row sum that column across the
+          counted visits (see &quot;Skipped and cancelled visits drop out of the day&apos;s numbers&quot;
+          above) instead of leaving the cell blank — so a Turf Sq. Ft. column shows the day&apos;s total
+          square footage, not just each job&apos;s own number. Rate is the one exception: it&apos;s a
+          per-unit price, so summing it across different jobs wouldn&apos;t mean anything, and that cell
+          stays blank on purpose.
+        </Callout>
+      </Section>
+
+      <Section id="products" title="Products (materials) on a visit">
+        <p>
+          Opening a visit&apos;s detail sheet from the board shows a <strong>Products</strong> section
+          for materials tied to that job — the same editor used on the Job record&apos;s own Products
+          tab, not a read-only summary. From here you can add a product, edit its quantity or unit
+          price, and change its status (Used/Invoice, Used, do not Invoice, Not Used/Cancel, or reopen
+          it to Pending) without leaving the board.
+        </p>
+        <Callout>
+          <strong>&quot;Used&quot; and &quot;Used, not billed&quot; both take the material off the
+          shelf</strong> — the difference is only whether it still reaches the client&apos;s invoice.
+          Pick deliberately: a negative or blank quantity is rejected outright rather than silently
+          rounded to something else, since the quantity on this row is what adjusts inventory once the
+          status changes.
+        </Callout>
       </Section>
 
       <Section id="filters-search" title="Filters, search, and routing">
@@ -356,6 +403,32 @@ export function DispatchBoardGuide() {
         </p>
       </Section>
 
+      <Section id="bulk-actions" title="Bulk actions on selected visits">
+        <p>
+          Checking one or more visit rows reveals an <strong>Actions (n)</strong> button on the
+          toolbar with a Change Status submenu, a Re-assign Crew submenu, and — separately —{" "}
+          <strong>Email Selected Clients</strong>.
+        </p>
+        <p>
+          <strong>Email Selected Clients</strong> opens a compose dialog addressed to the distinct
+          clients behind the checked visits — selecting three visits for the same client only
+          addresses that client once. It pulls each recipient&apos;s email from their client record
+          and skips (with a reason shown in the dialog) anyone with no address on file or a hard
+          email bounce; a <strong>Purpose</strong> toggle additionally decides whether clients
+          marked Do Not Market are skipped (Marketing/promotional) or still included (Service
+          notice — for messages about work they&apos;ve already contracted, with no unsubscribe
+          footer). Subject and body can be typed from scratch or started from a Documents email
+          template (type &quot;Client&quot;) — the same block-based template system used for
+          invoice emails — and a row of merge tags can be inserted into the message at the cursor.
+          Sending fires one email per recipient and logs to each client&apos;s Activity timeline.
+        </p>
+        <Callout>
+          Email Selected Clients requires the same permission as any other outbound client email
+          (Email Activity&apos;s Send permission) — it isn&apos;t a separate, less-gated path to
+          reach clients in bulk.
+        </Callout>
+      </Section>
+
       <Section id="route-order" title="Stop order and Optimize Route">
         <p>
           Stop order is <strong>per crew</strong>. The <strong>#</strong> column numbers each crew&apos;s
@@ -364,9 +437,18 @@ export function DispatchBoardGuide() {
         </p>
         <p>
           Drag rows in <strong>Manual Route</strong> mode, or use <strong>Reverse</strong> to flip the
-          current order. Either way the board shows an &quot;Order changed — not yet saved&quot; banner
-          until you click <strong>Save Order</strong>.
+          current order, or <strong>Group Stops</strong> to cluster each crew&apos;s stops by zip area.
+          Either way the board shows an &quot;Order changed — not yet saved&quot; banner until you
+          click <strong>Save Order</strong>.
         </p>
+        <Callout>
+          <strong>Reverse, Group Stops, and Optimize Route all work one crew at a time.</strong> Each
+          tool groups the visits currently on screen by crew first, then reorders each crew&apos;s own
+          stops independently — a mixed-crew day never interleaves one crew&apos;s stops with
+          another&apos;s. Checking specific rows narrows any of the three tools to just those stops (a
+          checked row a filter has since hidden falls back to the full board rather than an empty run);
+          with nothing checked, all three act on every visit currently visible.
+        </Callout>
 
         <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
           The order is remembered for next week
@@ -421,18 +503,19 @@ export function DispatchBoardGuide() {
           </tbody>
         </Table>
         <p>
-          The route is anchored at the crew&apos;s <strong>starting address</strong> (set per crew under
-          Team → Crews), so it begins where the crew actually begins rather than at whichever stop
-          happened to be listed first. Anchoring only applies when every stop in view belongs to the
-          same crew — filter to one crew first if you want it. With a mixed-crew list the stops are
-          still ordered by driving time, just without a shop to start from, and the toast says so.
+          Optimize Route solves each crew&apos;s tour separately (in parallel) and anchors it at that{" "}
+          <strong>crew&apos;s own starting address</strong> (set per crew under Team → Crews) — a
+          mixed-crew day no longer needs to be filtered down to one crew first to get a real route. A
+          crew with no starting address set still gets routed by driving time, just without a shop to
+          start or end at, and the confirmation toast says which crews that applies to. If one
+          crew&apos;s route fails to solve (a bad address, a Distance Matrix error), the others still
+          come back — it isn&apos;t all-or-nothing.
         </p>
         <p>
-          After optimizing, the banner reports the driving time <em>between stops</em> and the shop
-          leg separately (&quot;18 min out from the shop&quot;, or &quot;18 min back to shop&quot; when
-          working furthest-first). An optimized order is a proposal like any manual drag — it isn&apos;t
-          saved, and doesn&apos;t become the crew&apos;s remembered order, until you click
-          <strong> Save Order</strong>.
+          After optimizing, the banner reports how many crews were routed and the combined driving time{" "}
+          <em>between stops</em> and shop legs across all of them. An optimized order is a proposal like
+          any manual drag — it isn&apos;t saved, and doesn&apos;t become the crew&apos;s remembered
+          order, until you click <strong>Save Order</strong>.
         </p>
         <Callout>
           Optimize Route needs a Google Maps Platform API key, entered under{" "}

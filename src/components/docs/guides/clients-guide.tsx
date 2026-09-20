@@ -78,6 +78,7 @@ export function ClientsGuide() {
           <TOCLink href="#custom-fields">Custom Fields &amp; zone measurements</TOCLink>
           <TOCLink href="#contacts">Contacts</TOCLink>
           <TOCLink href="#timeline">Activity timeline</TOCLink>
+          <TOCLink href="#account-statement">Account Statement</TOCLink>
         </div>
       </div>
 
@@ -334,6 +335,25 @@ export function ClientsGuide() {
           the account, and filtering to Transactions or Estimates narrows it down in one click
           instead of cross-referencing multiple pages.
         </Callout>
+      </Section>
+
+      <Section id="account-statement" title="Account Statement">
+        <p>
+          <strong>Client &gt; More &gt; Account Statement</strong> generates a mail-in-style,
+          running-balance statement PDF for the client — modeled on the org&apos;s old Service
+          Autopilot statement report. The dialog sets a <strong>Statement Date</strong>, a{" "}
+          <strong>Period From/To</strong> range, a toggle for whether to show invoice/payment
+          line-item detail or just the running totals, a &quot;don&apos;t generate if balance is
+          less than&quot; minimum-balance filter, and an optional statement message — with a live
+          preview of the PDF alongside the fields as they&apos;re changed.
+        </p>
+        <p>
+          <strong>Open / Print</strong> opens the generated PDF in a new tab; <strong>Email
+          Statement</strong> sends it to an address (defaulting to the client&apos;s own, but
+          editable) instead. If the minimum-balance filter is set and the client&apos;s balance
+          falls short of it, an email send is silently skipped rather than sent — the dialog
+          reports this so it isn&apos;t mistaken for a delivery failure.
+        </p>
       </Section>
     </DocsFontScope>
   );

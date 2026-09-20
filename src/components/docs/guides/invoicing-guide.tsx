@@ -71,6 +71,14 @@ export function InvoicingGuide() {
             The invoice description follows a fallback chain: the visit&apos;s own override, then the
             job-level override, then the service&apos;s own invoice description, then the plain service
             name.
+            <br />
+            <strong>Materials ride along too.</strong> Any Product added to the job that&apos;s
+            still <strong>Pending</strong>, or that a crew already marked <strong>Used</strong> in
+            the field (inventory decremented, but not yet billed), gets swept onto this same
+            invoice as its own line and flipped to <strong>Invoiced</strong> so a later visit on
+            the same job can&apos;t bill it again. A product marked <strong>Used, not billed</strong>
+            {" "}is deliberately skipped — that status exists for materials the crew used but
+            shouldn&apos;t be charged for.
           </li>
           <li>
             <strong>A contract&apos;s billing cycle.</strong> Any job linked to a contract is billed on
@@ -148,6 +156,32 @@ export function InvoicingGuide() {
             rate limit, a provider outage), the error you see is the provider&apos;s own reason
             &mdash; not a generic &quot;failed to send&quot; &mdash; so you can tell a typo in the
             client record apart from a problem on the sending side.
+          </li>
+          <li>
+            <strong>The manual Invoice buttons won&apos;t double-bill.</strong> The dispatch board&apos;s
+            per-visit popup and the job detail page&apos;s Invoice button both check for an existing
+            invoice first &mdash; a visit or job that&apos;s already been invoiced shows{" "}
+            <strong>View Invoice #N</strong> instead and takes you straight there rather than
+            creating a second, duplicate draft.
+          </li>
+          <li>
+            <strong>Products need a Service first.</strong> Adding a Product to a job requires
+            picking which of the job&apos;s Services it belongs to &mdash; the same rule Estimates
+            already follow. Add Product is disabled (with a hint) until the job has at least one
+            Service on it.
+          </li>
+          <li>
+            <strong>Invoice and estimate email templates live in Documents,</strong> not a
+            dedicated Email Templates settings page &mdash; Settings still has an Email Templates
+            panel, but it&apos;s now just a pointer card to <strong>Documents</strong>, where invoice,
+            estimate, client, and chemical-notice templates are all built with the same block
+            editor.
+          </li>
+          <li>
+            <strong>Printing several invoices at once produces one PDF.</strong> Selecting multiple
+            rows on the Invoices list and choosing <strong>Print Selected</strong> combines them
+            into a single multi-page PDF in one tab &mdash; it no longer opens a separate print
+            popup per invoice (the same change applies to Estimates&apos; own Print Selected).
           </li>
         </ul>
       </Section>

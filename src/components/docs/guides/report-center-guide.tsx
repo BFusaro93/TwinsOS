@@ -10,13 +10,13 @@ import {
 import { GuideLink } from "@/components/docs/GuideLink";
 
 const SECTIONS: [string, number, string][] = [
-  ["Service Reports", 13, "Visits Report, Backlog Services, Client Count by Service, Client Services Report, Package Summary Report, Skipped Visits Report"],
+  ["Service Reports", 14, "Visits Report, Backlog Services, Client Count by Service, Client Services Report, Package Summary Report, Skipped Visits Report, Daily Load List"],
   ["Client", 11, "Client Balance, Client Contact List, Client Referral, New Clients Report, Terminations Report, Cancellation Count Report"],
   ["Revenue", 10, "Invoice Audit Summary, Payment Audit Summary, Revenue by Postal Code, Revenue by Service Summary, Daily Production, Sales Activity Summary"],
   ["Schedule Lists", 8, "Employee Directory, Vendor Contact List, Inventory Product List, Call Ahead Required, Service Price List"],
   ["Job Costing", 8, "Job Costing Report, Cost of Goods Sold Report, Job Cost Summary, Service Profitability Summary, Production Rate Accuracy, WIP Report"],
   ["Financial", 6, "Invoiced Income by Client, Invoices with Balances, Pre-Payments, Profit / Loss (Accrual), Profit / Loss (Cash), Sales Tax Report"],
-  ["Audits", 6, "Client Timeline Report, Lead Timeline Report, Income Not Invoiced, Visits — Client Has Balance Due, Unapplied Payments, Sales Commission Export"],
+  ["Audits", 9, "Client Timeline Report, Lead Timeline Report, Income Not Invoiced, Visits — Client Has Balance Due, Unapplied Payments, Sales Commission Export, Audit Log, Security & Access Audit, Change Activity by User"],
   ["Lead", 5, "New Leads Report, Lead Aging Summary, Closed Leads Summary, Company Scorecard, Sales Summary by Source"],
   ["Estimates", 4, "Estimates by Stage, Accepted Estimates by Service, Accepted Estimates — Estimated vs Invoiced Value"],
   ["Job Hours", 3, "Job Hours Summary, Crew Hours Summary, Timesheet Detail"],
@@ -67,6 +67,7 @@ export function ReportCenterGuide() {
           <TOCLink href="#curated-dashboards">The curated, top-level dashboards</TOCLink>
           <TOCLink href="#kpi-scorecard">The KPI Scorecard</TOCLink>
           <TOCLink href="#company-report">The Company Report</TOCLink>
+          <TOCLink href="#audit-trail">Audit trail: per-record tabs and the org-wide log</TOCLink>
           <TOCLink href="#export">Exporting, printing, and scheduled delivery</TOCLink>
           <TOCLink href="#permissions">Permissions and gating</TOCLink>
         </div>
@@ -105,7 +106,7 @@ export function ReportCenterGuide() {
           array is the union of twelve definition arrays, one array per{" "}
           <code>ReportSectionKey</code>.
           Counting the actual <code>section:</code> entries across those files gives{" "}
-          <strong>75 reports</strong> total, close to the ~70 figure — spread across twelve
+          <strong>79 reports</strong> total, close to the ~70 figure — spread across twelve
           sections:
         </p>
         <Table>
@@ -237,12 +238,18 @@ export function ReportCenterGuide() {
       <Section id="dates-and-limits" title="Date ranges, Eastern time, and large results">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Everything is Eastern time.</strong> Every date and time a report evaluates —
-            the relative presets (Today, Yesterday, Month to Date, Year to Date), a custom
-            From/To pair, a bare date typed into a filter — is interpreted on America/New_York
-            calendar days. A filter on a single date matches the whole Eastern day, and a visit
-            completed at 11:30 PM Eastern lands on that day, not the next UTC day. Scheduled PDFs
-            format their times in Eastern as well.
+            <strong>Everything runs on the org&apos;s own clock, not the viewer&apos;s.</strong>{" "}
+            Every date and time a report evaluates — the relative presets (Today, Yesterday,
+            Month to Date, Year to Date), a custom From/To pair, a bare date typed into a filter
+            — is interpreted on that org&apos;s configured operating timezone
+            (<code>organizations.timezone</code>, editable in Settings &gt; Organization; every
+            existing org defaults to America/New_York). The report-run route resolves it
+            server-side via <code>getMyTimeZone()</code> and threads it into every{" "}
+            <code>analysis()</code> call — a filter on a single date matches the whole day in the
+            org&apos;s zone, and a visit completed at 11:30 PM in that zone lands on that day, not
+            the next UTC day. Scheduled PDFs format their times in the org&apos;s zone as well.
+            Two managers in different physical timezones looking at the same org&apos;s reports
+            see identical day boundaries; a multi-org staff view would not, by design.
           </li>
           <li>
             <strong>&quot;All Time&quot; means all time.</strong> Picking All Time in a date-range
@@ -317,8 +324,12 @@ export function ReportCenterGuide() {
           A <code>Dashboard</code> record bundles one or more{" "}
           <code>CustomReport</code> analyses into tabs, built either from a blank starting point
           or from one of the entries in <code>DASHBOARD_TEMPLATES</code> — e.g. &quot;Sales
-          Overview&quot; (estimate pipeline, win rate, recent activity) or &quot;A/R
-          Overview&quot; (outstanding balances, collections, payment activity). A saved dashboard
+          Overview&quot; (estimate pipeline, win rate, recent activity), &quot;A/R
+          Overview&quot; (outstanding balances, collections, payment activity), or &quot;Operations
+          Dashboard&quot; — modeled on Service Autopilot&apos;s Operations Dashboard, with nine
+          tabs (KPI&apos;s, Tickets, Profit / Loss, Upcoming Jobs - no contracts, Won Estimates by
+          Service, Products/Bulk Material, Contracts, Services Insights, Projections) built mostly
+          by embedding reports that already existed elsewhere in the Report Center. A saved dashboard
           opens at <code>/crm/admin/reports/dashboards/[id]</code>, rendered by{" "}
           <code>DashboardViewer</code>.
         </p>
@@ -507,6 +518,64 @@ export function ReportCenterGuide() {
           Gated the same as the rest of the Report Center: <code>view_report_center</code> to
           open it, Landscapt module required, hidden from crew. There&apos;s nothing to edit on
           this page — no Manage Report Center split, unlike the KPI Scorecard.
+        </p>
+      </Section>
+
+      <Section id="audit-trail" title="Audit trail: per-record tabs and the org-wide log">
+        <p>
+          There are two ways to see who changed what. Most detail panels and dialogs —
+          Clients, Jobs, Invoices, Estimates, Contracts, Packages, Services, Tickets, damage
+          cases, Purchase Orders, Requisitions, Receiving, Projects, Products, and the Equipt
+          side&apos;s Assets, Work Orders, PM Schedules, Parts, and Vehicles — have their own{" "}
+          <strong>Audit Trail</strong> tab (<code>AuditTrailTab</code>), scoped to that one
+          record. As of this week that list also includes <strong>Employees</strong>,{" "}
+          <strong>Crews</strong>, <strong>Schedules</strong> (the recurrence definitions behind
+          recurring jobs), and the <strong>Automation</strong> builder — the last one shows a
+          single history for the whole rule because its sequences, triggers, and conditions all
+          roll their entries up to the parent automation. For the record you don&apos;t already
+          have open, the <strong>Audits</strong> section of the Report Center has three reports
+          reading a new org-wide <code>rpt_audit_log</code> view: <strong>Audit Log</strong> (the
+          full trail, filterable by category, record type, user, and action),{" "}
+          <strong>Security &amp; Access Audit</strong> (permission, user, credential, and
+          approval-chain changes only, defaulting to a 90-day window), and{" "}
+          <strong>Change Activity by User</strong> (a count of changes per person, grouped by
+          record type — useful for spotting an unexpected burst of edits).
+        </p>
+        <p>
+          <strong>What an entry captures.</strong> Every changed field on a save is recorded, not
+          just one — a save that changed both status and price used to log only the status
+          branch and silently drop the price change; the generic field diff now always runs
+          alongside any specialized status/qty/price phrasing. Money columns are decoded from
+          cents to dollars automatically. Some events read as a plain-language decision rather
+          than a field diff — an approval step reads &quot;Approval step 2 approved by Dana
+          Reyes — &apos;ok to order&apos;&quot;, a change order reads &quot;Change order CO #99
+          Extra pavers approved — $4500.00&quot; — and roll up onto the requisition, PO,
+          estimate, or project being approved. Attribution uses the signed-in editor, not the
+          record&apos;s original creator, except on the very first insert.
+        </p>
+        <p>
+          <strong>What&apos;s deliberately hidden.</strong> Credential tables (API keys,
+          third-party integrations, OAuth tokens) are audited, but secret values are redacted —
+          an entry says a credential changed, never what it changed to or from. A user moving
+          between organizations is recorded against the org they <em>left</em>, not the one they
+          joined, so a cross-org move stays visible to the org it happened to.
+        </p>
+        <p>
+          <strong>Coverage is trigger-based, so it can have gaps.</strong> An entry only exists
+          for a table with a mapped trigger — that&apos;s how the Products screen went for a
+          while without receiving/usage history (the RPC wrote{" "}
+          <code>record_type = &apos;product_item&apos;</code> but the screen read{" "}
+          <code>&apos;product&apos;</code>) and how project change orders and schedule edits
+          recorded nowhere a person could read them until this week. Fifteen more Landscapt
+          tables were added to coverage in the same pass: payments and payment allocations,
+          milestones, job services/products/materials, crew member times, chemical applications,
+          contract services, client properties/contacts, employees, roles, discounts, and
+          overhead settings — all rolling up onto the parent record&apos;s existing tab. The
+          table also lost its client-writable INSERT policy: previously any authenticated org
+          member could insert a row naming someone else as the actor, so a trail that could be
+          forged wasn&apos;t evidence. Writes now only happen through the SECURITY DEFINER
+          trigger functions and the service-role key, making <code>audit_log</code> append-only
+          from the browser.
         </p>
       </Section>
 
