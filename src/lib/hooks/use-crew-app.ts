@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
+import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,9 @@ function crewVisitSelect(hidePricing: boolean): string {
     "budgeted_hours",
   ].join(", ");
 
+  // The job's linked property, for the stop-address fallback (resolveStopAddress).
+  const jobEmbeds = "client_properties(address, city, state, zip)";
+
   const visitCols = [
     "id", "org_id", "job_id", "client_id", "job_service_id",
     "storm_event_id", "snow_depth_inches", "temperature", "asset_type",
@@ -84,13 +88,23 @@ function crewVisitSelect(hidePricing: boolean): string {
 
   return `
     ${visitCols},
-    clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+    clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
     crm_crews(name),
-    crm_jobs(${jobCols}, crm_job_services(${serviceCols}))
+    crm_jobs(${jobCols}, ${jobEmbeds}, crm_job_services(${serviceCols}))
   `;
 }
 
-function mapJobRow(job: Record<string, unknown>): CRMJob {
+function mapJobRow(
+  job: Record<string, unknown>,
+  client: Record<string, unknown> | null
+): CRMJob {
+  // The address the crew actually drives to, resolved the same way the
+  // dispatch board shows it and /api/crm/route-optimize routes it.
+  const stopAddr = resolveStopAddress({
+    job: job as Parameters<typeof resolveStopAddress>[0]["job"],
+    property: embeddedOne(job.client_properties as Record<string, unknown> | null) as Parameters<typeof resolveStopAddress>[0]["property"],
+    client: client as Parameters<typeof resolveStopAddress>[0]["client"],
+  });
   const services = Array.isArray(job.crm_job_services)
     ? (job.crm_job_services as Record<string, unknown>[]).map(s => ({
         id:            s.id as string,
@@ -117,10 +131,10 @@ function mapJobRow(job: Record<string, unknown>): CRMJob {
     notesToCrewUpdatedAt: (job.notes_to_crew_updated_at as string) ?? null,
     notesToClient:  (job.notes_to_client as string) ?? null,
     notes:          (job.notes as string) ?? null,
-    serviceAddress: (job.service_address as string) ?? null,
-    serviceCity:    (job.service_city as string) ?? null,
-    serviceState:   (job.service_state as string) ?? null,
-    serviceZip:     (job.service_zip as string) ?? null,
+    serviceAddress: stopAddr?.parts.address ?? null,
+    serviceCity:    stopAddr?.parts.city ?? null,
+    serviceState:   stopAddr?.parts.state ?? null,
+    serviceZip:     stopAddr?.parts.zip ?? null,
     budgetedHours:  (job.budgeted_hours as number) ?? null,
     services,
   } as unknown as CRMJob;
@@ -181,7 +195,7 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     createdAt:            row.created_at as string,
     updatedAt:            row.updated_at as string,
     deletedAt:            row.deleted_at as string | null,
-    job: job ? mapJobRow(job) : undefined,
+    job: job ? mapJobRow(job, client) : undefined,
   };
 }
 
