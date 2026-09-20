@@ -5,7 +5,8 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import type { Database } from "@/types/supabase";
 import { logger } from "@/lib/logger";
-import { planIncludesAddon } from "@/lib/stripe/plans";
+import { resolveGoogleMapsKey } from "@/lib/google-maps-key";
+import { embeddedOne, formatStopAddress, resolveStopAddress } from "@/lib/utils/stop-address";
 
 interface DistanceMatrixRow {
   elements: { status: string; duration?: { value: number } }[];
@@ -113,54 +114,6 @@ async function fetchMatrix(
   return { matrix };
 }
 
-/**
- * Resolves the Google Maps API key an org would actually use, honoring the
- * same plan/add-on entitlement routing as the live optimize call — so the
- * Settings "Test Connection" button (see ?test=1 below) reports on the key
- * that's really in effect, not whatever the org happens to have saved.
- */
-async function resolveApiKeyForOrg(
-  sb: ReturnType<typeof createClient<Database>>,
-  orgId: string
-): Promise<{ apiKey: string } | { error: string; status: number }> {
-  const { data: org } = await sb
-    .from("organizations")
-    .select("customizations, plan")
-    .eq("id", orgId)
-    .single();
-
-  // Orgs on a plan that bundles Route Optimization (currently Enterprise) or
-  // that bought the standalone $15/mo add-on get routed through our own
-  // platform Google Maps key — they shouldn't have to bring their own. Every
-  // other org still falls back to its own key from Settings → Integrations,
-  // same as before this add-on existed.
-  let entitled = planIncludesAddon(org?.plan ?? "", "route_optimization");
-  if (!entitled) {
-    const { data: addon } = await sb
-      .from("organization_addons")
-      .select("enabled")
-      .eq("org_id", orgId)
-      .eq("addon_key", "route_optimization")
-      .eq("enabled", true)
-      .maybeSingle();
-    entitled = !!addon;
-  }
-
-  const orgApiKey = (org?.customizations as Record<string, unknown>)?.google_maps_api_key as string | undefined;
-  // Prefer the platform key for entitled orgs, but don't block them on it if
-  // it hasn't been provisioned yet and they happen to also have their own key set.
-  const apiKey = entitled ? (process.env.GOOGLE_MAPS_PLATFORM_API_KEY ?? orgApiKey) : orgApiKey;
-  if (!apiKey) {
-    return {
-      error: entitled
-        ? "Route Optimization is enabled for this org, but the platform Google Maps key isn't configured. Contact support."
-        : "Google Maps API key not configured. Add your own in Settings → Integrations, or purchase the Route Optimization add-on ($15/mo) to use ours.",
-      status: 422,
-    };
-  }
-  return { apiKey };
-}
-
 // Two well-known, always-geocodable public coordinates used solely to prove
 // the resolved key can actually reach the Distance Matrix API. No visit or
 // org address data is involved, so this works even for orgs with no visits.
@@ -193,7 +146,7 @@ export async function POST(request: Request) {
   // proves the resolved key can reach Google.
   const isTest = new URL(request.url).searchParams.get("test") === "1";
   if (isTest) {
-    const keyResult = await resolveApiKeyForOrg(sb, profile.org_id);
+    const keyResult = await resolveGoogleMapsKey(sb, profile.org_id);
     if ("error" in keyResult) {
       return NextResponse.json({ error: keyResult.error }, { status: keyResult.status });
     }
@@ -213,7 +166,7 @@ export async function POST(request: Request) {
   }
   const { visitIds, strategy, crewId } = parsed.data;
 
-  const keyResult = await resolveApiKeyForOrg(sb, profile.org_id);
+  const keyResult = await resolveGoogleMapsKey(sb, profile.org_id);
   if ("error" in keyResult) {
     return NextResponse.json({ error: keyResult.error }, { status: keyResult.status });
   }
@@ -227,7 +180,28 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (sb as any)
     .from("crm_job_visits")
-    .select("id, job_id, crm_jobs(service_address, service_city, service_state, service_zip)")
+    // The address a stop is routed to is resolved the same way the board, the
+    // crew app and the geocoder resolve it (see resolveStopAddress) — job
+    // snapshot, then linked property, then the client's service address, then
+    // its billing address. Selecting only crm_jobs.service_address here is
+    // what used to make Optimize drop, server-side and silently, stops the
+    // board had already shown a full address for.
+    // The client is read off the VISIT, not off crm_jobs, because that's the
+    // row the dispatch board resolves from (useVisitsForDate embeds
+    // clients(...) on the visit). crm_job_visits.client_id and
+    // crm_jobs.client_id agree today, but resolving from a different row than
+    // the board does is how the two ended up disagreeing in the first place.
+    .select(`
+      id, job_id,
+      clients(
+        service_address, service_city, service_state, service_zip,
+        billing_address, billing_city, billing_state, billing_zip
+      ),
+      crm_jobs(
+        service_address, service_city, service_state, service_zip,
+        client_properties(address, city, state, zip)
+      )
+    `)
     .in("id", visitIds)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null);
@@ -240,17 +214,23 @@ export async function POST(request: Request) {
   const withAddresses: VisitWithAddr[] = [];
   for (const v of visits) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const job = (v as any).crm_jobs;
-    if (!job?.service_address) continue;
-    const addr = [job.service_address, job.service_city, job.service_state, job.service_zip]
-      .filter(Boolean)
-      .join(", ");
-    withAddresses.push({ id: v.id, address: addr });
+    const job = embeddedOne((v as any).crm_jobs);
+    const resolved = resolveStopAddress({
+      job,
+      property: embeddedOne(job?.client_properties),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      client: embeddedOne((v as any).clients),
+    });
+    if (!resolved) continue;
+    withAddresses.push({ id: v.id, address: formatStopAddress(resolved.parts) });
   }
 
   if (withAddresses.length < 2) {
     return NextResponse.json(
-      { error: "Not enough visits have service addresses for route optimization." },
+      {
+        error:
+          "Not enough of these stops have an address to route to. A stop needs a service address on the job, its property, or the client.",
+      },
       { status: 422 }
     );
   }

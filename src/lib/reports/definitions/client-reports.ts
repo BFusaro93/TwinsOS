@@ -685,4 +685,63 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       );
     },
   },
+  {
+    key: "address-verification",
+    section: "client",
+    name: "Address Verification",
+    description:
+      "Shows every service address a crew could be sent to and whether Google has confirmed it. Defaults to the ones that still need a look.",
+    filters: [
+      {
+        key: "show",
+        label: "Show",
+        type: "select",
+        defaultValue: "needs_attention",
+        options: [
+          { value: "needs_attention", label: "Needs attention (unchecked or unconfirmed)" },
+          { value: "suspicious", label: "Suspicious only" },
+          { value: "all", label: "All addresses" },
+        ],
+      },
+      { key: "record_kind", label: "Record Type", type: "select", options: [
+        { value: "Client", label: "Client" },
+        { value: "Property", label: "Property" },
+        { value: "Crew Yard", label: "Crew Yard" },
+      ] },
+    ],
+    analysis: (params) => {
+      // "never_checked" is the view's stand-in for a NULL verdict, so an
+      // address nobody has looked at sorts alongside the ones Google doubted
+      // rather than disappearing from an `in` filter.
+      const buckets: Record<string, string[]> = {
+        needs_attention: ["never_checked", "unconfirmed_and_suspicious", "partial_match", "not_found"],
+        suspicious: ["unconfirmed_and_suspicious", "not_found"],
+      };
+      const wanted = buckets[params.show ?? "needs_attention"];
+      return {
+        dataset: "rpt_address_verification",
+        columns: [
+          "record_kind",
+          "client_name",
+          "label",
+          "address",
+          "city",
+          "state",
+          "zip",
+          "address_verdict",
+          "address_verified_at",
+        ],
+        filters: [
+          ...(wanted ? [{ column: "address_verdict", op: "in" as const, value: wanted }] : []),
+          ...(params.record_kind
+            ? [{ column: "record_kind", op: "eq" as const, value: params.record_kind }]
+            : []),
+        ],
+        groupBy: [],
+        aggregates: [],
+        sortColumn: "address_verdict",
+        sortDir: "asc" as const,
+      };
+    },
+  },
 ];

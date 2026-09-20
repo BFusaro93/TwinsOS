@@ -3444,6 +3444,12 @@ export function DispatchBoard() {
    */
   async function handleOptimizeRoute() {
     const scope = routeScope();
+    // `job.serviceAddress` here is the stop's RESOLVED address (job snapshot →
+    // linked property → client service → client billing; see
+    // resolveStopAddress), which is the same address /api/crm/route-optimize
+    // resolves server-side. Keep the two in step: a stop this filter keeps but
+    // the server can't resolve gets silently dropped from the tour, and the
+    // crew drives an unoptimized leg to it.
     const targets = displayVisits.filter((v) => v.job?.serviceAddress && scope.has(v.id));
     const groups = new Map<string, typeof targets>();
     for (const v of targets) {
@@ -3459,8 +3465,8 @@ export function DispatchBoard() {
     if (routable.length === 0) {
       toast.error(
         scope.scoped
-          ? "Each crew needs at least 2 selected stops with a service address to optimize. Select more stops, or clear the selection to route the whole board."
-          : "Each crew needs at least 2 stops with a service address to optimize. Try assigning visits to a crew first."
+          ? "Each crew needs at least 2 selected stops with an address to optimize. Select more stops, or clear the selection to route the whole board."
+          : "Each crew needs at least 2 stops with an address to optimize. A stop needs a service address on the job, its property, or the client — and visits need to be assigned to a crew."
       );
       return;
     }

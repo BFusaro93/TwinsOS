@@ -96,3 +96,66 @@ Found 2026-08-28 building scheduled report emails ([report_schedules](supabase/m
 
 ## Cleanup — dead ConditionField union members
 - [ ] `client_type`, `client_status`, `job_type` (as a condition field), `job_status`, `tag` (as a condition field), `property_city`, `revenue_ytd`, `last_job_date` in [crm-automations.ts](src/types/crm-automations.ts)'s `ConditionField` type are leftover "Legacy" entries — not in the `CONDITION_GROUPS` picklist (unselectable in the UI) and not referenced anywhere in the evaluator. Harmless but dead; safe to delete next time this file is touched.
+
+## Address verification at point of entry — BUILT 2026-09-19
+Spec written and built the same day, after the Optimize Route fix ([stop-address.ts](src/lib/utils/stop-address.ts)). Prompted by two PROD jobs reading `100/200 Northgate Pkwy, Plymouth MN` against clients reading `100/200 Northgate Dr, Marlborough MA` — different states, and nothing in the app could tell you which was real.
+
+**Decisions taken:**
+- **Provider: Address Validation API, falling back to Geocoding.** Address Validation reports per-component confirmation; it is a separate API in Google Cloud and **was enabled 2026-09-19**, so it is now the live path. The Geocoding fallback stays for orgs that have not enabled it, labelled `source: "geocode"` so the UI never overstates the weaker check.
+- **Entitlement: one shared resolver.** [google-maps-key.ts](src/lib/google-maps-key.ts) now serves route-optimize, jobs/geocode and address/verify. This fixed a live inconsistency: `/api/crm/jobs/geocode` read `customizations.google_maps_api_key` directly, so an Enterprise org entitled to the platform key had working route optimization and silently no map pins.
+- **Advisory, never blocking.** Rural and new-construction addresses legitimately fail, and Google being down is not the user's problem to solve mid-form.
+
+**Built:**
+- [x] [`POST /api/crm/address/verify`](src/app/api/crm/address/verify/route.ts) — server-side, key never reaches the browser.
+- [x] Migration [20260919030000](supabase/migrations/20260919030000_address_verification_columns.sql) — `address_verdict` + `address_verified_at` on `clients`, `client_properties`, `crm_crews`. **Applied to PROD and TEST.**
+- [x] Wired on blur at all three entry points, sharing [AddressSuggestion](src/components/shared/AddressSuggestion.tsx) so they can't drift into describing the same verdict differently: client service address (New Client + Edit Client), property address, crew starting address.
+- [x] Verdicts persist through the existing saves, and only when the check ran against the address actually being saved.
+- [x] **Nominatim deleted.** `geocodeAddress()` in CrewsList was the last non-Google caller; its usage policy wants an identifying User-Agent and ~1 req/sec, which a per-blur browser call did not meet.
+- [x] Backfill report — [`rpt_address_verification`](supabase/migrations/20260919040000_rpt_address_verification.sql) view + an "Address Verification" entry under Client reports. **Applied to PROD and TEST.** Registered in `crm_run_report`'s whitelist by rewriting the live definition rather than restating the function, so every other guard in it survives by construction (see the price-run permission regression).
+
+**Verified against live Address Validation responses:**
+
+| typed | verdict | what the user sees |
+|---|---|---|
+| `100 Northgate Pkwy, Marlborough, MA` | `unconfirmed_and_suspicious` | warning — **this is the bug it was built to catch** |
+| `100 Northgate Dr, Marlborough, MA` | `unconfirmed_and_suspicious` | warning — *neither* spelling is real |
+| `99999 Nonexistent Fakestreet Blvd` | `unconfirmed_and_suspicious` | warning |
+| `14 Birchwood Ln, Millbury, MA` | `unconfirmed_but_plausible` | suggests `14 Birchwood Dr` — a real correction in live data |
+| `455 Main St, Worcester, MA` | `confirmed` | "Address confirmed" |
+| `1600 Amphitheatre Parkway, Mountain View, CA` | `confirmed` | "Address confirmed" |
+
+**`hasUnconfirmedComponents` is a trap and is not used.** Measured live it is `true` for 455 Main St Worcester *and* for Google's own 1600 Amphitheatre Parkway, because an unconfirmed street *number* is routine. Keying on it flagged every address in the system. The real discriminator is whether the **`route` component is CONFIRMED**, backed up by `validationGranularity === "OTHER"` and `possibleNextAction === "FIX"` — all three agree on every case measured. That collapses to the same fact the Geocoding fallback reads off a missing `route` component, so the two providers stay consistent.
+
+Two calibration details, both found by measurement: `hasInferredComponents` is **not** consulted (Google infers ZIP+4 on essentially every US address, so requiring its absence left nothing reaching `confirmed`), and the normalized zip is truncated to 5 digits (Google returns `01608-1821`, which would otherwise put a pointless "did you mean" under a correct address). A `confirmed` verdict also suppresses the suggestion line, so Google preferring `Pkwy` over `Parkway` does not nag.
+
+- [ ] **Not exercised end-to-end in the browser** — TEST has no Google key at all (`GOOGLE_MAPS_PLATFORM_API_KEY` absent from `.env.local.test`, no `google_maps_api_key` on the TEST org), so the route 422s at key resolution there. The request/response handling was verified by calling Google directly with the one org key that exists and replaying the real responses through the verdict mapping.
+- [x] **Address Validation API enabled** 2026-09-19. Billed separately from Geocoding — watch the first invoice.
+- [ ] Out of scope, still: billing addresses (mail deliverability is a different question from routability) and the portal's self-service address edit.
+
+## Timezone date defaults — resolved upstream, my change reverted
+Worked on 2026-09-20 from a branch cut before the per-org timezone work landed on `main`. **Everything here was superseded; the net repo change is zero and both databases are back to main's intended state.** Recorded because the failure mode is worth not repeating.
+
+What happened: [20260919020000](supabase/migrations/20260919020000_company_timezone_date_defaults.sql) looked like an unapplied migration, so its three column defaults were applied to PROD and TEST. But `main` had already moved on — [20260919030000_org_timezone.sql](supabase/migrations/20260919030000_org_timezone.sql) **explicitly drops those exact defaults** (lines 124–126) and replaces them with BEFORE INSERT triggers calling `public.org_today(new.org_id)`, because a column DEFAULT cannot reference another column.
+
+**The bug that created:** a column DEFAULT is evaluated *before* a BEFORE ROW trigger fires, so `new.invoice_date` was never null, the trigger's `if new.<col> is null` guard never passed, and every org was silently pinned to Eastern — the precise behaviour the per-org work existed to remove. Reverted on both databases; verified no defaults remain and the three `org_today` triggers are in place.
+
+**Lessons, both already paid for once in this repo:**
+- Diff a migration's `create or replace function` against the LIVE definition before applying it. The live one is sometimes newer — that check is what stopped this branch from also reverting `create_invoice_from_milestone()` from `org_today(v_org_id)` back to a hardcoded Eastern constant.
+- A migration file existing and being unapplied does not mean it *should* be applied. Check whether a later migration supersedes it.
+- `git fetch origin main` before deciding anything about migration state. This branch was cut at `388b42d0`; by the time it was pushed, `main` had three per-org timezone commits and nine new migrations.
+
+- [ ] `COMPANY_TIME_ZONE` in `src/lib/utils.ts` — worth confirming the per-org work covered the app side, since the DB half now honours `organizations.timezone`.
+
+## Migration numbering collisions
+`main` already carries two colliding pairs from concurrent sessions — `20260919030000` (`org_timezone` and `server_insert_audit_cannot_forge_actor`) and `20260919040000` (`fix_org_today_default_triggers` and `security_advisor_cleanup`). This branch's two migrations originally collided with both and were renumbered to `20260919070000` / `20260919080000`.
+
+- [ ] Nothing enforces uniqueness. `git fetch` and check `ls supabase/migrations | tail` before choosing a version number.
+
+**The DB ledger and the filenames have also diverged**, because migrations applied through the Supabase MCP are stamped with the apply time, not the filename. `supabase_migrations.schema_migrations` records `org_timezone` as `20260919070000` on PROD but `20260920025558` on TEST, while the repo file is `20260919030000_org_timezone.sql`. The same migration therefore has three different version numbers. This branch's two migrations are numbered `20260920050000` / `20260920050100`, above every ledger entry on both projects, so a future `db push` will re-run rather than skip them — they are idempotent by construction (`add column if not exists`, a guarded `pg_constraint` check, `create or replace view`, and a whitelist block that returns early if already registered), and re-running the whitelist block was verified to leave `crm_run_report` registered exactly once with its guards intact.
+
+- [x] Reconciled 2026-09-20 so `check-drift` passes. Every production ledger version now has a matching local filename:
+  - this branch's two migrations renamed to the versions production recorded (`20260920031229`, `20260920032839`)
+  - `20260920041022_revert_hardcoded_date_defaults.sql` committed (it had been applied to both databases with no file)
+  - `org_timezone` and `fix_org_today_default_triggers` renamed from `20260919030000`/`20260919040000` to `20260919070000`/`20260919080000`, matching production and incidentally removing the repo's only two duplicate migration versions
+  - `20260920032737_estimate_date_drop_utc_default.sql` **reconstructed** — it was applied straight to production with no committed file. Its content was inferred from the ledger name and verified against the live schema (`estimates.estimate_date` has no default and carries an `org_today` trigger, exactly what the statement produces). Worth a second pair of eyes.
+- [ ] Decide whether migrations should be applied via `supabase db push` (filename = version) rather than the Supabase MCP, which stamps the apply time and is what produced all of this drift. `check-drift` only guards production, so the same divergence is accumulating unchecked on TEST.

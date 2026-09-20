@@ -1,3 +1,4 @@
+import type { AddressVerdict } from "@/types/address-verification";
 export type ClientStatus = 'active' | 'inactive' | 'lead' | 'cancelled' | 'lost';
 export type AccountType = 'residential' | 'commercial';
 export type InvoiceFrequency = 'daily' | 'weekly' | 'monthly' | 'upon_completion';
@@ -66,6 +67,11 @@ export interface Client {
   serviceCity: string | null;
   serviceState: string | null;
   serviceZip: string | null;
+  /** Result of the last Google check on serviceAddress. null = never checked. */
+  addressVerdict: AddressVerdict | null;
+  addressVerifiedAt: string | null;
+  lat: number | null;
+  lng: number | null;
   billingSameAsService: boolean;
   gateCode: string | null;
   notesToCrew: string | null;
@@ -191,6 +197,16 @@ export interface NewClientFormValues {
   billingCity: string;
   billingState: string;
   billingZip: string;
+  /**
+   * Where the crew is dispatched to. Optional on the type because the quick-
+   * create dialog gates it on the org's Settings → Required Fields choice;
+   * when it's given and no separate billing address is, billing mirrors it
+   * (clients.billing_same_as_service defaults to true).
+   */
+  serviceAddress?: string;
+  serviceCity?: string;
+  serviceState?: string;
+  serviceZip?: string;
   source: string;
   salesRepId: string;
   /** Initial lifecycle status. Defaults to "active"; the New Client dialog can create a Lead instead. */
