@@ -27,6 +27,7 @@ import {
   useApplyPriceAdjustment,
 } from "@/lib/hooks/use-bulk-pricing";
 import { useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { toast } from "sonner";
 
 const JOB_TYPES = ["recurring", "one_time", "package", "snow", "project", "waiting_list"] as const;
@@ -50,6 +51,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
   const { data: services = [] } = useAllCRMServices();
   const preview = usePreviewPriceAdjustment();
   const apply = useApplyPriceAdjustment();
+  const [confirm, confirmDialog] = useConfirm();
 
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
@@ -140,22 +142,21 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
     });
   }
 
-  function handleApply() {
+  async function handleApply() {
     if (!canApply || !result) return;
     const count = selectedRows.length;
     const skippedNote =
       excluded.size > 0
-        ? `\n\n${excluded.size} line${excluded.size !== 1 ? "s" : ""} you unticked will be left alone.`
+        ? ` ${excluded.size} line${excluded.size !== 1 ? "s" : ""} you unticked will be left alone.`
         : "";
-    if (
-      !confirm(
-        `Re-price ${count} line${count !== 1 ? "s" : ""} by ${signedCurrency(selectedDelta)}?` +
-          skippedNote +
-          `\n\nThis changes what customers are billed going forward. It can be undone from the run history.`
-      )
-    ) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: `Re-price ${count} line${count !== 1 ? "s" : ""} by ${signedCurrency(selectedDelta)}?`,
+      description:
+        `This changes what customers are billed going forward.${skippedNote} It can be undone from the run history.`,
+      confirmLabel: "Apply",
+      destructive: true,
+    });
+    if (!confirmed) return;
 
     apply.mutate(
       {
@@ -587,6 +588,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
           )}
         </section>
       )}
+      {confirmDialog}
     </div>
   );
 }
