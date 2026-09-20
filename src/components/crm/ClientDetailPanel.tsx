@@ -1909,7 +1909,6 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
   const [addInvoiceOpen, setAddInvoiceOpen] = useState(false);
-  const [showAllAccounting, setShowAllAccounting] = useState(false);
   const [allAccountingOpen, setAllAccountingOpen] = useState(false);
   const [allEstimatesOpen, setAllEstimatesOpen] = useState(false);
 
@@ -1971,7 +1970,6 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   if (isLead) {
     // Leads only show the estimates column — full width
-    const openEstimates = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
     return (
       <div className="flex flex-col overflow-hidden h-full">
         <div className="flex items-center justify-between border-b px-4 py-2.5">
@@ -2751,95 +2749,6 @@ function AllContactsModal({
   );
 }
 
-function AllPropertiesModal({
-  properties,
-  onClose,
-  onOpenProperty,
-  onAddProperty,
-}: {
-  properties: ClientProperty[];
-  onClose: () => void;
-  onOpenProperty: (p: ClientProperty) => void;
-  onAddProperty: () => void;
-}) {
-  const [search, setSearch] = useState("");
-
-  const filtered = properties.filter((p) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      (p.name ?? "").toLowerCase().includes(q) ||
-      (p.address ?? "").toLowerCase().includes(q) ||
-      (p.city ?? "").toLowerCase().includes(q)
-    );
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
-        <div className="flex items-center justify-between border-b px-6 py-3">
-          <h2 className="text-base font-semibold text-neutral-800">All Properties</h2>
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, address, city…"
-              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
-            />
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddProperty}>
-              <Plus className="mr-1 h-3 w-3" /> Add Property
-            </Button>
-            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-auto flex-1">
-          {filtered.length === 0 ? (
-            <div className="p-6 text-sm text-neutral-400 text-center">No properties found.</div>
-          ) : (
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-neutral-600 text-white">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Address</th>
-                  <th className="px-4 py-2 text-left font-medium">City</th>
-                  <th className="px-4 py-2 text-left font-medium">State</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filtered.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="cursor-pointer hover:bg-neutral-50"
-                    onClick={() => onOpenProperty(p)}
-                  >
-                    <td className="px-4 py-2.5 font-medium text-neutral-800">
-                      {p.name ?? "—"}
-                      {p.isMaster && (
-                        <Badge variant="secondary" className="ml-1.5 text-[9px] h-4 px-1.5">Master</Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-neutral-600">{p.address ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-neutral-600">{p.city ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-neutral-600">{p.state ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="border-t px-6 py-2 text-xs text-neutral-400">
-          {filtered.length} propert{filtered.length !== 1 ? "ies" : "y"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function AllAccountingModal({
   invoices,
   payments,
@@ -3296,10 +3205,6 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       router.push(`/crm/clients/${clientId}`);
     } catch { toast.error("Failed to convert lead"); }
   }
-
-  const address = [client.billingAddress, client.billingCity, client.billingState, client.billingZip]
-    .filter(Boolean)
-    .join(", ");
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
