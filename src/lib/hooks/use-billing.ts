@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { BillablePlan } from "@/lib/stripe/plans";
 import { getSeatConfig } from "@/lib/stripe/plans";
 import type { BillingPlanInfo, BillingAddonInfo } from "@/app/api/billing/plans/route";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { monthStartInZone } from "@/lib/time/zone";
 
 export interface BillingInfo {
   plan: string;
@@ -138,8 +140,11 @@ export interface SmsUsage {
 }
 
 export function useSmsUsage(enabled: boolean) {
+  const orgTimeZone = useOrgTimeZone();
   return useQuery<SmsUsage | null>({
-    queryKey: ["sms-usage"],
+    // The zone is part of the key: it determines which billing period this
+    // reads, so a zone change has to invalidate the cached figure.
+    queryKey: ["sms-usage", orgTimeZone],
     enabled,
     queryFn: async () => {
       const supabase = createClient();
@@ -148,9 +153,8 @@ export function useSmsUsage(enabled: boolean) {
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
       if (!profile) return null;
 
-      const periodStart = new Date();
-      periodStart.setUTCDate(1);
-      const periodStartStr = periodStart.toISOString().slice(0, 10);
+      // Same key the send path writes: the 1st of the ORG's month.
+      const periodStartStr = monthStartInZone(new Date(), orgTimeZone);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any)

@@ -1,3 +1,6 @@
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { monthStartInZone } from "@/lib/time/zone";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -98,12 +101,16 @@ export async function sendClientSms(
   // Feeds the SMS add-on's included-volume/overage billing (Phase 3) — every
   // successful send counts, regardless of which org/messaging-service sent
   // it. Best-effort: a failure here shouldn't fail the send itself.
-  const periodStart = new Date();
-  periodStart.setUTCDate(1);
+  // The billing period key is the 1st of the month on the ORG's calendar. All
+  // three places that touch organization_sms_usage (this, the overage cron,
+  // and the usage widget) must derive it identically or usage is written under
+  // one key and read under another — and a UTC-derived key already advances on
+  // the evening of a month's last day.
+  const periodStart = monthStartInZone(new Date(), await getOrgTimeZone(supabase, params.orgId));
   await supabase
     .rpc("increment_sms_usage", {
       p_org_id: params.orgId,
-      p_period_start: periodStart.toISOString().slice(0, 10),
+      p_period_start: periodStart,
     })
     .then(() => {}, () => {});
 
