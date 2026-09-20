@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { isAddonKey, getPriceIdForAddon } from "@/lib/stripe/addons";
-import { planIncludesAddon, type BundledAddonKey } from "@/lib/stripe/plans";
+import { isAddonKey, getPriceIdForAddon, addonAppliesToModules } from "@/lib/stripe/addons";
+import { planIncludesAddon, getModulesForPlan, type BundledAddonKey } from "@/lib/stripe/plans";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 
 const ToggleAddonSchema = z.object({
@@ -43,6 +43,14 @@ export async function POST(request: Request) {
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+
+  // Mirrors the Subscription tab's own UI filter (SubscriptionTab.tsx,
+  // addonAppliesToModules) so a module-inapplicable add-on (e.g. Route
+  // Optimization or SMS on an Equipt-only org) can't be enabled by calling
+  // this route directly, bypassing that filter.
+  if (enabled && !addonAppliesToModules(addon, getModulesForPlan(org.plan))) {
+    return NextResponse.json({ error: `The "${addon}" add-on isn't available on your plan` }, { status: 422 });
+  }
 
   const serviceClient = createServiceClient();
 
