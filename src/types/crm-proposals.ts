@@ -26,19 +26,6 @@ export interface EstimateEmail {
   emailType: "estimate" | "confirmation";
 }
 
-export interface CRMEmailTemplate {
-  id: string;
-  orgId: string;
-  name: string;
-  subject: string;
-  bodyHtml: string;
-  templateType: "estimate" | "confirmation" | "invoice" | "chemical_application" | "general";
-  isDefault: boolean;
-  includePdf: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // Merge tags supported in email templates
 export const EMAIL_MERGE_TAGS = [
   { tag: "[clientfirstname]",  label: "Client First Name" },

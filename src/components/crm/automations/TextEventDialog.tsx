@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
+import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { renderBlocksToPlainText } from "@/lib/utils/document-template-renderer";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
 
@@ -38,6 +43,16 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
   const [to, setTo] = useState<string[]>(c.to ?? ["client_primary_phone"]);
   const [requireApproval, setRequireApproval] = useState<boolean>(c.require_approval ?? false);
   const [saving, setSaving] = useState(false);
+
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  const smsTemplates = allDocTemplates.filter((t) => t.docType === "text_message" && t.status === "active");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
+
+  useEffect(() => {
+    if (!selectedDocTemplate) return;
+    setMessage(renderBlocksToPlainText(selectedDocTemplate.blocks));
+  }, [selectedDocTemplate]);
 
   function toggleTo(value: string) {
     setTo((prev) =>
@@ -68,6 +83,21 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
           <DialogTitle>Text Message Event</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
+          {smsTemplates.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Use a template</Label>
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Choose a template…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {smsTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}{t.isDefault ? " (default)" : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between">
               <Label>Message</Label>
