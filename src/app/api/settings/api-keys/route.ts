@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateApiKey } from "@/lib/api/auth";
 import { isKnownScope } from "@/lib/api/scopes";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 
 const createKeySchema = z.object({
   name: z.string().min(1).max(100),
@@ -53,6 +54,13 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
   if (!profile || profile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
+  }
+
+  if (!(await orgHasAddon(supabase, profile.org_id, "api_access"))) {
+    return NextResponse.json(
+      { error: "API access isn't included on your plan. Add it in Settings → Subscription before creating a key." },
+      { status: 403 }
+    );
   }
 
   const parsed = createKeySchema.safeParse(await request.json().catch(() => ({})));
