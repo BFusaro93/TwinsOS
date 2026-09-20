@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── permission section component ──────────────────────────────────────────────
 
@@ -226,6 +227,7 @@ function RoleDialog({
 type ActiveFilter = "active" | "inactive" | "all";
 
 export function RolesList() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: roles, isLoading } = useRoles(false);
   const { mutateAsync: update } = useUpdateRole();
   const { mutateAsync: deleteRole } = useDeleteRole();
@@ -249,7 +251,12 @@ export function RolesList() {
   }
 
   async function handleDelete(role: CRMRole) {
-    if (!confirm(`Delete role "${role.name}"? This cannot be undone.`)) return;
+    if (!(await confirm({
+      title: `Delete role "${role.name}"?`,
+      description: "This cannot be undone.",
+      confirmLabel: "Delete Role",
+      destructive: true,
+    }))) return;
     try {
       await deleteRole(role.id);
       toast.success("Role deleted");
@@ -362,7 +369,7 @@ export function RolesList() {
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <PermissionGate permission="allow_roles_access">
                       <button
-                        onClick={() => handleDelete(role)}
+                        onClick={() => void handleDelete(role)}
                         className="text-slate-300 hover:text-red-500"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -383,6 +390,7 @@ export function RolesList() {
           onOpenChange={(o) => { if (!o) setDialogRole(null); }}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

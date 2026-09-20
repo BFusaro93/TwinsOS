@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
-import { isoNy } from "@/lib/reports/ny-date";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 
 export async function POST(
   _request: Request,
@@ -98,7 +99,7 @@ export async function POST(
     await recalcNextPackageVisitDate(
       supabase,
       (visit as { job_service_id: string | null }).job_service_id,
-      isoNy(new Date())
+      todayInZone(await getOrgTimeZone(supabase, (visit as { org_id: string }).org_id))
     );
   } catch (err) {
     console.error("[visits/complete] package min_days recalc failed:", err);

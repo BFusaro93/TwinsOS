@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { SettingRow } from "@/components/settings/settings-ui";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import { DEFAULT_TIME_ZONE, SELECTABLE_TIME_ZONES } from "@/lib/time/zone";
 
 // General organization settings — name, address, tax rate, and labor rates.
 // Branding (logo/accent color) lives in BrandingTab; the maintenance-request
@@ -34,6 +35,9 @@ export function OrganizationTab() {
   const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
   const [burdenedDraft, setBurdenedDraft] = useState((burdenedLaborRateCents / 100).toFixed(2));
   const [orgNameDraft, setOrgNameDraft] = useState(orgName);
+  // Seeded from the platform default until the org row loads, then synced in
+  // the effect below alongside the other remote-backed drafts.
+  const [tzDraft, setTzDraft] = useState<string>(DEFAULT_TIME_ZONE);
 
   // The Save buttons below must compare against what's ACTUALLY persisted in
   // organizations.customizations, not the zustand store's value — the store
@@ -56,6 +60,7 @@ export function OrganizationTab() {
     seeded.current = true;
     setOrgNameDraft(remoteSettings.name);
     setTaxDraft(remoteSettings.taxRatePercent);
+    setTzDraft(remoteSettings.timezone);
     const savedRate = (remoteSettings.customizations as Record<string, unknown>)?.breakevenLaborRateCents;
     if (typeof savedRate === "number") setBreakevenDraft((savedRate / 100).toFixed(2));
     const savedBurdened = (remoteSettings.customizations as Record<string, unknown>)?.burdenedLaborRateCents;
@@ -173,6 +178,43 @@ export function OrganizationTab() {
         </div>
         <Separator />
         <div className="px-6">
+          <SettingRow
+            label="Operating Time Zone"
+            description="The clock your business runs on. Decides which day a visit, invoice or report belongs to — for everyone, including staff logged in from another time zone."
+          >
+            <div className="flex items-center gap-2">
+              <select
+                value={tzDraft}
+                onChange={(e) => setTzDraft(e.target.value)}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                {SELECTABLE_TIME_ZONES.map((tz) => (
+                  <option key={tz.value} value={tz.value}>{tz.label}</option>
+                ))}
+                {/* An org set to something outside the shortlist (directly in
+                    the DB) must still see its own value selected rather than
+                    silently reading as Eastern. */}
+                {!SELECTABLE_TIME_ZONES.some((t) => t.value === tzDraft) && (
+                  <option value={tzDraft}>{tzDraft}</option>
+                )}
+              </select>
+              <span className="text-xs text-slate-500">
+                Now {new Date().toLocaleTimeString("en-US", {
+                  timeZone: tzDraft,
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </span>
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={savingSettings || tzDraft === (remoteSettings?.timezone ?? "")}
+                onClick={() => updateOrgSettings({ timezone: tzDraft })}
+              >
+                Save
+              </Button>
+            </div>
+          </SettingRow>
           <SettingRow
             label="Default Sales Tax Rate"
             description="Applied to new POs and requisitions. Can be overridden per record."

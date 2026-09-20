@@ -14,7 +14,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { EstimateStage } from "@/types/crm-estimates";
-import { nyDateParts, shiftYmd, ymd } from "@/lib/reports/ny-date";
+import { shiftYmd, ymd, zoneDateParts } from "@/lib/time/zone";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,39 +68,37 @@ function stageLabelText(stage: string): string {
 
 type DateRange = "this_year" | "last_30" | "last_90" | "custom";
 
-// Range edges are whole calendar days in America/New_York (the org's operating
-// timezone). `new Date("YYYY-MM-DD")` would parse as UTC midnight, which is the
-// previous evening in NY and quietly shifts the window by several hours.
-const NY_HOUR_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  hour: "numeric",
-  hourCycle: "h23",
-});
+// Range edges are whole calendar days on the ORG's clock. `new Date(
+// "YYYY-MM-DD")` would parse as UTC midnight, which is the previous evening
+// in any negative-offset zone and quietly shifts the window by hours.
+function hourFmt(timeZone: string) {
+  return new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23" });
+}
 
 /** The instant at which the NY calendar day `ymdStr` begins. */
-function nyDayStart(ymdStr: string): Date {
+function zoneDayStart(ymdStr: string, timeZone: string): Date {
   // NY is UTC-4 (EDT) or UTC-5 (EST); whichever lands on 00:00 NY is right.
   for (const offset of ["-04:00", "-05:00"]) {
     const t = new Date(`${ymdStr}T00:00:00${offset}`);
-    const hour = NY_HOUR_FMT.formatToParts(t).find((p) => p.type === "hour")?.value;
+    const hour = hourFmt(timeZone).formatToParts(t).find((p) => p.type === "hour")?.value;
     if (hour === "0" || hour === "00") return t;
   }
   return new Date(`${ymdStr}T00:00:00-05:00`);
 }
 
 /** The last instant of the NY calendar day `ymdStr`. */
-function nyDayEnd(ymdStr: string): Date {
-  return new Date(nyDayStart(shiftYmd(ymdStr, 1)).getTime() - 1);
+function zoneDayEnd(ymdStr: string, timeZone: string): Date {
+  return new Date(zoneDayStart(shiftYmd(ymdStr, 1), timeZone).getTime() - 1);
 }
 
-function getRangeStart(range: DateRange, customStart: string): string {
+function getRangeStart(range: DateRange, customStart: string, timeZone: string): string {
   const now = new Date();
-  const { year } = nyDateParts(now);
-  const yearStart = nyDayStart(ymd(year, 0, 1)).toISOString();
+  const { year } = zoneDateParts(now, timeZone);
+  const yearStart = zoneDayStart(ymd(year, 0, 1), timeZone).toISOString();
   if (range === "this_year") return yearStart;
   if (range === "last_30") return new Date(now.getTime() - 30 * 86400_000).toISOString();
   if (range === "last_90") return new Date(now.getTime() - 90 * 86400_000).toISOString();
-  return customStart ? nyDayStart(customStart).toISOString() : yearStart;
+  return customStart ? zoneDayStart(customStart, timeZone).toISOString() : yearStart;
 }
 
 // ── Raw DB types ──────────────────────────────────────────────────────────────
@@ -470,14 +469,16 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
 // ── Main exported section ─────────────────────────────────────────────────────
 
 export function EstimatesReportSection() {
+  // Window edges are whole days on the org's clock, not the reader's.
+  const timeZone = useOrgTimeZone();
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
-  const rangeStart = useMemo(() => getRangeStart(dateRange, customStart), [dateRange, customStart]);
+  const rangeStart = useMemo(() => getRangeStart(dateRange, customStart, timeZone), [dateRange, customStart, timeZone]);
   const rangeEnd = useMemo(
-    () => (dateRange === "custom" && customEnd ? nyDayEnd(customEnd).toISOString() : new Date().toISOString()),
-    [dateRange, customEnd]
+    () => (dateRange === "custom" && customEnd ? zoneDayEnd(customEnd, timeZone).toISOString() : new Date().toISOString()),
+    [dateRange, customEnd, timeZone]
   );
 
   const { data, isLoading } = useEstimatesReportData(rangeStart);

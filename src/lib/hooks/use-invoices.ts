@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 // ── locked-invoice error handling ───────────────────────────────────────────────
 
@@ -473,6 +474,9 @@ export function useCreateInvoice() {
 }
 
 export function useBulkImportInvoices() {
+  // Imported rows without a date mean "today" on the ORG's calendar, not
+  // the importer's laptop or the UTC server.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
@@ -507,7 +511,7 @@ export function useBulkImportInvoices() {
             created_by: user?.id ?? null,
             client_id: clientId,
             description: r.description.trim(),
-            invoice_date: r.invoiceDate?.trim() || isoNy(new Date()),
+            invoice_date: r.invoiceDate?.trim() || todayInZone(orgTimeZone),
             due_date: r.dueDate?.trim() || null,
             po_number: r.poNumber?.trim() || null,
             status: r.status?.trim().toLowerCase() || "draft",
@@ -1305,6 +1309,9 @@ const PAYMENT_METHODS = [
 ];
 
 export function useBulkImportPayments() {
+  // Imported rows without a date mean "today" on the ORG's calendar, not
+  // the importer's laptop or the UTC server.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
@@ -1340,7 +1347,7 @@ export function useBulkImportPayments() {
           invoice_id: invoiceId,
           amount_cents: amountCents,
           unused_amount_cents: invoiceId ? 0 : amountCents,
-          payment_date: r.paymentDate?.trim() || isoNy(new Date()),
+          payment_date: r.paymentDate?.trim() || todayInZone(orgTimeZone),
           method,
           reference: r.reference?.trim() || null,
           memo: r.memo?.trim() || null,

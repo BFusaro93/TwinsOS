@@ -23,6 +23,7 @@ import { ReportScheduleDialog } from "./ReportScheduleDialog";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
 import { buildTotalsRow, exportRowsWithTotals } from "@/lib/reports/export-rows";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
 function chartInputFromResult(
   title: string,
@@ -85,7 +86,11 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
   );
   const { data: result, isFetching, error, refetch } = useRunReport(def.key, values);
 
-  const headerVisuals = def.headerVisuals?.(values) ?? [];
+  // The chart's date window must match the table's, and the table's is
+  // resolved server-side against the ORG's zone — so this has to use the same
+  // zone, not the browser's.
+  const orgTimeZone = useOrgTimeZone();
+  const headerVisuals = def.headerVisuals?.(values, orgTimeZone) ?? [];
   const [chartResults, setChartResults] = useState<Record<string, ReportResult>>({});
   const handleChartData = (title: string, chartResult: ReportResult) => {
     setChartResults((prev) => (prev[title] === chartResult ? prev : { ...prev, [title]: chartResult }));

@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { billSmsOverageForPeriod } from "@/lib/stripe/sms-billing";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { monthStartInZone } from "@/lib/time/zone";
 
 const log = logger.child("cron bill-sms-overage");
 
@@ -33,10 +35,6 @@ export async function GET(request: Request) {
   );
   const stripe = getStripe();
 
-  const periodStart = new Date();
-  periodStart.setUTCDate(1);
-  const periodStartStr = periodStart.toISOString().slice(0, 10);
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: addonRows, error } = await (supabase as any)
     .from("organization_addons")
@@ -53,6 +51,9 @@ export async function GET(request: Request) {
   for (const row of addonRows ?? []) {
     const org = row.organizations;
     if (!org) continue;
+    // Per org: the period this cron bills must be the same key the send path
+    // incremented, which is the org's own month — not the UTC one.
+    const periodStartStr = monthStartInZone(new Date(), await getOrgTimeZone(supabase, org.id));
     try {
       const { data: usage } = await supabase
         .from("organization_sms_usage")

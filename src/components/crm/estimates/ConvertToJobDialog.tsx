@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CalendarDays, Briefcase, Plus, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, roundHours, todayLocalISODate } from "@/lib/utils";
-import { isoNy } from "@/lib/reports/ny-date";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useEstimateShareTokens } from "@/lib/hooks/use-estimates";
@@ -32,6 +32,7 @@ import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
 const JOB_TYPES = [
   { value: "one_time",    label: "One Time" },
@@ -130,6 +131,8 @@ interface Props {
 }
 
 export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Props) {
+  // Date Sold is the org's calendar day for the acceptance instant.
+  const orgTimeZone = useOrgTimeZone();
   const lineItems = (estimate.lineItems ?? []).filter((li) => !li.deletedAt);
   // Only catalog-linked product/material direct costs feed forward into job-level
   // demand (crm_job_products) — free-text costs have nothing to link an order to.
@@ -171,7 +174,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   /** Date Sold — defaults to the estimate's acceptance date (portal or public
    *  proposal), else today. Drives the Sales by Date Sold reports (E-09). */
   const [dateSold,      setDateSold]      = useState(() =>
-    estimate.portalAcceptedAt ? isoNy(new Date(estimate.portalAcceptedAt)) : todayLocalISODate()
+    estimate.portalAcceptedAt ? isoInZone(new Date(estimate.portalAcceptedAt), orgTimeZone) : todayInZone(orgTimeZone)
   );
   const [dateSoldTouched, setDateSoldTouched] = useState(false);
   const { data: shareTokens } = useEstimateShareTokens(estimate.id);
@@ -184,7 +187,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       .filter((d): d is string => !!d)
       .sort()
       .pop();
-    if (accepted) setDateSold(isoNy(new Date(accepted)));
+    if (accepted) setDateSold(isoInZone(new Date(accepted), orgTimeZone));
   }, [shareTokens, dateSoldTouched, estimate.portalAcceptedAt]);
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep || e.id === salesRepId);

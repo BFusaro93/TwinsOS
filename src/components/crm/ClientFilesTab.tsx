@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Upload, FileText, Image, FileSpreadsheet, Trash2, Download, Eye, File } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 function formatBytes(bytes: number | null): string {
   if (!bytes) return "—";
@@ -37,6 +38,7 @@ function FileIcon({ mimeType }: { mimeType: string | null }) {
 }
 
 function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { mutateAsync: deleteFile, isPending: deleting } = useDeleteClientFile();
   const getUrl = useSignedFileUrl();
   const [downloading, setDownloading] = useState(false);
@@ -71,7 +73,7 @@ function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void 
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${file.name}"?`)) return;
+    if (!(await confirm({ title: `Delete "${file.name}"?`, confirmLabel: "Delete", destructive: true }))) return;
     try {
       await deleteFile({ id: file.id, clientId: file.clientId, storagePath: file.storagePath });
       toast.success("File deleted");
@@ -120,6 +122,7 @@ function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void 
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
+      {confirmDialog}
     </div>
   );
 }

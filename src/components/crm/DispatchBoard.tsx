@@ -44,7 +44,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime, formatDateShort, todayCompanyISODate, formatHours } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort, formatHours } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
@@ -95,7 +96,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CRMJob, CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
-import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
+import { useCrews, useCrewDailyMembers, useCrewDailyMembersRange, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
@@ -110,6 +111,10 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 // handing VisitRow a fresh [] every render, which would otherwise defeat any
 // memoization keyed on this array's identity.
 const EMPTY_MEMBER_TIMES: CrewMemberTime[] = [];
+
+// Same stable-empty-array reasoning as EMPTY_MEMBER_TIMES, for per-day crew
+// headcount overrides.
+const EMPTY_DAILY_OVERRIDES: { id: string; member_id: string; crew_id: string }[] = [];
 
 // Formats a "HH:MM" / "HH:MM:SS" 24h time string (the shape a native
 // <input type="time"> value/DB `time` column uses) into "3:00 PM" for
@@ -452,6 +457,9 @@ function JobDetailSheet({
    * Start/End edit overlaps another stop already assigned to this crew. */
   allVisits: CRMJobVisit[];
 }) {
+  // Fallback service/invoice date when a visit has no scheduled_date: the
+  // org's day, never the browser's.
+  const { today: orgToday } = useOrgDates();
   const { mutateAsync: updateVisit } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
@@ -748,7 +756,7 @@ function JobDetailSheet({
       return;
     }
     try {
-      const serviceDate = visit.scheduledDate ?? todayCompanyISODate();
+      const serviceDate = visit.scheduledDate ?? orgToday();
       // invoiceDescription is authored via a rich-text editor on the Service
       // (and carried down onto the job/visit) — stripHtml() it before it
       // reaches an actual generated invoice, or a client-facing invoice
@@ -787,7 +795,7 @@ function JobDetailSheet({
         jobId: visit.jobId,
         clientId: visit.clientId,
         description: masterDescription ?? serviceName,
-        invoiceDate: visit.scheduledDate ?? todayCompanyISODate(),
+        invoiceDate: visit.scheduledDate ?? orgToday(),
         lineItems,
         subtotalCents,
         taxRateBps: 0,
@@ -2389,6 +2397,7 @@ function VisitRow({
   allVisits,
   drivingCrewIds,
   customFieldDefs,
+  dailyOverrides,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -2425,6 +2434,9 @@ function VisitRow({
   drivingCrewIds: Set<string>;
   /** Org custom-field definitions (Settings), for the dynamic trailing columns. */
   customFieldDefs: PropertyCustomFieldDef[];
+  /** This visit's own scheduledDate slice of the board's batched per-day crew
+   * headcount overrides — see dailyOverridesByDate in DispatchBoard. */
+  dailyOverrides: { id: string; member_id: string; crew_id: string }[];
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -2489,11 +2501,12 @@ function VisitRow({
   const endButtonRef = useRef<HTMLButtonElement>(null);
 
   const { data: richCrewsForSize } = useCrews(false);
-  // Must key off this visit's own date, not the board's global selectedDate —
-  // on a multi-day (From/To range) view, a visit from day 2+ of the range
-  // would otherwise resolve its headcount override against day 1's roster.
-  // JobDetailSheet does this correctly (useCrewDailyMembers(visit.scheduledDate)).
-  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(visit.scheduledDate);
+  // dailyOverrides is keyed off this visit's own date via the prop (see
+  // dailyOverridesByDate in DispatchBoard), not the board's global
+  // selectedDate — on a multi-day (From/To range) view, a visit from day 2+
+  // of the range would otherwise resolve its headcount override against day
+  // 1's roster. JobDetailSheet does this correctly too (useCrewDailyMembers(visit.scheduledDate)).
+  const dailyOverridesForSize = dailyOverrides;
   const upsertMemberTime = useUpsertCrewMemberTime();
 
   // Does the crew actually on this visit have different punch times from each
@@ -3205,10 +3218,22 @@ export function DispatchBoard() {
   const urlRouter    = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
-  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayCompanyISODate());
+  // The service day is the ORG's day, not the viewer's — a manager checking
+  // the board from another state has to see what the crew sees.
+  const { today: orgToday, timeZone: orgTimeZone } = useOrgDates();
+  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? orgToday());
+  // The org's timezone arrives with the settings query, which can resolve
+  // AFTER this mounts — so the day defaulted to on first paint may have been
+  // the platform default's, not the org's. Re-snap while the URL carries no
+  // explicit date, i.e. while the user hasn't chosen a day themselves.
+  useEffect(() => {
+    if (searchParams.get("date") !== null) return;
+    const t = orgToday();
+    setSelectedDate((prev) => (prev === t ? prev : t));
+  }, [orgTimeZone, orgToday, searchParams]);
   useEffect(() => {
     const current = searchParams.get("date");
-    const isToday = selectedDate === todayCompanyISODate();
+    const isToday = selectedDate === orgToday();
     // Keep the URL clean on the default day; otherwise mirror the selection.
     if ((isToday && current === null) || current === selectedDate) return;
     const params = new URLSearchParams(searchParams.toString());
@@ -3216,7 +3241,7 @@ export function DispatchBoard() {
     const qs = params.toString();
     // replace (not push) so paging through days doesn't spam history.
     urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [selectedDate, searchParams, pathname, urlRouter]);
+  }, [selectedDate, searchParams, pathname, urlRouter, orgToday]);
   const [endDate,         setEndDate]         = useState("");
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
   const [tagFilters,      setTagFilters]       = useState<string[]>([]);
@@ -3301,6 +3326,20 @@ export function DispatchBoard() {
   // visible row would be its own N+1 problem.
   const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
   const { data: drivingCrewIds = new Set<string>() } = useDrivingCrewIds(selectedDate);
+  // Batched by date range, not per-row — every VisitRow needs the headcount
+  // override for its own visit date (which can differ from the board's
+  // selectedDate on a multi-day From/To view), and firing one
+  // useCrewDailyMembers query per distinct date among the visible rows was
+  // its own N+1 (Sentry-flagged repeating spans on this route).
+  const { data: allDailyOverrides = [] } = useCrewDailyMembersRange(selectedDate, effectiveEnd ?? selectedDate);
+  const dailyOverridesByDate = useMemo(() => {
+    const m = new Map<string, { id: string; member_id: string; crew_id: string }[]>();
+    for (const o of allDailyOverrides) {
+      const list = m.get(o.work_date);
+      if (list) list.push(o); else m.set(o.work_date, [o]);
+    }
+    return m;
+  }, [allDailyOverrides]);
   // Remembered per-(crew, weekday) stop order, used to seed a day that has
   // never been saved so a recurring route doesn't have to be re-dragged weekly.
   const { data: rememberedOrder } = useCrewRouteOrder(selectedDate, effectiveEnd);
@@ -3540,6 +3579,26 @@ export function DispatchBoard() {
     setRoutedCrewCount(0);
   }
 
+  /**
+   * Drops BOTH kinds of unsaved order — an optimize result and a manual
+   * drag/reverse/group — and is what every date or date-range change must
+   * call.
+   *
+   * `manualOrder` is a bare list of visit ids with no date attached, so
+   * changing the day swaps the entire visit set out from under it. Date
+   * changes used to call clearOptimization() alone, which left `manualOrder`
+   * pointing at the day the user had just LEFT while the board showed the new
+   * day. The "Order changed — not yet saved" banner stayed up across the
+   * switch and invited a Save, and crm_save_route_order matches visits on id
+   * and org only — never on date — so that Save wrote priorities onto the
+   * previous day's visits, recorded crm_crew_route_order rows against that
+   * day's weekday, and silently dropped visits on the day actually on screen.
+   */
+  function clearPendingOrder() {
+    clearOptimization();
+    setManualOrder(null);
+  }
+
   function isVisible(col: string) { return visibleKeys.includes(col); }
 
   /** See effectiveCrewId at the top of this file. */
@@ -3718,7 +3777,21 @@ export function DispatchBoard() {
   }
 
   async function handleSaveOrder() {
-    const changedOrder = manualOrder ?? displayVisits.map((v) => v.id);
+    // Only ever save ids that belong to the visit set currently loaded for
+    // this date/range. clearPendingOrder() should already have dropped a
+    // manualOrder left over from another day, but this is the last gate before
+    // an RPC that matches on id and org alone: a single foreign id here would
+    // renumber a visit on a different date, write a crm_crew_route_order row
+    // against that date's weekday, and push a real visit off the end of the
+    // list so it kept a now-colliding priority.
+    const loadedIds = new Set(allVisits.map((v) => v.id));
+    const changedOrder = (manualOrder ?? displayVisits.map((v) => v.id)).filter((id) => loadedIds.has(id));
+    if (changedOrder.length === 0) {
+      toast.error("Nothing to save — the visits this order applied to are no longer on the board.");
+      setManualOrder(null);
+      clearOptimization();
+      return;
+    }
     // manualOrder/displayVisits are built from `filtered` — if a crew/status/
     // search filter is active, visits it hides never appear in changedOrder
     // at all. Assigning sequential priorities 1..N over changedOrder alone
@@ -3962,27 +4035,27 @@ export function DispatchBoard() {
           override the box renders at 14px text and clips the native
           calendar-picker icon off the right edge at desktop widths. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
-        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
+        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearPendingOrder(); }} />
 
         <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-1 shrink-0">
           <span className="font-medium">From</span>
           <Input
             type="date"
             value={selectedDate}
-            onChange={(e) => { setSelectedDate(e.target.value); clearOptimization(); }}
+            onChange={(e) => { setSelectedDate(e.target.value); clearPendingOrder(); }}
             className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); clearOptimization(); }}
+            onChange={(e) => { setEndDate(e.target.value); clearPendingOrder(); }}
             className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           {endDate && (
             <button
               className="text-slate-400 hover:text-slate-700"
-              onClick={() => setEndDate("")}
+              onClick={() => { setEndDate(""); clearPendingOrder(); }}
               title="Clear end date"
             >
               <XIcon className="h-3.5 w-3.5" />
@@ -4756,6 +4829,7 @@ export function DispatchBoard() {
                   allVisits={allVisits}
                   drivingCrewIds={drivingCrewIds}
                   customFieldDefs={customFieldDefs}
+                  dailyOverrides={dailyOverridesByDate.get(visit.scheduledDate) ?? EMPTY_DAILY_OVERRIDES}
                 />
               ))
             )}

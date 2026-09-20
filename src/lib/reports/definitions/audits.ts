@@ -27,6 +27,22 @@ const ACTIVITY_TYPE_OPTIONS = [
   { value: "automation", label: "Automation" },
 ];
 
+/** audit_log.action CHECK values (audit_log_action_check). */
+const AUDIT_ACTION_OPTIONS = [
+  { value: "created", label: "Created" },
+  { value: "updated", label: "Updated" },
+  { value: "status_changed", label: "Status Changed" },
+  { value: "qty_adjusted", label: "Qty Adjusted" },
+  { value: "price_updated", label: "Price Updated" },
+  { value: "vendor_changed", label: "Vendor Changed" },
+  { value: "image_uploaded", label: "Image Uploaded" },
+  { value: "received", label: "Received" },
+  { value: "name_conflict", label: "Name Conflict" },
+  { value: "archived", label: "Archived" },
+  { value: "unarchived", label: "Unarchived" },
+  { value: "deleted", label: "Deleted" },
+];
+
 export const AUDIT_REPORTS: PrebuiltReportDef[] = [
   {
     key: "client-timeline",
@@ -39,7 +55,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       { key: "type", label: "Activity Type", type: "select", options: ACTIVITY_TYPE_OPTIONS },
       { key: "client", label: "Client Name", type: "text", placeholder: "Any client" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_client_activity",
       columns: [
         "occurred_at",
@@ -50,7 +66,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         "status",
       ],
       filters: [
-        ...dateRangeFilters("occurred_at", params, { datetime: true }),
+        ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
         ...eqFilter("activity_type", params.type),
         ...containsFilter("client_name", params.client),
         { column: "client_status", op: "neq", value: "lead" },
@@ -72,7 +88,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       { key: "type", label: "Activity Type", type: "select", options: ACTIVITY_TYPE_OPTIONS },
       { key: "client", label: "Lead Name", type: "text", placeholder: "Any lead" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_client_activity",
       columns: [
         "occurred_at",
@@ -83,7 +99,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         "status",
       ],
       filters: [
-        ...dateRangeFilters("occurred_at", params, { datetime: true }),
+        ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
         ...eqFilter("activity_type", params.type),
         ...containsFilter("client_name", params.client),
         { column: "client_status", op: "eq", value: "lead" },
@@ -104,7 +120,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "Draft invoices only, by invoice date. A row drops off once the invoice is printed, sent, or voided. Completed visits that have not had an invoice created at all do not appear here.",
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
       columns: [
         "invoice_number",
@@ -115,7 +131,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         "total_cents",
       ],
       filters: [
-        ...dateRangeFilters("invoice_date", params),
+        ...dateRangeFilters("invoice_date", params, timeZone),
         { column: "status", op: "eq", value: "draft" },
       ],
       groupBy: [],
@@ -131,8 +147,8 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows completed and in-progress visits for clients who still have an outstanding balance.",
     filters: [dateRangeFilterDef("Visit Date", "this_month")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
       type Row = {
         scheduled_date: string | null;
@@ -233,7 +249,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows payments with money still unapplied to an invoice, including prepayments and credits.",
     filters: [dateRangeFilterDef("Payment Date", "all_time")],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_payments",
       columns: [
         "payment_date",
@@ -244,7 +260,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         "unused_amount_cents",
       ],
       filters: [
-        ...dateRangeFilters("payment_date", params, { preset: "all_time" }),
+        ...dateRangeFilters("payment_date", params, timeZone, { preset: "all_time" }),
         { column: "unused_amount_cents", op: "gt", value: 0 },
       ],
       groupBy: [],
@@ -264,7 +280,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
     notes: ["Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Amounts exclude sales tax."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
       columns: [
         "invoice_number",
@@ -276,13 +292,132 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         "under_contract",
       ],
       filters: [
-        ...dateRangeFilters("invoice_date", params),
+        ...dateRangeFilters("invoice_date", params, timeZone),
         ...eqFilter("sales_rep", params.sales_rep),
         { column: "status", op: "in", value: [...ISSUED_INVOICE_STATUSES] },
       ],
       groupBy: [],
       aggregates: [],
       sortColumn: "invoice_date",
+      sortDir: "desc",
+    }),
+  },
+  {
+    key: "audit-log",
+    section: "audits",
+    name: "Audit Log",
+    description:
+      "Every recorded change across Equipt and Landscapt — who changed what, when, and from what value to what.",
+    filters: [
+      dateRangeFilterDef("Date", "this_month"),
+      {
+        key: "category",
+        label: "Category",
+        type: "select",
+        options: [
+          { value: "Security & Access", label: "Security & Access" },
+          { value: "Money", label: "Money" },
+          { value: "Operations", label: "Operations" },
+          { value: "Setup & Config", label: "Setup & Config" },
+        ],
+      },
+      { key: "record_type", label: "Record Type", type: "text", placeholder: "Any record type" },
+      { key: "user", label: "Changed By", type: "text", placeholder: "Any user" },
+      { key: "action", label: "Action", type: "select", options: AUDIT_ACTION_OPTIONS },
+    ],
+    notes: [
+      'Entries are written by database triggers, not by the app, so they cover every path a change can arrive through — the UI, the API, an automation or an import.',
+      'Changed By reads "system" when the change came from a background job (a contract renewal, a scheduled invoice run) rather than a signed-in person.',
+    ],
+    analysis: (params, timeZone) => ({
+      dataset: "rpt_audit_log",
+      columns: [
+        "occurred_at",
+        "category",
+        "record_label",
+        "action",
+        "changed_by",
+        "description",
+      ],
+      filters: [
+        ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
+        ...eqFilter("category", params.category),
+        ...containsFilter("record_label", params.record_type),
+        ...containsFilter("changed_by", params.user),
+        ...eqFilter("action", params.action),
+      ],
+      groupBy: [],
+      aggregates: [],
+      sortColumn: "occurred_at",
+      sortDir: "desc",
+    }),
+  },
+  {
+    key: "security-audit",
+    section: "audits",
+    name: "Security & Access Audit",
+    description:
+      "Permission, user, credential and approval-chain changes only — the review you want before an audit or after someone leaves.",
+    filters: [
+      dateRangeFilterDef("Date", "last_90"),
+      { key: "user", label: "Changed By", type: "text", placeholder: "Any user" },
+    ],
+    notes: [
+      "Covers user profiles and roles, permission sets, API keys, third-party integrations, OAuth tokens and approval flows.",
+      "Secret values (API keys, hashes, tokens) are never recorded — an entry says the credential changed, never what it changed to.",
+      "A user moving between organizations is recorded against the organization they LEFT, so it stays visible here.",
+    ],
+    analysis: (params, timeZone) => ({
+      dataset: "rpt_audit_log",
+      columns: [
+        "occurred_at",
+        "record_label",
+        "action",
+        "changed_by",
+        "changed_by_email",
+        "description",
+      ],
+      filters: [
+        ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true, preset: "last_90" }),
+        ...containsFilter("changed_by", params.user),
+        { column: "category", op: "eq", value: "Security & Access" },
+      ],
+      groupBy: [],
+      aggregates: [],
+      sortColumn: "occurred_at",
+      sortDir: "desc",
+    }),
+  },
+  {
+    key: "audit-activity-by-user",
+    section: "audits",
+    name: "Change Activity by User",
+    description:
+      "How many changes each person made, broken down by record type — useful for spotting an unexpected burst of edits.",
+    filters: [
+      dateRangeFilterDef("Date", "this_month"),
+      {
+        key: "category",
+        label: "Category",
+        type: "select",
+        options: [
+          { value: "Security & Access", label: "Security & Access" },
+          { value: "Money", label: "Money" },
+          { value: "Operations", label: "Operations" },
+          { value: "Setup & Config", label: "Setup & Config" },
+        ],
+      },
+    ],
+    analysis: (params, timeZone) => ({
+      dataset: "rpt_audit_log",
+      columns: [],
+      filters: [
+        ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
+        ...eqFilter("category", params.category),
+      ],
+      groupBy: ["changed_by", "record_label"],
+      aggregates: [{ fn: "count", column: "*" }],
+      sortColumn: "count_all",
       sortDir: "desc",
     }),
   },

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
-import { isoNy } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 const createJobSchema = z.object({
   clientId: z.string().uuid(),
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
       job_type: body.jobType ?? "one_time",
       scheduled_date: body.scheduledDate ?? null,
       notes: body.notes ?? null,
-      date_sold: body.dateSold ?? isoNy(new Date()),
+      date_sold: body.dateSold ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
       status: "scheduled",
     })
     .select("id, job_number, job_type, status, scheduled_date, created_at")

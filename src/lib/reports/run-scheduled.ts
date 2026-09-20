@@ -9,19 +9,20 @@ import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
 import { buildTotalsRow } from "@/lib/reports/export-rows";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import type { ReportColumnDef, ReportFieldType, ReportResult } from "@/types/crm-reports";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 
-/** The org's operating timezone — the cron runs on a UTC server, so every
- *  wall-clock rendering has to pin this explicitly (the browser path gets
- *  it for free from the user's machine). */
-const REPORT_TZ = "America/New_York";
+// The cron runs on a UTC server with no user session, so every wall-clock
+// rendering has to pin the ORG's zone explicitly — it can't be inferred from
+// the host the way the browser path infers it from the user's machine. It is
+// resolved once per report in renderScheduledReportPdf and threaded down.
 
 /** Standalone copy of ReportTable's `formatCellValue` — that file is a
  *  "use client" component; duplicated here rather than imported so this
  *  server-only path (the report-schedules cron) has no dependency on it.
- *  Differs on `datetime`: the date part is formatted in America/New_York
- *  too (utils.formatDate uses the host timezone, which is UTC on Vercel
- *  and would roll an evening timestamp onto the next day). */
-function formatCellValueServer(value: unknown, type: ReportFieldType): string {
+ *  Differs on `datetime`: the date part is formatted in the org's zone too
+ *  (utils.formatDate uses the host timezone, which is UTC on Vercel and would
+ *  roll an evening timestamp onto the next day). */
+function formatCellValueServer(value: unknown, type: ReportFieldType, timeZone: string): string {
   if (value === null || value === undefined) return "—";
   switch (type) {
     case "money":
@@ -40,13 +41,13 @@ function formatCellValueServer(value: unknown, type: ReportFieldType): string {
       const d = new Date(String(value));
       if (isNaN(d.getTime())) return "—";
       const date = new Intl.DateTimeFormat("en-US", {
-        timeZone: REPORT_TZ,
+        timeZone,
         month: "short",
         day: "numeric",
         year: "numeric",
       }).format(d);
       const time = d.toLocaleTimeString("en-US", {
-        timeZone: REPORT_TZ,
+        timeZone,
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -59,7 +60,7 @@ function formatCellValueServer(value: unknown, type: ReportFieldType): string {
   }
 }
 
-function chartFromResult(title: string, result: ReportResult): ReportExportChart | null {
+function chartFromResult(title: string, result: ReportResult, timeZone: string): ReportExportChart | null {
   const labelCol: ReportColumnDef | undefined = result.columns[0];
   const valueCol: ReportColumnDef | undefined = result.columns[1];
   if (!labelCol || !valueCol) return null;
@@ -68,7 +69,7 @@ function chartFromResult(title: string, result: ReportResult): ReportExportChart
     bars: result.rows.map((row) => ({
       label: String(row[labelCol.key] ?? ""),
       value: typeof row[valueCol.key] === "number" ? (row[valueCol.key] as number) : 0,
-      valueLabel: formatCellValueServer(row[valueCol.key], valueCol.type),
+      valueLabel: formatCellValueServer(row[valueCol.key], valueCol.type, timeZone),
     })),
   };
 }
@@ -88,11 +89,14 @@ export async function renderScheduledReportPdf(
     throw new Error(`Report "${def.key}" has no analysis() — cannot run headlessly.`);
   }
 
-  const config = def.analysis({});
+  // Every date boundary and wall-clock rendering below belongs to THIS org.
+  const timeZone = await getOrgTimeZone(supabase, orgId);
+
+  const config = def.analysis({}, timeZone);
   config.filters = [...config.filters, { column: "org_id", op: "eq", value: orgId }];
   const result = await runAnalysis(supabase, config);
 
-  const headerVisuals = def.headerVisuals?.({}) ?? [];
+  const headerVisuals = def.headerVisuals?.({}, timeZone) ?? [];
   const chartResults = await Promise.all(
     headerVisuals.map(async (hv) => {
       const visualConfig = {
@@ -100,18 +104,18 @@ export async function renderScheduledReportPdf(
         filters: [...hv.visual.config.filters, { column: "org_id", op: "eq" as const, value: orgId }],
       };
       const chartResult = await runAnalysis(supabase, visualConfig);
-      return chartFromResult(hv.title, chartResult);
+      return chartFromResult(hv.title, chartResult, timeZone);
     })
   );
   const charts = chartResults.filter((c): c is ReportExportChart => c !== null);
 
   const generatedAt = new Date().toLocaleString("en-US", {
-    timeZone: REPORT_TZ,
+    timeZone,
     dateStyle: "medium",
     timeStyle: "short",
   });
 
-  const grouped = buildGroupedPdfSection(result, formatCellValueServer) ?? undefined;
+  const grouped = buildGroupedPdfSection(result, (v, t) => formatCellValueServer(v, t, timeZone)) ?? undefined;
   const buffer = await renderToBuffer(
     createElement(ReportExportDocument, {
       title: def.name,
@@ -121,8 +125,8 @@ export async function renderScheduledReportPdf(
         {
           heading: "",
           columns: grouped ? grouped.columns : result.columns.map((c) => c.label),
-          rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValueServer(row[c.key], c.type))),
-          totals: grouped ? undefined : buildTotalsRow(result, formatCellValueServer) ?? undefined,
+          rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValueServer(row[c.key], c.type, timeZone))),
+          totals: grouped ? undefined : buildTotalsRow(result, (v, t) => formatCellValueServer(v, t, timeZone)) ?? undefined,
           grouped,
         },
       ],

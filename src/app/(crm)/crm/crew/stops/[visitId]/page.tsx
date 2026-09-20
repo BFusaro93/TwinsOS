@@ -41,6 +41,7 @@ import { formatCurrency } from "@/lib/utils";
 import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { toast } from "sonner";
 
 /**
@@ -167,6 +168,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const submitUpsell  = useSubmitFieldUpsell();
   const { data: jobProducts = [] } = useJobProducts(anchorVisitId);
   const useMaterials  = useUseJobProductMaterials();
+  const [confirm, confirmDialog] = useConfirm();
 
   const [noteText, setNoteText]       = useState("");
   const [upsellOpen, setUpsellOpen]       = useState(false);
@@ -268,7 +270,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   }
 
   async function handleMarkUsedNoInvoice(material: JobProductMaterial, usedQty: number) {
-    if (!window.confirm(`${material.productName} will come out of inventory but won't be added to the client's invoice. Continue?`)) return;
+    const confirmed = await confirm({
+      title: `${material.productName} will come out of inventory but won't be added to the client's invoice. Continue?`,
+      confirmLabel: "Continue",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await useMaterials.mutateAsync({
         visitId: anchorVisitId,
@@ -281,7 +288,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   }
 
   async function handleMarkNotUsed(material: JobProductMaterial) {
-    if (!window.confirm(`${material.productName} won't be counted as used on this job. Continue?`)) return;
+    const confirmed = await confirm({
+      title: `${material.productName} won't be counted as used on this job. Continue?`,
+      confirmLabel: "Continue",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { notUsed: true } });
     } catch (err) {
@@ -862,6 +874,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { EMAIL_FROM } from "@/lib/email/send";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 
 /**
  * GET /api/cron/sales-meeting-reminders — called every 15 minutes by Vercel
@@ -89,15 +90,15 @@ export async function GET(request: Request) {
       ?? "a new lead";
     const scheduledAt = new Date(meeting.scheduled_at as string);
     // The Node runtime's default timezone is UTC on Vercel — without an
-    // explicit timeZone, this would display a 2pm Eastern meeting as "6pm"
-    // (or "7pm" outside DST) in both the in-app notification and the
-    // reminder email below. This codebase hardcodes America/New_York as the
-    // org's operating timezone everywhere date/time display accounts for it
-    // (see src/lib/reports/ny-date.ts).
+    // explicit timeZone this would show a 2pm meeting as "6pm" (or "7pm"
+    // outside DST) in both the in-app notification and the reminder email.
+    // The meeting was booked on its own org's clock, so that is the clock it
+    // has to be read back on.
+    const meetingTz = await getOrgTimeZone(supabase, meeting.org_id as string);
     const timeStr = scheduledAt.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
-      timeZone: "America/New_York",
+      timeZone: meetingTz,
     });
     // `?open=` makes the calendar jump to the meeting's day and open it —
     // without it the link only landed on whatever day the calendar defaults

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
-import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import type { COGSReportRow } from "@/app/api/crm/reports/cogs/route";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
 function pctOf(numerator: number, denominator: number) {
   return denominator > 0 ? Math.round((numerator / denominator) * 1000) / 10 : 0;
@@ -17,10 +18,10 @@ function ratioOf(numerator: number, denominator: number) {
   return denominator > 0 ? Math.round(numerator / denominator) : 0;
 }
 
-function defaultDateRange() {
+function defaultDateRange(timeZone: string) {
   const now = new Date();
-  const { year, month } = nyDateParts(now);
-  return { from: ymd(year, month, 1), to: isoNy(now) };
+  const { year, month } = zoneDateParts(now, timeZone);
+  return { from: ymd(year, month, 1), to: isoInZone(now, timeZone) };
 }
 
 function OverUnderCell({ cents }: { cents: number }) {
@@ -92,9 +93,22 @@ async function fetchReport(params: URLSearchParams): Promise<{ rows: COGSReportR
 }
 
 export default function COGSReportPage() {
-  const [defaults] = useState(defaultDateRange);
+  // Month-to-date on the ORG's calendar, not the reader's.
+  const orgTimeZone = useOrgTimeZone();
+  const [defaults] = useState(() => defaultDateRange(orgTimeZone));
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
+  // The org-settings query can resolve AFTER this mounts, so the defaults
+  // above may have been computed from the fallback zone. Re-snap once the
+  // real zone lands — but never over a range the user has picked themselves.
+  // Same treatment as the dispatch board and the daily load list.
+  const touchedDates = useRef(false);
+  useEffect(() => {
+    if (touchedDates.current) return;
+    const d = defaultDateRange(orgTimeZone);
+    setFrom(d.from);
+    setTo(d.to);
+  }, [orgTimeZone]);
 
   const params = new URLSearchParams({ from, to });
 
@@ -153,11 +167,11 @@ export default function COGSReportPage() {
       <div className="flex gap-3 items-end flex-wrap">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-slate-600">From</label>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 text-sm w-36" />
+          <Input type="date" value={from} onChange={(e) => { touchedDates.current = true; setFrom(e.target.value); }} className="h-8 text-sm w-36" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-slate-600">To</label>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 text-sm w-36" />
+          <Input type="date" value={to} onChange={(e) => { touchedDates.current = true; setTo(e.target.value); }} className="h-8 text-sm w-36" />
         </div>
       </div>
 

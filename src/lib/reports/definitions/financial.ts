@@ -68,12 +68,12 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       "Totals invoiced income per client — subtotal, tax, total, and amount paid.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
     notes: ["Excludes draft and void invoices."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
       columns: [],
       filters: [
         ...issuedInvoiceFilter(),
-        ...dateRangeFilters("invoice_date", params, { preset: "this_year" }),
+        ...dateRangeFilters("invoice_date", params, timeZone, { preset: "this_year" }),
       ],
       groupBy: ["client_name"],
       aggregates: [
@@ -95,7 +95,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       "Shows every open invoice with a balance due and how many days overdue it is.",
     filters: [dateRangeFilterDef("Invoice Date", "all_time")],
     notes: ["Excludes draft and void invoices — only issued invoices are receivables."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
       columns: [
         "invoice_number",
@@ -111,7 +111,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "balance_cents", op: "gt", value: 0 },
         ...issuedInvoiceFilter(),
-        ...dateRangeFilters("invoice_date", params, { preset: "all_time" }),
+        ...dateRangeFilters("invoice_date", params, timeZone, { preset: "all_time" }),
       ],
       groupBy: [],
       aggregates: [],
@@ -126,7 +126,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     description: "Shows prepayments received, how much has been applied, and what remains.",
     filters: [dateRangeFilterDef("Payment Date", "this_year")],
     notes: ["Cash only: excludes account credits and AR write-offs. Applied Amount is net of refunds."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_payments",
       columns: [
         "payment_date",
@@ -140,7 +140,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "is_prepayment", op: "eq", value: true },
         ...cashPaymentFilter(),
-        ...dateRangeFilters("payment_date", params, { preset: "this_year" }),
+        ...dateRangeFilters("payment_date", params, timeZone, { preset: "this_year" }),
       ],
       groupBy: [],
       aggregates: [],
@@ -155,8 +155,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Income by invoiced line item (accrual basis) less job material and field labor costs.",
     filters: [dateRangeFilterDef("Date Range", "this_month")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
       // Rule A (issued invoices only) and the soft-delete guard are applied on
       // the joined parent; `!inner` drops line items whose invoice fails them.
@@ -211,8 +211,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Income by payments received (cash basis) less job material and field labor costs.",
     filters: [dateRangeFilterDef("Date Range", "this_month")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
       let payQuery = supabase
         .from("crm_payments")
@@ -271,8 +271,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows taxable, non-taxable, and collected sales tax totals by month.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
       let query = supabase
         .from("crm_invoices")
         .select("id, invoice_date, subtotal_cents, discount_cents, tax_cents, total_cents")
@@ -383,8 +383,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     name: "Financials",
     description: "Invoiced totals and cash collected for a date range, alongside current receivables aging.",
     filters: [dateRangeFilterDef("Invoice Date", "this_month")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_month");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
       let invQuery = supabase
         .from("crm_invoices")

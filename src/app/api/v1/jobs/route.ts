@@ -3,8 +3,9 @@ import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { JOB_SELECT, shapeJob } from "./shape";
 import { createJobSchema } from "./validation";
-import { isoNy } from "@/lib/reports/ny-date";
 import { roundHours } from "@/lib/utils";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 /** GET /api/v1/jobs — list the org's Landscapt jobs. Requires scope "jobs:read". */
 export async function GET(request: Request) {
@@ -119,7 +120,7 @@ export async function POST(request: Request) {
       notes_to_crew: body.notesToCrew ?? null,
       sales_rep_id: body.salesRepId ?? null,
       // Date Sold feeds the Sales by Date Sold / Approved Sales by Sales Rep reports.
-      date_sold: body.dateSold ?? isoNy(new Date()),
+      date_sold: body.dateSold ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
       status: "scheduled",
       man_count: menCount,
       // crm_jobs.budgeted_hours is the MAN-HOUR rollup — the same unit

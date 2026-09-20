@@ -37,8 +37,6 @@ import {
 } from "@/lib/hooks/use-crm-discounts";
 import type { DiscountType } from "@/types/crm-discounts";
 import { formatCurrency } from "@/lib/utils";
-import { EmailTemplatesEditor } from "@/components/crm/settings/EmailTemplatesEditor";
-import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import {
   Select as UISelect,
   SelectContent as UISelectContent,
@@ -106,6 +104,7 @@ import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { useConnectStatus, useStartConnectOnboarding, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { LANDSCAPT_TAB_PERMISSIONS } from "@/lib/permissions/settings-access";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -302,6 +301,7 @@ function UsersTab() {
 // ── CRMTab ────────────────────────────────────────────────────────────────────
 
 function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlaceholder?: string }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: items = [], isLoading } = useOrgList(listName);
   const { mutateAsync: addItem } = useAddOrgListItem();
   const { mutateAsync: deleteItem } = useDeleteOrgListItem();
@@ -319,7 +319,7 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Remove this option?")) return;
+    if (!(await confirm({ title: "Remove this option?", confirmLabel: "Remove", destructive: true }))) return;
     try { await deleteItem({ id, listName }); toast.success("Removed"); }
     catch { toast.error("Failed to remove"); }
   }
@@ -356,6 +356,7 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
           </button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -363,6 +364,7 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
 // ── Discounts editor (name + a real percent or flat-dollar rate) ───────────────
 
 function DiscountsEditor() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: discounts = [], isLoading } = useDiscounts();
   const { mutateAsync: createDiscount } = useCreateDiscount();
   const { mutateAsync: updateDiscount } = useUpdateDiscount();
@@ -412,7 +414,7 @@ function DiscountsEditor() {
   }
 
   async function handleRemove(id: string) {
-    if (!confirm("Remove this discount?")) return;
+    if (!(await confirm({ title: "Remove this discount?", confirmLabel: "Remove", destructive: true }))) return;
     try { await deleteDiscount(id); toast.success("Discount removed"); }
     catch { toast.error("Failed to remove discount"); }
   }
@@ -516,6 +518,7 @@ function DiscountsEditor() {
           </button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -696,13 +699,19 @@ function CRMTab() {
       <AccordionSection title="Custom Client Fields" count={0} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
         <CustomFieldDefsEditor />
       </AccordionSection>
-      <AccordionSection title="Email Templates" count={0} defaultOpen={false} description="General-purpose templates for one-off client emails, e.g. the Dispatch Board / Waiting List &quot;Email Selected Clients&quot; bulk action">
-        <EmailTemplatesEditor
-          templateType="general"
-          description="These templates only support client/company merge tags below — not estimate- or invoice-specific ones."
-          mergeTags={GENERAL_EMAIL_MERGE_TAGS}
-          emptyMessage="No email templates yet. Create one to reuse when emailing clients in bulk."
-        />
+      <AccordionSection title="Email Templates" defaultOpen={false} description="Templates used when emailing clients now live in Documents, alongside every other template type.">
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
+          <p className="text-sm text-slate-600">
+            Build and edit client email templates in <span className="font-medium">Documents</span> — create a
+            document with type &quot;Client&quot;, and it&apos;ll show up in the template picker for the Dispatch
+            Board / Waiting List &quot;Email Selected Clients&quot; bulk action.
+          </p>
+          <Link href="/crm/settings/documents" className="w-fit">
+            <Button size="sm" variant="outline" className="h-8 text-xs">
+              Go to Documents
+            </Button>
+          </Link>
+        </div>
       </AccordionSection>
     </div>
   );
@@ -745,6 +754,7 @@ function CrewAppSection() {
 // ── CustomFieldDefsEditor ─────────────────────────────────────────────────────
 
 function CustomFieldDefsEditor() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: defs = [], isLoading } = useCustomFieldDefs();
   const { mutateAsync: create, isPending: creating } = useCreateCustomFieldDef();
   const { mutateAsync: update } = useUpdateCustomFieldDef();
@@ -774,7 +784,12 @@ function CustomFieldDefsEditor() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete custom field "${name}"? Existing values on clients will be lost.`)) return;
+    if (!(await confirm({
+      title: `Delete custom field "${name}"?`,
+      description: "Existing values on clients will be lost.",
+      confirmLabel: "Delete Field",
+      destructive: true,
+    }))) return;
     try {
       await remove(id);
       toast.success("Field deleted");
@@ -940,6 +955,7 @@ function CustomFieldDefsEditor() {
           </button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

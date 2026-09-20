@@ -1,13 +1,13 @@
 "use client";
 
 import { toast } from "sonner";
+import Link from "next/link";
 import { EstimateTemplatesList } from "@/components/crm/estimates/EstimateTemplatesList";
 import { EstimateDisplaySettingsPanel } from "@/components/crm/estimates/EstimateDisplaySettingsPanel";
-import { EmailTemplatesEditor } from "@/components/crm/settings/EmailTemplatesEditor";
+import { Button } from "@/components/ui/button";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 
 // ─── Client View defaults ───────────────────────────────────────────────────
 
@@ -71,12 +71,25 @@ export default function EstimateSettingsPage() {
         </TabsContent>
 
         <TabsContent value="email-templates">
-          <EmailTemplatesEditor
-            templateType="estimate"
-            description="Email templates sent when sharing or following up on estimates."
-            mergeTags={EMAIL_MERGE_TAGS}
-            emptyMessage="No email templates yet. Create one to use when sending estimates."
-          />
+          <div className="mb-2">
+            <h2 className="text-sm font-semibold text-slate-700">Email Templates</h2>
+            <p className="text-xs text-slate-400">
+              Email templates used when sending an estimate now live in Documents, alongside every other
+              template type.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
+            <p className="text-sm text-slate-600">
+              Build and edit estimate email templates in <span className="font-medium">Documents</span> — create a
+              document with type &quot;Estimate&quot;, and it&apos;ll show up in the template picker when
+              sending an estimate.
+            </p>
+            <Link href="/crm/settings/documents" className="w-fit">
+              <Button size="sm" variant="outline" className="h-8 text-xs">
+                Go to Documents
+              </Button>
+            </Link>
+          </div>
         </TabsContent>
 
         <TabsContent value="client-view">

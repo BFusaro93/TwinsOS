@@ -1,5 +1,6 @@
 import type { BlockType } from "@/types/crm-documents";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { stripHtml } from "@/lib/utils/strip-html";
 
 // ── Merge tag resolution ─────────────────────────────────────────────────────
 // Matches the pattern used by the estimate/invoice send routes so preview and
@@ -28,6 +29,12 @@ const HTML_SAFE_MERGE_TAG_KEYS = new Set([
   "[estimategrid]",
   "[paymentlink]",
   "[invoicegrid]",
+  // Chemical Application Notice route: a <ul>/<li> list of products applied
+  // and a <br><br>-joined block of the catalog's own route-sheet care
+  // instructions — org-authored content assembled server-side, not
+  // client-controlled freeform text.
+  "[products]",
+  "[careinstructions]",
 ]);
 
 export function resolveMergeTags(
@@ -61,34 +68,24 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[clientname]": "Jane Homeowner",
   "[clientfirstname]": "Jane",
   "[clientlastname]": "Homeowner",
-  "[contacttitle]": "Property Owner",
   "[clientemail]": "jane.homeowner@example.com",
   "[clienthomephone]": "(555) 123-4567",
   "[clientworkphone]": "(555) 123-4568",
   "[clientcellphone]": "(555) 123-4569",
   "[clientotherphone]": "(555) 123-4570",
   "[clientfax]": "(555) 123-4571",
-  "[nameoninvoice]": "Jane Homeowner",
   "[accountnumber]": "10042",
   "[clientaccountbalance]": "$0.00",
   "[howwebillyou]": "Email",
   "[salesperson]": "Alex Rep",
-  "[csr]": "Sam Support",
   "[referringclient]": "N/A",
-  "[creditcardending]": "4242",
-  "[creditcardexpiration]": "12/28",
   // Billing address
   "[billingaddress1]": "123 Main St",
-  "[billingaddress2]": "",
   "[billingcity]": "Anytown",
   "[billingstate]": "MN",
   "[billingzip]": "55401",
   // Property
-  "[propertyname]": "Main Residence",
-  "[masterproperty]": "Main Residence",
-  "[subproperty]": "",
   "[physicaladdress1]": "123 Main St",
-  "[physicaladdress2]": "",
   "[physicalcity]": "Anytown",
   "[physicalstate]": "MN",
   "[physicalzip]": "55401",
@@ -96,10 +93,8 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[grosssqft]": "12,000",
   "[mulchbedsqft]": "600",
   "[yardsofmulch]": "12",
-  "[parkinglot sqft]": "0",
   "[linearfeetperimeter]": "420",
   "[linearfeetedging]": "310",
-  "[condounits]": "1",
   "[gatecode]": "#1234",
   "[notestocrew]": "Dog in backyard — keep gate closed.",
   // Company
@@ -109,19 +104,8 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[companystate]": "MN",
   "[companyzip]": "55401",
   "[companyphone]": "(555) 987-6543",
-  "[companyemail]": "info@yourcompany.com",
-  "[companywebsite]": "www.yourcompany.com",
-  "[invoicelogo]": "",
-  "[estimatelogo]": "",
-  "[signatureline]": "Your Company Name<br>(555) 987-6543<br>info@yourcompany.com",
   // System
   "[today]": new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-  "[formurl]": "https://example.com/form",
-  "[formlink]": '<a href="#">Fill Out Form</a>',
-  "[optinlink]": '<a href="#">Opt In</a>',
-  "[optoutlink]": '<a href="#">Unsubscribe</a>',
-  "[clientportallink]": '<a href="#">Client Portal</a>',
-  "[clientportalsignup]": '<a href="#">Set Up Your Portal Account</a>',
   // Estimate
   "[estimatenumber]": "00042",
   "[estimatecode]": "EST-00042",
@@ -154,7 +138,7 @@ export const KNOWN_MERGE_TAG_KEYS = new Set(Object.keys(SAMPLE_MERGE_VALUES));
 
 // ── Block → HTML rendering (shared by preview + send-test-email) ────────────
 
-interface RenderableBlock {
+export interface RenderableBlock {
   blockType: BlockType;
   content: string | null;
 }
@@ -187,6 +171,18 @@ export function renderBlocksToHtml(
 ): string {
   const rows = blocks.map((block) => renderBlock(block, mergeVars, options)).join("\n");
   return `<div style="max-width:600px;margin:0 auto;font-family:Verdana,Arial,sans-serif;color:#1e293b;">${rows}</div>`;
+}
+
+// Plain-text rendering for SMS (`text_message` doc type) — the builder
+// restricts these templates to paragraph-only blocks, so this just strips
+// each block's rich-text HTML and joins them. Merge tags are left literal;
+// they're resolved later at send time by resolveSmsStepContent.
+export function renderBlocksToPlainText(blocks: RenderableBlock[]): string {
+  return blocks
+    .filter((b) => b.blockType === "paragraph")
+    .map((b) => stripHtml(b.content ?? ""))
+    .filter((text) => text.trim().length > 0)
+    .join("\n\n");
 }
 
 function renderBlock(

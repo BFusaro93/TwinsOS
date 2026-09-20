@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
 import { groupVisitsIntoStops, visitServices } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
 
 /** The stop's routable address, in the shape the crew app's payload uses. */
@@ -51,9 +52,12 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
+  // Which day the crew's schedule opens on is the ORG's day. A crew phone set
+  // to another timezone (or a UTC server) must not show a different route than
+  // the office dispatched.
   const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
     ? dateParam
-    : isoNy(new Date());
+    : todayInZone(await getMyTimeZone(supabase));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any)

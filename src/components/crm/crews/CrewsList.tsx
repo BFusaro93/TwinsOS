@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,7 @@ import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -590,11 +592,12 @@ function CrewDialog({
   const tabList = [
     { value: "details", label: "Team Details" },
     { value: "assignments", label: "Team Assignments", disabled: !activeCrew },
+    { value: "audit", label: "Audit Trail", disabled: !activeCrew },
   ];
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setActiveCrew(crew); setForm(crew ? crewToForm(crew) : emptyForm); } onOpenChange(o); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[90vh] flex flex-col sm:p-0">
+      <DialogContent className="max-w-2xl p-0 gap-0 h-[90vh] flex flex-col sm:p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="text-xl font-bold">{title}</DialogTitle>
         </DialogHeader>
@@ -625,6 +628,9 @@ function CrewDialog({
             <TabsContent value="assignments" className="mt-0">
               {activeCrew && <TeamAssignmentsTab crew={activeCrew} />}
             </TabsContent>
+            <TabsContent value="audit" className="mt-0">
+              {activeCrew && <AuditTrailTab recordType="crew" recordId={activeCrew.id} />}
+            </TabsContent>
           </div>
         </Tabs>
 
@@ -645,6 +651,7 @@ function CrewDialog({
 type ActiveFilter = "active" | "inactive" | "all";
 
 export function CrewsList() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: crews, isLoading } = useCrews(false);
   const { mutateAsync: update } = useUpdateCrew();
   const { can } = useGate();
@@ -666,7 +673,12 @@ export function CrewsList() {
   });
 
   async function handleDeactivate(id: string, name: string) {
-    if (!confirm(`Deactivate crew "${name}"?`)) return;
+    if (!(await confirm({
+      title: `Deactivate crew "${name}"?`,
+      description: "The crew stops appearing on the dispatch board. Its history is preserved.",
+      confirmLabel: "Deactivate",
+      destructive: true,
+    }))) return;
     try {
       await update({ id, updates: { is_active: false } });
       toast.success(`${name} deactivated`);
@@ -798,7 +810,7 @@ export function CrewsList() {
                       {crew.isActive ? (
                         <button
                           className="text-sm text-slate-700 hover:text-red-600 transition-colors"
-                          onClick={() => handleDeactivate(crew.id, crew.name)}
+                          onClick={() => void handleDeactivate(crew.id, crew.name)}
                         >
                           Active
                         </button>
@@ -828,6 +840,7 @@ export function CrewsList() {
           }}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

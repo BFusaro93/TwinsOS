@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -8,6 +7,8 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { SAMPLE_INVOICE } from "@/lib/invoices/sample-invoice";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 export async function GET(
   _req: NextRequest,
@@ -50,7 +51,7 @@ export async function GET(
   const invoiceData: InvoicePDFData = {
     ...SAMPLE_INVOICE,
     invoiceNumber: 1001,
-    invoiceDate: isoNy(new Date()),
+    invoiceDate: todayInZone(await getOrgTimeZone(supabase, template.org_id)),
     notes: template.show_notes === false
       ? null
       : ((template.default_notes as string | null) || SAMPLE_INVOICE.notes),

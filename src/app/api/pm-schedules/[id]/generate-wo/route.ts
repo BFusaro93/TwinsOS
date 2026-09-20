@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 type ServerSupabase = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -61,19 +62,12 @@ export async function POST(
 ) {
   const { id: scheduleId } = await params;
 
-  // The server has no stored org timezone to derive "today" from — trust
-  // the browser's own local calendar date when it's given (a well-formed
-  // YYYY-MM-DD), falling back to the server's UTC date only if it's
-  // missing/malformed (e.g. a direct API call with no body).
-  let clientToday: string | null = null;
-  try {
-    const body = await request.json() as { today?: string };
-    if (body?.today && /^\d{4}-\d{2}-\d{2}$/.test(body.today)) {
-      clientToday = body.today;
-    }
-  } catch {
-    // No/invalid JSON body — fall back below.
-  }
+  // "Today" comes from the org's own stored timezone. This used to trust a
+  // `today` sent by the browser, because the server had nowhere to get the
+  // org's clock from — that is no longer true, and the browser's answer was
+  // never the right one anyway: a manager generating PMs from another
+  // timezone would shift the schedule's day for everyone. A `today` in the
+  // body is now ignored.
 
   const userClient = await createServerClient();
   const { data: { user }, error: authErr } = await userClient.auth.getUser();
@@ -329,7 +323,7 @@ export async function POST(
   // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
   // Advance from today (actual generation date) so that generating early
   // doesn't push the next due date further out than one interval from now.
-  const today = clientToday ?? isoNy(new Date());
+  const today = todayInZone(await getOrgTimeZone(userClient, profile.org_id as string));
   const nextDue = advanceDate(today, schedule.frequency);
   await adminClient
     .from("pm_schedules")
