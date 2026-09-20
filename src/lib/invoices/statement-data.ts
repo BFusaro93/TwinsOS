@@ -1,6 +1,7 @@
 import type { InvoicePDFStatementData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 
-import { isoNy } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -33,7 +34,7 @@ export async function buildInvoiceStatementData(
     .neq("status", "void")
     .neq("status", "draft")
     .is("deleted_at", null)
-    .lte("invoice_date", inv.invoice_date ?? isoNy(new Date()))
+    .lte("invoice_date", inv.invoice_date ?? todayInZone(await getOrgTimeZone(supabase, inv.org_id)))
     .order("invoice_date", { ascending: false });
 
   const previousBalanceCents = (otherInvoices ?? []).reduce(

@@ -8,7 +8,7 @@ import {
   eqFilter,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { isoNy } from "@/lib/reports/ny-date";
+import { todayInZone } from "@/lib/time/zone";
 
 // ============================================================
 // Service Reports section — pre-built reports.
@@ -44,7 +44,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       { key: "zip", label: "Service Zip", type: "text", placeholder: "Any zip" },
     ],
     notes: ["Budgeted Man-Hours and Actual Man-Hours are both duration × number of men."],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
         "scheduled_date",
@@ -61,7 +61,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         "service_zip",
       ],
       filters: [
-        ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
         ...eqFilter("status", params.status),
         ...eqFilter("crew_name", params.crew),
         ...containsFilter("service_zip", params.zip),
@@ -88,7 +88,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.",
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
         "scheduled_date",
@@ -107,7 +107,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
           op: "lte",
           // "Today" as the calendar date in America/New_York, not UTC — the
           // UTC date rolls over at 8pm/7pm Eastern.
-          value: params.to || isoNy(new Date()),
+          value: params.to || todayInZone(timeZone),
         },
       ],
       groupBy: [],
@@ -402,7 +402,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
     name: "Skipped Visits Report",
     description: "Shows visits that were skipped in any defined time frame, with the reason.",
     filters: [dateRangeFilterDef("Scheduled Between", "this_month")],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
         "scheduled_date",
@@ -415,7 +415,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "status", op: "eq", value: "skipped" },
-        ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
       ],
       groupBy: [],
       aggregates: [],

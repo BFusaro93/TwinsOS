@@ -25,6 +25,7 @@ import { centsToDisplay } from "@/lib/estimate-calc";
 import type { CRMDiscount } from "@/types/crm-discounts";
 import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimates";
 import type { BudgetMethod } from "@/types/crm-jobs";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── template item row (inside edit dialog) ────────────────────────────────────
 
@@ -394,6 +395,7 @@ function EditTemplateDialog({
 // ── main templates list ───────────────────────────────────────────────────────
 
 export function EstimateTemplatesList() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: templates, isLoading } = useEstimateTemplates();
   const { mutateAsync: createTemplate, isPending: creating } = useCreateEstimateTemplate();
   const { mutateAsync: deleteTemplate } = useDeleteEstimateTemplate();
@@ -508,7 +510,7 @@ export function EstimateTemplatesList() {
                   <td className="px-4 py-3">
                     <button
                       onClick={async () => {
-                        if (confirm(`Delete "${t.name}"?`)) {
+                        if (await confirm({ title: `Delete "${t.name}"?`, confirmLabel: "Delete Template", destructive: true })) {
                           try {
                             await deleteTemplate(t.id);
                             toast.success("Template deleted");
@@ -537,6 +539,7 @@ export function EstimateTemplatesList() {
           onOpenChange={(o) => !o && setEditTargetId(null)}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

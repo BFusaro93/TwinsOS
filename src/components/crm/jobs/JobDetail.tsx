@@ -43,7 +43,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCompanyDate, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -86,6 +87,7 @@ import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 /**
  * crm_job_products statuses that still owe the client an invoice line —
@@ -155,6 +157,7 @@ interface Props {
 }
 
 export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const { can } = usePermissions();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
@@ -1470,7 +1473,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           const day = parseInt(v);
                           const entry = days.find((d) => d.day === day);
                           if (!entry) return;
-                          if (!confirm(`Remove all ${entry.count} scheduled ${entry.name} visits? This cannot be undone.`)) return;
+                          if (!(await confirm({
+                            title: `Remove all ${entry.count} scheduled ${entry.name} visits?`,
+                            description: "This cannot be undone.",
+                            confirmLabel: "Remove Visits",
+                            destructive: true,
+                          }))) return;
                           const removed = await deleteVisitsByDay.mutateAsync({ jobId: job.id, dayOfWeek: day });
                           toast.success(`Removed ${removed} ${entry.name} visits`);
                         }}
@@ -1614,7 +1622,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         isChemicalJob={isChemicalJob}
                         crews={crews}
                         onDelete={async () => {
-                          if (!confirm("Delete this visit?")) return;
+                          if (!(await confirm({ title: "Delete this visit?", confirmLabel: "Delete Visit", destructive: true }))) return;
                           await deleteVisit.mutateAsync(v.id);
                           toast.success("Visit deleted");
                         }}
@@ -1783,6 +1791,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         open={projectSheetOpen}
         onOpenChange={setProjectSheetOpen}
       />
+      {confirmDialog}
     </div>
   );
 }
@@ -1814,6 +1823,9 @@ function VisitRow({
   onSkip: (reason: string) => Promise<void>;
   onDispatch: (date: string, crewId: string | null) => Promise<void>;
 }) {
+  // completed_at is an instant; render it on the ORG's clock so the same
+  // visit doesn't read as a different day to someone in another timezone.
+  const { format: formatOrgDate } = useOrgDates();
   // Package visits are tied to a specific service row that carries its own
   // date window (e.g. "Fert 2 of 5" is due anytime 8/1–8/31) — show that
   // window instead of just the single day this visit happens to be scheduled
@@ -1914,7 +1926,7 @@ function VisitRow({
               service date to someone looking from another timezone. */}
           {visit.status === "completed" && visit.completedAt && (
             <p className="mt-0.5 text-[10px] text-slate-400">
-              {formatCompanyDate(visit.completedAt)}
+              {formatOrgDate(visit.completedAt)}
             </p>
           )}
         </td>

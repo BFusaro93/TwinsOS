@@ -35,6 +35,7 @@ import {
   type SalesMeetingWithClient,
 } from "@/lib/hooks/use-sales-meetings";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 const schema = z.object({
   salesRepId: z.string().min(1, "Sales rep is required"),
@@ -80,6 +81,7 @@ export function SalesMeetingDialog({
   defaultDate,
   defaultTime,
 }: Props) {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: reps } = useSalesReps();
   const { data: clients } = useClients();
   const createMeeting = useCreateSalesMeeting();
@@ -236,7 +238,7 @@ export function SalesMeetingDialog({
 
   async function handleDelete() {
     if (!meeting) return;
-    if (!confirm("Cancel this meeting?")) return;
+    if (!(await confirm({ title: "Cancel this meeting?", confirmLabel: "Cancel Meeting", cancelLabel: "Keep Meeting", destructive: true }))) return;
     try {
       await deleteMeeting.mutateAsync(meeting.id);
       toast.success("Meeting canceled");
@@ -417,6 +419,7 @@ export function SalesMeetingDialog({
             </div>
           </DialogFooter>
         </form>
+        {confirmDialog}
       </DialogContent>
     </Dialog>
   );

@@ -22,6 +22,16 @@ export interface ReportContext {
   /** Authenticated, RLS-scoped server client. */
   supabase: SupabaseClient;
   params: ReportParams;
+  /**
+   * The running org's IANA operating timezone.
+   *
+   * Every "today", "this month" and week boundary a report computes has to be
+   * the ORG's, not the UTC server's and not the viewer's. Resolved once by the
+   * run route and handed down, so a definition never has to look it up — pass
+   * it to the helpers in lib/time/zone rather than reaching for the
+   * helpers in lib/time/zone.
+   */
+  timeZone: string;
 }
 
 /**
@@ -45,7 +55,7 @@ export interface PrebuiltReportDef {
   /** Charts rendered above the table (and embedded in the PDF export) — e.g. a
    *  bar chart of the same data grouped a different way. Built from `params`
    *  so date-window filters can match whatever the table itself is showing. */
-  headerVisuals?: (params: ReportParams) => ReportHeaderVisual[];
+  headerVisuals?: (params: ReportParams, timeZone: string) => ReportHeaderVisual[];
   /** Render this report's OWN result as a chart instead of a table when
    *  embedded on a dashboard (via reportKey) — for bespoke `run` reports
    *  whose shape a chart communicates better than a table (e.g. a
@@ -54,7 +64,10 @@ export interface PrebuiltReportDef {
    *  AnalysisConfig-driven query — only `type`/`labelColumn`/`valueColumns`
    *  (and friends) are read; `config` is a placeholder, never queried. */
   chartVisual?: VisualSpec;
-  analysis?: (params: ReportParams) => AnalysisConfig;
+  /** `timeZone` is the running org's IANA zone — every date boundary this
+   *  builds must be computed against it, never the server's UTC day. A
+   *  definition with no date logic can simply ignore the argument. */
+  analysis?: (params: ReportParams, timeZone: string) => AnalysisConfig;
   run?: (ctx: ReportContext) => Promise<ReportResult>;
   href?: string;
   /** Can be scheduled for daily email delivery (report_schedules). Only

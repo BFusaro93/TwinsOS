@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
@@ -21,6 +21,8 @@ import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJob } from "@/types/crm-jobs";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 // One row per JOB, not per visit. Recurring/package jobs can have dozens of
 // generated visits — showing one row per visit made the same job appear to
@@ -112,15 +114,15 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   project:      "Project",
 };
 
-// .toISOString() converts through UTC — for timezones ahead of UTC this
-// shifts the date back a day, e.g. dropping "today" from the active view
-// after evening local time. Format from local Y/M/D components instead.
-function toLocalDateString(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+// The default window is "today through 30 days out" on the ORG's calendar.
+// It used to be computed from the browser's clock at MODULE scope, which was
+// wrong twice over: the viewer's day isn't the service day (this list has to
+// agree with the dispatch board), and a module-level constant is frozen at
+// import time, so a tab left open overnight kept yesterday's window.
+function defaultJobWindow(timeZone: string): { from: string; to: string } {
+  const today = todayInZone(timeZone);
+  return { from: today, to: shiftYmd(today, 30) };
 }
-
-const today = toLocalDateString(new Date());
-const in30 = toLocalDateString(new Date(Date.now() + 30 * 86400_000));
 
 export function JobsList() {
   const router = useRouter();
@@ -128,8 +130,20 @@ export function JobsList() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"active" | "unscheduled" | "completed">("active");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(in30);
+  const orgTimeZone = useOrgTimeZone();
+  const [defaults] = useState(() => defaultJobWindow(orgTimeZone));
+  const [fromDate, setFromDate] = useState(defaults.from);
+  const [toDate, setToDate] = useState(defaults.to);
+  // The org-settings query can resolve after mount, so the window above may
+  // have come from the fallback zone. Re-snap once the real zone lands, but
+  // never over a window the user has set themselves.
+  const touchedDates = useRef(false);
+  useEffect(() => {
+    if (touchedDates.current) return;
+    const w = defaultJobWindow(orgTimeZone);
+    setFromDate(w.from);
+    setToDate(w.to);
+  }, [orgTimeZone]);
   const [newJobOpen, setNewJobOpen] = useState(false);
 
   // Status/date filtering happens client-side below, per-occurrence — a job's
@@ -293,14 +307,14 @@ export function JobsList() {
             <Input
               type="date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={(e) => { touchedDates.current = true; setFromDate(e.target.value); }}
               className="w-36 text-sm"
             />
             <span>–</span>
             <Input
               type="date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              onChange={(e) => { touchedDates.current = true; setToDate(e.target.value); }}
               className="w-36 text-sm"
             />
           </div>

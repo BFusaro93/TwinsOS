@@ -44,7 +44,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime, formatDateShort, todayCompanyISODate, formatHours } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort, formatHours } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
@@ -456,6 +457,9 @@ function JobDetailSheet({
    * Start/End edit overlaps another stop already assigned to this crew. */
   allVisits: CRMJobVisit[];
 }) {
+  // Fallback service/invoice date when a visit has no scheduled_date: the
+  // org's day, never the browser's.
+  const { today: orgToday } = useOrgDates();
   const { mutateAsync: updateVisit } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
@@ -752,7 +756,7 @@ function JobDetailSheet({
       return;
     }
     try {
-      const serviceDate = visit.scheduledDate ?? todayCompanyISODate();
+      const serviceDate = visit.scheduledDate ?? orgToday();
       // invoiceDescription is authored via a rich-text editor on the Service
       // (and carried down onto the job/visit) — stripHtml() it before it
       // reaches an actual generated invoice, or a client-facing invoice
@@ -791,7 +795,7 @@ function JobDetailSheet({
         jobId: visit.jobId,
         clientId: visit.clientId,
         description: masterDescription ?? serviceName,
-        invoiceDate: visit.scheduledDate ?? todayCompanyISODate(),
+        invoiceDate: visit.scheduledDate ?? orgToday(),
         lineItems,
         subtotalCents,
         taxRateBps: 0,
@@ -3214,10 +3218,22 @@ export function DispatchBoard() {
   const urlRouter    = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
-  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayCompanyISODate());
+  // The service day is the ORG's day, not the viewer's — a manager checking
+  // the board from another state has to see what the crew sees.
+  const { today: orgToday, timeZone: orgTimeZone } = useOrgDates();
+  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? orgToday());
+  // The org's timezone arrives with the settings query, which can resolve
+  // AFTER this mounts — so the day defaulted to on first paint may have been
+  // the platform default's, not the org's. Re-snap while the URL carries no
+  // explicit date, i.e. while the user hasn't chosen a day themselves.
+  useEffect(() => {
+    if (searchParams.get("date") !== null) return;
+    const t = orgToday();
+    setSelectedDate((prev) => (prev === t ? prev : t));
+  }, [orgTimeZone, orgToday, searchParams]);
   useEffect(() => {
     const current = searchParams.get("date");
-    const isToday = selectedDate === todayCompanyISODate();
+    const isToday = selectedDate === orgToday();
     // Keep the URL clean on the default day; otherwise mirror the selection.
     if ((isToday && current === null) || current === selectedDate) return;
     const params = new URLSearchParams(searchParams.toString());
@@ -3225,7 +3241,7 @@ export function DispatchBoard() {
     const qs = params.toString();
     // replace (not push) so paging through days doesn't spam history.
     urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [selectedDate, searchParams, pathname, urlRouter]);
+  }, [selectedDate, searchParams, pathname, urlRouter, orgToday]);
   const [endDate,         setEndDate]         = useState("");
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
   const [tagFilters,      setTagFilters]       = useState<string[]>([]);
@@ -3367,26 +3383,29 @@ export function DispatchBoard() {
     const ids = [...selectedIds];
     const label = STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
     try {
-      let results: Response[];
       if (status === "completed") {
-        // Use the complete route so the parent job status is also updated
-        results = await Promise.all(
-          ids.map((id) => fetch(`/api/crm/visits/${id}/complete`, { method: "POST" }))
-        );
+        // Bulk-complete runs the full per-visit completion (job status,
+        // invoicing, activity/automation side effects) server-side for every
+        // id in one request — not a simple field update, so it can't go
+        // through bulk-update, but it no longer needs one fetch per visit.
+        const res = await fetch("/api/crm/visits/bulk-complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) throw new Error("One or more updates failed");
+        const summary = await res.json() as { completed: number; failed: { id: string; error: string }[] };
+        if (summary.failed.length > 0) throw new Error("One or more updates failed");
       } else {
-        const body: Record<string, unknown> = { status };
-        if (status === "skipped" || status === "cancelled") body.skip_reason = reason?.trim() || null;
-        results = await Promise.all(
-          ids.map((id) =>
-            fetch(`/api/crm/visits/${id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            })
-          )
-        );
+        const updates: Record<string, unknown> = { status };
+        if (status === "skipped" || status === "cancelled") updates.skip_reason = reason?.trim() || null;
+        const res = await fetch("/api/crm/visits/bulk-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, updates }),
+        });
+        if (!res.ok) throw new Error("One or more updates failed");
       }
-      if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
       await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -3428,6 +3447,12 @@ export function DispatchBoard() {
    */
   async function handleOptimizeRoute() {
     const scope = routeScope();
+    // `job.serviceAddress` here is the stop's RESOLVED address (job snapshot →
+    // linked property → client service → client billing; see
+    // resolveStopAddress), which is the same address /api/crm/route-optimize
+    // resolves server-side. Keep the two in step: a stop this filter keeps but
+    // the server can't resolve gets silently dropped from the tour, and the
+    // crew drives an unoptimized leg to it.
     const targets = displayVisits.filter((v) => v.job?.serviceAddress && scope.has(v.id));
     const groups = new Map<string, typeof targets>();
     for (const v of targets) {
@@ -3443,8 +3468,8 @@ export function DispatchBoard() {
     if (routable.length === 0) {
       toast.error(
         scope.scoped
-          ? "Each crew needs at least 2 selected stops with a service address to optimize. Select more stops, or clear the selection to route the whole board."
-          : "Each crew needs at least 2 stops with a service address to optimize. Try assigning visits to a crew first."
+          ? "Each crew needs at least 2 selected stops with an address to optimize. Select more stops, or clear the selection to route the whole board."
+          : "Each crew needs at least 2 stops with an address to optimize. A stop needs a service address on the job, its property, or the client — and visits need to be assigned to a crew."
       );
       return;
     }
@@ -3555,6 +3580,26 @@ export function DispatchBoard() {
     setTotalDriveMins(null);
     setShopLegMins(null);
     setRoutedCrewCount(0);
+  }
+
+  /**
+   * Drops BOTH kinds of unsaved order — an optimize result and a manual
+   * drag/reverse/group — and is what every date or date-range change must
+   * call.
+   *
+   * `manualOrder` is a bare list of visit ids with no date attached, so
+   * changing the day swaps the entire visit set out from under it. Date
+   * changes used to call clearOptimization() alone, which left `manualOrder`
+   * pointing at the day the user had just LEFT while the board showed the new
+   * day. The "Order changed — not yet saved" banner stayed up across the
+   * switch and invited a Save, and crm_save_route_order matches visits on id
+   * and org only — never on date — so that Save wrote priorities onto the
+   * previous day's visits, recorded crm_crew_route_order rows against that
+   * day's weekday, and silently dropped visits on the day actually on screen.
+   */
+  function clearPendingOrder() {
+    clearOptimization();
+    setManualOrder(null);
   }
 
   function isVisible(col: string) { return visibleKeys.includes(col); }
@@ -3735,7 +3780,21 @@ export function DispatchBoard() {
   }
 
   async function handleSaveOrder() {
-    const changedOrder = manualOrder ?? displayVisits.map((v) => v.id);
+    // Only ever save ids that belong to the visit set currently loaded for
+    // this date/range. clearPendingOrder() should already have dropped a
+    // manualOrder left over from another day, but this is the last gate before
+    // an RPC that matches on id and org alone: a single foreign id here would
+    // renumber a visit on a different date, write a crm_crew_route_order row
+    // against that date's weekday, and push a real visit off the end of the
+    // list so it kept a now-colliding priority.
+    const loadedIds = new Set(allVisits.map((v) => v.id));
+    const changedOrder = (manualOrder ?? displayVisits.map((v) => v.id)).filter((id) => loadedIds.has(id));
+    if (changedOrder.length === 0) {
+      toast.error("Nothing to save — the visits this order applied to are no longer on the board.");
+      setManualOrder(null);
+      clearOptimization();
+      return;
+    }
     // manualOrder/displayVisits are built from `filtered` — if a crew/status/
     // search filter is active, visits it hides never appear in changedOrder
     // at all. Assigning sequential priorities 1..N over changedOrder alone
@@ -3979,27 +4038,27 @@ export function DispatchBoard() {
           override the box renders at 14px text and clips the native
           calendar-picker icon off the right edge at desktop widths. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
-        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
+        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearPendingOrder(); }} />
 
         <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-1 shrink-0">
           <span className="font-medium">From</span>
           <Input
             type="date"
             value={selectedDate}
-            onChange={(e) => { setSelectedDate(e.target.value); clearOptimization(); }}
+            onChange={(e) => { setSelectedDate(e.target.value); clearPendingOrder(); }}
             className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); clearOptimization(); }}
+            onChange={(e) => { setEndDate(e.target.value); clearPendingOrder(); }}
             className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           {endDate && (
             <button
               className="text-slate-400 hover:text-slate-700"
-              onClick={() => setEndDate("")}
+              onClick={() => { setEndDate(""); clearPendingOrder(); }}
               title="Clear end date"
             >
               <XIcon className="h-3.5 w-3.5" />
@@ -4463,16 +4522,12 @@ export function DispatchBoard() {
                     onSelect={async () => {
                       const ids = [...selectedIds];
                       try {
-                        const results = await Promise.all(
-                          ids.map((id) =>
-                            fetch(`/api/crm/visits/${id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ crew_id: null }),
-                            })
-                          )
-                        );
-                        if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                        const res = await fetch("/api/crm/visits/bulk-update", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ ids, updates: { crew_id: null } }),
+                        });
+                        if (!res.ok) throw new Error("One or more updates failed");
                         await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                         setSelectedIds(new Set());
                         toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
@@ -4490,16 +4545,12 @@ export function DispatchBoard() {
                       onSelect={async () => {
                         const ids = [...selectedIds];
                         try {
-                          const results = await Promise.all(
-                            ids.map((id) =>
-                              fetch(`/api/crm/visits/${id}`, {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ crew_id: c.id }),
-                              })
-                            )
-                          );
-                          if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                          const res = await fetch("/api/crm/visits/bulk-update", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ ids, updates: { crew_id: c.id } }),
+                          });
+                          if (!res.ok) throw new Error("One or more updates failed");
                           await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                           setSelectedIds(new Set());
                           toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);

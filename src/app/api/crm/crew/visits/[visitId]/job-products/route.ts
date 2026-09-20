@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
-import { isoNy } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 
 /**
  * GET /api/crm/crew/visits/:visitId/job-products — the materials office
@@ -53,15 +54,16 @@ export async function GET(
   // crm_job_products has no resolved-at column; updated_at is set by the
   // same write that moves the row out of 'pending', so it's the closest
   // thing to "when was this recorded". Compared in NY, matching every other
-  // date boundary in this codebase (see isoNy).
-  const serviceDate = (visit.scheduled_date as string | null) ?? isoNy(new Date());
+  // date boundary in this codebase (see lib/time/zone).
+  const timeZone = await getOrgTimeZone(supabase, visit.org_id as string);
+  const serviceDate = (visit.scheduled_date as string | null) ?? todayInZone(timeZone);
 
   return NextResponse.json(
     (data ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((row: any) =>
         row.status === "pending"
-        || (row.updated_at && isoNy(new Date(row.updated_at as string)) === serviceDate)
+        || (row.updated_at && isoInZone(new Date(row.updated_at as string), timeZone) === serviceDate)
       )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((row: any) => ({

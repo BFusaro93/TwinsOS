@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
-import { isoNy } from "@/lib/reports/ny-date";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import {
   accountOwnedByOrg,
   resolveMethod,
@@ -316,7 +317,7 @@ export async function recordEstimateDepositCharge({
       // allocations + unused + refunded = amount true from the first moment.
       unused_amount_cents: depositCents,
       is_prepayment: true,
-      payment_date: isoNy(new Date()),
+      payment_date: todayInZone(await getOrgTimeZone(db, orgId)),
       method,
       reference: paymentIntent.id,
       memo: `Deposit for estimate #${estimate.estimate_number ?? "—"} paid online`,

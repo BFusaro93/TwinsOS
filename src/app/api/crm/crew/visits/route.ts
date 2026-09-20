@@ -1,8 +1,28 @@
 import { NextResponse } from "next/server";
-import { isoNy } from "@/lib/reports/ny-date";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
 import { groupVisitsIntoStops, visitServices } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
+import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
+
+/** The stop's routable address, in the shape the crew app's payload uses. */
+function stopAddress(
+  job: Record<string, unknown> | null,
+  client: Record<string, unknown> | null
+): { line1: string | null; city: string | null; state: string | null; zip: string | null } {
+  const resolved = resolveStopAddress({
+    job: job as Parameters<typeof resolveStopAddress>[0]["job"],
+    property: embeddedOne(job?.client_properties as Record<string, unknown> | null) as Parameters<typeof resolveStopAddress>[0]["property"],
+    client: client as Parameters<typeof resolveStopAddress>[0]["client"],
+  });
+  return {
+    line1: resolved?.parts.address ?? null,
+    city: resolved?.parts.city ?? null,
+    state: resolved?.parts.state ?? null,
+    zip: resolved?.parts.zip ?? null,
+  };
+}
 
 /**
  * GET /api/crm/crew/visits?date=YYYY-MM-DD
@@ -32,9 +52,12 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
+  // Which day the crew's schedule opens on is the ORG's day. A crew phone set
+  // to another timezone (or a UTC server) must not show a different route than
+  // the office dispatched.
   const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
     ? dateParam
-    : isoNy(new Date());
+    : todayInZone(await getMyTimeZone(supabase));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any)
@@ -73,9 +96,11 @@ export async function GET(request: Request) {
       men_count, actual_hours, budgeted_hours, clocked_in_at, clocked_out_at,
       paused_at, break_minutes, skip_reason,
       acknowledged_notes_at, notes_to_crew_updated_at, completed_at, created_at, updated_at,
-      clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+      clients(display_name, primary_phone, service_address, service_city, service_state, service_zip,
+        billing_address, billing_city, billing_state, billing_zip),
       crm_jobs(job_type, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
         notes_to_crew, notes_to_crew_updated_at,
+        client_properties(address, city, state, zip),
         crm_job_services(id, service_name, budgeted_hours, team_size, sort_order))
     `)
     .eq("org_id", orgId)
@@ -118,12 +143,10 @@ export async function GET(request: Request) {
       updatedAt: row.updated_at as string,
       clientName: (client?.display_name as string) ?? null,
       clientPhone: (client?.primary_phone as string) ?? null,
-      address: {
-        line1: (job?.service_address as string) ?? (client?.billing_address as string) ?? null,
-        city: (job?.service_city as string) ?? (client?.billing_city as string) ?? null,
-        state: (job?.service_state as string) ?? (client?.billing_state as string) ?? null,
-        zip: (job?.service_zip as string) ?? (client?.billing_zip as string) ?? null,
-      },
+      // Resolved the same way the dispatch board shows it and
+      // /api/crm/route-optimize routes it, so the crew drives to the address
+      // the route was actually built from (see resolveStopAddress).
+      address: stopAddress(job, client),
       jobType: (job?.job_type as string) ?? null,
       budgetedHours: (job?.budgeted_hours as number) ?? null,
     };
@@ -155,6 +178,10 @@ export async function GET(request: Request) {
           sortOrder: (s.sort_order as number) ?? 0,
         }))
       : [];
+    // groupVisitsIntoStops() falls back to serviceAddress+serviceCity when a
+    // visit has no property_id, so leaving this unresolved collapsed every
+    // address-less visit of the day into a single "stop".
+    const addr = stopAddress(job, client);
     return {
       id: row.id as string,
       orgId,
@@ -208,10 +235,10 @@ export async function GET(request: Request) {
             jobType: job.job_type as string,
             notesToCrew: (job.notes_to_crew as string) ?? null,
             notesToCrewUpdatedAt: (job.notes_to_crew_updated_at as string) ?? null,
-            serviceAddress: (job.service_address as string) ?? null,
-            serviceCity: (job.service_city as string) ?? null,
-            serviceState: (job.service_state as string) ?? null,
-            serviceZip: (job.service_zip as string) ?? null,
+            serviceAddress: addr.line1,
+            serviceCity: addr.city,
+            serviceState: addr.state,
+            serviceZip: addr.zip,
             budgetedHours: (job.budgeted_hours as number) ?? null,
             services,
           } as unknown as CRMJob)

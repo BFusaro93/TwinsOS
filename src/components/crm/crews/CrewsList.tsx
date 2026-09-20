@@ -13,6 +13,8 @@ import {
 } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
+import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +38,7 @@ import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -301,20 +304,6 @@ function Field({
   );
 }
 
-async function geocodeAddress(address: string, city: string, state: string, zip: string) {
-  const parts = [address, city, state, zip].filter(Boolean).join(", ");
-  if (!parts) return null;
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(parts)}`,
-      { headers: { "Accept-Language": "en" } }
-    );
-    const json = await res.json();
-    if (json[0]) return { lat: parseFloat(json[0].lat), lng: parseFloat(json[0].lon) };
-  } catch { /* silently ignore */ }
-  return null;
-}
-
 function TeamDetailsTab({
   form,
   onChange,
@@ -326,7 +315,7 @@ function TeamDetailsTab({
   onChange: (k: string, v: any) => void;
   crewId?: string;
 }) {
-  const [geocoding, setGeocoding] = useState(false);
+  const addr = useVerifyAddress();
   const { data: logins = [] } = useCrewLogins();
   const { data: allCrews } = useCrews(false);
 
@@ -339,22 +328,31 @@ function TeamDetailsTab({
   );
   const availableLogins = logins.filter((l) => !linkedElsewhere.has(l.id));
 
-  const handleAddressBlur = useCallback(async () => {
-    const { starting_address, starting_city, starting_state, starting_zip } = form;
-    if (!starting_address && !starting_city && !starting_zip) return;
-    setGeocoding(true);
-    const result = await geocodeAddress(
-      starting_address ?? "",
-      starting_city ?? "",
-      starting_state ?? "",
-      starting_zip ?? ""
-    );
-    setGeocoding(false);
-    if (result) {
-      onChange("starting_lat", result.lat);
-      onChange("starting_lng", result.lng);
-    }
-  }, [form, onChange]);
+  // Was a silent Nominatim (OpenStreetMap) lookup that only wrote lat/lng and
+  // swallowed every failure - the one place in the app on a non-Google provider,
+  // and its usage policy wants an identifying User-Agent and ~1 req/sec, which a
+  // per-blur browser call doesn't meet. Now the same server-side Google check
+  // the client and property address fields use.
+  const handleAddressBlur = useCallback(() => {
+    void addr.verify({
+      address: form.starting_address ?? "",
+      city: form.starting_city ?? "",
+      state: form.starting_state ?? "",
+      zip: form.starting_zip ?? "",
+    });
+  }, [form, addr]);
+
+  // Coordinates come back with the verdict, so the lat/lng fields still fill
+  // themselves exactly as they did before.
+  useEffect(() => {
+    if (addr.state !== "done" || !addr.result) return;
+    if (addr.result.lat == null || addr.result.lng == null) return;
+    onChange("starting_lat", addr.result.lat);
+    onChange("starting_lng", addr.result.lng);
+    // onChange is a fresh closure each render; keying on the coordinates keeps
+    // this to one write per resolved address.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addr.state, addr.result?.lat, addr.result?.lng]);
 
   return (
     <div className="rounded border">
@@ -490,10 +488,25 @@ function TeamDetailsTab({
                   }
                   placeholder="Lng"
                 />
-                {geocoding && (
-                  <span className="text-xs text-slate-400 animate-pulse">Locating…</span>
-                )}
               </div>
+            </Field>
+            <Field label="">
+              <AddressSuggestion
+                typed={{
+                  address: form.starting_address ?? "",
+                  city: form.starting_city ?? "",
+                  state: form.starting_state ?? "",
+                  zip: form.starting_zip ?? "",
+                }}
+                state={addr.state}
+                result={addr.result}
+                onAccept={(n) => {
+                  onChange("starting_address", n.address || null);
+                  onChange("starting_city", n.city || null);
+                  onChange("starting_state", n.state || null);
+                  onChange("starting_zip", n.zip || null);
+                }}
+              />
             </Field>
           </tbody>
         </table>
@@ -638,6 +651,7 @@ function CrewDialog({
 type ActiveFilter = "active" | "inactive" | "all";
 
 export function CrewsList() {
+  const [confirm, confirmDialog] = useConfirm();
   const { data: crews, isLoading } = useCrews(false);
   const { mutateAsync: update } = useUpdateCrew();
   const { can } = useGate();
@@ -659,7 +673,12 @@ export function CrewsList() {
   });
 
   async function handleDeactivate(id: string, name: string) {
-    if (!confirm(`Deactivate crew "${name}"?`)) return;
+    if (!(await confirm({
+      title: `Deactivate crew "${name}"?`,
+      description: "The crew stops appearing on the dispatch board. Its history is preserved.",
+      confirmLabel: "Deactivate",
+      destructive: true,
+    }))) return;
     try {
       await update({ id, updates: { is_active: false } });
       toast.success(`${name} deactivated`);
@@ -791,7 +810,7 @@ export function CrewsList() {
                       {crew.isActive ? (
                         <button
                           className="text-sm text-slate-700 hover:text-red-600 transition-colors"
-                          onClick={() => handleDeactivate(crew.id, crew.name)}
+                          onClick={() => void handleDeactivate(crew.id, crew.name)}
                         >
                           Active
                         </button>
@@ -821,6 +840,7 @@ export function CrewsList() {
           }}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

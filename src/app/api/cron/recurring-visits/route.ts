@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { companyTodayAsLocalMidnight } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { DEFAULT_TIME_ZONE, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
 /**
  * GET /api/cron/recurring-visits — called daily by Vercel Cron at 06:00 UTC
@@ -197,11 +198,16 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const today = companyTodayAsLocalMidnight();
-  const windowEnd = addDays(today, LOOKAHEAD_DAYS);
-
-  const fromStr = toISODate(today);
-  const toStr   = toISODate(windowEnd);
+  // Each job's generation window starts on ITS OWN org's today.
+  const orgTodayCache = new Map<string, Date>();
+  async function orgTodayFor(orgId: string): Promise<Date> {
+    let hit = orgTodayCache.get(orgId);
+    if (!hit) {
+      hit = todayInZoneAsLocalMidnight(await getOrgTimeZone(supabase, orgId));
+      orgTodayCache.set(orgId, hit);
+    }
+    return hit;
+  }
 
   // ── fetch active recurring and package jobs ───────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -243,6 +249,35 @@ export async function GET(request: Request) {
   }
 
   // ── for each job, load existing visits in the window (idempotency) ────────
+  // The prefetch has to be ONE query covering every org's window, but those
+  // windows no longer share a start date. Rather than padding a single
+  // reference day by a guessed margin — which needs an argument about how far
+  // apart two zones can be, and silently re-inserts existing visits if that
+  // argument is ever wrong — resolve the orgs actually involved and take the
+  // true min/max. Jobs are already fetched by this point, so this costs
+  // nothing extra.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const orgIds = [...new Set((jobs as any[]).map((j) => j.org_id as string | null).filter((x): x is string => !!x))];
+  const orgWindows = await Promise.all(
+    orgIds.map(async (id) => {
+      const t = await orgTodayFor(id);
+      return { from: toISODate(t), to: toISODate(addDays(t, LOOKAHEAD_DAYS)) };
+    })
+  );
+  // A job with no org_id resolves to the platform default zone (getOrgTimeZone
+  // coalesces), and that day can fall OUTSIDE the min/max of the real orgs —
+  // e.g. every real org on Pacific time while the default is Eastern. Include
+  // the default window too whenever such a job exists, or its visits would
+  // fall outside the prefetch and be re-inserted.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hasOrglessJob = (jobs as any[]).some((j) => !j.org_id);
+  if (hasOrglessJob || orgWindows.length === 0) {
+    const t = todayInZoneAsLocalMidnight(DEFAULT_TIME_ZONE);
+    orgWindows.push({ from: toISODate(t), to: toISODate(addDays(t, LOOKAHEAD_DAYS)) });
+  }
+  const fromStr = orgWindows.reduce((m, w) => (w.from < m ? w.from : m), orgWindows[0].from);
+  const toStr   = orgWindows.reduce((m, w) => (w.to   > m ? w.to   : m), orgWindows[0].to);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jobIds = (jobs as any[]).map((j) => j.id as string);
 
@@ -303,6 +338,9 @@ export async function GET(request: Request) {
     recurrence_end: string | null; package_total_steps: number | null;
     priority: number; notes_to_crew: string | null; man_count: number | null;
   }[]) {
+
+    const today = await orgTodayFor(job.org_id);
+    const windowEnd = addDays(today, LOOKAHEAD_DAYS);
 
     // Respect recurrence_end if set
     const effectiveEnd = job.recurrence_end
@@ -373,7 +411,8 @@ export async function GET(request: Request) {
   }
 
   console.info(
-    `[recurring-visits] ${today.toISOString()} — window ${fromStr}→${toStr}: ` +
+    `[recurring-visits] ${new Date().toISOString()} — prefetch ${fromStr}→${toStr}, ` +
+    `${orgTodayCache.size} org calendar(s): ` +
     `${totalInserted} visits created, ${skippedPastEnd} jobs past recurrence_end`
   );
 

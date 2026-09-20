@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
-import { isoNy } from "@/lib/reports/ny-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone } from "@/lib/time/zone";
 
 /**
  * POST /api/crm/crew/drive/start
@@ -44,7 +45,9 @@ export async function POST(request: Request) {
     .insert({
       org_id: orgId,
       crew_id: crewId,
-      work_date: isoNy(now),
+      // The crew's work day is the org's day — a crew driving at 9pm in a
+      // Pacific org must not have the segment filed under tomorrow.
+      work_date: isoInZone(now, await getOrgTimeZone(supabase, orgId)),
       started_at: now.toISOString(),
       created_by: user.id,
     })

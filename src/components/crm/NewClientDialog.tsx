@@ -24,6 +24,8 @@ import { EditClientDialogExport } from "./ClientDetailPanel";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
+import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 
 type InitialStatus = "lead" | "active";
 
@@ -38,12 +40,20 @@ interface Props {
 export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus = "active" }: Props) {
   const { mutateAsync: createClient, isPending } = useCreateClient();
   const rf = useRequiredFields("client");
+  const addr = useVerifyAddress();
 
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<"residential" | "commercial">("residential");
   const [status, setStatus] = useState<InitialStatus>(initialStatus);
   const [primaryPhone, setPrimaryPhone] = useState("");
   const [primaryEmail, setPrimaryEmail] = useState("");
+  // The address a crew is dispatched to. Captured here rather than only in the
+  // full edit dialog so Settings → Required Fields can actually enforce it —
+  // a requirement on a field the create form doesn't show is unenforceable.
+  const [serviceAddress, setServiceAddress] = useState("");
+  const [serviceCity, setServiceCity] = useState("");
+  const [serviceState, setServiceState] = useState("");
+  const [serviceZip, setServiceZip] = useState("");
 
   // After quick create: open full edit dialog on the new client
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -54,12 +64,19 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
     if (!displayName.trim()) { toast.error("Display name is required"); return; }
     if (rf.isRequired("primary_phone") && !primaryPhone.trim()) { toast.error("Phone is required"); return; }
     if (rf.isRequired("primary_email") && !primaryEmail.trim()) { toast.error("Email is required"); return; }
+    if (rf.isRequired("service_address") && !serviceAddress.trim()) { toast.error("Service address is required"); return; }
     try {
       const client = await createClient({
         displayName: displayName.trim(),
         accountType,
         primaryPhone: primaryPhone.trim(),
         primaryEmail: primaryEmail.trim(),
+        serviceAddress: serviceAddress.trim(),
+        serviceCity: serviceCity.trim(),
+        serviceState: serviceState.trim(),
+        serviceZip: serviceZip.trim(),
+        // Left blank on purpose — useCreateClient mirrors the service address
+        // into billing when no separate billing address is given.
         billingAddress: "",
         billingCity: "",
         billingState: "",
@@ -86,6 +103,11 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
       setDisplayName("");
       setPrimaryPhone("");
       setPrimaryEmail("");
+      setServiceAddress("");
+      setServiceCity("");
+      setServiceState("");
+      setServiceZip("");
+      addr.reset();
       setAccountType("residential");
       setStatus(initialStatus);
       setCreatedId(null);
@@ -159,8 +181,52 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
               )}
             </div>
 
+            {rf.isVisible("service_address") && (
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label>Service Address{rf.req("service_address")}</Label>
+                  <Input
+                    value={serviceAddress}
+                    onChange={(e) => setServiceAddress(e.target.value)}
+                    onBlur={() => void addr.verify({ address: serviceAddress, city: serviceCity, state: serviceState, zip: serviceZip })}
+                    placeholder="123 Main St"
+                  />
+                </div>
+                <div className="grid grid-cols-[1fr_auto_auto] gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label>City</Label>
+                    <Input value={serviceCity} onChange={(e) => setServiceCity(e.target.value)} placeholder="Worcester" />
+                  </div>
+                  <div className="flex w-20 flex-col gap-1.5">
+                    <Label>State</Label>
+                    <Input value={serviceState} onChange={(e) => setServiceState(e.target.value)} placeholder="MA" />
+                  </div>
+                  <div className="flex w-24 flex-col gap-1.5">
+                    <Label>Zip</Label>
+                    <Input
+                      value={serviceZip}
+                      onChange={(e) => setServiceZip(e.target.value)}
+                      onBlur={() => void addr.verify({ address: serviceAddress, city: serviceCity, state: serviceState, zip: serviceZip })}
+                      placeholder="01605"
+                    />
+                  </div>
+                </div>
+                <AddressSuggestion
+                  typed={{ address: serviceAddress, city: serviceCity, state: serviceState, zip: serviceZip }}
+                  state={addr.state}
+                  result={addr.result}
+                  onAccept={(n) => {
+                    setServiceAddress(n.address);
+                    setServiceCity(n.city);
+                    setServiceState(n.state);
+                    setServiceZip(n.zip);
+                  }}
+                />
+              </div>
+            )}
+
             <p className="text-xs text-slate-400">
-              After creating, you&apos;ll be able to fill in address, billing, custom fields, and more.
+              After creating, you&apos;ll be able to fill in billing, custom fields, and more.
             </p>
           </div>
 
@@ -172,7 +238,8 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
                 isPending ||
                 !displayName.trim() ||
                 (rf.isRequired("primary_phone") && !primaryPhone.trim()) ||
-                (rf.isRequired("primary_email") && !primaryEmail.trim())
+                (rf.isRequired("primary_email") && !primaryEmail.trim()) ||
+                (rf.isRequired("service_address") && !serviceAddress.trim())
               }
             >
               {isPending ? "Creating…" : "Create & Continue →"}

@@ -28,6 +28,7 @@ import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 type StatusFilter = PhotoJobStatus | "all";
 type ArchiveFilter = "current" | "archived";
@@ -67,8 +68,22 @@ const EMPTY_FORM = { name: "", customerName: "", address: "", city: "", state: "
 
 // ── Full-featured detail pane (list view) ─────────────────────────────────────
 
+/** Both the detail pane and the grid card delete a job with the same warning. */
+function confirmDelete(
+  confirm: ReturnType<typeof useConfirm>[0],
+  jobName: string,
+): Promise<boolean> {
+  return confirm({
+    title: `Permanently delete "${jobName}"?`,
+    description: "The job and its photos are removed. This cannot be undone.",
+    confirmLabel: "Delete Job",
+    destructive: true,
+  });
+}
+
 function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => void }) {
   const router = useRouter();
+  const [confirm, confirmDialog] = useConfirm();
   const { isCrew: isCrewRole, canAnnotate } = usePhotoAccess();
   const { data: job, isLoading } = usePhotoJob(jobId);
   // Non-archived projects for the "link a new project" picker; the full list
@@ -221,8 +236,8 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
               size="sm" variant="outline"
               className="gap-1.5 text-xs border-red-200 text-red-500 hover:bg-red-50"
               disabled={deleting}
-              onClick={() => {
-                if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) {
+              onClick={async () => {
+                if (await confirmDelete(confirm, job.name)) {
                   deleteJob(job.id, { onSuccess: () => { toast.success("Job deleted"); onDeleted(); }, onError: () => toast.error("Failed to delete job") });
                 }
               }}
@@ -405,6 +420,7 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
       </div>
 
       <ProjectDetailSheet project={linkedProject} open={projectSheetOpen} onOpenChange={setProjectSheetOpen} />
+      {confirmDialog}
     </div>
   );
 }
@@ -413,6 +429,7 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
 
 export function JobPhotosPage() {
   const router = useRouter();
+  const [confirm, confirmDialog] = useConfirm();
   const { canUpload, canDelete } = usePhotoAccess();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("current");
@@ -686,7 +703,7 @@ export function JobPhotosPage() {
                       <button
                         className="shrink-0 rounded-md p-1.5 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
                         title="Delete job"
-                        onClick={(e) => { e.stopPropagation(); if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) deleteJob(job.id, { onSuccess: () => toast.success("Job deleted"), onError: () => toast.error("Failed to delete job") }); }}
+                        onClick={async (e) => { e.stopPropagation(); if (await confirmDelete(confirm, job.name)) deleteJob(job.id, { onSuccess: () => toast.success("Job deleted"), onError: () => toast.error("Failed to delete job") }); }}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -698,6 +715,7 @@ export function JobPhotosPage() {
           )
         )}
       </div>
+      {confirmDialog}
     </PhotoModuleGuard>
   );
 }

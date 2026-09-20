@@ -12,7 +12,7 @@ import {
 } from "@/lib/reports/helpers";
 import { runAnalysis } from "@/lib/reports/engine";
 import { CLIENT_STATUSES, isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
-import { nyDateParts, ymd } from "@/lib/reports/ny-date";
+import { ymd, zoneDateParts } from "@/lib/time/zone";
 import type { AnalysisFilter } from "@/types/crm-reports";
 
 // ============================================================
@@ -119,7 +119,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Client Since", "all_time"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
       columns: [
         "display_name",
@@ -131,7 +131,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         "client_since",
       ],
       filters: [
-        ...dateRangeFilters("client_since", params, { preset: "all_time" }),
+        ...dateRangeFilters("client_since", params, timeZone, { preset: "all_time" }),
         ...eqFilter("sales_rep", params.sales_rep),
         CLIENT_STATUS_FILTER,
       ],
@@ -190,7 +190,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     name: "Client Referral",
     description: "Shows word-of-mouth referrals — who referred each client.",
     filters: [dateRangeFilterDef("Client Since", "this_year")],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
       columns: [
         "display_name",
@@ -201,7 +201,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         "billing_city",
       ],
       filters: [
-        ...dateRangeFilters("client_since", params, { preset: "this_year" }),
+        ...dateRangeFilters("client_since", params, timeZone, { preset: "this_year" }),
         { column: "referred_by", op: "not_null" },
       ],
       groupBy: [],
@@ -219,7 +219,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Client Since", "this_month"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
       columns: [
         "display_name",
@@ -232,7 +232,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         "primary_phone",
       ],
       filters: [
-        ...dateRangeFilters("client_since", params),
+        ...dateRangeFilters("client_since", params, timeZone),
         ...eqFilter("sales_rep", params.sales_rep),
         CLIENT_STATUS_FILTER,
       ],
@@ -251,7 +251,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Cancelled Between", "this_year"),
       { key: "reason", label: "Reason Contains", type: "text", placeholder: "Any reason" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
       columns: [
         "display_name",
@@ -264,7 +264,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "status", op: "eq", value: "cancelled" },
-        ...dateRangeFilters("closed_at", params, { preset: "this_year", datetime: true }),
+        ...dateRangeFilters("closed_at", params, timeZone, { preset: "this_year", datetime: true }),
         ...containsFilter("cancellation_reason", params.reason),
       ],
       groupBy: [],
@@ -279,8 +279,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     name: "Cancellation Count Report",
     description: "Shows how many cancellations occurred, broken down by reason, source, and sales rep.",
     filters: [dateRangeFilterDef("Cancelled Between", "this_year")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
       let query = supabase
         .from("clients")
         .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
@@ -346,8 +346,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     name: "New Client Count Report",
     description: "Shows new clients grouped by postal code, source, and sales rep.",
     filters: [dateRangeFilterDef("Client Since", "this_year")],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
       let query = supabase
         .from("clients")
         .select("source, billing_zip, client_since, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
@@ -413,13 +413,13 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     // Declarative aggregates always label count(*) as "Count"; this runs the
     // same analysis and relabels that one column so the header says what the
     // number actually is.
-    run: async ({ supabase, params }) => {
+    run: async ({ supabase, params, timeZone }) => {
       const result = await runAnalysis(supabase, {
         dataset: "rpt_job_visits",
         columns: [],
         filters: [
           { column: "status", op: "eq", value: "completed" },
-          ...dateRangeFilters("completed_at", params, { datetime: true }),
+          ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
         ],
         groupBy: ["client_name"],
         aggregates: [
@@ -448,8 +448,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Contract Start Between", "all_time"),
       { key: "active_only", label: "Active Only", type: "checkbox", defaultValue: "true" },
     ],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "all_time");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "all_time", timeZone);
       let query = supabase
         .from("crm_contracts")
         .select(
@@ -517,10 +517,10 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "New Leads = accounts created in the month (any current status). Converted = accounts whose Client Since date falls in the month and that are/were clients. Conversion % = Converted ÷ New Leads.",
     ],
-    run: async ({ supabase }) => {
+    run: async ({ supabase, timeZone }) => {
       // Month boundaries as they read in America/New_York (the org's operating
       // timezone) — a UTC-derived month would roll over hours early.
-      const { year: nyYear, month: nyMonth } = nyDateParts(new Date());
+      const { year: nyYear, month: nyMonth } = zoneDateParts(new Date(), timeZone);
       const months = [2, 1, 0].map((back) => {
         const d = new Date(Date.UTC(nyYear, nyMonth - back, 1));
         const y = d.getUTCFullYear();
@@ -557,7 +557,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       function toNyDay(dateStr: string | null): string | null {
         if (!dateStr) return null;
         if (dateStr.length === 10) return dateStr;
-        const { year, month, day } = nyDateParts(new Date(dateStr));
+        const { year, month, day } = zoneDateParts(new Date(dateStr), timeZone);
         return ymd(year, month, day);
       }
       function inMonth(dateStr: string | null, m: (typeof months)[number]): boolean {
@@ -621,8 +621,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     notes: [
       "New Leads = accounts created in range that are still leads (open or lost). Converted Leads = accounts whose Client Since date falls in range. Avg Days to Convert = created → Client Since, over converted accounts whose Client Since is after their created date (accounts created directly as clients are excluded). Total Clients = active + inactive + cancelled; Total Leads = open leads only.",
     ],
-    run: async ({ supabase, params }) => {
-      const { from, to } = resolveDateRange(params, "this_year");
+    run: async ({ supabase, params, timeZone }) => {
+      const { from, to } = resolveDateRange(params, "this_year", timeZone);
 
       const { data, error } = await supabase
         .from("clients")
@@ -644,7 +644,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       function toNyDay(dateStr: string | null): string | null {
         if (!dateStr) return null;
         if (dateStr.length === 10) return dateStr;
-        const { year, month, day } = nyDateParts(new Date(dateStr));
+        const { year, month, day } = zoneDateParts(new Date(dateStr), timeZone);
         return ymd(year, month, day);
       }
       function inRange(dateStr: string | null): boolean {
@@ -683,6 +683,65 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         [col("metric", "Metric"), col("value", "Value", "number", false)],
         resultRows
       );
+    },
+  },
+  {
+    key: "address-verification",
+    section: "client",
+    name: "Address Verification",
+    description:
+      "Shows every service address a crew could be sent to and whether Google has confirmed it. Defaults to the ones that still need a look.",
+    filters: [
+      {
+        key: "show",
+        label: "Show",
+        type: "select",
+        defaultValue: "needs_attention",
+        options: [
+          { value: "needs_attention", label: "Needs attention (unchecked or unconfirmed)" },
+          { value: "suspicious", label: "Suspicious only" },
+          { value: "all", label: "All addresses" },
+        ],
+      },
+      { key: "record_kind", label: "Record Type", type: "select", options: [
+        { value: "Client", label: "Client" },
+        { value: "Property", label: "Property" },
+        { value: "Crew Yard", label: "Crew Yard" },
+      ] },
+    ],
+    analysis: (params) => {
+      // "never_checked" is the view's stand-in for a NULL verdict, so an
+      // address nobody has looked at sorts alongside the ones Google doubted
+      // rather than disappearing from an `in` filter.
+      const buckets: Record<string, string[]> = {
+        needs_attention: ["never_checked", "unconfirmed_and_suspicious", "partial_match", "not_found"],
+        suspicious: ["unconfirmed_and_suspicious", "not_found"],
+      };
+      const wanted = buckets[params.show ?? "needs_attention"];
+      return {
+        dataset: "rpt_address_verification",
+        columns: [
+          "record_kind",
+          "client_name",
+          "label",
+          "address",
+          "city",
+          "state",
+          "zip",
+          "address_verdict",
+          "address_verified_at",
+        ],
+        filters: [
+          ...(wanted ? [{ column: "address_verdict", op: "in" as const, value: wanted }] : []),
+          ...(params.record_kind
+            ? [{ column: "record_kind", op: "eq" as const, value: params.record_kind }]
+            : []),
+        ],
+        groupBy: [],
+        aggregates: [],
+        sortColumn: "address_verdict",
+        sortDir: "asc" as const,
+      };
     },
   },
 ];

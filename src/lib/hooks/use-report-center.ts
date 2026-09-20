@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { getDataset, getDatasetField } from "@/lib/reports/datasets";
 import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";
-import { isoNy, shiftYmd } from "@/lib/reports/ny-date";
+import { shiftYmd } from "@/lib/time/zone";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import type {
   AnalysisConfig,
   AnalysisFilter,
@@ -391,11 +393,12 @@ type RelativeDateFilter = NonNullable<VisualSpec["relativeDateFilter"]>;
 
 /**
  * Inclusive "YYYY-MM-DD" bounds for a relative date filter, computed against
- * the calendar date in America/New_York (the org's operating timezone) — a
- * UTC `toISOString()` would roll "today" over to tomorrow at 8pm ET.
+ * the calendar date in the ORG's operating timezone — a UTC `toISOString()`
+ * would roll "today" over to tomorrow mid-evening in the Americas, and the
+ * viewer's own zone would give two people different "yesterdays".
  */
-export function relativeDateBounds(kind: RelativeDateFilter): { from: string; to: string } {
-  const today = isoNy(new Date());
+export function relativeDateBounds(kind: RelativeDateFilter, timeZone: string): { from: string; to: string } {
+  const today = todayInZone(timeZone);
   switch (kind) {
     case "today":
       return { from: today, to: today };
@@ -443,6 +446,7 @@ function dateWindowFilters(
 
 export function buildEffectiveConfig(
   visual: VisualSpec,
+  timeZone: string,
   dateRange?: { from: string; to: string },
   repFilter?: string
 ): AnalysisConfig {
@@ -459,7 +463,7 @@ export function buildEffectiveConfig(
     };
   }
   if (visual.relativeDateFilter && dateField) {
-    const { from, to } = relativeDateBounds(visual.relativeDateFilter);
+    const { from, to } = relativeDateBounds(visual.relativeDateFilter, timeZone);
     config = {
       ...config,
       filters: [...config.filters, ...dateWindowFilters(config.dataset, dateField, from, to)],
@@ -479,11 +483,13 @@ export function useRunVisualQuery(
   dateRange?: { from: string; to: string },
   repFilter?: string
 ) {
+  // The zone decides what "today"/"yesterday" mean, so it belongs in the key.
+  const orgTimeZone = useOrgTimeZone();
   return useQuery<ReportResult>({
-    queryKey: ["run-visual", visual, dateRange, repFilter],
+    queryKey: ["run-visual", visual, dateRange, repFilter, orgTimeZone],
     enabled: !!visual,
     queryFn: async () => {
-      const config = buildEffectiveConfig(visual as VisualSpec, dateRange, repFilter);
+      const config = buildEffectiveConfig(visual as VisualSpec, orgTimeZone, dateRange, repFilter);
       const res = await fetch("/api/crm/reports/analysis/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

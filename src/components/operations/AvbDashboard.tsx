@@ -19,6 +19,7 @@ import {
   useAvbCrews, useUpsertAvbCrew, useDeleteAvbCrew,
   type UpsertCrewPayload,
 } from "@/lib/hooks/use-avb-crews";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type CrewDef = { code: string; name: string };
@@ -709,6 +710,7 @@ interface HistoryProps {
   onDeleteWeek: (weekEnd: string) => void;
 }
 function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
+  const [confirm, confirmDialog] = useConfirm();
   if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
   const recentWeeks = weeks.slice(-8);
   const labels = recentWeeks.map(w=>fmtDate(w.weekEnd));
@@ -772,7 +774,7 @@ function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
                   <td className="px-3 py-3 pr-4 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <button title="Edit week" onClick={()=>onEditWeek(w)} className="text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4"/></button>
-                      <button onClick={()=>{if(confirm("Delete week of "+fmtDate(w.weekEnd)+"?"))onDeleteWeek(w.weekEnd);}} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4"/></button>
+                      <button onClick={async ()=>{if(await confirm({ title: "Delete week of "+fmtDate(w.weekEnd)+"?", confirmLabel: "Delete", destructive: true }))onDeleteWeek(w.weekEnd);}} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4"/></button>
                     </div>
                   </td>
                 </tr>);
@@ -781,6 +783,7 @@ function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
           </table>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }
@@ -1146,6 +1149,7 @@ interface SettingsProps {
 }
 
 function Settings({ crewDefs, dbEmployees, onUpsert, onDeleteEmployee, isUpserting, onSeedRoster, isSeeding, onUpsertCrew, onDeleteCrew, isUpsertingCrew, dbCrews }: SettingsProps) {
+  const [confirm, confirmDialog] = useConfirm();
   // ── Crew form state ──────────────────────────────────────────────────────────
   const [crewEditId, setCrewEditId] = useState<string | null>(null);
   const [crewForm, setCrewForm] = useState<{code: string; name: string} | null>(null);
@@ -1289,7 +1293,14 @@ function Settings({ crewDefs, dbEmployees, onUpsert, onDeleteEmployee, isUpserti
                     <div className="flex items-center justify-end gap-3">
                       <button onClick={() => openEditCrew(c)} title="Edit" className="text-slate-400 hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
                       <button
-                        onClick={() => { if (confirm(`Remove crew "${c.code} — ${c.name}"? Historical data is preserved.`)) onDeleteCrew(c.id); }}
+                        onClick={async () => {
+                          if (await confirm({
+                            title: `Remove crew "${c.code} — ${c.name}"?`,
+                            description: "Historical data is preserved.",
+                            confirmLabel: "Remove Crew",
+                            destructive: true,
+                          })) onDeleteCrew(c.id);
+                        }}
                         title="Remove"
                         disabled={isUpsertingCrew}
                         className="text-slate-400 hover:text-red-500 disabled:opacity-50"
@@ -1469,13 +1480,27 @@ function Settings({ crewDefs, dbEmployees, onUpsert, onDeleteEmployee, isUpserti
                         className="text-slate-400 hover:text-brand-600"
                       ><Pencil className="h-3.5 w-3.5" /></button>
                       <button
-                        onClick={() => { if (confirm(`Deactivate ${emp.name}? They'll be removed from crew lists but historical data is preserved.`)) setActive(emp, false); }}
+                        onClick={async () => {
+                          if (await confirm({
+                            title: `Deactivate ${emp.name}?`,
+                            description: "They'll be removed from crew lists but historical data is preserved.",
+                            confirmLabel: "Deactivate",
+                            destructive: true,
+                          })) setActive(emp, false);
+                        }}
                         title="Deactivate (keeps history)"
                         className="text-slate-400 hover:text-amber-500"
                         disabled={isUpserting}
                       ><X className="h-3.5 w-3.5" /></button>
                       <button
-                        onClick={() => { if (confirm(`Permanently delete ${emp.name}? Use this only for duplicate entries — this cannot be undone.`)) onDeleteEmployee(emp.id); }}
+                        onClick={async () => {
+                          if (await confirm({
+                            title: `Permanently delete ${emp.name}?`,
+                            description: "Use this only for duplicate entries — this cannot be undone.",
+                            confirmLabel: "Delete Permanently",
+                            destructive: true,
+                          })) onDeleteEmployee(emp.id);
+                        }}
                         title="Delete (duplicate entry)"
                         className="text-slate-400 hover:text-red-500"
                         disabled={isUpserting}
@@ -1522,12 +1547,14 @@ function Settings({ crewDefs, dbEmployees, onUpsert, onDeleteEmployee, isUpserti
       {dbEmployees && dbEmployees.length === 0 && (
         <p className="py-8 text-center text-sm text-slate-400 italic">No employees yet — use &ldquo;Load Default Roster&rdquo; to get started or add employees manually.</p>
       )}
+      {confirmDialog}
     </div>
   );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export function AvbDashboard() {
+  const [confirm, confirmDialog] = useConfirm();
   const [tab, setTab] = useState<Tab>("summary");
   const [viewDay, setViewDay] = useState(0);
   const [importDay, setImportDay] = useState(0);
@@ -1640,7 +1667,7 @@ export function AvbDashboard() {
   // CSV
   const handleCsv = useCallback((file: File) => {
     const r = new FileReader();
-    r.onload = ev => {
+    r.onload = async ev => {
       try {
         const g = parseGustoCsv(ev.target!.result as string, allEmp);
         setCsvSt(`✓ ${Object.keys(g.employees).length} employees | ${g.weekStart} → ${g.weekEnd}`);
@@ -1653,11 +1680,14 @@ export function AvbDashboard() {
           // user should Edit that week instead so their daily AvB data is preserved.
           const existing = weeks.find(w => w.weekEnd === g.weekEnd);
           if (existing) {
-            const ok = window.confirm(
-              `A saved entry already exists for the week of ${fmtDate(g.weekEnd)}.\n\n` +
-              `Starting a fresh import will erase that week's daily AvB data (budgeted hours, actual hours, revenue).\n\n` +
-              `Click OK to continue and overwrite, or Cancel to go back and use "Edit Week" instead.`
-            );
+            const ok = await confirm({
+              title: `A saved entry already exists for the week of ${fmtDate(g.weekEnd)}.`,
+              description:
+                "Starting a fresh import will erase that week's daily AvB data (budgeted hours, actual hours, revenue). " +
+                'Cancel to go back and use "Edit Week" instead.',
+              confirmLabel: "Overwrite Week",
+              destructive: true,
+            });
             if (!ok) { setCsvSt(""); return; }
           }
         }
@@ -1925,6 +1955,7 @@ export function AvbDashboard() {
           )}
         </>
       )}
+      {confirmDialog}
     </div>
   );
 }

@@ -1,0 +1,14 @@
+-- Reconstructed from the production migration ledger: version 20260920032737
+-- was applied to production with no committed file, so `check-drift` flagged it
+-- and a database rebuilt from migrations alone would not match production.
+--
+-- Same defect as 20260920041022 below, on estimates: a column DEFAULT is
+-- evaluated before a BEFORE ROW trigger fires, so with a default in place
+-- new.estimate_date was never null and the org_today trigger installed by
+-- 20260919070000_org_timezone.sql never fired -- silently pinning every org to
+-- the default's fixed zone.
+--
+-- Verified against the live schema before writing this file:
+-- estimates.estimate_date has column_default NULL and carries an org_today
+-- trigger, which is exactly the state this statement produces.
+alter table public.estimates alter column estimate_date drop default;

@@ -12,10 +12,10 @@ export const JOB_HOURS_REPORTS: PrebuiltReportDef[] = [
     name: "Job Hours Summary",
     description: "Shows total hours worked and labor cost by employee in any defined time frame.",
     filters: [dateRangeFilterDef("Worked Between", "this_month")],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_timesheets",
       columns: [],
-      filters: [...dateRangeFilters("work_date", params, { preset: "this_month" })],
+      filters: [...dateRangeFilters("work_date", params, timeZone, { preset: "this_month" })],
       groupBy: ["member_name"],
       aggregates: [
         { column: "*", fn: "count" },
@@ -32,10 +32,10 @@ export const JOB_HOURS_REPORTS: PrebuiltReportDef[] = [
     name: "Crew Hours Summary",
     description: "Shows total hours worked and labor cost by crew in any defined time frame.",
     filters: [dateRangeFilterDef("Worked Between", "this_month")],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_timesheets",
       columns: [],
-      filters: [...dateRangeFilters("work_date", params, { preset: "this_month" })],
+      filters: [...dateRangeFilters("work_date", params, timeZone, { preset: "this_month" })],
       groupBy: ["crew_name"],
       aggregates: [
         { column: "*", fn: "count" },
@@ -52,10 +52,10 @@ export const JOB_HOURS_REPORTS: PrebuiltReportDef[] = [
     name: "Drive Time Summary",
     description: "Shows total recorded drive time by crew in any defined time frame — day-level, not billed to clients.",
     filters: [dateRangeFilterDef("Driving Between", "this_month")],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_crew_drive_time",
       columns: [],
-      filters: [...dateRangeFilters("work_date", params, { preset: "this_month" })],
+      filters: [...dateRangeFilters("work_date", params, timeZone, { preset: "this_month" })],
       groupBy: ["crew_name"],
       aggregates: [
         { column: "*", fn: "count" },
@@ -74,11 +74,11 @@ export const JOB_HOURS_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Driving Between", "this_month"),
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_crew_drive_time",
       columns: ["work_date", "crew_name", "started_at", "ended_at", "minutes"],
       filters: [
-        ...dateRangeFilters("work_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("work_date", params, timeZone, { preset: "this_month" }),
         ...eqFilter("crew_name", params.crew),
       ],
       groupBy: [],
@@ -97,7 +97,7 @@ export const JOB_HOURS_REPORTS: PrebuiltReportDef[] = [
       dateRangeFilterDef("Worked Between", "this_month"),
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_timesheets",
       columns: [
         "work_date",
@@ -112,7 +112,7 @@ export const JOB_HOURS_REPORTS: PrebuiltReportDef[] = [
         "labor_cost_cents",
       ],
       filters: [
-        ...dateRangeFilters("work_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("work_date", params, timeZone, { preset: "this_month" }),
         ...eqFilter("crew_name", params.crew),
       ],
       groupBy: [],

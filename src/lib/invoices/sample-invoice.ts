@@ -1,4 +1,4 @@
-import { isoNy } from "@/lib/reports/ny-date";
+import { DEFAULT_TIME_ZONE, todayInZone } from "@/lib/time/zone";
 import type { InvoicePDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 
 /** Sample invoice used to render template/layout previews without needing a
@@ -29,7 +29,7 @@ export const SAMPLE_INVOICE: Omit<InvoicePDFData, "invoiceNumber" | "invoiceDate
     accountNumber: "10042",
     previousBalanceCents: 47813,
     accountBalanceCents: 95626,
-    lastPayment: { amountCents: 47813, date: isoNy(new Date()), reference: "7219443587" },
+    lastPayment: { amountCents: 47813, date: todayInZone(DEFAULT_TIME_ZONE), reference: "7219443587" },
     priorInvoices: [
       {
         invoiceNumber: 1000,

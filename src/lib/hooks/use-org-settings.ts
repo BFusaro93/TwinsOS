@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { CostMethod } from "@/lib/cost-methods";
 import type { CompanyAddress } from "@/stores/settings-store";
+import { coerceTimeZone } from "@/lib/time/zone";
 
 export interface OrgSettingsData {
   id: string;
@@ -26,6 +27,9 @@ export interface OrgSettingsData {
   ccProcessingFeeThresholdDollars: number;
   achPaymentsEnabled: boolean;
   crewHidePricing: boolean;
+  /** IANA name. The org's operating clock — what "today" and "this service
+   *  day" mean for every user, regardless of where they're sitting. */
+  timezone: string;
 }
 
 export interface UpdateOrgSettingsInput {
@@ -48,6 +52,7 @@ export interface UpdateOrgSettingsInput {
   ccProcessingFeeThresholdDollars?: number;
   achPaymentsEnabled?: boolean;
   crewHidePricing?: boolean;
+  timezone?: string;
 }
 
 function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
@@ -81,6 +86,10 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
       typeof row.cc_processing_fee_threshold_cents === "number" ? row.cc_processing_fee_threshold_cents / 100 : 500,
     achPaymentsEnabled: typeof row.ach_payments_enabled === "boolean" ? row.ach_payments_enabled : false,
     crewHidePricing: typeof row.crew_hide_pricing === "boolean" ? row.crew_hide_pricing : false,
+    // coerce, don't trust: an org row predating the column reads back null,
+    // and the whole point of this value is that nothing downstream has to
+    // second-guess it.
+    timezone: coerceTimeZone(row.timezone as string | null | undefined),
   };
 }
 
@@ -91,7 +100,7 @@ async function fetchOrgSettings(queryClient: QueryClient): Promise<OrgSettingsDa
   const supabase = createClient();
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled, crew_hide_pricing")
+    .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled, crew_hide_pricing, timezone")
     .eq("id", profile.orgId)
     .single();
   if (error) throw error;
@@ -134,6 +143,7 @@ export function useUpdateOrgSettings() {
         patch.cc_processing_fee_threshold_cents = Math.round(input.ccProcessingFeeThresholdDollars * 100);
       if (input.achPaymentsEnabled !== undefined) patch.ach_payments_enabled = input.achPaymentsEnabled;
       if (input.crewHidePricing !== undefined) patch.crew_hide_pricing = input.crewHidePricing;
+      if (input.timezone !== undefined) patch.timezone = input.timezone;
 
       // Merge customizations with existing values instead of replacing them
       if (input.googleMapsApiKey !== undefined) {
@@ -173,8 +183,11 @@ export function useUpdateOrgSettings() {
         throw new Error("Save was blocked — you don't have permission to change organization settings.");
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, input) => {
       queryClient.invalidateQueries({ queryKey: ["org-settings"] });
+      // Changing the clock changes what "today" is, so every cached list that
+      // was filtered or defaulted by a date is now potentially off by a day.
+      if (input.timezone !== undefined) queryClient.invalidateQueries();
     },
     onError: (err) => {
       // Surface to browser console so devs can see save failures even without a UI handler

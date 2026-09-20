@@ -5,52 +5,8 @@ import type { Database } from "@/types/supabase";
 import { getReport } from "@/lib/reports/registry";
 import { renderScheduledReportPdf } from "@/lib/reports/run-scheduled";
 import { EMAIL_FROM } from "@/lib/email/send";
-
-const EASTERN_TZ = "America/New_York";
-
-/** Wall-clock parts of `d` as they read in America/New_York. */
-function easternParts(d: Date): { year: number; month: number; day: number; hour: number } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: EASTERN_TZ,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    hour12: false,
-  }).formatToParts(d);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
-  // "24" shows up for midnight with hour12:false in some environments.
-  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour") % 24 };
-}
-
-/** Current hour (0-23) in America/New_York — the timezone every schedule's
- *  `hour_local` picker is expressed in. */
-function currentHourEastern(now: Date): number {
-  return easternParts(now).hour;
-}
-
-/** UTC offset (ms) America/New_York is at instant `d` (negative — behind UTC). */
-function easternOffsetMs(d: Date): number {
-  const p = easternParts(d);
-  const minuteSecond = new Intl.DateTimeFormat("en-US", {
-    timeZone: EASTERN_TZ,
-    minute: "numeric",
-    second: "numeric",
-  }).formatToParts(d);
-  const get = (type: string) => Number(minuteSecond.find((x) => x.type === type)?.value ?? "0");
-  const wall = Date.UTC(p.year, p.month - 1, p.day, p.hour, get("minute"), get("second"), d.getUTCMilliseconds());
-  return wall - d.getTime();
-}
-
-/** ISO instant of midnight (start of today) in America/New_York. The offset
- *  is re-derived at the midnight guess itself so DST-transition days (the
- *  offset changes at 2 AM local) still land on the true local midnight. */
-function startOfTodayEasternIso(now: Date): string {
-  const { year, month, day } = easternParts(now);
-  const wallMidnight = Date.UTC(year, month - 1, day);
-  const guess = new Date(wallMidnight - easternOffsetMs(now));
-  return new Date(wallMidnight - easternOffsetMs(guess)).toISOString();
-}
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { hourInZone, startOfTodayInZoneIso } from "@/lib/time/zone";
 
 /**
  * GET /api/cron/report-schedules — called hourly by Vercel Cron (see
@@ -60,9 +16,9 @@ function startOfTodayEasternIso(now: Date): string {
  * after the 2026-09 upgrade to Pro (see TASKS.md "Deferred — Vercel plan
  * upgrade for true hourly cron").
  *
- * For every enabled `report_schedules` row whose `hour_local` (America/
- * New_York) is at or before the current hour AND that hasn't already run
- * today (Eastern): runs its report (scoped to that schedule's org — see
+ * For every enabled `report_schedules` row whose `hour_local` is at or before
+ * the current hour IN THAT SCHEDULE'S OWN ORG TIMEZONE, and that hasn't
+ * already run today on that org's calendar: runs its report (scoped to that schedule's org — see
  * renderScheduledReportPdf), renders a PDF, and emails it to the schedule's
  * recipients. "At or before" rather than "equal to" because the scheduler
  * can fire a few minutes late — an exact hour match would then skip that
@@ -88,28 +44,45 @@ export async function GET(request: Request) {
   );
 
   const now = new Date();
-  // Midnight today in America/New_York. A schedule whose last_run_at is at or
-  // after this already ran today (success or error — an errored run is not
-  // retried until tomorrow, same as before) and is skipped.
-  const dayStart = startOfTodayEasternIso(now);
 
+  // hour_local and "already ran today" are both expressed on the OWNING ORG's
+  // clock, and orgs no longer share one — so neither can be a SQL filter any
+  // more. Fetch every live schedule and decide per row, after resolving that
+  // org's timezone (getOrgTimeZone caches, so N schedules in one org cost one
+  // lookup). At this table's size that is cheaper than the round trips a
+  // per-org query would take.
   const { data: schedules, error } = await supabase
     .from("report_schedules")
-    .select("id, org_id, report_key, recipients")
+    .select("id, org_id, report_key, recipients, hour_local, last_run_at")
     .eq("enabled", true)
-    .lte("hour_local", currentHourEastern(now))
-    .is("deleted_at", null)
-    .or(`last_run_at.is.null,last_run_at.lt.${dayStart}`);
+    .is("deleted_at", null);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Midnight today on each org's own calendar. A schedule whose last_run_at is
+  // at or after its org's dayStart already ran today (success or error — an
+  // errored run is not retried until tomorrow, same as before) and is skipped.
+  const dayStartByOrg = new Map<string, string>();
+  const due: { id: string; org_id: string; report_key: string; recipients: string[] }[] = [];
+  for (const schedule of schedules ?? []) {
+    const tz = await getOrgTimeZone(supabase, schedule.org_id);
+    if (!dayStartByOrg.has(schedule.org_id)) {
+      dayStartByOrg.set(schedule.org_id, startOfTodayInZoneIso(now, tz));
+    }
+    const dayStart = dayStartByOrg.get(schedule.org_id)!;
+    if (hourInZone(now, tz) < schedule.hour_local) continue;
+    if (schedule.last_run_at && schedule.last_run_at >= dayStart) continue;
+    due.push(schedule);
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
   let sent = 0;
   let failed = 0;
 
-  for (const schedule of schedules ?? []) {
+  for (const schedule of due) {
+    const dayStart = dayStartByOrg.get(schedule.org_id)!;
     // Claim before sending: the conditional UPDATE only succeeds for a row
     // that still hasn't run today, so an overlapping/retried GitHub Actions
     // run (not guaranteed exactly-once, and this workflow also allows manual

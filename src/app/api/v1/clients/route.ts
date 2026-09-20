@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { isClientStatus } from "@/lib/reports/client-status";
-import { isoNy } from "@/lib/reports/ny-date";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { CLIENT_SELECT, shapeClient } from "./shape";
 import { createClientSchema } from "./validation";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 /** GET /api/v1/clients — list the org's clients. Requires scope "clients:read". */
 export async function GET(request: Request) {
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
       status,
       // client_since is the conversion date: set when the account is created
       // straight as a client, left NULL for leads until they convert.
-      client_since: isClientStatus(status) ? isoNy(new Date()) : null,
+      client_since: isClientStatus(status) ? todayInZone(await getOrgTimeZone(db, auth.orgId)) : null,
       primary_phone: body.primaryPhone ?? null,
       primary_email: body.primaryEmail ?? null,
       billing_address: body.billingAddress ?? null,

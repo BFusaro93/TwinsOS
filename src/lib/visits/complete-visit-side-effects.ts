@@ -1,10 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
-import { isoNy } from "@/lib/reports/ny-date";
 import type { Database } from "@/types/supabase";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { logger } from "@/lib/logger";
 import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 /**
  * Everything that must happen AFTER a crm_job_visits row flips to
@@ -144,7 +145,9 @@ export async function applyVisitCompletionSideEffects(
 ): Promise<VisitCompletionSideEffectsResult> {
   const { supabase, orgId, visitId, userId } = args;
   const fireAutomations = args.fireAutomations ?? true;
-  const today = args.today ?? isoNy(new Date());
+  // The visit's service day is the ORG's day — a crew completing work at
+  // 9pm in a Pacific org must not have it invoiced under tomorrow.
+  const today = args.today ?? todayInZone(await getOrgTimeZone(supabase, orgId));
 
   const result: VisitCompletionSideEffectsResult = {
     ok: false,

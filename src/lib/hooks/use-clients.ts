@@ -5,10 +5,12 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import type { AddressVerdict } from "@/types/address-verification";
 import { todayLocalISODate } from "@/lib/utils";
-import { isoNy } from "@/lib/reports/ny-date";
 import { logger } from "@/lib/logger";
 import type { BulkImportResult } from "@/lib/csv";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import type {
   Client,
   ClientContact,
@@ -110,6 +112,10 @@ function mapClient(row: any): Client {
     serviceCity: row.service_city ?? null,
     serviceState: row.service_state ?? null,
     serviceZip: row.service_zip ?? null,
+    addressVerdict: row.address_verdict ?? null,
+    addressVerifiedAt: row.address_verified_at ?? null,
+    lat: row.lat ?? null,
+    lng: row.lng ?? null,
     billingSameAsService: row.billing_same_as_service ?? true,
     gateCode: row.gate_lock_code,
     notesToCrew: row.notes_to_crew,
@@ -388,7 +394,7 @@ export function useAddClientProperty() {
       isMaster = false,
     }: {
       clientId: string;
-      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string };
+      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string; addressVerdict?: AddressVerdict | null; lat?: number | null; lng?: number | null };
       /** True only for the auto-created property backed by the client's own address (see AerialMeasurementDialog) — every manual "Add Property" stays a non-master satellite property. */
       isMaster?: boolean;
     }) => {
@@ -404,6 +410,12 @@ export function useAddClientProperty() {
         gate_lock_code: property.gateCode,
         notes_to_crew: property.notesToCrew,
         is_master: isMaster,
+        ...(property.addressVerdict !== undefined && {
+          address_verdict: property.addressVerdict,
+          address_verified_at: property.addressVerdict ? new Date().toISOString() : null,
+          ...(property.lat != null && { lat: property.lat }),
+          ...(property.lng != null && { lng: property.lng }),
+        }),
       });
       if (error) throw error;
       const label = [property.name, property.address].filter((s) => s && s.trim()).join(" — ");
@@ -426,7 +438,7 @@ export function useUpdateClientProperty() {
     }: {
       id: string;
       clientId: string;
-      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string };
+      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string; addressVerdict?: AddressVerdict | null; lat?: number | null; lng?: number | null };
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -440,6 +452,14 @@ export function useUpdateClientProperty() {
           zip: property.zip,
           gate_lock_code: property.gateCode,
           notes_to_crew: property.notesToCrew,
+          // Only stamped when the form actually ran a check on the address
+          // being saved - an untouched address keeps whatever verdict it had.
+          ...(property.addressVerdict !== undefined && {
+            address_verdict: property.addressVerdict,
+            address_verified_at: property.addressVerdict ? new Date().toISOString() : null,
+            ...(property.lat != null && { lat: property.lat }),
+            ...(property.lng != null && { lng: property.lng }),
+          }),
         })
         .eq("id", id);
       if (error) throw error;
@@ -508,10 +528,19 @@ export function useCreateClient() {
           account_type: values.accountType,
           primary_phone: values.primaryPhone || null,
           primary_email: values.primaryEmail || null,
-          billing_address: values.billingAddress || null,
-          billing_city: values.billingCity || null,
-          billing_state: values.billingState || null,
-          billing_zip: values.billingZip || null,
+          service_address: values.serviceAddress || null,
+          service_city: values.serviceCity || null,
+          service_state: values.serviceState || null,
+          service_zip: values.serviceZip || null,
+          // clients.billing_same_as_service defaults to true and is in fact
+          // true for every client on both projects, so a create that captured
+          // a service address and no separate billing address mirrors it
+          // rather than leaving billing blank — leaving them to diverge is how
+          // clients ended up with one address and not the other.
+          billing_address: values.billingAddress || values.serviceAddress || null,
+          billing_city: values.billingCity || values.serviceCity || null,
+          billing_state: values.billingState || values.serviceState || null,
+          billing_zip: values.billingZip || values.serviceZip || null,
           source: values.source || null,
           sales_rep_id: values.salesRepId || null,
           // New Client dialog can create the record as a Lead instead of
@@ -682,6 +711,8 @@ export function useBulkImportClients() {
 }
 
 export function useUpdateClient() {
+  // client_since is the conversion DATE — the org's day, not the browser's.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Client> }) => {
@@ -721,6 +752,14 @@ export function useUpdateClient() {
           service_city: updates.serviceCity,
           service_state: updates.serviceState,
           service_zip: updates.serviceZip,
+          // Only written when the form ran a check on the address being saved;
+          // an untouched address keeps the verdict it already had.
+          ...(updates.addressVerdict !== undefined && {
+            address_verdict: updates.addressVerdict,
+            address_verified_at: updates.addressVerdict ? new Date().toISOString() : null,
+            ...(updates.lat != null && { lat: updates.lat }),
+            ...(updates.lng != null && { lng: updates.lng }),
+          }),
           billing_same_as_service: updates.billingSameAsService,
           source: updates.source,
           ok_to_email: updates.okToEmail,
@@ -740,7 +779,7 @@ export function useUpdateClient() {
           referred_by: updates.referredBy,
           referred_by_client_id: updates.referredByClientId,
           // Empty string from the date input means "cleared", not a date.
-          client_since: updates.clientSince || (leadConverting ? isoNy(new Date()) : null),
+          client_since: updates.clientSince || (leadConverting ? todayInZone(orgTimeZone) : null),
           priority: updates.priority ?? null,
           is_taxable: updates.isTaxable,
           turf_sqft: updates.turfSqft ?? null,
@@ -1043,6 +1082,10 @@ export function useCreateLead() {
       billingCity?: string;
       billingState?: string;
       billingZip?: string;
+      serviceAddress?: string;
+      serviceCity?: string;
+      serviceState?: string;
+      serviceZip?: string;
       source?: string;
       notes?: string;
     }) => {
@@ -1056,10 +1099,19 @@ export function useCreateLead() {
           account_type: values.accountType ?? "residential",
           primary_phone: values.primaryPhone || null,
           primary_email: values.primaryEmail || null,
-          billing_address: values.billingAddress || null,
-          billing_city: values.billingCity || null,
-          billing_state: values.billingState || null,
-          billing_zip: values.billingZip || null,
+          service_address: values.serviceAddress || null,
+          service_city: values.serviceCity || null,
+          service_state: values.serviceState || null,
+          service_zip: values.serviceZip || null,
+          // clients.billing_same_as_service defaults to true and is in fact
+          // true for every client on both projects, so a create that captured
+          // a service address and no separate billing address mirrors it
+          // rather than leaving billing blank — leaving them to diverge is how
+          // clients ended up with one address and not the other.
+          billing_address: values.billingAddress || values.serviceAddress || null,
+          billing_city: values.billingCity || values.serviceCity || null,
+          billing_state: values.billingState || values.serviceState || null,
+          billing_zip: values.billingZip || values.serviceZip || null,
           source: values.source || null,
           status: "lead",
           // client_since is the conversion date — leads don't have one until
@@ -1148,6 +1200,8 @@ export function useBulkImportLeads() {
 }
 
 export function useConvertLeadToClient() {
+  // client_since is the conversion DATE — the org's day, not the browser's.
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
@@ -1162,7 +1216,7 @@ export function useConvertLeadToClient() {
       // here — reports measure "new clients" and "days to convert" off it.
       const { data: updated, error } = await supabase
         .from("clients")
-        .update({ status: "active", client_since: isoNy(new Date()) })
+        .update({ status: "active", client_since: todayInZone(orgTimeZone) })
         .eq("id", id)
         .eq("status", "lead")
         .select("id");

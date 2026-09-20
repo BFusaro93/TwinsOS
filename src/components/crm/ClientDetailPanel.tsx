@@ -136,7 +136,10 @@ import {
   CreditCard,
 } from "lucide-react";
 import type { Client, ClientContact, ClientProperty, ContactPhone, PhoneType } from "@/types/crm";
+import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
+import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -256,12 +259,18 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 // invoice-level default_payment_method preference above).
 
 function SavedPaymentMethodSection({ client }: { client: Client }) {
+  const [confirm, confirmDialog] = useConfirm();
   const [dialogOpen, setDialogOpen] = useState(false);
   const removeMethod = useRemoveSavedPaymentMethod();
   const setAutopayEnabled = useSetAutopayEnabled();
 
   async function handleRemove() {
-    if (!confirm("Remove the saved payment method for this client? Autopay will stop until a new one is added.")) return;
+    if (!(await confirm({
+      title: "Remove the saved payment method for this client?",
+      description: "Autopay will stop until a new one is added.",
+      confirmLabel: "Remove",
+      destructive: true,
+    }))) return;
     try {
       await removeMethod.mutateAsync({ clientId: client.id });
       toast.success("Payment method removed");
@@ -329,6 +338,7 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
         onOpenChange={setDialogOpen}
         onSaved={() => toast.success("Payment method saved")}
       />
+      {confirmDialog}
     </div>
   );
 }
@@ -686,6 +696,7 @@ function ClientCombobox({
 function EditClientDialog({ client, open, onOpenChange }: { client: Client; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { mutateAsync: update, isPending } = useUpdateClient();
   const rf = useRequiredFields("client");
+  const svcAddr = useVerifyAddress();
   const { data: fieldDefs = [] } = useCustomFieldDefs();
   const { data: fieldValues = [], isLoading: fieldValuesLoading } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
@@ -862,6 +873,15 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
         serviceCity: form.serviceCity || null,
         serviceState: form.serviceState || null,
         serviceZip: form.serviceZip || null,
+        // Carried through only when the check ran against the address actually
+        // being saved; an untouched address keeps the verdict it already had.
+        ...(svcAddr.state === "done" && svcAddr.result
+          ? {
+              addressVerdict: svcAddr.result.verdict,
+              lat: svcAddr.result.lat,
+              lng: svcAddr.result.lng,
+            }
+          : {}),
       };
       const billingAddr = billingSameAsService
         ? { billingAddress: form.serviceAddress || null, billingCity: form.serviceCity || null, billingState: form.serviceState || null, billingZip: form.serviceZip || null }
@@ -1041,7 +1061,11 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 pt-1">Service Address</p>
               <div className="flex flex-col gap-1.5">
                 <Label>Street</Label>
-                <Input value={form.serviceAddress} onChange={(e) => patch("serviceAddress", e.target.value)} />
+                <Input
+                  value={form.serviceAddress}
+                  onChange={(e) => patch("serviceAddress", e.target.value)}
+                  onBlur={() => void svcAddr.verify({ address: form.serviceAddress, city: form.serviceCity, state: form.serviceState, zip: form.serviceZip })}
+                />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex flex-col gap-1.5">
@@ -1054,9 +1078,24 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>ZIP</Label>
-                  <Input value={form.serviceZip} onChange={(e) => patch("serviceZip", e.target.value)} />
+                  <Input
+                    value={form.serviceZip}
+                    onChange={(e) => patch("serviceZip", e.target.value)}
+                    onBlur={() => void svcAddr.verify({ address: form.serviceAddress, city: form.serviceCity, state: form.serviceState, zip: form.serviceZip })}
+                  />
                 </div>
               </div>
+              <AddressSuggestion
+                typed={{ address: form.serviceAddress, city: form.serviceCity, state: form.serviceState, zip: form.serviceZip }}
+                state={svcAddr.state}
+                result={svcAddr.result}
+                onAccept={(n) => {
+                  patch("serviceAddress", n.address);
+                  patch("serviceCity", n.city);
+                  patch("serviceState", n.state);
+                  patch("serviceZip", n.zip);
+                }}
+              />
 
               <div className="flex items-center gap-2 pt-1">
                 <input
@@ -1420,6 +1459,7 @@ function ContactDialog({
   onOpenChange: (o: boolean) => void;
   contact?: ClientContact | null;
 }) {
+  const [confirm, confirmDialog] = useConfirm();
   const isEditing = !!contact;
   const { mutateAsync: addContact, isPending: isAdding } = useAddClientContact();
   const { mutateAsync: updateContact, isPending: isUpdating } = useUpdateClientContact();
@@ -1516,7 +1556,11 @@ function ContactDialog({
 
   async function handleDelete() {
     if (!contact) return;
-    if (!confirm(`Remove ${contact.firstName}${contact.lastName ? ` ${contact.lastName}` : ""} as a contact?`)) return;
+    if (!(await confirm({
+      title: `Remove ${contact.firstName}${contact.lastName ? ` ${contact.lastName}` : ""} as a contact?`,
+      confirmLabel: "Remove Contact",
+      destructive: true,
+    }))) return;
     try {
       await deleteContact({ id: contact.id, clientId });
       toast.success("Contact removed");
@@ -1632,6 +1676,7 @@ function ContactDialog({
             <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
           </div>
         </DialogFooter>
+        {confirmDialog}
       </DialogContent>
     </Dialog>
   );
@@ -1647,6 +1692,7 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
   const [form, setForm] = useState({
     name: "", address: "", city: "", state: "", zip: "", gateCode: "", notesToCrew: "",
   });
+  const addr = useVerifyAddress();
 
   // Seed the form whenever the dialog opens (either for a new property, or to edit an existing one)
   useEffect(() => {
@@ -1660,7 +1706,9 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
       gateCode: property?.gateCode ?? "",
       notesToCrew: property?.notesToCrew ?? "",
     });
-  }, [open, property]);
+    // A reopened dialog must not show the previous property's verdict.
+    addr.reset();
+  }, [open, property, addr]);
 
   function patch(k: keyof typeof form, v: string) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -1669,11 +1717,21 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
   async function handleSave() {
     if (!form.address.trim() && !form.name.trim()) { toast.error("Address or name is required"); return; }
     try {
+      // Carry the verdict through only when the check ran against the address
+      // actually being saved; otherwise leave the stored verdict alone.
+      const checked =
+        addr.state === "done" && addr.result
+          ? {
+              addressVerdict: addr.result.verdict,
+              lat: addr.result.lat,
+              lng: addr.result.lng,
+            }
+          : {};
       if (isEditing && property) {
-        await updateProperty({ id: property.id, clientId, property: { ...form } });
+        await updateProperty({ id: property.id, clientId, property: { ...form, ...checked } });
         toast.success("Property updated");
       } else {
-        await addProperty({ clientId, property: { ...form } });
+        await addProperty({ clientId, property: { ...form, ...checked } });
         toast.success("Property added");
       }
       onOpenChange(false);
@@ -1691,7 +1749,11 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Street Address *</Label>
-            <Input value={form.address} onChange={(e) => patch("address", e.target.value)} />
+            <Input
+              value={form.address}
+              onChange={(e) => patch("address", e.target.value)}
+              onBlur={() => void addr.verify({ address: form.address, city: form.city, state: form.state, zip: form.zip })}
+            />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-1 flex flex-col gap-1.5">
@@ -1704,9 +1766,19 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>ZIP</Label>
-              <Input value={form.zip} onChange={(e) => patch("zip", e.target.value)} />
+              <Input
+                value={form.zip}
+                onChange={(e) => patch("zip", e.target.value)}
+                onBlur={() => void addr.verify({ address: form.address, city: form.city, state: form.state, zip: form.zip })}
+              />
             </div>
           </div>
+          <AddressSuggestion
+            typed={{ address: form.address, city: form.city, state: form.state, zip: form.zip }}
+            state={addr.state}
+            result={addr.result}
+            onAccept={(n) => setForm((p) => ({ ...p, address: n.address, city: n.city, state: n.state, zip: n.zip }))}
+          />
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Gate Code</Label>
@@ -1878,6 +1950,7 @@ function jobBorderColor(job: CRMJob): string {
 // ── HomeTab ───────────────────────────────────────────────────────────────────
 
 function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; isLead?: boolean; onSwitchTab?: (tab: string) => void }) {
+  const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
   const [jobFilter, setJobFilter] = useState<"active" | "completed">("active");
   const [clientVisitsModal, setClientVisitsModal] = useState<"upcoming" | "history" | null>(null);
@@ -1894,7 +1967,6 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
   const [addInvoiceOpen, setAddInvoiceOpen] = useState(false);
-  const [showAllAccounting, setShowAllAccounting] = useState(false);
   const [allAccountingOpen, setAllAccountingOpen] = useState(false);
   const [allEstimatesOpen, setAllEstimatesOpen] = useState(false);
 
@@ -1956,7 +2028,6 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   if (isLead) {
     // Leads only show the estimates column — full width
-    const openEstimates = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
     return (
       <div className="flex flex-col overflow-hidden h-full">
         <div className="flex items-center justify-between border-b px-4 py-2.5">
@@ -2163,7 +2234,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                           <DropdownMenuItem
                             className="text-red-600 focus:text-red-600"
                             onClick={async () => {
-                              if (!confirm("Cancel this job?")) return;
+                              if (!(await confirm({ title: "Cancel this job?", confirmLabel: "Cancel Job", cancelLabel: "Keep Job", destructive: true }))) return;
                               try {
                                 await updateJobStatus.mutateAsync({ id: job.id, status: "cancelled", scheduledDate: job.scheduledDate ?? "", clientId });
                                 toast.success("Job cancelled");
@@ -2443,6 +2514,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
         onOpenJob={(id) => { setClientVisitsModal(null); setJobEditMode(false); setSelectedJobId(id); }}
       />
     )}
+    {confirmDialog}
     </>
   );
 }
@@ -2729,95 +2801,6 @@ function AllContactsModal({
 
         <div className="border-t px-6 py-2 text-xs text-neutral-400">
           {filtered.length} contact{filtered.length !== 1 ? "s" : ""}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AllPropertiesModal({
-  properties,
-  onClose,
-  onOpenProperty,
-  onAddProperty,
-}: {
-  properties: ClientProperty[];
-  onClose: () => void;
-  onOpenProperty: (p: ClientProperty) => void;
-  onAddProperty: () => void;
-}) {
-  const [search, setSearch] = useState("");
-
-  const filtered = properties.filter((p) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      (p.name ?? "").toLowerCase().includes(q) ||
-      (p.address ?? "").toLowerCase().includes(q) ||
-      (p.city ?? "").toLowerCase().includes(q)
-    );
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
-        <div className="flex items-center justify-between border-b px-6 py-3">
-          <h2 className="text-base font-semibold text-neutral-800">All Properties</h2>
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, address, city…"
-              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
-            />
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddProperty}>
-              <Plus className="mr-1 h-3 w-3" /> Add Property
-            </Button>
-            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-auto flex-1">
-          {filtered.length === 0 ? (
-            <div className="p-6 text-sm text-neutral-400 text-center">No properties found.</div>
-          ) : (
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-neutral-600 text-white">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Address</th>
-                  <th className="px-4 py-2 text-left font-medium">City</th>
-                  <th className="px-4 py-2 text-left font-medium">State</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filtered.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="cursor-pointer hover:bg-neutral-50"
-                    onClick={() => onOpenProperty(p)}
-                  >
-                    <td className="px-4 py-2.5 font-medium text-neutral-800">
-                      {p.name ?? "—"}
-                      {p.isMaster && (
-                        <Badge variant="secondary" className="ml-1.5 text-[9px] h-4 px-1.5">Master</Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-neutral-600">{p.address ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-neutral-600">{p.city ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-neutral-600">{p.state ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="border-t px-6 py-2 text-xs text-neutral-400">
-          {filtered.length} propert{filtered.length !== 1 ? "ies" : "y"}
         </div>
       </div>
     </div>
@@ -3280,10 +3263,6 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       router.push(`/crm/clients/${clientId}`);
     } catch { toast.error("Failed to convert lead"); }
   }
-
-  const address = [client.billingAddress, client.billingCity, client.billingState, client.billingZip]
-    .filter(Boolean)
-    .join(", ");
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">

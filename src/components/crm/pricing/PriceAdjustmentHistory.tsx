@@ -10,6 +10,8 @@ import {
   useRevertPriceAdjustment,
 } from "@/lib/hooks/use-bulk-pricing";
 import { toast } from "sonner";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 function signedCurrency(cents: number): string {
   const sign = cents > 0 ? "+" : cents < 0 ? "−" : "";
@@ -24,19 +26,21 @@ function describe(method: string, amount: number): string {
 }
 
 export function PriceAdjustmentHistory() {
+  // applied_at is an instant — read it back on the org's wall clock, not the
+  // viewer's, so two people looking at the same run agree on when it ran.
+  const orgTimeZone = useOrgTimeZone();
   const { data: runs = [], isLoading } = usePriceAdjustments();
   const revert = useRevertPriceAdjustment();
+  const [confirm, confirmDialog] = useConfirm();
 
-  function handleRevert(id: string, name: string, lineCount: number) {
-    if (
-      !confirm(
-        `Undo "${name}"?\n\n` +
-          `This restores the original price on up to ${lineCount} line${lineCount !== 1 ? "s" : ""}. ` +
-          `Lines you have re-priced by hand since the run are left as they are.`
-      )
-    ) {
-      return;
-    }
+  async function handleRevert(id: string, name: string, lineCount: number) {
+    const confirmed = await confirm({
+      title: `Undo "${name}"?`,
+      description: `This restores the original price on up to ${lineCount} line${lineCount !== 1 ? "s" : ""}. Lines you have re-priced by hand since the run are left as they are.`,
+      confirmLabel: "Undo",
+      destructive: true,
+    });
+    if (!confirmed) return;
     revert.mutate(id, {
       onSuccess: ({ reverted, skipped }) => {
         // The skip count is the whole point of surfacing this: it means a
@@ -112,7 +116,7 @@ export function PriceAdjustmentHistory() {
               </td>
               <td className="px-4 py-3 text-xs text-slate-500">
                 {new Date(r.appliedAt).toLocaleString("en-US", {
-                  timeZone: "America/New_York",
+                  timeZone: orgTimeZone,
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}
@@ -141,6 +145,7 @@ export function PriceAdjustmentHistory() {
           ))}
         </tbody>
       </table>
+      {confirmDialog}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/supabase";
+import { GOOGLE_FAILURE_STATUSES, resolveGoogleMapsKey } from "@/lib/google-maps-key";
 
 /**
  * POST /api/crm/jobs/geocode — resolves lat/lng for a batch of the org's jobs
@@ -67,8 +68,7 @@ function joinAddress(p: AddressParts): string {
   return [p.address, p.city, p.state, p.zip].map((s) => s?.trim()).filter(Boolean).join(", ");
 }
 
-/** Statuses that mean "Google itself refused/failed", as opposed to "this address is unknown". */
-const GOOGLE_FAILURE_STATUSES = new Set(["REQUEST_DENIED", "OVER_QUERY_LIMIT", "OVER_DAILY_LIMIT", "INVALID_REQUEST", "UNKNOWN_ERROR"]);
+
 
 export async function POST(request: Request) {
   const cookieStore = await cookies();
@@ -98,19 +98,15 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data: org } = await sb
-    .from("organizations")
-    .select("customizations")
-    .eq("id", profile.org_id)
-    .single();
-
-  const apiKey = (org?.customizations as Record<string, unknown> | null)?.google_maps_api_key as string | undefined;
-  if (!apiKey?.trim()) {
-    return NextResponse.json(
-      { error: "Google Maps API key not configured. Add it in Settings → Integrations → Google Maps." },
-      { status: 422 }
-    );
+  // Shared with /api/crm/route-optimize and /api/crm/address/verify so an org
+  // entitled to the platform key gets it here too — reading
+  // customizations.google_maps_api_key directly meant an Enterprise org with
+  // no key of its own had working route optimization and silently no map pins.
+  const keyResult = await resolveGoogleMapsKey(sb, profile.org_id);
+  if ("error" in keyResult) {
+    return NextResponse.json({ error: keyResult.error }, { status: keyResult.status });
   }
+  const apiKey = keyResult.apiKey;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: jobsData, error: jobsError } = await (sb as any)

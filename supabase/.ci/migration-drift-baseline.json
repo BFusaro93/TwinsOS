@@ -1,5 +1,5 @@
 {
-  "_comment": "Known, already-reconciled migration history gaps between supabase/migrations/ and production as of 2026-08-24 (see PR #68). The drift-check workflow ignores exactly these versions so CI stays green without requiring us to reverse-engineer decades-old ad-hoc schema changes. Any NEW drift beyond this baseline fails the build. Do not add to this list to silence a check on migrations you're actively adding — that's what the check is for. Only add here if you've done the same live-schema verification PR #68 did and are documenting a deliberately-accepted historical gap.",
+  "_comment": "Known, already-reconciled migration history gaps between supabase/migrations/ and production as of 2026-08-24 (see PR #68), extended 2026-09-20 after reconciling ~321 version-number mismatches (renamed the production schema_migrations.version to match the committed filename for each — same-named migration, no schema change involved). The drift-check workflow ignores exactly these versions so CI stays green without requiring us to reverse-engineer decades-old ad-hoc schema changes. Any NEW drift beyond this baseline fails the build. Do not add to this list to silence a check on migrations you're actively adding — that's what the check is for. Only add here if you've done the same live-schema verification PR #68 did and are documenting a deliberately-accepted historical gap.",
   "knownRemoteOnly": [
     "20260623024109",
     "20260623025056",
@@ -29,11 +29,24 @@
     "20260731030632",
     "20260731133918",
     "20260731141056",
-    "20260805151519"
+    "20260805151519",
+    "20260828025734",
+    "20260831182141",
+    "20260901011042",
+    "20260902001121",
+    "20260902001458",
+    "20260903032851",
+    "20260907142353",
+    "20260913184622"
   ],
   "knownLocalOnly": [
     "20260619000010",
     "20260710000005",
-    "20260710000006"
+    "20260710000006",
+    "20260906110000",
+    "20260906180000",
+    "20260906180100",
+    "20260906180200",
+    "20260906180500"
   ]
 }

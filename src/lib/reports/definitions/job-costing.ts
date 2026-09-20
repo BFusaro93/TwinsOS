@@ -43,7 +43,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       "Revenue is the visit's own rate for per-service visits, otherwise the live sum of the job's included service lines (so re-pricing a line is reflected), otherwise the job rate.",
       LABOR_COST_NOTE,
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
         "worked_date",
@@ -64,7 +64,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "status", op: "eq", value: "completed" },
-        ...dateRangeFilters("completed_at", params, { datetime: true, preset: "this_month" }),
+        ...dateRangeFilters("completed_at", params, timeZone, { datetime: true, preset: "this_month" }),
         ...eqFilter("crew_name", params.crew),
       ],
       groupBy: [],
@@ -84,12 +84,12 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       "Visits with multiple services are grouped by the combined service list.",
       LABOR_COST_NOTE,
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [],
       filters: [
         { column: "status", op: "eq", value: "completed" },
-        ...dateRangeFilters("completed_at", params, { datetime: true, preset: "this_month" }),
+        ...dateRangeFilters("completed_at", params, timeZone, { datetime: true, preset: "this_month" }),
       ],
       groupBy: ["service_names"],
       aggregates: [
@@ -114,7 +114,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       "One row per completed visit × service. A recurring job's visits still in progress or not yet done are excluded, even if the job itself is marked complete.",
       "Rate Variance is actual vs. assumed, as a percentage. Negative means the job took longer than the assumed rate predicted (the rate may be set too aggressively); positive means it went faster (the rate may be too conservative).",
     ],
-    analysis: (params) => ({
+    analysis: (params, timeZone) => ({
       dataset: "rpt_job_services",
       columns: [
         "scheduled_date",
@@ -138,7 +138,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
         // stays 'scheduled' while individual visits complete (and a
         // completed job can still have skipped visits with no hours).
         { column: "visit_status", op: "eq", value: "completed" },
-        ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
+        ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
       ],
       groupBy: [],
       aggregates: [],

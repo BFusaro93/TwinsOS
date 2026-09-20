@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapJob, mapVisit } from "./use-crm-jobs";
 import type { CRMJob, CRMJobVisit, StormEvent, StormEventStatus, SnowRoute, SnowRouteStop } from "@/types/crm-jobs";
+import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,8 @@ export function useSnowJobs() {
         .from("crm_jobs")
         .select(`
           *,
-          clients(display_name, primary_phone, priority, billing_address, billing_city, billing_state, billing_zip),
+          clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+          client_properties(address, city, state, zip),
           crm_crews(name),
           crm_job_services(*)
         `)
@@ -83,10 +85,13 @@ export function useSnowJobs() {
       return (data.map((row: any) => ({
         ...mapJob({
           ...row,
-          service_address: row.service_address ?? row.clients?.billing_address ?? null,
-          service_city:    row.service_city    ?? row.clients?.billing_city    ?? null,
-          service_state:   row.service_state   ?? row.clients?.billing_state   ?? null,
-          service_zip:     row.service_zip     ?? row.clients?.billing_zip     ?? null,
+          // Same resolution order as the main dispatch board, the crew app and
+          // /api/crm/route-optimize — see resolveStopAddress.
+          ...stopAddressJobFields(resolveStopAddress({
+            job: row,
+            property: embeddedOne(row.client_properties),
+            client: row.clients,
+          })),
         }),
         clientPriority: row.clients?.priority ?? null,
       }))) as CRMJob[];
@@ -358,9 +363,9 @@ export function useStormEventVisits(stormEventId: string) {
         .from("crm_job_visits")
         .select(`
           *,
-          clients(display_name, primary_phone, priority, billing_address, billing_city, billing_state, billing_zip),
+          clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
           crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*))
+          crm_jobs(*, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
         `)
         .eq("storm_event_id", stormEventId)
         .is("deleted_at", null)
