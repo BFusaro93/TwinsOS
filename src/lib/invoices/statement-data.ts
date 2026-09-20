@@ -1,5 +1,6 @@
 import type { InvoicePDFStatementData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 
+import { isoNy } from "@/lib/reports/ny-date";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -32,7 +33,7 @@ export async function buildInvoiceStatementData(
     .neq("status", "void")
     .neq("status", "draft")
     .is("deleted_at", null)
-    .lte("invoice_date", inv.invoice_date ?? new Date().toISOString().slice(0, 10))
+    .lte("invoice_date", inv.invoice_date ?? isoNy(new Date()))
     .order("invoice_date", { ascending: false });
 
   const previousBalanceCents = (otherInvoices ?? []).reduce(
@@ -40,29 +41,19 @@ export async function buildInvoiceStatementData(
     0
   );
 
-  // "Prior invoice" should be the most recent OTHER invoice that still has
-  // an outstanding balance — the plain newest-by-date row could be one this
-  // invoice already indirectly follows-up on but that's since been paid in
-  // full, which would otherwise print as still owed and "N days past due".
-  const priorInvoiceRow =
-    (otherInvoices ?? []).find(
-      (row: { balance_cents: number | null }) => (row.balance_cents ?? 0) > 0
-    ) ?? null;
-  const priorInvoice = priorInvoiceRow
-    ? {
-        invoiceNumber: priorInvoiceRow.invoice_number as number,
-        amountCents: (priorInvoiceRow.balance_cents as number) ?? 0,
-        date: priorInvoiceRow.invoice_date as string,
-        daysPastDue: priorInvoiceRow.due_date
-          ? Math.max(
-              0,
-              Math.floor(
-                (Date.now() - new Date(priorInvoiceRow.due_date + "T12:00:00").getTime()) / 86_400_000
-              )
-            )
-          : 0,
-      }
-    : null;
+  // Every OTHER still-open invoice, not just the most recent one — a fully
+  // paid-off invoice is excluded (it would otherwise print as still owed
+  // and "N days past due").
+  const priorInvoices = (otherInvoices ?? [])
+    .filter((row: { balance_cents: number | null }) => (row.balance_cents ?? 0) > 0)
+    .map((row: { invoice_number: number; invoice_date: string; due_date: string | null; balance_cents: number | null }) => ({
+      invoiceNumber: row.invoice_number,
+      amountCents: row.balance_cents ?? 0,
+      date: row.invoice_date,
+      daysPastDue: row.due_date
+        ? Math.max(0, Math.floor((Date.now() - new Date(row.due_date + "T12:00:00").getTime()) / 86_400_000))
+        : 0,
+    }));
 
   const { data: paymentRow } = await supabase
     .from("crm_payments")
@@ -98,6 +89,6 @@ export async function buildInvoiceStatementData(
     // had already been paid/credited.
     accountBalanceCents: previousBalanceCents + (inv.balance_cents ?? 0),
     lastPayment,
-    priorInvoice,
+    priorInvoices,
   };
 }

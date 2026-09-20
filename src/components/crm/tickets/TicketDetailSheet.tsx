@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   useCloseTicket,
   useUpdateTicket,
@@ -14,6 +15,8 @@ import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
 import { useProjects } from "@/lib/hooks/use-projects";
+import { useCreateEstimateFromUpsell } from "@/lib/hooks/use-upsell-convert";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useClients } from "@/lib/hooks/use-clients";
 import { NewClientDialog } from "@/components/crm/NewClientDialog";
@@ -49,7 +52,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/shared/PermissionGate";
-import { AlertTriangle, Download, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Download, FileText, Loader2, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
 import { escapeHtml } from "@/lib/utils/escape-html";
@@ -332,6 +335,9 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
 // ── linked records picker ─────────────────────────────────────────────────────
 
 function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
+  const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const createEstimate = useCreateEstimateFromUpsell();
   const addLink = useAddTicketLink();
   const removeLink = useRemoveTicketLink();
   const { data: links } = useTicketLinks(ticket.id);
@@ -358,6 +364,22 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
       ? (jobs ?? []).map((j) => ({ id: j.id, label: j.serviceAddress || j.jobType || `Job ${j.id.slice(0, 8)}` }))
       : projects.map((p) => ({ id: p.id, label: p.name }));
 
+  async function handleCreateEstimate() {
+    try {
+      const res = await createEstimate.mutateAsync(ticket);
+      toast.success(
+        res.resumed
+          ? `Estimate #${res.estimateNumber} was already created for this ticket — opening it.`
+          : res.lineAdded
+          ? `Estimate #${res.estimateNumber} created and linked, with the suggested service on it.`
+          : `Estimate #${res.estimateNumber} created and linked — add the service line to price it.`
+      );
+      router.push(`/crm/estimates/${res.estimateId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the estimate");
+    }
+  }
+
   async function handleAdd() {
     if (!selectedId) return;
     const opt = options.find((o) => o.id === selectedId);
@@ -366,8 +388,52 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
     setSelectedId("");
   }
 
+  // A crew-submitted upsell exists to become a quote, and the estimate link is
+  // what makes it show as converted in reporting — so offer it as one action
+  // rather than making the office create the estimate and come back to link it.
+  // Hidden once an estimate is linked, so nobody quietly quotes it twice.
+  // One click here creates a real priced estimate, which every other entry
+  // point to estimate creation gates on `estimate_add`. Without the same gate a
+  // role with tickets but deliberately no estimating rights (a dispatcher, a
+  // CSR) could mint estimates through this button — and the underlying insert
+  // is permitted, because RLS on `estimates` is org-scoped and knows nothing
+  // about the crm_roles permission catalog. Hidden rather than disabled while
+  // permissions are still loading, so it never flashes for someone who can't
+  // use it.
+  const isUpsell = ticket.category === "Upsell";
+  const canCreateEstimate = !permissionsLoading && can("estimate_add");
+  const hasEstimateLink = (links ?? []).some((l) => l.linkType === "estimate");
+
   return (
     <div>
+      {isUpsell && !hasEstimateLink && canCreateEstimate && (
+        <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-xs font-medium text-emerald-900">
+            Crew suggested this work
+          </p>
+          <p className="mt-0.5 text-xs text-emerald-700">
+            Create the quote and link it back in one step, so this shows up as converted
+            once it&apos;s won.
+          </p>
+          <Button
+            size="sm"
+            className="mt-2 h-8 gap-1.5 text-xs"
+            onClick={handleCreateEstimate}
+            disabled={createEstimate.isPending || !ticket.clientId}
+          >
+            {createEstimate.isPending ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating…</>
+            ) : (
+              <><FileText className="h-3.5 w-3.5" /> Create estimate</>
+            )}
+          </Button>
+          {!ticket.clientId && (
+            <p className="mt-1.5 text-xs text-amber-700">
+              This ticket has no client, so there&apos;s nothing to quote against.
+            </p>
+          )}
+        </div>
+      )}
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Linked Records</p>
       {(links ?? []).length === 0 ? (
         <p className="text-xs text-slate-400 mb-3">No links yet.</p>

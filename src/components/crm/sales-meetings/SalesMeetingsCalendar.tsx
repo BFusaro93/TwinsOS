@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, CalendarCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WeekStrip } from "@/components/crm/WeekStrip";
-import { useSalesReps, useSalesMeetings, type SalesMeetingWithClient } from "@/lib/hooks/use-sales-meetings";
+import { useSalesReps, useSalesMeetings, useSalesMeeting, type SalesMeetingWithClient } from "@/lib/hooks/use-sales-meetings";
 import type { SalesRepOption } from "@/types/crm-sales-meetings";
 import { SalesMeetingDialog } from "./SalesMeetingDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -94,6 +95,27 @@ export function SalesMeetingsCalendar() {
   }, [viewMode, selectedDate, selected]);
 
   const { data: meetings, isLoading: meetingsLoading } = useSalesMeetings(rangeStartIso, rangeEndIso);
+
+  // `?open=<id>` deep link, from a reminder email or the notification bell.
+  // The meeting is fetched by id rather than looked for in `meetings`, because
+  // neither link knows which day the calendar opens on — a reminder sent an
+  // hour before a 12:30am meeting goes out on the *previous* day, so the
+  // record would never be in the default (today) range.
+  const searchParams = useSearchParams();
+  const openId = searchParams.get("open");
+  const { data: deepLinkedMeeting } = useSalesMeeting(openId);
+  const consumedOpenId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkedMeeting || consumedOpenId.current === deepLinkedMeeting.id) return;
+    consumedOpenId.current = deepLinkedMeeting.id;
+    // Jump to the meeting's day either way; only open the dialog if this user
+    // could have opened it by clicking, so the deep link grants no extra access.
+    setSelectedDate(toLocalDateString(new Date(deepLinkedMeeting.scheduledAt)));
+    if (!canEdit) return;
+    setEditingMeeting(deepLinkedMeeting);
+    setSlotDefaults({});
+    setDialogOpen(true);
+  }, [deepLinkedMeeting, canEdit]);
 
   function openNewMeeting(opts: { repId?: string; date?: string; hour?: number } = {}) {
     if (!canAdd) return;

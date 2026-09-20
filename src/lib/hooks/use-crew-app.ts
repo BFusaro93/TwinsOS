@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { groupVisitsIntoStops, type Stop } from "@/lib/utils/visit-stops";
+import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -18,7 +18,76 @@ async function getAuthContext() {
     .select("org_id")
     .eq("id", user.id)
     .single();
-  return { supabase, userId: user.id, orgId: profile.org_id as string };
+  // crew_hide_pricing decides the SHAPE of the queries below, not just what
+  // the page renders — see crewVisitSelect().
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase as any)
+    .from("organizations")
+    .select("crew_hide_pricing")
+    .eq("id", profile.org_id)
+    .single();
+  return {
+    supabase,
+    userId: user.id,
+    orgId: profile.org_id as string,
+    hidePricing: org?.crew_hide_pricing === true,
+  };
+}
+
+/**
+ * Columns the crew tablet reads. Deliberately enumerated rather than `*`.
+ *
+ * crew_hide_pricing used to be applied only at the last moment, by skipping a
+ * <p> in the stop page — every crew device still received the full
+ * crm_job_visits row (rate_cents, qty), the full crm_jobs row, and every
+ * crm_job_services row with its rate. "Hidden" pricing was one devtools
+ * Network tab away, on a shared tablet. Now the rate simply is not requested
+ * when the org has hidden it.
+ *
+ * The visit- and job-level rate_cents are dropped unconditionally: nothing in
+ * the crew UI reads them (the stop page reads the *service* rate), so there is
+ * no reason to ship them to a field device either way.
+ *
+ * Enumerating also means a newly added column is not automatically exposed to
+ * crew — the right default for this surface. Anything genuinely needed here
+ * has to be added on purpose, and mapVisit()/mapJobRow() are the checklist.
+ */
+function crewVisitSelect(hidePricing: boolean): string {
+  const serviceCols = [
+    "id", "job_id", "service_id", "service_name", "qty",
+    "budgeted_hours", "team_size", "sort_order",
+    ...(hidePricing ? [] : ["rate_cents"]),
+  ].join(", ");
+
+  // NB: no notes_to_client — crm_jobs has no such column. mapJobRow() reads it
+  // and so has always produced null here; under `*` that was invisible, but
+  // naming a non-existent column explicitly makes PostgREST 400 the whole
+  // request. The visit-level notes_to_client (which does exist) is unaffected.
+  const jobCols = [
+    "id", "org_id", "client_id", "property_id", "job_type", "status",
+    "notes_to_crew", "notes_to_crew_updated_at", "notes",
+    "service_address", "service_city", "service_state", "service_zip",
+    "budgeted_hours",
+  ].join(", ");
+
+  const visitCols = [
+    "id", "org_id", "job_id", "client_id", "job_service_id",
+    "storm_event_id", "snow_depth_inches", "temperature", "asset_type",
+    "crew_id", "scheduled_date", "start_time", "end_time",
+    "status", "sub_status", "completion_notes", "actual_hours", "completed_at",
+    "priority", "notes_to_crew", "notes_to_client", "invoice_description",
+    "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
+    "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes",
+    "acknowledged_notes_at", "notes_to_crew_updated_at", "skip_reason",
+    "created_at", "updated_at", "deleted_at",
+  ].join(", ");
+
+  return `
+    ${visitCols},
+    clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+    crm_crews(name),
+    crm_jobs(${jobCols}, crm_job_services(${serviceCols}))
+  `;
 }
 
 function mapJobRow(job: Record<string, unknown>): CRMJob {
@@ -43,6 +112,9 @@ function mapJobRow(job: Record<string, unknown>): CRMJob {
     jobType:        job.job_type as CRMJob["jobType"],
     status:         job.status as string,
     notesToCrew:    (job.notes_to_crew as string) ?? null,
+    // Not on CRMJob — see VisitWithNotesStamp in visit-stops.ts. Drives the
+    // "the office changed the notes after you acknowledged them" re-arm.
+    notesToCrewUpdatedAt: (job.notes_to_crew_updated_at as string) ?? null,
     notesToClient:  (job.notes_to_client as string) ?? null,
     notes:          (job.notes as string) ?? null,
     serviceAddress: (job.service_address as string) ?? null,
@@ -54,7 +126,7 @@ function mapJobRow(job: Record<string, unknown>): CRMJob {
   } as unknown as CRMJob;
 }
 
-function mapVisit(row: Record<string, unknown>): CRMJobVisit {
+function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
   const client = row.clients as Record<string, unknown> | null;
   const crew   = row.crm_crews as Record<string, unknown> | null;
   const job    = row.crm_jobs as Record<string, unknown> | null;
@@ -84,6 +156,8 @@ function mapVisit(row: Record<string, unknown>): CRMJobVisit {
     budgetedHours:        (job?.budgeted_hours as number) ?? null,
     completedAt:          row.completed_at as string | null,
     priority:             (row.priority as number) ?? 1,
+    isHighPriority:       (row.is_high_priority as boolean | null) ?? null,
+    effectiveHighPriority: (row.is_high_priority as boolean | null) ?? (job?.is_high_priority as boolean | undefined) ?? false,
     notesToCrew:          row.notes_to_crew as string | null,
     notesToClient:        row.notes_to_client as string | null,
     invoiceDescription:   row.invoice_description as string | null,
@@ -102,6 +176,7 @@ function mapVisit(row: Record<string, unknown>): CRMJobVisit {
     pausedAt:             row.paused_at as string | null,
     breakMinutes:         (row.break_minutes as number) ?? 0,
     acknowledgedNotesAt:  row.acknowledged_notes_at as string | null,
+    notesToCrewUpdatedAt: (row.notes_to_crew_updated_at as string) ?? null,
     skipReason:           row.skip_reason as string | null,
     createdAt:            row.created_at as string,
     updatedAt:            row.updated_at as string,
@@ -117,7 +192,7 @@ export function useMyCrewVisits(date: string) {
   return useQuery<CRMJobVisit[]>({
     queryKey: ["crew-app-visits", date],
     queryFn: async () => {
-      const { supabase, userId } = await getAuthContext();
+      const { supabase, userId, hidePricing } = await getAuthContext();
 
       // Crew accounts log in as the crew itself — find the crew by user_id on crm_crews
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,12 +208,7 @@ export function useMyCrewVisits(date: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_job_visits")
-        .select(`
-          *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
-          crm_crews(name),
-          crm_jobs(*, crm_job_services(*))
-        `)
+        .select(crewVisitSelect(hidePricing))
         .eq("scheduled_date", date)
         .eq("crew_id", membership.crew_id)
         .is("deleted_at", null)
@@ -168,16 +238,11 @@ export function useVisitDetail(visitId: string) {
   return useQuery<CRMJobVisit | null>({
     queryKey: ["crew-app-visit", visitId],
     queryFn: async () => {
-      const { supabase } = await getAuthContext();
+      const { supabase, hidePricing } = await getAuthContext();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_job_visits")
-        .select(`
-          *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
-          crm_crews(name),
-          crm_jobs(*, crm_job_services(*))
-        `)
+        .select(crewVisitSelect(hidePricing))
         .eq("id", visitId)
         .is("deleted_at", null)
         .single();
@@ -198,21 +263,31 @@ export function useStopDetail(anchorVisitId: string) {
   return useQuery<Stop | null>({
     queryKey: ["crew-app-stop", anchorVisitId],
     queryFn: async () => {
-      const { supabase } = await getAuthContext();
-      const select = `
-        *,
-        clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
-        crm_crews(name),
-        crm_jobs(*, crm_job_services(*))
-      `;
+      const { supabase, userId, hidePricing } = await getAuthContext();
+      const select = crewVisitSelect(hidePricing);
+
+      // Scope the anchor to the caller's own crew. This used to fetch any
+      // visit by id, so a crew account could deep-link
+      // /crm/crew/stops/<any visit id> and pull up another crew's stop —
+      // client, address, notes and (before the select was narrowed) pricing.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: crew } = await (supabase as any)
+        .from("crm_crews")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!crew) return null;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: anchorRow, error: anchorErr } = await (supabase as any)
         .from("crm_job_visits")
         .select(select)
         .eq("id", anchorVisitId)
+        .eq("crew_id", crew.id)
         .is("deleted_at", null)
-        .single();
+        .maybeSingle();
       if (anchorErr) throw anchorErr;
+      if (!anchorRow) return null;
       const anchor = mapVisit(anchorRow as Record<string, unknown>);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -221,6 +296,7 @@ export function useStopDetail(anchorVisitId: string) {
         .select(select)
         .eq("client_id", anchor.clientId)
         .eq("scheduled_date", anchor.scheduledDate)
+        .eq("crew_id", crew.id)
         .is("deleted_at", null);
       if (siblingErr) throw siblingErr;
 
@@ -259,6 +335,92 @@ export function useVisitPhotos(visitId: string) {
         uploadedBy:  r.uploaded_by as string | null,
         createdAt:   r.created_at as string,
       }));
+    },
+  });
+}
+
+// ── useVisitChemicals ────────────────────────────────────────────────────────
+// Read-only chemical mix info for the crew stop page — what to use, how much
+// active ingredient, and (when computed) the finished-mix solution volume
+// the tech should actually prepare. Crew never writes here.
+
+export interface VisitChemicalApplication {
+  id: string;
+  visitId: string;
+  productName: string | null;
+  used: boolean;
+  chemicalAmount: number | null;
+  unitName: string | null;
+  solutionAmount: number | null;
+  solutionUnitName: string | null;
+  applicationRateLabel: string | null;
+}
+
+/** Batched by visit id (a stop can bundle several same-day visits) so the
+ * whole "Chemical Mix" card can decide up front whether it has anything to
+ * show, rather than each visit's row silently hiding itself. */
+export function useVisitChemicals(visitIds: string[]) {
+  return useQuery<VisitChemicalApplication[]>({
+    queryKey: ["crew-app-chemicals", [...visitIds].sort()],
+    queryFn: async () => {
+      const { supabase } = await getAuthContext();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_chemical_applications")
+        .select(
+          "id, visit_id, chemical_amount, solution_amount, used, application_rate_label, " +
+          "product:product_id(name), unit:unit_of_measure_id(name), " +
+          "solution_unit:solution_unit_of_measure_id(name)"
+        )
+        .in("visit_id", visitIds)
+        .is("deleted_at", null)
+        .order("created_at");
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data as any[]).map((row) => ({
+        id: row.id,
+        visitId: row.visit_id,
+        productName: row.product?.name ?? null,
+        used: row.used ?? true,
+        chemicalAmount: row.chemical_amount,
+        unitName: row.unit?.name ?? null,
+        solutionAmount: row.solution_amount,
+        solutionUnitName: row.solution_unit?.name ?? null,
+        applicationRateLabel: row.application_rate_label,
+      }));
+    },
+    enabled: visitIds.length > 0,
+  });
+}
+
+// ── useJobProducts ───────────────────────────────────────────────────────────
+// Materials office staff already planned/called for on this visit's job
+// (crm_job_products) — distinct from an ad-hoc new request. Mirrors
+// crew-app's fetchJobProducts()/GET .../job-products route. plannedQty is
+// the original called-for amount; qty becomes "quantity actually used" once
+// status leaves 'pending' (see supabase/migrations/
+// 20260918050000_crm_job_products_planned_qty.sql).
+
+// 'used' = used, inventory decremented, STILL TO BE INVOICED (what "Mark
+// Used" records). 'used_no_invoice' is the deliberate don't-bill variant.
+export type JobProductStatus = "pending" | "invoiced" | "used" | "used_no_invoice" | "not_used";
+
+export interface JobProductMaterial {
+  id: string;
+  productName: string;
+  plannedQty: number;
+  qty: number;
+  status: JobProductStatus;
+}
+
+export function useJobProducts(visitId: string) {
+  return useQuery<JobProductMaterial[]>({
+    queryKey: ["crew-app-job-products", visitId],
+    enabled: !!visitId,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/job-products`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     },
   });
 }
@@ -477,7 +639,14 @@ export function useStopClockIn() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ localTime }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        // The route enforces the notes-acknowledgment gate server-side and
+        // explains itself in `error` (including "the office updated the
+        // notes, read them again") — show that instead of a generic
+        // connection message the crew can't act on.
+        const payload = await res.json().catch(() => null);
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Failed to start job");
+      }
       return res.json();
     },
     onSuccess: (_data, anchorVisitId) => {
@@ -490,7 +659,12 @@ export function useStopClockIn() {
       // stops showing "Driving" the moment a job actually starts.
       qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
     },
-    onError: () => toast.error("Failed to start job — check your connection and try again"),
+    onError: (err, anchorVisitId) => {
+      toast.error(err instanceof Error ? err.message : "Failed to start job");
+      // A rejected clock-in usually means our copy of the notes (or the
+      // acknowledgment) is stale — pull fresh so the gate re-renders.
+      qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
+    },
   });
 }
 
@@ -643,6 +817,59 @@ export function useAddCrewNote() {
   });
 }
 
+/**
+ * POST /api/crm/crew/visits/:id/job-products/:jobProductId/use-materials —
+ * records how much of a planned material was actually used, whether it
+ * should still be billed, or that it wasn't used at all. Only valid while
+ * the row is still 'pending'; the route 409s on an already-resolved row
+ * (e.g. a second crew on the same job got there first), same as crew-app's
+ * useJobProductMaterials().
+ *
+ * `noInvoice: true` is the secondary "Used — don't bill" action. Omitting it
+ * records 'used', which stays billable.
+ */
+export function useUseJobProductMaterials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      visitId,
+      jobProductId,
+      usage,
+    }: {
+      visitId: string;
+      jobProductId: string;
+      usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true };
+    }) => {
+      const res = await fetch(
+        `/api/crm/crew/visits/${visitId}/job-products/${jobProductId}/use-materials`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(usage),
+        }
+      );
+      if (!res.ok) {
+        // The route answers every rejection it can explain with a plain
+        // sentence in `error` (over-quantity, nothing on hand, already
+        // recorded by someone else). Surface that rather than the raw
+        // response body, which used to reach the crew as a JSON blob.
+        const payload = await res.json().catch(() => null);
+        const message = typeof payload?.error === "string"
+          ? payload.error
+          : "Couldn't record materials used";
+        throw new Error(message);
+      }
+      return res.json() as Promise<JobProductMaterial>;
+    },
+    // Refetch on failure too: a 409 means the server's copy is the truth and
+    // the row should flip to its resolved, read-only state rather than
+    // leaving the crew staring at controls that can never succeed.
+    onSettled: (_data, _err, { visitId }) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-job-products", visitId] });
+    },
+  });
+}
+
 export function useUploadVisitPhoto() {
   const qc = useQueryClient();
   return useMutation({
@@ -709,5 +936,68 @@ export function useDeleteCrewMemberTime() {
       qc.invalidateQueries({ queryKey: ["crew-member-times", visitId] });
     },
     onError: () => toast.error("Failed to remove crew member time"),
+  });
+}
+
+// ── field upsells ────────────────────────────────────────────────────────────
+
+/**
+ * Services the office has opened up for crews to suggest. An empty list hides
+ * the Suggest work button entirely, which is deliberately the feature's on/off
+ * switch — there's no separate permission key to keep in sync.
+ */
+export function useFieldUpsellServices() {
+  return useQuery({
+    queryKey: ["crew-app-upsell-services"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_services")
+        .select("id, name, upsell_pitch")
+        .eq("show_in_field_upsells", true)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string; upsell_pitch: string | null }[];
+    },
+  });
+}
+
+/**
+ * Submits one suggestion. Everything — ticket, photo, job link, client
+ * timeline entry, office notification — happens in the one route so a crew on
+ * a patchy connection makes a single request rather than a partial chain.
+ */
+export function useSubmitFieldUpsell() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      visitId,
+      serviceId,
+      note,
+      file,
+    }: {
+      visitId: string;
+      serviceId: string;
+      note: string;
+      file?: File | null;
+    }) => {
+      const form = new FormData();
+      form.append("serviceId", serviceId);
+      form.append("note", note);
+      if (file) form.append("file", file);
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/upsell`, {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Couldn't send the suggestion");
+      return json as { id: string; ticketNumber: number; photoAttached: boolean };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
   });
 }

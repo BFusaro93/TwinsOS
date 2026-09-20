@@ -377,4 +377,90 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       );
     },
   },
+  {
+    key: "financials-snapshot",
+    section: "financial",
+    name: "Financials",
+    description: "Invoiced totals and cash collected for a date range, alongside current receivables aging.",
+    filters: [dateRangeFilterDef("Invoice Date", "this_month")],
+    run: async ({ supabase, params }) => {
+      const { from, to } = resolveDateRange(params, "this_month");
+
+      let invQuery = supabase
+        .from("crm_invoices")
+        .select("subtotal_cents, tax_cents, total_cents")
+        .in("status", ISSUED_INVOICE_STATUSES)
+        .is("deleted_at", null);
+      if (from) invQuery = invQuery.gte("invoice_date", from);
+      if (to) invQuery = invQuery.lte("invoice_date", to);
+      const { data: invData, error: invError } = await invQuery.limit(10000);
+      if (invError) throw new Error(invError.message);
+
+      let payQuery = supabase
+        .from("crm_payments")
+        .select("amount_cents, refunded_amount_cents")
+        .eq("is_credit", false)
+        .neq("method", AR_WRITE_OFF_METHOD)
+        .is("deleted_at", null);
+      if (from) payQuery = payQuery.gte("payment_date", from);
+      if (to) payQuery = payQuery.lte("payment_date", to);
+      const { data: payData, error: payError } = await payQuery.limit(10000);
+      if (payError) throw new Error(payError.message);
+
+      const { data: balData, error: balError } = await supabase
+        .from("crm_invoices")
+        .select("due_date, invoice_date, balance_cents")
+        .in("status", ISSUED_INVOICE_STATUSES)
+        .gt("balance_cents", 0)
+        .is("deleted_at", null)
+        .limit(10000);
+      if (balError) throw new Error(balError.message);
+
+      type InvRow = { subtotal_cents: number | null; tax_cents: number | null; total_cents: number | null };
+      const invoices = (invData ?? []) as unknown as InvRow[];
+      const preTaxTotal = invoices.reduce((sum, r) => sum + (r.subtotal_cents ?? 0), 0);
+      const salesTax = invoices.reduce((sum, r) => sum + (r.tax_cents ?? 0), 0);
+      const invoiceTotal = invoices.reduce((sum, r) => sum + (r.total_cents ?? 0), 0);
+
+      type PayRow = { amount_cents: number | null; refunded_amount_cents: number | null };
+      const payments = (payData ?? []) as unknown as PayRow[];
+      const totalPayments = payments.reduce(
+        (sum, r) => sum + (r.amount_cents ?? 0) - (r.refunded_amount_cents ?? 0),
+        0
+      );
+
+      type BalRow = { due_date: string | null; invoice_date: string | null; balance_cents: number | null };
+      const now = Date.now();
+      let d0_30 = 0;
+      let d31_60 = 0;
+      let d61_plus = 0;
+      for (const r of (balData ?? []) as unknown as BalRow[]) {
+        const anchor = r.due_date ?? r.invoice_date;
+        const daysPastDue = anchor ? Math.floor((now - new Date(anchor).getTime()) / 86400000) : 0;
+        const balance = r.balance_cents ?? 0;
+        if (daysPastDue <= 30) d0_30 += balance;
+        else if (daysPastDue <= 60) d31_60 += balance;
+        else d61_plus += balance;
+      }
+      const totalReceivables = d0_30 + d31_60 + d61_plus;
+
+      const rows = [
+        { section: "Financials", metric: "Invoice Pre-Tax Total", value: preTaxTotal },
+        { section: "Financials", metric: "Sales Tax", value: salesTax },
+        { section: "Financials", metric: "Invoice Total", value: invoiceTotal },
+        { section: "Financials", metric: "Payments", value: totalPayments },
+        { section: "Receivables (as of today)", metric: "0-30", value: d0_30 },
+        { section: "Receivables (as of today)", metric: "31-60", value: d31_60 },
+        { section: "Receivables (as of today)", metric: "61+", value: d61_plus },
+        { section: "Receivables (as of today)", metric: "Total", value: totalReceivables },
+      ];
+
+      return buildResult(
+        [col("metric", "Metric"), col("value", "Value", "money", false)],
+        rows,
+        undefined,
+        "section"
+      );
+    },
+  },
 ];

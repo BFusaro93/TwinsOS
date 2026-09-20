@@ -28,6 +28,11 @@ import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useInvoices, usePayments, usePayment, usePaymentAllocations, useAllocatedPaymentsFromOtherClients } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
+import {
+  useCustomFieldDefs as useRateMatrixFieldDefs,
+  usePropertyCustomFieldValues,
+  useUpsertPropertyCustomFieldValue,
+} from "@/lib/hooks/use-rate-matrix";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClientPortalStatus, clientPortalStatusKey, type ClientPortalStatusResponse } from "@/lib/hooks/use-client-portal-status";
 import { useContracts } from "@/lib/hooks/use-contracts";
@@ -80,6 +85,7 @@ import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
+import { AccountStatementDialog } from "./clients/AccountStatementDialog";
 import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
   useQuickBooksClientLink,
@@ -99,6 +105,7 @@ import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import {
   Phone,
   Mail,
@@ -942,7 +949,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl h-[85vh] flex flex-col p-0"
+        className="max-w-2xl h-[85vh] flex flex-col p-0 sm:p-0"
         // The Referred-By suggestion list unmounts on the same mousedown that
         // selects a suggestion; if Radix resolves that pointer event against a
         // detached node it reads as "outside" and would close the dialog and
@@ -1255,14 +1262,16 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Tax Rate (%)</Label>
-                <Input
-                  type="number"
-                  step="0.25"
-                  min="0"
-                  max="30"
+                {/* Basis points are hundredths just like cents, so
+                    CurrencyInput's raw-text-while-focused handling applies
+                    verbatim — a toFixed(2)-formatted controlled input turned
+                    "6.25" into 6.03 by re-formatting mid-keystroke (D-19). */}
+                <CurrencyInput
+                  blankWhenZero
                   placeholder={orgSettings ? `Org default (${orgSettings.taxRatePercent}%)` : "Org default"}
-                  value={form.defaultTaxRateBps > 0 ? (form.defaultTaxRateBps / 100).toFixed(2) : ""}
-                  onChange={(e) => patch("defaultTaxRateBps", Math.round(parseFloat(e.target.value || "0") * 100))}
+                  cents={form.defaultTaxRateBps}
+                  onChange={(bps) => patch("defaultTaxRateBps", bps)}
+                  aria-label="Default tax rate percent"
                 />
                 <p className="text-xs text-slate-400">Leave blank to use the organization default tax rate.</p>
               </div>
@@ -1722,6 +1731,9 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
               <Input value={form.notesToCrew} onChange={(e) => patch("notesToCrew", e.target.value)} />
             </div>
           </div>
+          {/* Rate Matrix pricing inputs (e.g. Turf Sq Ft) — only meaningful once
+              the property has an id, same as any other property-scoped panel. */}
+          {isEditing && property && <PropertyCustomFieldsSection propertyId={property.id} />}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1729,6 +1741,48 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Numeric custom field values used as Rate Matrix pricing lookups (e.g.
+// "Turf Sq Ft: 12,000"). Auto-saves per field on blur — independent of the
+// dialog's own Save button, same pattern as other property sub-panels.
+function PropertyCustomFieldsSection({ propertyId }: { propertyId: string }) {
+  const { data: fieldDefs = [] } = useRateMatrixFieldDefs("property");
+  const numericFieldDefs = fieldDefs.filter((d) => d.fieldType === "number");
+  const { data: values = [] } = usePropertyCustomFieldValues(propertyId);
+  const upsertValue = useUpsertPropertyCustomFieldValue();
+
+  if (numericFieldDefs.length === 0) return null;
+
+  function valueFor(fieldDefId: string): number | "" {
+    const v = values.find((x) => x.fieldDefId === fieldDefId)?.valueNumber;
+    return v ?? "";
+  }
+
+  function saveValue(fieldDefId: string, raw: string) {
+    const valueNumber = raw === "" ? null : Number(raw);
+    upsertValue.mutate({ propertyId, fieldDefId, valueNumber }, {
+      onError: () => toast.error("Failed to save custom field value"),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <Label className="text-slate-500">Custom Fields (Rate Matrix pricing inputs)</Label>
+      <div className="grid grid-cols-2 gap-3">
+        {numericFieldDefs.map((d) => (
+          <div key={d.id} className="flex flex-col gap-1.5">
+            <Label className="text-xs font-normal text-slate-500">{d.label}</Label>
+            <Input
+              type="number"
+              defaultValue={valueFor(d.id)}
+              onBlur={(e) => saveValue(d.id, e.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1971,7 +2025,10 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   return (
     <>
-    <div className="grid min-h-[600px] grid-cols-1 bg-white px-3 md:grid-cols-[1fr_10px_1fr_10px_1fr]">
+    {/* minmax(0,1fr), not 1fr: a bare fr track won't shrink below its content's
+        min-content, so Jobs and Open Estimates were stealing width and left
+        Accounting a third narrower than its share. */}
+    <div className="grid min-h-[600px] grid-cols-1 bg-white px-3 md:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
       {/* Left — Jobs */}
       <div className="flex flex-col bg-white">
         <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
@@ -2627,7 +2684,7 @@ function AllContactsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Contacts</h2>
           <div className="flex items-center gap-3">
@@ -2719,7 +2776,7 @@ function AllPropertiesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Properties</h2>
           <div className="flex items-center gap-3">
@@ -2843,7 +2900,7 @@ function AllAccountingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Accounting</h2>
           <div className="flex items-center gap-3">
@@ -2943,7 +3000,7 @@ function AllEstimatesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Estimates</h2>
           <div className="flex items-center gap-3">
@@ -3067,7 +3124,7 @@ function ClientAllVisitsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-w-[calc(100vw-2rem)] max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">{title}</h2>
@@ -3190,6 +3247,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [accountStatementOpen, setAccountStatementOpen] = useState(false);
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
   const { mutateAsync: activate } = useActivateClient();
@@ -3273,11 +3331,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               )}
             </div>
 
-            {/* Info row: address on left, contact details on right */}
-            <div className="mt-1.5 flex gap-8">
+            {/* Info row: address on left, contact details on right. Wraps, and
+                the address keeps its natural width — squeezed between the icon
+                and the contact block it was breaking mid-line into four. */}
+            <div className="mt-1.5 flex flex-wrap gap-x-8 gap-y-1">
               {/* Left — billing address (two lines) */}
               {(client.billingAddress || client.billingCity) && (
-                <div className="flex items-start gap-1 text-sm text-slate-500 leading-snug">
+                <div className="flex shrink-0 items-start gap-1 text-sm text-slate-500 leading-snug">
                   <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <div>
                     {client.billingAddress && <div>{client.billingAddress}</div>}
@@ -3453,7 +3513,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => setActiveTab("audit")}>
                       <History className="mr-2 h-3.5 w-3.5" /> View Audit Trail
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setActiveTab("details")}>
+                    <DropdownMenuItem onClick={() => setAccountStatementOpen(true)}>
                       <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -3593,7 +3653,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
                       #{t.ticketNumber}{t.category ? ` · ${t.category}` : ""}
                     </p>
-                    <span className="truncate text-slate-700">
+                    {/* block, not inline: truncate's overflow/ellipsis have no
+                        effect on a non-replaced inline element, so a long
+                        subject ran straight out of the card. */}
+                    <span className="block truncate text-slate-700">
                       {t.subject || "(no subject)"}
                     </span>
                   </div>
@@ -3740,7 +3803,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
-        <TabsList className="sticky top-0 z-10 shrink-0 justify-start rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
+        {/* Scrolls sideways — nine tabs don't fit beside a 340px list panel, and
+            without this Audit Trail was simply cut off the edge. */}
+        <TabsList className="sticky top-0 z-10 shrink-0 justify-start overflow-x-auto rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
           {(
             [
               { value: "home",      label: "Home" },
@@ -3757,7 +3822,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="h-full shrink-0 rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
               {tab.label}
             </TabsTrigger>
@@ -3959,6 +4024,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         property={editProperty}
       />
       <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
+      <AccountStatementDialog
+        clientId={clientId}
+        clientName={client.displayName}
+        clientEmail={client.primaryEmail}
+        open={accountStatementOpen}
+        onClose={() => setAccountStatementOpen(false)}
+      />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog
         clientId={clientId}

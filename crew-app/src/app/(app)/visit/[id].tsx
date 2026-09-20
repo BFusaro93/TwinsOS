@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -13,24 +14,41 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { useTheme } from '@/hooks/use-theme';
-import { fetchVisitPhotos, fetchVisitRequisitions, todayLocalDate } from '@/lib/api';
-import { useCrewVisits } from '@/lib/hooks/use-crew-visits';
+import {
+  fetchJobProducts,
+  fetchVisitChemicals,
+  fetchVisitPhotos,
+  fetchVisitRequisitions,
+  todayLocalDate,
+} from '@/lib/api';
+import { C } from '@/lib/colors';
+import { useCrewStops } from '@/lib/hooks/use-crew-stops';
 import {
   elapsedSince,
-  formatAddress,
-  formatTimeWindow,
-  PROGRESS_COLOR,
-  PROGRESS_LABEL,
+  formatStopAddress,
+  formatStopTimeWindow,
   STATUS_LABEL,
-  visitProgress,
+  stopProgress,
+  STOP_PROGRESS_COLOR,
+  STOP_PROGRESS_LABEL,
 } from '@/lib/format';
-import { applyQueueOverlay } from '@/lib/offline/overlay';
+import { applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { captureVisitPhoto } from '@/lib/offline/photos';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
-import type { AddPhotoPayload, RequestMaterialsPayload } from '@/lib/offline/types';
-import type { VisitPhoto, VisitRequisition } from '@/lib/types';
+import type {
+  AddNotePayload,
+  AddPhotoPayload,
+  RecordMaterialUsagePayload,
+  RequestMaterialsPayload,
+  SkipServicePayload,
+} from '@/lib/offline/types';
+import type {
+  CrewStopVisit,
+  JobProductMaterial,
+  VisitChemicalApplication,
+  VisitPhoto,
+  VisitRequisition,
+} from '@/lib/types';
 
 const REQUISITION_STATUS_LABEL: Record<VisitRequisition['status'], string> = {
   draft: 'Submitted',
@@ -42,11 +60,11 @@ const REQUISITION_STATUS_LABEL: Record<VisitRequisition['status'], string> = {
 };
 
 const REQUISITION_STATUS_COLOR: Record<VisitRequisition['status'], string> = {
-  draft: '#c98a1f',
-  pending_approval: '#c98a1f',
-  approved: '#2fa84f',
-  rejected: '#d9342b',
-  ordered: '#2fa84f',
+  draft: C.amberTextStrong,
+  pending_approval: C.amberTextStrong,
+  approved: C.green,
+  rejected: C.red,
+  ordered: C.green,
   closed: '#8a8a8a',
 };
 
@@ -57,38 +75,100 @@ function localTimeNow(): string {
   return new Date().toTimeString().slice(0, 5);
 }
 
-export default function VisitDetailScreen() {
+/**
+ * Stop detail screen — clock in/out, pause/resume, notes, photos, materials
+ * for one "stop" (everything the crew does at one client/address today,
+ * possibly spanning several crm_job_visits rows — see
+ * src/lib/utils/visit-stops.ts). The route param is still named `id` (kept
+ * for minimal churn from the previous per-visit screen) but it's now the
+ * stop's anchorVisitId. Photos and materials requests are still filed
+ * against this one anchor visit id, matching the web stop page.
+ */
+export default function StopDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const theme = useTheme();
   // Today's schedule is the only data source this phase has — there's no
-  // single-visit GET route yet, so this screen shares useCrewVisits() with
-  // home.tsx and looks its visit up by id.
-  const { visits, isLoading, error, refetch } = useCrewVisits(TODAY);
-  const { itemsForVisit, enqueueClockIn, enqueueClockOut, enqueueAddPhoto, retry, discard } =
-    useOfflineQueue();
+  // single-stop GET route yet, so this screen shares useCrewStops() with
+  // home.tsx and looks its stop up by anchorVisitId.
+  const { stops, isLoading, error, refetch } = useCrewStops(TODAY);
+  const {
+    itemsForVisit,
+    enqueueClockIn,
+    enqueueClockOut,
+    enqueuePause,
+    enqueueResume,
+    enqueueAddPhoto,
+    enqueueRecordMaterialUsage,
+    enqueueAcknowledgeNotes,
+    enqueueAddNote,
+    enqueueSkipVisit,
+    retry,
+    discard,
+  } = useOfflineQueue();
   const [notes, setNotes] = useState('');
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [confirmedPhotos, setConfirmedPhotos] = useState<VisitPhoto[]>([]);
   const [requisitions, setRequisitions] = useState<VisitRequisition[]>([]);
+  const [chemicals, setChemicals] = useState<VisitChemicalApplication[]>([]);
+  const [plannedMaterials, setPlannedMaterials] = useState<JobProductMaterial[]>([]);
+  const [noteText, setNoteText] = useState('');
+  const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
+  const [skipReasonText, setSkipReasonText] = useState('');
   const [, forceTick] = useState(0);
 
-  const serverVisit = useMemo(() => visits.find((v) => v.id === id), [visits, id]);
+  const serverStop = useMemo(() => stops.find((s) => s.anchorVisitId === id), [stops, id]);
   const queueItems = useMemo(() => (id ? itemsForVisit(id) : []), [id, itemsForVisit]);
-  const visit = useMemo(
-    () => (serverVisit ? applyQueueOverlay(serverVisit, queueItems) : undefined),
-    [serverVisit, queueItems]
+  const stop = useMemo(
+    () => (serverStop ? applyStopQueueOverlay(serverStop, queueItems) : undefined),
+    [serverStop, queueItems]
   );
-  const progress = visit ? visitProgress(visit) : null;
+  const progress = stop ? stopProgress(stop) : null;
+  // Skip targets an individual service visit, not the stop's anchor, so its
+  // queue items live under each visit's own id — gather them separately from
+  // `queueItems` above (which is scoped to the anchor only).
+  const skipQueueItemsByVisitId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof itemsForVisit>>();
+    if (stop) {
+      for (const v of stop.visits) {
+        map.set(v.id, itemsForVisit(v.id).filter((i) => i.type === 'skip_service'));
+      }
+    }
+    return map;
+  }, [stop, itemsForVisit]);
 
   const clockQueueItems = queueItems.filter((i) => i.type === 'clock_in' || i.type === 'clock_out');
   const failedClockItem = clockQueueItems.find((i) => i.status === 'failed');
   const isClockActionPending = clockQueueItems.some((i) => i.status === 'pending' || i.status === 'syncing');
 
+  const pauseQueueItems = queueItems.filter((i) => i.type === 'pause' || i.type === 'resume');
+  const failedPauseItem = pauseQueueItems.find((i) => i.status === 'failed');
+  const isPauseActionPending = pauseQueueItems.some((i) => i.status === 'pending' || i.status === 'syncing');
+
   const photoQueueItems = queueItems.filter((i) => i.type === 'add_photo');
   const materialsQueueItems = queueItems.filter((i) => i.type === 'request_materials');
+  const materialUsageQueueItems = queueItems.filter((i) => i.type === 'record_material_usage');
+  const noteQueueItems = queueItems.filter((i) => i.type === 'add_note');
+  const ackQueueItem = queueItems.find((i) => i.type === 'acknowledge_notes' && i.status !== 'failed');
+  const failedAckItem = queueItems.find((i) => i.type === 'acknowledge_notes' && i.status === 'failed');
 
-  // Once every queue item for this visit clears (synced), pull fresh server
+  // Notes-acknowledgment gate — mirrors the web stop page's `anchor` lookup
+  // and Clock In disabling, and is enforced server-side by the clock-in route
+  // so a replayed request can't walk past it.
+  //
+  // An acknowledgment given BEFORE the office last edited the notes doesn't
+  // count: otherwise a crew that read "gate code 4412" at 7:02 still sees a
+  // green "Acknowledged 7:02 AM" over a 9:40 AM "DOG IS LOOSE", with Clock In
+  // already enabled. A stop with no notes timestamp at all (older row) falls
+  // back to "any acknowledgment counts" rather than blocking every crew.
+  const anchor = stop ? stop.visits.find((v) => v.id === stop.anchorVisitId) ?? stop.visits[0] : undefined;
+  const hasNotes = !!stop?.notesToCrew;
+  const notesChangedSinceAck =
+    !!anchor?.acknowledgedNotesAt &&
+    !!stop?.notesToCrewUpdatedAt &&
+    new Date(anchor.acknowledgedNotesAt).getTime() < new Date(stop.notesToCrewUpdatedAt).getTime();
+  const acknowledged = !!anchor?.acknowledgedNotesAt && !notesChangedSinceAck;
+
+  // Once every queue item for this stop clears (synced), pull fresh server
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
   // created requisition's real status.
   const prevActiveCountRef = useRef(0);
@@ -98,6 +178,8 @@ export default function VisitDetailScreen() {
       void refetch();
       void loadPhotos();
       void loadRequisitions();
+      void loadChemicals();
+      void loadPlannedMaterials();
     }
     prevActiveCountRef.current = activeCount;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,40 +207,74 @@ export default function VisitDetailScreen() {
     }
   }
 
+  async function loadChemicals() {
+    if (!id) return;
+    try {
+      const data = await fetchVisitChemicals(id);
+      setChemicals(data);
+    } catch {
+      // Same tolerance as loadPhotos()/loadRequisitions() above — a stale
+      // (or empty) chemical list while offline is acceptable; this is
+      // read-only reference info, not something crew acts on here.
+    }
+  }
+
+  async function loadPlannedMaterials() {
+    if (!id) return;
+    try {
+      const data = await fetchJobProducts(id);
+      setPlannedMaterials(data);
+    } catch {
+      // Same tolerance as the other load*() functions above.
+    }
+  }
+
   useEffect(() => {
     void loadPhotos();
     void loadRequisitions();
+    void loadChemicals();
+    void loadPlannedMaterials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Re-render every 30s so the "clocked in for Xh Ym" readout stays live.
+  // Re-render every 30s so the "clocked in for Xh Ym"/"on break for Xh Ym" readout stays live.
   useEffect(() => {
-    if (progress !== 'clocked_in') return;
+    if (progress !== 'clocked_in' && progress !== 'on_break') return;
     const interval = setInterval(() => forceTick((n) => n + 1), 30_000);
     return () => clearInterval(interval);
   }, [progress]);
 
   const handleClockIn = () => {
-    if (!visit) return;
+    if (!stop) return;
     // Written to the local queue immediately — this resolves synchronously
     // from the UI's perspective (no network wait), which is what makes the
     // "Clocked In" state below reflect the tap right away.
-    void enqueueClockIn(visit.id, localTimeNow());
+    void enqueueClockIn(stop.anchorVisitId, localTimeNow());
   };
 
   const handleClockOut = () => {
-    if (!visit) return;
-    void enqueueClockOut(visit.id, localTimeNow(), notes.trim() || undefined);
+    if (!stop) return;
+    void enqueueClockOut(stop.anchorVisitId, localTimeNow(), notes.trim() || undefined);
+  };
+
+  const handlePause = () => {
+    if (!stop) return;
+    void enqueuePause(stop.anchorVisitId);
+  };
+
+  const handleResume = () => {
+    if (!stop) return;
+    void enqueueResume(stop.anchorVisitId);
   };
 
   const handleAddPhoto = async (source: 'camera' | 'library') => {
-    if (!visit) return;
+    if (!stop) return;
     setPhotoError(null);
     setIsCapturing(true);
     try {
-      const captured = await captureVisitPhoto(visit.id, source);
+      const captured = await captureVisitPhoto(stop.anchorVisitId, source);
       if (!captured) return; // user canceled
-      await enqueueAddPhoto(visit.id, captured.localUri, captured.mimeType, captured.fileName);
+      await enqueueAddPhoto(stop.anchorVisitId, captured.localUri, captured.mimeType, captured.fileName);
     } catch (err) {
       setPhotoError(err instanceof Error ? err.message : 'Failed to add photo');
     } finally {
@@ -167,8 +283,71 @@ export default function VisitDetailScreen() {
   };
 
   const handleRequestMaterials = () => {
-    if (!visit) return;
-    router.push({ pathname: '/visit/request-materials', params: { visitId: visit.id } });
+    if (!stop) return;
+    router.push({ pathname: '/visit/request-materials', params: { visitId: stop.anchorVisitId } });
+  };
+
+  // Mark Used keeps the material billable — the office called for it, the
+  // client pays for it. See the `used` status on the route.
+  const handleMarkUsed = (material: JobProductMaterial, usedQty: number) => {
+    if (!stop) return;
+    void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, { usedQty });
+  };
+
+  // The deliberate exception: used, inventory comes down, nothing reaches the
+  // invoice. Confirmed because it writes off real revenue.
+  const handleMarkUsedNoInvoice = (material: JobProductMaterial, usedQty: number) => {
+    if (!stop) return;
+    Alert.alert(
+      "Used — don't bill?",
+      `${material.productName} will come out of inventory but won't be added to the client's invoice.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: "Don't bill",
+          style: 'destructive',
+          onPress: () =>
+            void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, {
+              usedQty,
+              noInvoice: true,
+            }),
+        },
+      ]
+    );
+  };
+
+  const handleMarkNotUsed = (material: JobProductMaterial) => {
+    if (!stop) return;
+    Alert.alert('Mark as not used?', `${material.productName} won't be counted as used on this job.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Not Used',
+        style: 'destructive',
+        onPress: () =>
+          void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, {
+            notUsed: true,
+          }),
+      },
+    ]);
+  };
+
+  const handleAcknowledge = () => {
+    if (!stop) return;
+    void enqueueAcknowledgeNotes(stop.anchorVisitId);
+  };
+
+  const handleSendNote = () => {
+    if (!stop || !noteText.trim()) return;
+    void enqueueAddNote(stop.anchorVisitId, noteText.trim());
+    setNoteText('');
+  };
+
+  const handleSkip = () => {
+    if (!skipTargetId || !skipReasonText.trim() || !stop) return;
+    const visit = stop.visits.find((v) => v.id === skipTargetId);
+    void enqueueSkipVisit(skipTargetId, skipReasonText.trim(), visit?.serviceName ?? 'Service');
+    setSkipTargetId(null);
+    setSkipReasonText('');
   };
 
   const confirmDiscard = (queueItemId: string, description: string) => {
@@ -180,113 +359,183 @@ export default function VisitDetailScreen() {
 
   if (isLoading) {
     return (
-      <ThemedView style={styles.centered}>
+      <View style={[styles.centered, styles.screenBg]}>
         <ActivityIndicator />
-      </ThemedView>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <ThemedView style={styles.centered}>
-        <ThemedText style={styles.errorText}>{error}</ThemedText>
+      <View style={[styles.centered, styles.screenBg]}>
+        <Text style={styles.errorText}>{error}</Text>
         <Pressable style={styles.retryButton} onPress={() => void refetch()}>
-          <ThemedText style={styles.retryButtonText}>Try again</ThemedText>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </Pressable>
-      </ThemedView>
+      </View>
     );
   }
 
-  if (!visit) {
+  if (!stop) {
     return (
-      <ThemedView style={styles.centered}>
+      <View style={[styles.centered, styles.screenBg]}>
         <ThemedText type="subtitle" style={styles.emptyTitle}>
-          Visit not found
+          Job not found
         </ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.emptyBody}>
-          This visit isn&apos;t in today&apos;s schedule anymore.
-        </ThemedText>
-      </ThemedView>
+        <Text style={styles.emptyBody}>This job isn&apos;t in today&apos;s schedule anymore.</Text>
+      </View>
     );
   }
+
+  const totalActualHours = stop.visits.reduce((sum, v) => sum + (v.actualHours ?? 0), 0);
+  const completionNotes = stop.visits.map((v) => v.completionNotes).find(Boolean) ?? null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: visit.clientName ?? 'Visit' }} />
+      <Stack.Screen options={{ title: stop.clientName ?? 'Job' }} />
 
       <SyncStatusChip />
 
-      <View style={styles.headerRow}>
-        <ThemedText type="subtitle" style={styles.clientName}>
-          {visit.clientName ?? 'Unknown client'}
-        </ThemedText>
-        <View style={[styles.statusPill, { backgroundColor: PROGRESS_COLOR[progress!] }]}>
-          <ThemedText style={styles.statusPillText}>{PROGRESS_LABEL[progress!]}</ThemedText>
+      <View style={styles.card}>
+        <View style={styles.headerRow}>
+          <Text style={styles.clientName}>{stop.clientName ?? 'Unknown client'}</Text>
+          <View style={[styles.statusPill, { backgroundColor: STOP_PROGRESS_COLOR[progress!] }]}>
+            <Text style={styles.statusPillText}>{STOP_PROGRESS_LABEL[progress!]}</Text>
+          </View>
+        </View>
+
+        <View style={styles.infoStack}>
+          <InfoRow label="Time window" value={formatStopTimeWindow(stop)} />
+          {formatStopAddress(stop) ? <InfoRow label="Address" value={formatStopAddress(stop)!} /> : null}
+          {stop.clientPhone ? <InfoRow label="Phone" value={stop.clientPhone} /> : null}
         </View>
       </View>
 
-      <InfoRow label="Time window" value={formatTimeWindow(visit)} />
-      {formatAddress(visit) ? <InfoRow label="Address" value={formatAddress(visit)!} /> : null}
-      {visit.clientPhone ? <InfoRow label="Phone" value={visit.clientPhone} /> : null}
-      <InfoRow label="Status" value={STATUS_LABEL[visit.status]} />
-
-      {visit.notesToCrew ? (
-        <View style={[styles.notesBox, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="smallBold">Notes from the office</ThemedText>
-          <ThemedText style={styles.notesText}>{visit.notesToCrew}</ThemedText>
+      {hasNotes ? (
+        <View style={[styles.amberBox, acknowledged && styles.greenAckBox]}>
+          <Text style={[styles.amberBoxTitle, acknowledged && styles.greenAckTitle]}>Job Notes</Text>
+          <Text style={styles.amberBoxText}>{stop.notesToCrew}</Text>
+          {!acknowledged ? (
+            <>
+              {notesChangedSinceAck ? (
+                <Text style={styles.ackStaleText}>
+                  The office changed these notes after you read them — read them again.
+                </Text>
+              ) : null}
+              <Pressable
+                style={({ pressed }) => [styles.ackButton, pressed && styles.ackButtonPressed]}
+                onPress={handleAcknowledge}
+                disabled={!!ackQueueItem}
+              >
+                <Text style={styles.ackButtonText}>
+                  {ackQueueItem ? 'Saving…' : "I've read the notes"}
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.ackConfirmedText}>
+              Acknowledged{anchor?.acknowledgedNotesAt ? ` ${new Date(anchor.acknowledgedNotesAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
+            </Text>
+          )}
         </View>
       ) : null}
 
-      {progress === 'clocked_in' && visit.clockedInAt ? (
-        <ThemedText themeColor="textSecondary" style={styles.elapsed}>
-          Clocked in for {elapsedSince(visit.clockedInAt)}
-          {isClockActionPending ? ' · not yet synced' : ''}
-        </ThemedText>
+      <ServicesSection
+        visits={stop.visits}
+        skipQueueItemsByVisitId={skipQueueItemsByVisitId}
+        skipTargetId={skipTargetId}
+        skipReasonText={skipReasonText}
+        onSkipReasonChange={setSkipReasonText}
+        onStartSkip={setSkipTargetId}
+        onCancelSkip={() => {
+          setSkipTargetId(null);
+          setSkipReasonText('');
+        }}
+        onConfirmSkip={handleSkip}
+        onRetrySkip={(itemId) => void retry(itemId)}
+        onDiscardSkip={(itemId) => confirmDiscard(itemId, 'This skip will not be recorded.')}
+      />
+
+      <ChemicalsSection chemicals={chemicals} />
+
+      {progress === 'on_break' && stop.pausedAt ? (
+        <View style={styles.blueBanner}>
+          <View>
+            <Text style={styles.blueBannerTitle}>On Break</Text>
+            <Text style={styles.blueBannerSubtitle}>
+              {isPauseActionPending ? 'Not yet synced' : 'On break'}
+            </Text>
+          </View>
+          <Text style={styles.bannerTimer}>{elapsedSince(stop.pausedAt)}</Text>
+        </View>
+      ) : progress === 'clocked_in' && stop.clockedInAt ? (
+        <View style={styles.amberBanner}>
+          <View>
+            <Text style={styles.amberBannerTitle}>Job Running</Text>
+            <Text style={styles.amberBannerSubtitle}>
+              {isClockActionPending ? 'Not yet synced' : 'In progress'}
+            </Text>
+          </View>
+          <Text style={[styles.bannerTimer, { color: C.amberTextStrong }]}>
+            {elapsedSince(stop.clockedInAt)}
+          </Text>
+        </View>
       ) : null}
 
       {progress === 'completed' ? (
-        <View style={styles.completedSummary}>
-          {visit.actualHours != null ? (
-            <InfoRow label="Actual hours" value={visit.actualHours.toFixed(2)} />
+        <View style={styles.greenBox}>
+          <Text style={styles.greenBoxTitle}>Job Complete</Text>
+          {totalActualHours > 0 ? (
+            <Text style={styles.greenBoxSubtitle}>Actual hours: {totalActualHours.toFixed(2)}</Text>
           ) : null}
-          {visit.completionNotes ? (
-            <InfoRow label="Completion notes" value={visit.completionNotes} />
-          ) : null}
+          {completionNotes ? <Text style={styles.greenBoxSubtitle}>{completionNotes}</Text> : null}
           {isClockActionPending ? (
-            <ThemedText themeColor="textSecondary" type="small">
-              Not yet synced — will confirm once back online.
-            </ThemedText>
+            <Text style={styles.greenBoxSubtitle}>Not yet synced — will confirm once back online.</Text>
           ) : null}
         </View>
       ) : null}
 
       {failedClockItem ? (
-        <View style={styles.conflictBox}>
-          <ThemedText style={styles.conflictText}>{failedClockItem.lastError}</ThemedText>
-          <View style={styles.conflictActions}>
-            <Pressable style={styles.conflictButton} onPress={() => void retry(failedClockItem.id)}>
-              <ThemedText style={styles.conflictButtonText}>Retry</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.conflictButton, styles.conflictButtonSecondary]}
-              onPress={() =>
-                confirmDiscard(
-                  failedClockItem.id,
-                  'This will drop the unsynced action. Pull to refresh afterwards to see the current state.'
-                )
-              }
-            >
-              <ThemedText style={styles.conflictButtonText}>Discard</ThemedText>
-            </Pressable>
-          </View>
-        </View>
+        <ConflictBox
+          message={failedClockItem.lastError ?? 'This action failed to sync.'}
+          onRetry={() => void retry(failedClockItem.id)}
+          onDiscard={() =>
+            confirmDiscard(
+              failedClockItem.id,
+              'This will drop the unsynced action. Pull to refresh afterwards to see the current state.'
+            )
+          }
+        />
       ) : null}
 
-      {progress === 'clocked_in' ? (
+      {failedPauseItem ? (
+        <ConflictBox
+          message={failedPauseItem.lastError ?? "This didn't sync."}
+          onRetry={() => void retry(failedPauseItem.id)}
+          onDiscard={() =>
+            confirmDiscard(failedPauseItem.id, 'This will drop the unsynced break action.')
+          }
+        />
+      ) : null}
+
+      {/* A failed acknowledgment used to be invisible: every consumer filters
+          `status !== 'failed'`, so the tap looked like it did nothing, Clock In
+          stayed disabled, and there was no Retry anywhere on the screen. */}
+      {failedAckItem ? (
+        <ConflictBox
+          message={failedAckItem.lastError ?? "Your note acknowledgment didn't sync — tap Retry to send it again."}
+          onRetry={() => void retry(failedAckItem.id)}
+          onDiscard={() =>
+            confirmDiscard(failedAckItem.id, "This will drop the unsynced acknowledgment — you'll need to read the notes again.")
+          }
+        />
+      ) : null}
+
+      {progress === 'clocked_in' || progress === 'on_break' ? (
         <TextInput
-          style={[styles.notesInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
+          style={styles.notesInput}
           placeholder="Completion notes (optional)"
-          placeholderTextColor="#8a8a8a"
+          placeholderTextColor="#94a3b8"
           value={notes}
           onChangeText={setNotes}
           multiline
@@ -294,23 +543,28 @@ export default function VisitDetailScreen() {
       ) : null}
 
       {progress === 'not_started' ? (
-        <ActionButton label="Clock In" color="#208AEF" onPress={handleClockIn} />
+        <ActionButton
+          label="Clock In"
+          variant="solidGreen"
+          onPress={handleClockIn}
+          disabled={hasNotes && !acknowledged}
+        />
       ) : null}
 
-      {progress === 'clocked_in' ? (
-        <ActionButton label="Clock Out" color="#d9342b" onPress={handleClockOut} />
+      {progress === 'on_break' ? (
+        <ActionButton label="Resume Job" variant="solidGreen" onPress={handleResume} />
+      ) : progress === 'clocked_in' ? (
+        <ActionButton label="Take a Break" variant="outlineBlue" onPress={handlePause} />
       ) : null}
 
-      {progress === 'completed' ? (
-        <ThemedText themeColor="textSecondary" style={styles.doneText}>
-          This visit is complete.
-        </ThemedText>
+      {progress === 'clocked_in' || progress === 'on_break' ? (
+        <ActionButton label="Clock Out" variant="solidRed" onPress={handleClockOut} />
       ) : null}
 
       {progress === 'skipped' ? (
-        <ThemedText themeColor="textSecondary" style={styles.doneText}>
-          This visit was skipped or cancelled.
-        </ThemedText>
+        <View style={styles.card}>
+          <Text style={styles.doneText}>This job was skipped or cancelled.</Text>
+        </View>
       ) : null}
 
       <PhotosSection
@@ -323,7 +577,16 @@ export default function VisitDetailScreen() {
         onDiscard={(itemId) =>
           confirmDiscard(itemId, 'This photo will not be uploaded. It stays saved on this device.')
         }
-        theme={theme}
+      />
+
+      <PlannedMaterialsSection
+        materials={plannedMaterials}
+        usageQueueItems={materialUsageQueueItems}
+        onMarkUsed={handleMarkUsed}
+        onMarkUsedNoInvoice={handleMarkUsedNoInvoice}
+        onMarkNotUsed={handleMarkNotUsed}
+        onRetry={(itemId) => void retry(itemId)}
+        onDiscard={(itemId) => confirmDiscard(itemId, "This won't be recorded as used.")}
       />
 
       <MaterialsSection
@@ -334,7 +597,16 @@ export default function VisitDetailScreen() {
         onDiscard={(itemId) =>
           confirmDiscard(itemId, 'This materials request will not be submitted.')
         }
-        theme={theme}
+      />
+
+      <NotesToOfficeSection
+        jobComments={anchor?.jobComments}
+        noteText={noteText}
+        onNoteTextChange={setNoteText}
+        onSend={handleSendNote}
+        noteQueueItems={noteQueueItems}
+        onRetry={(itemId) => void retry(itemId)}
+        onDiscard={(itemId) => confirmDiscard(itemId, 'This note will not be sent to the office.')}
       />
     </ScrollView>
   );
@@ -343,27 +615,242 @@ export default function VisitDetailScreen() {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
-      <ThemedText themeColor="textSecondary" type="small" style={styles.infoLabel}>
-        {label}
-      </ThemedText>
-      <ThemedText style={styles.infoValue}>{value}</ThemedText>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
 }
 
 function ActionButton({
   label,
-  color,
+  variant,
   onPress,
+  disabled,
 }: {
   label: string;
-  color: string;
+  variant: 'solidGreen' | 'solidRed' | 'outlineBlue';
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <Pressable style={[styles.actionButton, { backgroundColor: color }]} onPress={onPress}>
-      <ThemedText style={styles.actionButtonText}>{label}</ThemedText>
+    <Pressable
+      style={({ pressed }) => [
+        styles.actionButton,
+        variant === 'solidGreen' && styles.actionButtonGreen,
+        variant === 'solidRed' && styles.actionButtonRed,
+        variant === 'outlineBlue' && styles.actionButtonOutlineBlue,
+        pressed && !disabled && styles.actionButtonPressed,
+        disabled && styles.actionButtonDisabled,
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Text
+        style={[
+          styles.actionButtonText,
+          variant === 'outlineBlue' && styles.actionButtonTextBlue,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
+  );
+}
+
+function ConflictBox({
+  message,
+  onRetry,
+  onDiscard,
+}: {
+  message: string;
+  onRetry: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <View style={styles.conflictBox}>
+      <Text style={styles.conflictText}>{message}</Text>
+      <View style={styles.conflictActions}>
+        <Pressable style={styles.conflictButton} onPress={onRetry}>
+          <Text style={styles.conflictButtonText}>Retry</Text>
+        </Pressable>
+        <Pressable style={[styles.conflictButton, styles.conflictButtonSecondary]} onPress={onDiscard}>
+          <Text style={styles.conflictButtonText}>Discard</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * One row per underlying visit in the stop — mirrors the web stop page's
+ * services checklist, including the per-service Skip control
+ * (stops/[visitId]/page.tsx:284-296, 645-670). A row mid-flight (queued,
+ * syncing, or failed to sync) shows that instead of the Skip button; once
+ * the queue item clears and the next refetch lands, `v.status === 'skipped'`
+ * takes over from server truth, same convergence pattern as
+ * PlannedMaterialsSection.
+ */
+function ServicesSection({
+  visits,
+  skipQueueItemsByVisitId,
+  skipTargetId,
+  skipReasonText,
+  onSkipReasonChange,
+  onStartSkip,
+  onCancelSkip,
+  onConfirmSkip,
+  onRetrySkip,
+  onDiscardSkip,
+}: {
+  visits: CrewStopVisit[];
+  skipQueueItemsByVisitId: Map<string, ReturnType<typeof useOfflineQueue>['items']>;
+  skipTargetId: string | null;
+  skipReasonText: string;
+  onSkipReasonChange: (text: string) => void;
+  onStartSkip: (visitId: string) => void;
+  onCancelSkip: () => void;
+  onConfirmSkip: () => void;
+  onRetrySkip: (itemId: string) => void;
+  onDiscardSkip: (itemId: string) => void;
+}) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>
+          Services {visits.length > 1 ? `(${visits.length})` : ''}
+        </Text>
+      </View>
+      {visits.length === 0 ? (
+        <Text style={styles.mutedRowText}>No services listed</Text>
+      ) : (
+        visits.map((v, index) => {
+          const rowTerminal = v.status === 'completed' || v.status === 'cancelled' || v.status === 'skipped';
+          const skipItems = skipQueueItemsByVisitId.get(v.id) ?? [];
+          const activeSkipItem = skipItems.find((i) => i.status !== 'failed');
+          const failedSkipItem = skipItems.find((i) => i.status === 'failed');
+          const isSkipTarget = skipTargetId === v.id;
+          return (
+            <View
+              key={v.id}
+              style={[styles.serviceRow, index === visits.length - 1 && styles.lastRow]}
+            >
+              <View style={styles.serviceRowTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.serviceRowTitle}>{v.serviceName ?? 'Service'}</Text>
+                  {v.budgetedHours != null ? (
+                    <Text style={styles.serviceRowSubtitle}>Budgeted: {v.budgetedHours}h</Text>
+                  ) : null}
+                </View>
+                {activeSkipItem ? (
+                  <Text style={styles.serviceStatus}>
+                    {activeSkipItem.status === 'syncing' ? 'Skipping…' : 'Skip queued'}
+                  </Text>
+                ) : failedSkipItem ? null : v.status === 'skipped' ? (
+                  <Text style={[styles.serviceStatus, styles.serviceStatusSkipped]}>Skipped</Text>
+                ) : v.status === 'completed' ? (
+                  <Text style={[styles.serviceStatus, styles.serviceStatusDone]}>{STATUS_LABEL[v.status]}</Text>
+                ) : !rowTerminal && !isSkipTarget ? (
+                  <Pressable onPress={() => onStartSkip(v.id)} hitSlop={8}>
+                    <Text style={styles.linkText}>Skip</Text>
+                  </Pressable>
+                ) : !rowTerminal ? null : (
+                  <Text style={styles.serviceStatus}>{STATUS_LABEL[v.status]}</Text>
+                )}
+              </View>
+
+              {failedSkipItem ? (
+                <View style={styles.skipFailedRow}>
+                  <Text style={[styles.errorText, styles.materialsErrorText]}>
+                    {failedSkipItem.lastError ?? "This skip didn't sync."}
+                  </Text>
+                  <View style={styles.materialsFailedActions}>
+                    <Pressable onPress={() => onRetrySkip(failedSkipItem.id)}>
+                      <Text style={styles.linkText}>Retry</Text>
+                    </Pressable>
+                    <Pressable onPress={() => onDiscardSkip(failedSkipItem.id)}>
+                      <Text style={styles.linkText}>Discard</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+
+              {isSkipTarget ? (
+                <View style={styles.skipForm}>
+                  <TextInput
+                    style={styles.skipReasonInput}
+                    placeholder="Reason for skipping (required)"
+                    placeholderTextColor="#94a3b8"
+                    value={skipReasonText}
+                    onChangeText={onSkipReasonChange}
+                    multiline
+                  />
+                  <View style={styles.skipFormActions}>
+                    <Pressable onPress={onCancelSkip} hitSlop={8}>
+                      <Text style={styles.linkText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.skipConfirmButton,
+                        pressed && styles.skipConfirmButtonPressed,
+                        !skipReasonText.trim() && styles.markUsedButtonDisabled,
+                      ]}
+                      disabled={!skipReasonText.trim()}
+                      onPress={onConfirmSkip}
+                    >
+                      <Text style={styles.skipConfirmButtonText}>Confirm Skip</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
+}
+
+/**
+ * What to use and how much finished-mix solution to prepare, computed from
+ * the product's application rate + dilution ratio when the office has it
+ * configured. Mirrors the web crew stop page's "Chemical Mix" card. Renders
+ * nothing when there's nothing marked used for this visit — most visits
+ * have no chemical tracking at all.
+ */
+function ChemicalsSection({ chemicals }: { chemicals: VisitChemicalApplication[] }) {
+  const used = chemicals.filter((c) => c.used);
+  if (used.length === 0) return null;
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>Chemical Mix</Text>
+      </View>
+      <View style={styles.cardBody}>
+        {used.map((a) => (
+          <View key={a.id} style={styles.chemicalRow}>
+            <Text style={styles.chemicalProductName}>{a.productName ?? 'Chemical'}</Text>
+            {a.solutionAmount != null ? (
+              <Text style={styles.chemicalAmountText}>
+                Use{' '}
+                <Text style={styles.chemicalAmountStrong}>
+                  {a.solutionAmount} {a.solutionUnitName ?? ''}
+                </Text>{' '}
+                of finished mix
+                {a.chemicalAmount != null ? ` (${a.chemicalAmount} ${a.unitName ?? ''} active)` : ''}
+              </Text>
+            ) : a.chemicalAmount != null ? (
+              <Text style={styles.chemicalAmountText}>
+                {a.chemicalAmount} {a.unitName ?? ''}
+              </Text>
+            ) : null}
+            {a.applicationRateLabel ? (
+              <Text style={styles.chemicalRateLabel}>{a.applicationRateLabel}</Text>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -375,7 +862,6 @@ function PhotosSection({
   onAdd,
   onRetry,
   onDiscard,
-  theme,
 }: {
   confirmedPhotos: VisitPhoto[];
   photoQueueItems: ReturnType<typeof useOfflineQueue>['items'];
@@ -384,82 +870,280 @@ function PhotosSection({
   onAdd: (source: 'camera' | 'library') => void;
   onRetry: (itemId: string) => void;
   onDiscard: (itemId: string) => void;
-  theme: ReturnType<typeof useTheme>;
 }) {
   return (
-    <View style={styles.photosSection}>
-      <ThemedText type="smallBold">Job photos</ThemedText>
-
-      <View style={styles.photoButtonRow}>
-        <Pressable
-          style={[styles.photoButton, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => onAdd('camera')}
-          disabled={isCapturing}
-        >
-          <ThemedText type="small">Take Photo</ThemedText>
-        </Pressable>
-        <Pressable
-          style={[styles.photoButton, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => onAdd('library')}
-          disabled={isCapturing}
-        >
-          <ThemedText type="small">Choose from Library</ThemedText>
-        </Pressable>
-        {isCapturing ? <ActivityIndicator size="small" /> : null}
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>
+          Photos {confirmedPhotos.length + photoQueueItems.length > 0
+            ? `(${confirmedPhotos.length + photoQueueItems.length})`
+            : ''}
+        </Text>
       </View>
 
-      {photoError ? <ThemedText style={styles.errorText}>{photoError}</ThemedText> : null}
+      <View style={styles.cardBody}>
+        <View style={styles.photoButtonRow}>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            onPress={() => onAdd('camera')}
+            disabled={isCapturing}
+          >
+            <Text style={styles.secondaryButtonText}>Take Photo</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            onPress={() => onAdd('library')}
+            disabled={isCapturing}
+          >
+            <Text style={styles.secondaryButtonText}>Choose from Library</Text>
+          </Pressable>
+          {isCapturing ? <ActivityIndicator size="small" /> : null}
+        </View>
 
-      {confirmedPhotos.length === 0 && photoQueueItems.length === 0 ? (
-        <ThemedText themeColor="textSecondary" type="small">
-          No photos yet.
-        </ThemedText>
-      ) : (
-        <View style={styles.photoGrid}>
-          {confirmedPhotos.map((photo) => (
-            <View key={photo.id} style={styles.photoTile}>
-              {photo.signedUrl ? (
-                <Image source={{ uri: photo.signedUrl }} style={styles.photoImage} />
+        {photoError ? <Text style={styles.errorText}>{photoError}</Text> : null}
+
+        {confirmedPhotos.length === 0 && photoQueueItems.length === 0 ? (
+          <Text style={styles.mutedCentered}>No photos yet</Text>
+        ) : (
+          <View style={styles.photoGrid}>
+            {confirmedPhotos.map((photo) => (
+              <View key={photo.id} style={styles.photoTile}>
+                {photo.signedUrl ? (
+                  <Image source={{ uri: photo.signedUrl }} style={styles.photoImage} />
+                ) : (
+                  <View style={[styles.photoImage, styles.photoPlaceholder]} />
+                )}
+              </View>
+            ))}
+
+            {photoQueueItems.map((item) => {
+              const payload = item.payload as AddPhotoPayload;
+              return (
+                <View key={item.id} style={styles.photoTile}>
+                  <Image source={{ uri: payload.localUri }} style={[styles.photoImage, styles.photoDimmed]} />
+                  <View
+                    style={[
+                      styles.photoBadge,
+                      { backgroundColor: item.status === 'failed' ? C.red : C.amberTextStrong },
+                    ]}
+                  >
+                    <Text style={styles.photoBadgeText}>
+                      {item.status === 'failed' ? 'Failed' : item.status === 'syncing' ? 'Uploading…' : 'Queued'}
+                    </Text>
+                  </View>
+                  {item.status === 'failed' ? (
+                    <View style={styles.photoFailedActions}>
+                      <Pressable onPress={() => onRetry(item.id)}>
+                        <Text style={styles.linkText}>Retry</Text>
+                      </Pressable>
+                      <Pressable onPress={() => onDiscard(item.id)}>
+                        <Text style={styles.linkText}>Discard</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Materials office staff already planned/called for on this job
+ * (crm_job_products) — distinct from MaterialsSection below, which is an
+ * ad-hoc NEW request for something not already planned. Lets the crew
+ * confirm or correct the actual quantity used against what was called for,
+ * since the two often differ in the field. A queued-but-unsynced usage item
+ * replaces that row's editable controls with its pending/failed state,
+ * mirroring how PhotosSection/MaterialsSection show queued items — once
+ * confirmed by the server (row removed from the queue), the next
+ * loadPlannedMaterials() refetch shows the resolved, read-only state.
+ */
+function PlannedMaterialsSection({
+  materials,
+  usageQueueItems,
+  onMarkUsed,
+  onMarkUsedNoInvoice,
+  onMarkNotUsed,
+  onRetry,
+  onDiscard,
+}: {
+  materials: JobProductMaterial[];
+  usageQueueItems: ReturnType<typeof useOfflineQueue>['items'];
+  onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkUsedNoInvoice: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkNotUsed: (material: JobProductMaterial) => void;
+  onRetry: (itemId: string) => void;
+  onDiscard: (itemId: string) => void;
+}) {
+  if (materials.length === 0) return null;
+
+  const queuedByJobProductId = new Map(
+    usageQueueItems.map((item) => [(item.payload as RecordMaterialUsagePayload).jobProductId, item])
+  );
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>Materials called for</Text>
+      </View>
+      <View style={styles.materialsList}>
+        {materials.map((material, index) => {
+          const queueItem = queuedByJobProductId.get(material.id);
+          return (
+            <View
+              key={material.id}
+              style={[styles.plannedMaterialRow, index === materials.length - 1 && styles.lastRow]}
+            >
+              {queueItem ? (
+                <QueuedMaterialRow item={queueItem} material={material} onRetry={onRetry} onDiscard={onDiscard} />
+              ) : material.status === 'pending' ? (
+                <PendingMaterialRow
+                  material={material}
+                  onMarkUsed={onMarkUsed}
+                  onMarkUsedNoInvoice={onMarkUsedNoInvoice}
+                  onMarkNotUsed={onMarkNotUsed}
+                />
               ) : (
-                <View style={[styles.photoImage, styles.photoPlaceholder]} />
+                <ResolvedMaterialRow material={material} />
               )}
             </View>
-          ))}
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
-          {photoQueueItems.map((item) => {
-            const payload = item.payload as AddPhotoPayload;
-            return (
-              <View key={item.id} style={styles.photoTile}>
-                <Image source={{ uri: payload.localUri }} style={[styles.photoImage, styles.photoDimmed]} />
-                <View
-                  style={[
-                    styles.photoBadge,
-                    { backgroundColor: item.status === 'failed' ? '#d9342b' : '#c98a1f' },
-                  ]}
-                >
-                  <ThemedText style={styles.photoBadgeText}>
-                    {item.status === 'failed' ? 'Failed' : item.status === 'syncing' ? 'Uploading…' : 'Queued'}
-                  </ThemedText>
-                </View>
-                {item.status === 'failed' ? (
-                  <View style={styles.photoFailedActions}>
-                    <Pressable onPress={() => onRetry(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Retry
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable onPress={() => onDiscard(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Discard
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
-      )}
+function PendingMaterialRow({
+  material,
+  onMarkUsed,
+  onMarkUsedNoInvoice,
+  onMarkNotUsed,
+}: {
+  material: JobProductMaterial;
+  onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkUsedNoInvoice: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkNotUsed: (material: JobProductMaterial) => void;
+}) {
+  const [qtyText, setQtyText] = useState(String(material.plannedQty));
+
+  const parsedQty = Number(qtyText);
+  // Strictly positive: zero isn't "used none", it's Not Used, and the route
+  // rejects it — don't offer a button that can only fail.
+  const isValid = qtyText.trim() !== '' && Number.isFinite(parsedQty) && parsedQty > 0;
+
+  return (
+    <>
+      <View style={styles.plannedMaterialHeader}>
+        <Text style={styles.materialsItemName}>{material.productName}</Text>
+        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+      </View>
+      <View style={styles.plannedMaterialActionsRow}>
+        <TextInput
+          style={styles.qtyInput}
+          keyboardType="decimal-pad"
+          value={qtyText}
+          onChangeText={setQtyText}
+        />
+        <Pressable
+          style={({ pressed }) => [
+            styles.markUsedButton,
+            pressed && styles.markUsedButtonPressed,
+            !isValid && styles.markUsedButtonDisabled,
+          ]}
+          disabled={!isValid}
+          onPress={() => onMarkUsed(material, parsedQty)}
+        >
+          <Text style={styles.markUsedButtonText}>Mark Used</Text>
+        </Pressable>
+        <Pressable onPress={() => onMarkNotUsed(material)} hitSlop={8}>
+          <Text style={styles.linkText}>Not Used</Text>
+        </Pressable>
+      </View>
+      {/* Secondary on purpose: the default (Mark Used) must stay billable. */}
+      <Pressable
+        onPress={() => onMarkUsedNoInvoice(material, parsedQty)}
+        disabled={!isValid}
+        hitSlop={8}
+      >
+        <Text style={[styles.linkText, styles.noBillLink, !isValid && styles.linkTextDisabled]}>
+          Used — don&apos;t bill
+        </Text>
+      </Pressable>
+    </>
+  );
+}
+
+function QueuedMaterialRow({
+  item,
+  material,
+  onRetry,
+  onDiscard,
+}: {
+  item: ReturnType<typeof useOfflineQueue>['items'][number];
+  material: JobProductMaterial;
+  onRetry: (itemId: string) => void;
+  onDiscard: (itemId: string) => void;
+}) {
+  const payload = item.payload as RecordMaterialUsagePayload;
+  const summary = payload.notUsed
+    ? 'Not used'
+    : payload.noInvoice
+      ? `Used: ${payload.usedQty} (not billed)`
+      : `Used: ${payload.usedQty}`;
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.plannedMaterialHeader}>
+        <Text style={styles.materialsItemName}>{material.productName}</Text>
+        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+      </View>
+      <View style={styles.queuedMaterialFooter}>
+        <Text style={styles.plannedQtyText}>{summary}</Text>
+        {item.status === 'failed' ? (
+          <View style={styles.materialsFailedActions}>
+            <Pressable onPress={() => onRetry(item.id)}>
+              <Text style={styles.linkText}>Retry</Text>
+            </Pressable>
+            <Pressable onPress={() => onDiscard(item.id)}>
+              <Text style={styles.linkText}>Discard</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={[styles.materialsStatusPill, { backgroundColor: C.amberTextStrong }]}>
+            <Text style={styles.materialsStatusPillText}>
+              {item.status === 'syncing' ? 'Sending…' : 'Queued'}
+            </Text>
+          </View>
+        )}
+      </View>
+      {item.status === 'failed' ? (
+        <Text style={[styles.errorText, styles.materialsErrorText]}>{item.lastError}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function ResolvedMaterialRow({ material }: { material: JobProductMaterial }) {
+  const color = material.status === 'not_used' ? C.amberTextStrong : C.green;
+  const label =
+    material.status === 'not_used'
+      ? 'Not used'
+      : material.status === 'used_no_invoice'
+        ? `Used: ${material.qty} (not billed)`
+        : `Used: ${material.qty}`;
+  return (
+    <View style={styles.plannedMaterialHeader}>
+      <View>
+        <Text style={styles.materialsItemName}>{material.productName}</Text>
+        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+      </View>
+      <View style={[styles.materialsStatusPill, { backgroundColor: color }]}>
+        <Text style={styles.materialsStatusPillText}>{label}</Text>
+      </View>
     </View>
   );
 }
@@ -470,10 +1154,10 @@ function PhotosSection({
  * request (materialsQueueItems, status 'pending'/'syncing'/'failed') renders
  * alongside server-confirmed ones (requisitions, from GET
  * /api/crm/crew/visits/:id/requisitions) rather than merging into a single
- * list — unlike clock state (see src/lib/offline/overlay.ts) a materials
- * request has no server "current value" to optimistically overwrite; it's
- * purely additive, so there's nothing to merge, only two lists to show
- * together.
+ * list — unlike clock/pause state (see src/lib/offline/overlay.ts) a
+ * materials request has no server "current value" to optimistically
+ * overwrite; it's purely additive, so there's nothing to merge, only two
+ * lists to show together.
  */
 function MaterialsSection({
   requisitions,
@@ -481,107 +1165,205 @@ function MaterialsSection({
   onRequest,
   onRetry,
   onDiscard,
-  theme,
 }: {
   requisitions: VisitRequisition[];
   materialsQueueItems: ReturnType<typeof useOfflineQueue>['items'];
   onRequest: () => void;
   onRetry: (itemId: string) => void;
   onDiscard: (itemId: string) => void;
-  theme: ReturnType<typeof useTheme>;
 }) {
   return (
-    <View style={styles.materialsSection}>
-      <View style={styles.materialsHeaderRow}>
-        <ThemedText type="smallBold">Materials requests</ThemedText>
+    <View style={styles.card}>
+      <View style={[styles.cardHeaderRow, styles.materialsHeaderRow]}>
+        <Text style={styles.cardHeaderTitle}>Materials requests</Text>
         <Pressable
-          style={[styles.materialsRequestButton, { backgroundColor: theme.backgroundElement }]}
+          style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
           onPress={onRequest}
         >
-          <ThemedText type="small">Request Materials</ThemedText>
+          <Text style={styles.secondaryButtonText}>Request Materials</Text>
         </Pressable>
       </View>
 
-      {requisitions.length === 0 && materialsQueueItems.length === 0 ? (
-        <ThemedText themeColor="textSecondary" type="small">
-          No materials requested for this visit.
-        </ThemedText>
-      ) : (
-        <View style={styles.materialsList}>
-          {materialsQueueItems.map((item) => {
-            const payload = item.payload as RequestMaterialsPayload;
-            return (
-              <View
-                key={item.id}
-                style={[styles.materialsRow, { backgroundColor: theme.backgroundElement }]}
-              >
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.materialsItemName}>
-                    {payload.quantity} × {payload.productItemName}
-                  </ThemedText>
+      <View style={styles.cardBody}>
+        {requisitions.length === 0 && materialsQueueItems.length === 0 ? (
+          <Text style={styles.mutedRowText}>No materials requested for this job.</Text>
+        ) : (
+          <View style={styles.materialsList}>
+            {materialsQueueItems.map((item) => {
+              const payload = item.payload as RequestMaterialsPayload;
+              return (
+                <View key={item.id} style={styles.materialsRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.materialsItemName}>
+                      {payload.quantity} × {payload.productItemName}
+                    </Text>
+                    {item.status === 'failed' ? (
+                      <Text style={[styles.errorText, styles.materialsErrorText]}>{item.lastError}</Text>
+                    ) : null}
+                  </View>
                   {item.status === 'failed' ? (
-                    <ThemedText type="small" style={styles.errorText}>
-                      {item.lastError}
-                    </ThemedText>
-                  ) : null}
+                    <View style={styles.materialsFailedActions}>
+                      <Pressable onPress={() => onRetry(item.id)}>
+                        <Text style={styles.linkText}>Retry</Text>
+                      </Pressable>
+                      <Pressable onPress={() => onDiscard(item.id)}>
+                        <Text style={styles.linkText}>Discard</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View style={[styles.materialsStatusPill, { backgroundColor: C.amberTextStrong }]}>
+                      <Text style={styles.materialsStatusPillText}>
+                        {item.status === 'syncing' ? 'Sending…' : 'Queued'}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                {item.status === 'failed' ? (
-                  <View style={styles.materialsFailedActions}>
-                    <Pressable onPress={() => onRetry(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Retry
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable onPress={() => onDiscard(item.id)}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Discard
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={[styles.materialsStatusPill, { backgroundColor: '#c98a1f' }]}>
-                    <ThemedText style={styles.materialsStatusPillText}>
-                      {item.status === 'syncing' ? 'Sending…' : 'Queued'}
-                    </ThemedText>
-                  </View>
-                )}
-              </View>
-            );
-          })}
+              );
+            })}
 
-          {requisitions.map((req) => (
-            <View key={req.id} style={[styles.materialsRow, { backgroundColor: theme.backgroundElement }]}>
+            {requisitions.map((req) => (
+              <View key={req.id} style={styles.materialsRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.materialsItemName}>{req.title}</Text>
+                  <Text style={styles.serviceRowSubtitle}>{req.requisitionNumber}</Text>
+                </View>
+                <View
+                  style={[styles.materialsStatusPill, { backgroundColor: REQUISITION_STATUS_COLOR[req.status] }]}
+                >
+                  <Text style={styles.materialsStatusPillText}>{REQUISITION_STATUS_LABEL[req.status]}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** Parses the anchor visit's job_comments into display strings, matching the
+ * web stop page's handling of both the legacy string format and the current
+ * `{ text }[]` shape (stops/[visitId]/page.tsx:533-540). */
+function formatJobComments(jobComments: unknown): string[] {
+  if (!jobComments) return [];
+  if (typeof jobComments === 'string') return [jobComments];
+  if (Array.isArray(jobComments)) {
+    return jobComments
+      .map((c) => (c && typeof c === 'object' ? ((c as { text?: string; content?: string }).text ?? (c as { text?: string; content?: string }).content ?? '') : ''))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/**
+ * "Notes to Office" — a crew-authored note thread visible to dispatchers on
+ * the web board (POST .../notes), mirroring the web stop page's card of the
+ * same name. Existing comments come from the anchor visit's jobComments
+ * (refreshed on the next fetchCrewVisits() poll); a note that hasn't synced
+ * yet renders separately below, same additive pattern as MaterialsSection.
+ */
+function NotesToOfficeSection({
+  jobComments,
+  noteText,
+  onNoteTextChange,
+  onSend,
+  noteQueueItems,
+  onRetry,
+  onDiscard,
+}: {
+  jobComments: unknown;
+  noteText: string;
+  onNoteTextChange: (text: string) => void;
+  onSend: () => void;
+  noteQueueItems: ReturnType<typeof useOfflineQueue>['items'];
+  onRetry: (itemId: string) => void;
+  onDiscard: (itemId: string) => void;
+}) {
+  const comments = formatJobComments(jobComments);
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>Notes to Office</Text>
+        <Text style={styles.serviceRowSubtitle}>Visible on the dispatch board</Text>
+      </View>
+      <View style={styles.cardBody}>
+        {comments.length > 0 ? (
+          <View style={styles.notesHistoryBox}>
+            {comments.map((text, i) => (
+              <Text key={i} style={styles.notesHistoryText}>
+                {text}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {noteQueueItems.map((item) => {
+          const payload = item.payload as AddNotePayload;
+          return (
+            <View key={item.id} style={styles.materialsRow}>
               <View style={{ flex: 1 }}>
-                <ThemedText style={styles.materialsItemName}>{req.title}</ThemedText>
-                <ThemedText themeColor="textSecondary" type="small">
-                  {req.requisitionNumber}
-                </ThemedText>
+                <Text style={styles.materialsItemName}>{payload.note}</Text>
+                {item.status === 'failed' ? (
+                  <Text style={[styles.errorText, styles.materialsErrorText]}>{item.lastError}</Text>
+                ) : null}
               </View>
-              <View
-                style={[
-                  styles.materialsStatusPill,
-                  { backgroundColor: REQUISITION_STATUS_COLOR[req.status] },
-                ]}
-              >
-                <ThemedText style={styles.materialsStatusPillText}>
-                  {REQUISITION_STATUS_LABEL[req.status]}
-                </ThemedText>
-              </View>
+              {item.status === 'failed' ? (
+                <View style={styles.materialsFailedActions}>
+                  <Pressable onPress={() => onRetry(item.id)}>
+                    <Text style={styles.linkText}>Retry</Text>
+                  </Pressable>
+                  <Pressable onPress={() => onDiscard(item.id)}>
+                    <Text style={styles.linkText}>Discard</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={[styles.materialsStatusPill, { backgroundColor: C.amberTextStrong }]}>
+                  <Text style={styles.materialsStatusPillText}>
+                    {item.status === 'syncing' ? 'Sending…' : 'Queued'}
+                  </Text>
+                </View>
+              )}
             </View>
-          ))}
+          );
+        })}
+
+        <View style={styles.noteComposeRow}>
+          <TextInput
+            style={styles.noteInput}
+            placeholder="Write a note..."
+            placeholderTextColor="#94a3b8"
+            value={noteText}
+            onChangeText={onNoteTextChange}
+            multiline
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.markUsedButton,
+              pressed && styles.markUsedButtonPressed,
+              !noteText.trim() && styles.markUsedButtonDisabled,
+            ]}
+            disabled={!noteText.trim()}
+            onPress={onSend}
+          >
+            <Text style={styles.markUsedButtonText}>Send</Text>
+          </Pressable>
         </View>
-      )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenBg: {
+    backgroundColor: C.bg,
+  },
   container: {
     flex: 1,
+    backgroundColor: C.bg,
   },
   content: {
-    padding: 20,
-    gap: 16,
+    padding: 16,
+    gap: 14,
     paddingBottom: 60,
   },
   centered: {
@@ -591,15 +1373,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     gap: 12,
   },
+
+  // Generic white card, matching the web page's `bg-white rounded-xl border`
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+  },
+  cardHeaderRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.headerBorder,
+  },
+  cardHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.text,
+  },
+  cardBody: {
+    padding: 16,
+    gap: 12,
+  },
+
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
+    padding: 16,
   },
   clientName: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 20,
+    fontWeight: '700',
+    color: C.text,
     flex: 1,
   },
   statusPill: {
@@ -610,42 +1419,158 @@ const styles = StyleSheet.create({
   statusPillText: {
     color: '#ffffff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  infoStack: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 10,
   },
   infoRow: {
     gap: 2,
   },
   infoLabel: {
+    fontSize: 11,
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    color: C.textFaint,
   },
   infoValue: {
-    fontSize: 16,
+    fontSize: 15,
+    color: C.text,
   },
-  notesBox: {
+
+  amberBox: {
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberBg,
     padding: 14,
     gap: 4,
   },
-  notesText: {
+  amberBoxTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.amberText,
+  },
+  amberBoxText: {
     fontSize: 14,
+    color: C.text,
   },
-  elapsed: {
-    fontSize: 14,
+  greenAckBox: {
+    borderColor: C.greenBorder,
+    backgroundColor: C.greenBg,
   },
-  completedSummary: {
-    gap: 12,
+  greenAckTitle: {
+    color: C.greenText,
   },
-  conflictBox: {
-    borderRadius: 10,
+  ackButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d9342b',
-    backgroundColor: '#d9342b18',
-    padding: 12,
+    borderColor: C.amberBorder,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  ackButtonPressed: {
+    backgroundColor: C.amberBorder,
+  },
+  ackButtonText: {
+    color: C.amberTextStrong,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  ackConfirmedText: {
+    fontSize: 12,
+    color: C.green,
+    marginTop: 2,
+  },
+  ackStaleText: {
+    fontSize: 12,
+    color: C.amberTextStrong,
+    marginBottom: 8,
+  },
+
+  amberBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberBg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  amberBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.amberText,
+  },
+  amberBannerSubtitle: {
+    fontSize: 12,
+    color: C.amberTextStrong,
+    marginTop: 2,
+  },
+  blueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    backgroundColor: C.blueBg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  blueBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.blueText,
+  },
+  blueBannerSubtitle: {
+    fontSize: 12,
+    color: C.blue,
+    marginTop: 2,
+  },
+  bannerTimer: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.blueText,
+    fontVariant: ['tabular-nums'],
+  },
+
+  greenBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.greenBorder,
+    backgroundColor: C.greenBg,
+    padding: 16,
+    alignItems: 'center',
+    gap: 2,
+  },
+  greenBoxTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.greenText,
+  },
+  greenBoxSubtitle: {
+    fontSize: 12,
+    color: C.green,
+  },
+
+  conflictBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.redBorder,
+    backgroundColor: C.redBg,
+    padding: 14,
     gap: 10,
   },
   conflictText: {
-    color: '#d9342b',
+    color: C.redText,
     fontSize: 14,
   },
   conflictActions: {
@@ -656,7 +1581,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    backgroundColor: '#d9342b',
+    backgroundColor: C.red,
   },
   conflictButtonSecondary: {
     backgroundColor: '#8a8a8a',
@@ -666,35 +1591,70 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+
   notesInput: {
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderRadius: 8,
+    borderColor: C.border,
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 15,
+    color: C.text,
     minHeight: 80,
     textAlignVertical: 'top',
   },
+
+  // Primary full-width actions — bold, tall, high-contrast, matching the
+  // web page's h-14 buttons so it's unambiguous what to tap next.
   actionButton: {
-    borderRadius: 10,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  actionButtonGreen: {
+    backgroundColor: C.green,
+  },
+  actionButtonRed: {
+    backgroundColor: C.red,
+  },
+  actionButtonOutlineBlue: {
+    backgroundColor: C.card,
+    borderWidth: 1.5,
+    borderColor: C.blue,
+  },
+  actionButtonPressed: {
+    opacity: 0.85,
+  },
+  actionButtonDisabled: {
+    opacity: 0.4,
   },
   actionButtonText: {
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 16,
   },
+  actionButtonTextBlue: {
+    color: C.blue,
+  },
+
   doneText: {
     textAlign: 'center',
+    color: C.textMuted,
+    padding: 16,
   },
   errorText: {
-    color: '#d9342b',
+    color: C.redText,
     textAlign: 'center',
+    fontSize: 13,
+  },
+  materialsErrorText: {
+    textAlign: 'left',
+    marginTop: 2,
   },
   retryButton: {
-    backgroundColor: '#208AEF',
+    backgroundColor: C.blue,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,
@@ -710,19 +1670,159 @@ const styles = StyleSheet.create({
   },
   emptyBody: {
     textAlign: 'center',
+    color: C.textMuted,
   },
-  photosSection: {
-    gap: 10,
+
+  // Secondary actions inside a card (Take Photo, Choose from Library, Request
+  // Materials) — a clearly-bordered pill so it doesn't blend into the card
+  // background the way an unstyled flat Pressable would.
+  secondaryButton: {
+    borderWidth: 1.5,
+    borderColor: C.blue,
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: C.blueBg,
   },
+  secondaryButtonPressed: {
+    backgroundColor: C.blueBorder,
+  },
+  secondaryButtonText: {
+    color: C.blueText,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  linkText: {
+    color: C.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // Deliberately quieter than "Not Used": writing off a material the office
+  // called for should never look like the obvious choice.
+  noBillLink: {
+    fontWeight: '500',
+    marginTop: 6,
+  },
+  linkTextDisabled: {
+    color: C.textFaint,
+  },
+  mutedRowText: {
+    color: C.textFaint,
+    fontSize: 14,
+    padding: 16,
+  },
+  mutedCentered: {
+    color: C.textFaint,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+
+  serviceRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.headerBorder,
+    gap: 8,
+  },
+  serviceRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  lastRow: {
+    borderBottomWidth: 0,
+  },
+  skipFailedRow: {
+    gap: 6,
+  },
+  skipForm: {
+    gap: 8,
+  },
+  skipReasonInput: {
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: C.text,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  skipFormActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 16,
+  },
+  skipConfirmButton: {
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: C.red,
+  },
+  skipConfirmButtonPressed: {
+    opacity: 0.85,
+  },
+  skipConfirmButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  serviceRowTitle: {
+    fontSize: 14,
+    color: C.text,
+  },
+  serviceRowSubtitle: {
+    fontSize: 12,
+    color: C.textFaint,
+    marginTop: 2,
+  },
+  serviceStatus: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.textMuted,
+  },
+  serviceStatusDone: {
+    color: C.green,
+  },
+  serviceStatusSkipped: {
+    color: C.amberTextStrong,
+  },
+
+  chemicalRow: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.greenBorder,
+    backgroundColor: C.greenBg,
+    padding: 12,
+    gap: 2,
+  },
+  chemicalProductName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.greenText,
+  },
+  chemicalAmountText: {
+    fontSize: 13,
+    color: C.greenText,
+  },
+  chemicalAmountStrong: {
+    fontWeight: '700',
+  },
+  chemicalRateLabel: {
+    fontSize: 12,
+    color: C.green,
+  },
+
   photoButtonRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     alignItems: 'center',
-  },
-  photoButton: {
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
   },
   photoGrid: {
     flexDirection: 'row',
@@ -739,7 +1839,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   photoPlaceholder: {
-    backgroundColor: '#8a8a8a44',
+    backgroundColor: '#e2e8f0',
   },
   photoDimmed: {
     opacity: 0.55,
@@ -762,31 +1862,85 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  materialsSection: {
+
+  plannedMaterialRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.headerBorder,
+    gap: 8,
+  },
+  plannedMaterialHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  plannedQtyText: {
+    fontSize: 12,
+    color: C.textFaint,
+    marginTop: 2,
+  },
+  plannedMaterialActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
-  materialsHeaderRow: {
+  qtyInput: {
+    width: 64,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 15,
+    color: C.text,
+    textAlign: 'center',
+  },
+  markUsedButton: {
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: C.green,
+  },
+  markUsedButtonPressed: {
+    opacity: 0.85,
+  },
+  markUsedButtonDisabled: {
+    opacity: 0.4,
+  },
+  markUsedButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  queuedMaterialFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  materialsRequestButton: {
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+
+  materialsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   materialsList: {
-    gap: 8,
+    gap: 10,
   },
   materialsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.headerBorder,
     borderRadius: 10,
     padding: 12,
     gap: 10,
   },
   materialsItemName: {
-    fontSize: 15,
+    fontSize: 14,
+    color: C.text,
   },
   materialsFailedActions: {
     flexDirection: 'row',
@@ -801,5 +1955,37 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
+  },
+
+  notesHistoryBox: {
+    backgroundColor: C.bg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.headerBorder,
+    padding: 12,
+    gap: 6,
+  },
+  notesHistoryText: {
+    fontSize: 13,
+    color: C.textMuted,
+  },
+  noteComposeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  noteInput: {
+    flex: 1,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: C.text,
+    minHeight: 44,
+    maxHeight: 100,
+    textAlignVertical: 'top',
   },
 });

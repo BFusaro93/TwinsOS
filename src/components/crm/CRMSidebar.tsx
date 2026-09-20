@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { BrandMark } from "@/components/shared/BrandMark";
@@ -126,7 +126,7 @@ export const CRM_NAV: NavSection[] = [
     label: "Administration",
     items: [
       { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3, permission: "view_report_center" },
-      { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list" },
+      { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list" },  // also hosts the Price Adjustments tab
       { label: "Products",  href: "/crm/settings/products",    icon: BookOpen },
       { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock },
       { label: "Packages",  href: "/crm/settings/packages",    icon: Package, permission: "package_list" },
@@ -152,7 +152,7 @@ function matchesHref(pathname: string, href: string): boolean {
 
 export function CRMSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const { can } = usePermissions();

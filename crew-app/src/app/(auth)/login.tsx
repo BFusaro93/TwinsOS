@@ -5,14 +5,45 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   TextInput,
+  View,
 } from 'react-native';
 import { Redirect } from 'expo-router';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+
+// Landscapt brand palette (src/components/shared/BrandMark.tsx, tailwind.config
+// brand.500/600, and (auth)/login/page.tsx on the web) — kept in sync by hand
+// since this app doesn't share the web app's Tailwind config.
+const BRAND_DARK_GREEN = '#005642';
+const BRAND_GREEN = '#60ab45';
+const BRAND_GREEN_PRESSED = '#4a8a33';
+const BRAND_BLUE = '#2aa9e0';
+const BRAND_LIME = '#b7d433';
+
+// Exact copy of src/components/shared/BrandMark.tsx's SVG (variant="color")
+// — kept in sync by hand since this app doesn't share that component.
+function BrandMark() {
+  return (
+    <Svg width={56} height={56} viewBox="0 0 48 48" role="img" aria-label="Brand mark">
+      <Rect x={1} y={1} width={46} height={46} rx={11} fill={BRAND_DARK_GREEN} />
+      <Path d="M15,13 L15,32" stroke={BRAND_BLUE} strokeWidth={5.5} fill="none" strokeLinecap="round" />
+      <Path
+        d="M15,32 L33,32"
+        stroke={BRAND_GREEN}
+        strokeWidth={5.5}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M22,32 L33,20" stroke={BRAND_LIME} strokeWidth={5.5} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 export default function LoginScreen() {
   const { session, isLoading: isSessionLoading } = useAuth();
@@ -57,54 +88,59 @@ export default function LoginScreen() {
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ThemedView style={styles.container}>
-        <ThemedText type="title" style={styles.title}>
-          Crew App
-        </ThemedText>
-        <ThemedText type="subtitle" style={styles.subtitle}>
-          Sign in
-        </ThemedText>
+      <View style={styles.container}>
+        <View style={styles.brandBlock}>
+          <BrandMark />
+          <Text style={styles.wordmark}>landscapt</Text>
+          <Text style={styles.tagline}>Sign in to your account</Text>
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#8a8a8a"
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          value={email}
-          onChangeText={setEmail}
-          editable={!isSubmitting}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#8a8a8a"
-          secureTextEntry
-          textContentType="password"
-          value={password}
-          onChangeText={setPassword}
-          editable={!isSubmitting}
-          onSubmitEditing={handleSignIn}
-        />
+        <View style={styles.card}>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#8a8a8a"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            value={email}
+            onChangeText={setEmail}
+            editable={!isSubmitting}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#8a8a8a"
+            secureTextEntry
+            textContentType="password"
+            value={password}
+            onChangeText={setPassword}
+            editable={!isSubmitting}
+            onSubmitEditing={handleSignIn}
+          />
 
-        {errorMessage ? (
-          <ThemedText style={styles.error}>{errorMessage}</ThemedText>
-        ) : null}
+          {errorMessage ? (
+            <ThemedText style={styles.error}>{errorMessage}</ThemedText>
+          ) : null}
 
-        <Pressable
-          style={[styles.button, isSubmitting && styles.buttonDisabled]}
-          onPress={handleSignIn}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <ThemedText style={styles.buttonText}>Sign in</ThemedText>
-          )}
-        </Pressable>
-      </ThemedView>
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              pressed && styles.buttonPressed,
+              isSubmitting && styles.buttonDisabled,
+            ]}
+            onPress={handleSignIn}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.buttonText}>Sign In</Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -112,21 +148,40 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+    backgroundColor: '#ffffff',
   },
   container: {
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
-    gap: 12,
   },
-  title: {
-    textAlign: 'center',
-    fontSize: 32,
-    lineHeight: 38,
+  brandBlock: {
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 32,
   },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: 16,
+  wordmark: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    color: BRAND_DARK_GREEN,
+  },
+  tagline: {
+    fontSize: 14,
+    color: '#64748b',
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 24,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   input: {
     borderWidth: 1,
@@ -141,12 +196,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   button: {
-    marginTop: 8,
-    backgroundColor: '#208AEF',
+    marginTop: 4,
+    backgroundColor: BRAND_GREEN,
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buttonPressed: {
+    backgroundColor: BRAND_GREEN_PRESSED,
   },
   buttonDisabled: {
     opacity: 0.6,

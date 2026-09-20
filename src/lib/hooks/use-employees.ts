@@ -534,6 +534,25 @@ export function useCrewDailyMembers(workDate: string) {
   });
 }
 
+/** Same as useCrewDailyMembers but covers an inclusive date range in one query, for multi-day dispatch board views. */
+export function useCrewDailyMembersRange(fromDate: string, toDate: string) {
+  return useQuery({
+    queryKey: ["crm-crew-daily-members-range", fromDate, toDate],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_crew_daily_members")
+        .select("id, member_id, crew_id, work_date")
+        .gte("work_date", fromDate)
+        .lte("work_date", toDate);
+      if (error) throw error;
+      return data as { id: string; member_id: string; crew_id: string; work_date: string }[];
+    },
+    enabled: !!fromDate && !!toDate,
+  });
+}
+
 /** Move a crew member onto `crewId` for `workDate` only — replaces any prior override for that day. */
 export function useSetCrewDailyMember() {
   const qc = useQueryClient();

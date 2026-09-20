@@ -35,7 +35,12 @@ export async function POST(request: Request) {
 
   let vendorName: string | null = null;
   if (body.vendorId) {
-    const { data: vendor } = await db.from("vendors").select("org_id, name").eq("id", body.vendorId).maybeSingle();
+    const { data: vendor } = await db
+      .from("vendors")
+      .select("org_id, name")
+      .eq("id", body.vendorId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!vendor || vendor.org_id !== auth.orgId) return jsonError("Vendor not found", 404);
     vendorName = vendor.name as string;
   }

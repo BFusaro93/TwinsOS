@@ -302,6 +302,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Estimate Declined by Client" description="When a client declines your estimate via the proposal link or client portal">
                 <Switch checked={prefs.emailEstimateClientRejected} onCheckedChange={() => toggle("emailEstimateClientRejected")} />
               </SettingRow>
+              <SettingRow label="Proposal Deposit Failed" description="When a client's deposit payment is declined or returned by their bank after they accepted">
+                <Switch checked={prefs.emailEstimateDepositFailed} onCheckedChange={() => toggle("emailEstimateDepositFailed")} />
+              </SettingRow>
               <SettingRow label="Estimate Expiring Soon" description="When an estimate you created is expiring within 3 days and hasn't been accepted">
                 <Switch checked={prefs.emailEstimateExpiring} onCheckedChange={() => toggle("emailEstimateExpiring")} />
               </SettingRow>
@@ -406,6 +409,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               </SettingRow>
               <SettingRow label="Estimate Declined by Client" description="When a client declines your estimate via the proposal link or client portal">
                 <Switch checked={prefs.inAppEstimateClientRejected} onCheckedChange={() => toggle("inAppEstimateClientRejected")} />
+              </SettingRow>
+              <SettingRow label="Proposal Deposit Failed" description="When a client's deposit payment is declined or returned by their bank after they accepted">
+                <Switch checked={prefs.inAppEstimateDepositFailed} onCheckedChange={() => toggle("inAppEstimateDepositFailed")} />
               </SettingRow>
               <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate">
                 <Switch checked={prefs.inAppEstimateChangeRequest} onCheckedChange={() => toggle("inAppEstimateChangeRequest")} />

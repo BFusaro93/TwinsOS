@@ -1,9 +1,11 @@
+import { Fragment } from "react";
 import {
   Document,
   Page,
   View,
   Text,
   Image,
+  Link,
   StyleSheet,
 } from "@react-pdf/renderer";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
@@ -64,7 +66,9 @@ export interface InvoicePDFStatementData {
   /** previousBalanceCents + this invoice's own outstanding balance. */
   accountBalanceCents: number;
   lastPayment: { amountCents: number; date: string; reference: string | null } | null;
-  priorInvoice: { invoiceNumber: number; amountCents: number; date: string; daysPastDue: number } | null;
+  /** Every OTHER still-open (outstanding balance) invoice for this client,
+   *  newest first — not just the single most recent one. */
+  priorInvoices: { invoiceNumber: number; amountCents: number; date: string; daysPastDue: number }[];
 }
 
 export interface OrgPDFData {
@@ -326,7 +330,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {invoice.viewOnlineUrl ? (
         <View style={S.notesSection}>
           <Text style={S.notesLabel}>View &amp; Pay Online</Text>
-          <Text style={S.notesText}>{invoice.viewOnlineUrl}</Text>
+          <Link src={invoice.viewOnlineUrl} style={[S.notesText, { color: accentColor }]}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}
 
@@ -397,9 +401,8 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           {org.logoUrl ? (
             // eslint-disable-next-line jsx-a11y/alt-text
             <Image src={org.logoUrl} style={SC.logo} />
-          ) : (
-            <Text style={SC.companyName}>{org.name}</Text>
-          )}
+          ) : null}
+          <Text style={SC.companyName}>{org.name}</Text>
           <Text style={SC.companyMeta}>{org.street}</Text>
           {orgAddressLine2 ? <Text style={SC.companyMeta}>{orgAddressLine2}</Text> : null}
           {org.phone ? <Text style={SC.companyMeta}>{org.phone}</Text> : null}
@@ -499,7 +502,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {invoice.viewOnlineUrl ? (
         <View style={SC.notes}>
           <Text style={SC.notesLabel}>View &amp; Pay Online</Text>
-          <Text>{invoice.viewOnlineUrl}</Text>
+          <Link src={invoice.viewOnlineUrl} style={{ color: accentColor }}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}
 
@@ -516,6 +519,13 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
 // and a payment stub — modeled after the org's existing paper statement
 // format rather than a single-invoice line-item sheet.
 
+/** A LETTER page is 792pt tall — used to size the payment stub to a true
+ *  bottom third (264pt) and to anchor the "view online"/notes block at the
+ *  boundary between the middle and bottom thirds, regardless of how much
+ *  activity is listed above it. */
+const PAGE_HEIGHT = 792;
+const BOTTOM_THIRD = PAGE_HEIGHT / 3;
+
 const SS = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 8.5, color: "#1e293b", padding: 32, backgroundColor: "#ffffff" },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
@@ -531,22 +541,29 @@ const SS = StyleSheet.create({
   toName: { fontSize: 9.5, fontFamily: "Helvetica-Bold" },
   toLine: { fontSize: 8, color: "#374151" },
 
-  summaryTables: { flexDirection: "column", width: 220 },
-  miniTable: { borderTop: "1 solid #cbd5e1", borderLeft: "1 solid #cbd5e1", borderRight: "1 solid #cbd5e1" },
+  summaryTables: { flexDirection: "column", width: 240 },
+  /** Header + single value-row table for Invoice #/Date/Payment Due — a more
+   *  clearly boxed "table" look (bordered cells) rather than stacked label rows. */
+  infoTable: { border: "1 solid #cbd5e1" },
+  infoHeaderRow: { flexDirection: "row", borderBottom: "1 solid #cbd5e1" },
+  infoHeaderCell: { flex: 1, backgroundColor: "#f8fafc", padding: 4, fontSize: 7, fontFamily: "Helvetica-Bold", textAlign: "center", borderRight: "1 solid #cbd5e1" },
+  infoValueRow: { flexDirection: "row" },
+  infoValueCell: { flex: 1, padding: 4, fontSize: 7.5, textAlign: "center", borderRight: "1 solid #cbd5e1" },
+  miniTable: { border: "1 solid #cbd5e1" },
   miniRow: { flexDirection: "row", borderBottom: "1 solid #cbd5e1" },
-  miniCellLabel: { flex: 1.4, backgroundColor: "#f0fdf4", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold", color: "#166534" },
+  miniCellLabel: { flex: 1.4, backgroundColor: "#f8fafc", padding: 4, fontSize: 7.5, fontFamily: "Helvetica-Bold" },
   miniCellValue: { flex: 1, padding: 4, fontSize: 7.5, textAlign: "right" },
-  balanceLabel: { flex: 1.4, backgroundColor: "#f0fdf4", padding: 4, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#166534" },
+  balanceLabel: { flex: 1.4, backgroundColor: "#f8fafc", padding: 4, fontSize: 8, fontFamily: "Helvetica-Bold" },
   balanceValue: { flex: 1, padding: 4, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#b91c1c", textAlign: "right" },
   spacer: { height: 8 },
 
   invoiceForRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4, marginBottom: 8, fontSize: 7.5 },
   invoiceForLabel: { fontFamily: "Helvetica-Bold" },
 
-  activityHeaderRow: { flexDirection: "row", backgroundColor: "#166534", paddingVertical: 4, paddingHorizontal: 6 },
+  activityHeaderRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6 },
   activityHeaderText: { fontSize: 7, fontFamily: "Helvetica-Bold", color: "#ffffff", textTransform: "uppercase" },
   activityRow: { flexDirection: "row", paddingVertical: 3, paddingHorizontal: 6, borderBottom: "1 solid #f1f5f9" },
-  activityDividerRow: { flexDirection: "row", paddingVertical: 3, borderTop: "1 solid #cbd5e1", borderBottom: "1 solid #cbd5e1", backgroundColor: "#f8fafc" },
+  activityDividerRow: { flexDirection: "row", paddingVertical: 3, marginTop: 16, borderTop: "1 solid #cbd5e1", borderBottom: "1 solid #cbd5e1", backgroundColor: "#f8fafc" },
   activityDividerText: { fontSize: 7, fontFamily: "Helvetica-Bold", textAlign: "center", color: "#475569" },
   cellDate: { flex: 1 },
   cellDesc: { flex: 3.5 },
@@ -555,19 +572,42 @@ const SS = StyleSheet.create({
   cellTotal: { flex: 1, textAlign: "right" },
   activityText: { fontSize: 7.5, color: "#334155" },
 
-  onlineBox: { marginTop: 14, backgroundColor: "#f0fdf4", padding: 8, borderRadius: 2 },
-  onlineBoxLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: "#166534", marginBottom: 2 },
-  onlineBoxText: { fontSize: 7, color: "#166534" },
+  onlineBox: { marginTop: 14, backgroundColor: "#f8fafc", padding: 8, borderRadius: 2 },
+  onlineBoxLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", marginBottom: 2 },
+  onlineBoxText: { fontSize: 7 },
+  /** Pins the "view online" box + advertisement + notes to the boundary
+   *  between the middle and bottom thirds of the page (its bottom edge
+   *  sits at BOTTOM_THIRD from the page bottom) instead of letting it flow
+   *  wherever the activity table happens to end. Only used when a payment
+   *  stub reserves the bottom third — otherwise this content flows normally. */
+  onlineNotesAnchor: { position: "absolute", left: 32, right: 32, bottom: BOTTOM_THIRD },
 
   termsSection: { marginTop: 14 },
   termsText: { fontSize: 7, color: "#b91c1c", lineHeight: 1.5 },
 
-  stub: { marginTop: 18, borderTop: "2 solid #166534", paddingTop: 10, flexDirection: "row", justifyContent: "space-between" },
+  /** Occupies the full bottom third of the page — a tear-off mail-in stub,
+   *  not just a compact box sitting in a large blank margin. Column layout
+   *  so the ad/terms text (adsAndNotes) can sit below the payment rows,
+   *  filling the space that would otherwise go blank. */
+  stub: {
+    position: "absolute",
+    bottom: 0,
+    left: 32,
+    right: 32,
+    height: BOTTOM_THIRD,
+    paddingTop: 24,
+    flexDirection: "column",
+    backgroundColor: "#ffffff",
+  },
+  stubTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
   stubLeft: { flexDirection: "column" },
-  stubRow: { flexDirection: "row", marginBottom: 2 },
-  stubLabel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", width: 70 },
-  stubValue: { fontSize: 7.5 },
-  stubTitle: { fontSize: 13, fontFamily: "Helvetica-Bold", color: "#166534" },
+  stubRow: { flexDirection: "row", marginBottom: 4, alignItems: "flex-end" },
+  stubLabel: { fontSize: 8.5, fontFamily: "Helvetica-Bold", width: 80 },
+  stubValue: { fontSize: 8.5 },
+  /** Blank underline for the client to write the check amount on — no value
+   *  is pre-filled, unlike every other stub row. */
+  stubBlankLine: { flex: 1, maxWidth: 120, borderBottom: "1 solid #1e293b", height: 11 },
+  stubTitle: { fontSize: 16, fontFamily: "Helvetica-Bold" },
   stubRight: { flexDirection: "column", alignItems: "flex-end" },
 
   footer: { position: "absolute", bottom: 16, left: 32, right: 32, flexDirection: "row", justifyContent: "space-between", fontSize: 6.5, color: "#9ca3af" },
@@ -582,20 +622,55 @@ function StatementInvoiceLayout({
   invoice,
   org,
   showAccountBalance = true,
+  showPaymentStub = true,
 }: {
   invoice: InvoicePDFData;
   org: OrgPDFData;
   /** false = highlight this invoice's own total/balance instead of the
    *  running account balance across all the client's other invoices. */
   showAccountBalance?: boolean;
+  /** false = no tear-off mail-in stub — reclaims the bottom third of the
+   *  page instead of reserving it. */
+  showPaymentStub?: boolean;
 }) {
+  const accentColor = org.brandColor || "#60ab45";
   const st = invoice.statement;
   const clientAddressLine2 = [invoice.clientCity, invoice.clientState, invoice.clientZip].filter(Boolean).join(", ");
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
   const invoiceLabel = `#${String(invoice.invoiceNumber).padStart(5, "0")}`;
+  const onlineBox = (
+    <View style={SS.onlineBox}>
+      <Text style={[SS.onlineBoxLabel, { color: accentColor }]}>To View Your Invoice Online</Text>
+      {invoice.viewOnlineUrl ? (
+        <Link src={invoice.viewOnlineUrl} style={[SS.onlineBoxText, { color: accentColor }]}>
+          Go to {invoice.viewOnlineUrl}
+        </Link>
+      ) : (
+        <Text style={[SS.onlineBoxText, { color: accentColor }]}>
+          Log in to your client portal to view this invoice and payment history.
+        </Text>
+      )}
+    </View>
+  );
+
+  const adsAndNotes = (
+    <>
+      {invoice.advertisementText ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
+        </View>
+      ) : null}
+
+      {invoice.notes ? (
+        <View style={SS.termsSection}>
+          <Text style={SS.termsText}>{invoice.notes?.replace(/<[^>]+>/g, "")}</Text>
+        </View>
+      ) : null}
+    </>
+  );
 
   return (
-    <Page size="LETTER" style={SS.page}>
+    <Page size="LETTER" style={[SS.page, { paddingBottom: showPaymentStub ? BOTTOM_THIRD + 16 : 50 }]}>
       <View style={SS.header}>
         <View style={SS.fromBlock}>
           <Text style={SS.fromLabel}>From</Text>
@@ -619,35 +694,43 @@ function StatementInvoiceLayout({
         </View>
 
         <View style={SS.summaryTables}>
-          <View style={SS.miniTable}>
-            <View style={SS.miniRow}>
-              <View style={SS.miniCellLabel}><Text>Invoice #</Text></View>
-              <View style={SS.miniCellValue}><Text>{invoiceLabel}</Text></View>
+          <View style={SS.infoTable}>
+            <View style={SS.infoHeaderRow}>
+              <View style={[SS.infoHeaderCell, { color: accentColor }]}><Text>Invoice #</Text></View>
+              <View style={[SS.infoHeaderCell, { color: accentColor }]}><Text>Invoice Date</Text></View>
+              <View style={[SS.infoHeaderCell, { color: accentColor, borderRight: "none" }]}><Text>Payment Due</Text></View>
             </View>
-            <View style={[SS.miniRow, { borderBottom: "none" }]}>
-              <View style={SS.miniCellLabel}><Text>Invoice Date</Text></View>
-              <View style={SS.miniCellValue}><Text>{formatDate(invoice.invoiceDate)}</Text></View>
+            <View style={SS.infoValueRow}>
+              <View style={SS.infoValueCell}><Text>{invoiceLabel}</Text></View>
+              <View style={SS.infoValueCell}><Text>{formatDate(invoice.invoiceDate)}</Text></View>
+              <View style={[SS.infoValueCell, { borderRight: "none" }]}>
+                <Text>{invoice.dueDate ? formatDate(invoice.dueDate) : "—"}</Text>
+              </View>
             </View>
           </View>
           <View style={SS.spacer} />
           <View style={SS.miniTable}>
             {st?.lastPayment ? (
               <View style={SS.miniRow}>
-                <View style={SS.miniCellLabel}><Text>Last Payment Received</Text></View>
+                <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Last Payment Received</Text></View>
                 <View style={SS.miniCellValue}><Text>{cents(st.lastPayment.amountCents)}</Text></View>
               </View>
             ) : null}
             {showAccountBalance && (
               <>
                 <View style={SS.miniRow}>
-                  <View style={SS.miniCellLabel}><Text>Previous Balance</Text></View>
+                  <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Previous Balance</Text></View>
                   <View style={SS.miniCellValue}><Text>{cents(st?.previousBalanceCents ?? 0)}</Text></View>
+                </View>
+                <View style={SS.miniRow}>
+                  <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Sales Tax</Text></View>
+                  <View style={SS.miniCellValue}><Text>{cents(invoice.taxCents)}</Text></View>
                 </View>
                 <View style={SS.miniRow}>
                   {/* invoice.totalCents is already tax-inclusive — shown here
                       (not as a separate Sales Tax line) so this column adds
                       up to Account Balance exactly: Previous + This Invoice. */}
-                  <View style={SS.miniCellLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
+                  <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Invoice {invoiceLabel} Total</Text></View>
                   <View style={SS.miniCellValue}><Text>{cents(invoice.totalCents)}</Text></View>
                 </View>
               </>
@@ -655,12 +738,12 @@ function StatementInvoiceLayout({
             <View style={[SS.miniRow, { borderBottom: "none" }]}>
               {showAccountBalance ? (
                 <>
-                  <View style={SS.balanceLabel}><Text>Account Balance</Text></View>
+                  <View style={[SS.balanceLabel, { color: accentColor }]}><Text>Account Balance</Text></View>
                   <View style={SS.balanceValue}><Text>{cents(st?.accountBalanceCents ?? invoice.totalCents)}</Text></View>
                 </>
               ) : (
                 <>
-                  <View style={SS.balanceLabel}><Text>Balance Due</Text></View>
+                  <View style={[SS.balanceLabel, { color: accentColor }]}><Text>Balance Due</Text></View>
                   <View style={SS.balanceValue}><Text>{cents(invoice.balanceCents)}</Text></View>
                 </>
               )}
@@ -677,7 +760,7 @@ function StatementInvoiceLayout({
         </View>
       </View>
 
-      <View style={SS.activityHeaderRow}>
+      <View style={[SS.activityHeaderRow, { backgroundColor: accentColor }]}>
         <View style={SS.cellDate}><Text style={SS.activityHeaderText}>Date</Text></View>
         <View style={SS.cellDesc}><Text style={SS.activityHeaderText}>Description</Text></View>
         <View style={SS.cellQty}><Text style={SS.activityHeaderText}>Qty</Text></View>
@@ -685,19 +768,19 @@ function StatementInvoiceLayout({
         <View style={SS.cellTotal}><Text style={SS.activityHeaderText}>Total</Text></View>
       </View>
 
-      {st?.priorInvoice && (
-        <View style={SS.activityRow}>
-          <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(st.priorInvoice.date)}</Text></View>
+      {(st?.priorInvoices ?? []).map((pi) => (
+        <View key={pi.invoiceNumber} style={SS.activityRow}>
+          <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(pi.date)}</Text></View>
           <View style={SS.cellDesc}>
             <Text style={SS.activityText}>
-              Invoice #{st.priorInvoice.invoiceNumber}{daysPastDueLabel(st.priorInvoice.daysPastDue)}
+              Invoice #{pi.invoiceNumber}{daysPastDueLabel(pi.daysPastDue)}
             </Text>
           </View>
           <View style={SS.cellQty} />
           <View style={SS.cellPrice} />
-          <View style={SS.cellTotal}><Text style={SS.activityText}>{cents(st.priorInvoice.amountCents)}</Text></View>
+          <View style={SS.cellTotal}><Text style={SS.activityText}>{cents(pi.amountCents)}</Text></View>
         </View>
-      )}
+      ))}
       {st?.lastPayment && (
         <View style={SS.activityRow}>
           <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(st.lastPayment.date)}</Text></View>
@@ -712,7 +795,7 @@ function StatementInvoiceLayout({
         </View>
       )}
 
-      {(st?.priorInvoice || st?.lastPayment) && (
+      {((st?.priorInvoices ?? []).length > 0 || st?.lastPayment) && (
         <View style={SS.activityDividerRow}>
           <Text style={SS.activityDividerText}>********* NEW ACCOUNT ACTIVITY *********</Text>
         </View>
@@ -730,46 +813,49 @@ function StatementInvoiceLayout({
         </View>
       ))}
 
-      <View style={SS.onlineBox}>
-        <Text style={SS.onlineBoxLabel}>To View Your Invoice Online</Text>
-        <Text style={SS.onlineBoxText}>
-          {invoice.viewOnlineUrl
-            ? `Go to ${invoice.viewOnlineUrl}`
-            : "Log in to your client portal to view this invoice and payment history."}
-        </Text>
-      </View>
+      {showPaymentStub ? (
+        <View style={SS.onlineNotesAnchor}>{onlineBox}</View>
+      ) : (
+        <>
+          {onlineBox}
+          {adsAndNotes}
+        </>
+      )}
 
-      {invoice.advertisementText ? (
-        <View style={{ marginTop: 10 }}>
-          <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
-        </View>
-      ) : null}
+      {showPaymentStub ? (
+        <View fixed style={[SS.stub, { borderTop: `2 solid ${accentColor}` }]}>
+          <View style={SS.stubTopRow}>
+            <View style={SS.stubLeft}>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Enclosed</Text><View style={SS.stubBlankLine} /></View>
+            </View>
+            <View style={SS.stubRight}>
+              <Text style={[SS.stubTitle, { color: accentColor }]}>PAYMENT STUB</Text>
+              <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
+              <Text style={SS.companyMeta}>{org.street}</Text>
+              {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
+              {org.phone ? <Text style={SS.companyMeta}>{org.phone}</Text> : null}
+              <Text
+                style={[SS.companyMeta, { marginTop: 6 }]}
+                render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+              />
+            </View>
+          </View>
 
-      {invoice.notes ? (
-        <View style={SS.termsSection}>
-          <Text style={SS.termsText}>{invoice.notes?.replace(/<[^>]+>/g, "")}</Text>
+          {/* Fills the otherwise-blank space below the payment rows — matches
+              the SA sample, which places the service update and terms text
+              inside the stub rather than leaving it empty. */}
+          <View style={{ marginTop: 12 }}>{adsAndNotes}</View>
         </View>
-      ) : null}
-
-      <View style={SS.stub}>
-        <View style={SS.stubLeft}>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+      ) : (
+        <View style={SS.footer} fixed>
+          <Text>{org.name} · {org.phone}</Text>
+          <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
-        <View style={SS.stubRight}>
-          <Text style={SS.stubTitle}>PAYMENT STUB</Text>
-          <Text style={[SS.companyMeta, { marginTop: 6 }]}>{org.name}</Text>
-          <Text style={SS.companyMeta}>{org.street}</Text>
-          {orgAddressLine2 ? <Text style={SS.companyMeta}>{orgAddressLine2}</Text> : null}
-        </View>
-      </View>
-
-      <View style={SS.footer} fixed>
-        <Text>{org.name} · {org.phone}</Text>
-        <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
-      </View>
+      )}
     </Page>
   );
 }
@@ -784,8 +870,12 @@ function renderLayout(layoutKey: InvoicePDFLayoutKey, invoice: InvoicePDFData, o
       return <CompactInvoiceLayout invoice={invoice} org={org} />;
     case "statement":
       return <StatementInvoiceLayout invoice={invoice} org={org} />;
+    case "statement_no_stub":
+      return <StatementInvoiceLayout invoice={invoice} org={org} showPaymentStub={false} />;
     case "statement_invoice_only":
       return <StatementInvoiceLayout invoice={invoice} org={org} showAccountBalance={false} />;
+    case "statement_invoice_only_no_stub":
+      return <StatementInvoiceLayout invoice={invoice} org={org} showAccountBalance={false} showPaymentStub={false} />;
     case "default":
     default:
       return <DefaultInvoiceLayout invoice={invoice} org={org} />;
@@ -804,6 +894,23 @@ export function InvoiceDocument({
   return (
     <Document title={`Invoice #${invoice.invoiceNumber}`} author={org.name}>
       {renderLayout(layoutKey, invoice, org)}
+    </Document>
+  );
+}
+
+/** Combines several invoices' pages into a single PDF — used by the
+ *  Invoices list's "Print Selected" bulk action instead of opening one
+ *  popup window per invoice. Each invoice keeps its own resolved layout. */
+export function InvoiceDocumentMulti({
+  items,
+}: {
+  items: { invoice: InvoicePDFData; org: OrgPDFData; layoutKey?: InvoicePDFLayoutKey }[];
+}) {
+  return (
+    <Document title="Invoices" author={items[0]?.org.name}>
+      {items.map((item, i) => (
+        <Fragment key={i}>{renderLayout(item.layoutKey ?? "default", item.invoice, item.org)}</Fragment>
+      ))}
     </Document>
   );
 }

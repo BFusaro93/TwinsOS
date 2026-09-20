@@ -1397,7 +1397,7 @@ export function EquiptSettingsTabs() {
       <AccessDenied
         title="No access to Equipt Settings"
         message="Equipt Settings is limited to admins and managers. Ask an admin if you need something changed here."
-        href="/dashboard"
+        href="/equipt/home"
         linkLabel="Go to Equipt"
       />
     );

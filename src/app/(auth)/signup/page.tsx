@@ -80,12 +80,21 @@ export default function SignupPage() {
 
     try {
       // Step 1: create the organization row via the API route (requires service role).
-      const orgRes = await fetch("/api/orgs/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName: companyName.trim(), plan: selectedPlan }),
-      });
-      const orgData = await orgRes.json();
+      let orgRes: Response;
+      let orgData: { error?: string; orgId?: string };
+      try {
+        orgRes = await fetch("/api/orgs/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyName: companyName.trim(), plan: selectedPlan }),
+        });
+        orgData = await orgRes.json();
+      } catch {
+        // Request never completed (offline, server unreachable). The finally
+        // block clears `loading`, but without this the user sees no reason why.
+        setError("Couldn't reach the server. Check your connection and try again.");
+        return;
+      }
       if (!orgRes.ok) {
         setError(orgData.error ?? "Failed to create organization.");
         return;
@@ -117,6 +126,10 @@ export default function SignupPage() {
 
       // Success — show confirmation screen.
       setStep("confirm");
+    } catch {
+      // Anything else that threw (e.g. the auth call failing at the transport
+      // layer) — without this the rejection escapes and the form goes quiet.
+      setError("Something went wrong creating your account. Please try again.");
     } finally {
       setLoading(false);
     }

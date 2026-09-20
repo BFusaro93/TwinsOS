@@ -120,7 +120,10 @@ const PRIORITY_OPTIONS: Array<{ label: string; value: TicketPriority | "all" }> 
   { label: "Low", value: "low" },
 ];
 
-const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Billing", "Change Service", "Complaint", "Other"];
+// "Upsell" is the category crew-submitted field suggestions land under (see
+// /api/crm/crew/visits/[visitId]/upsell), so it has to be filterable here even
+// though nobody picks it by hand in the New Ticket dialog.
+const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Upsell", "Billing", "Change Service", "Complaint", "Other"];
 
 // ── NewTicketDialog ───────────────────────────────────────────────────────────
 

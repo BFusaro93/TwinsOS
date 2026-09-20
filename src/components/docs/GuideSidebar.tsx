@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { Search, X, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { groupedDocGuides, DOC_GUIDE_GROUP_ICONS } from "@/lib/docs-guides";
+import { groupedDocGuides, DOC_GUIDE_GROUP_ICONS, guideBasePath } from "@/lib/docs-guides";
 
 /**
  * Persistent sidebar for the advanced-guides area (Docs landing pages +
@@ -20,6 +20,7 @@ export function GuideSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
+  const basePath = guideBasePath(pathname);
   const q = search.trim().toLowerCase();
   const groups = groupedDocGuides();
   const filtered = q
@@ -83,7 +84,7 @@ export function GuideSidebar({ onNavigate }: { onNavigate?: () => void }) {
                 <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-slate-100 pl-3">
                   {group.guides.map((guide) => {
                     const GuideIcon = guide.icon;
-                    const href = `/settings/support/${guide.slug}`;
+                    const href = `${basePath}/${guide.slug}`;
                     const active = pathname === href;
                     return (
                       <Link

@@ -2,21 +2,39 @@ import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { File } from 'expo-file-system';
 
-import { ApiError, clockInVisit, clockOutVisit, requestMaterials, uploadVisitPhoto } from '@/lib/api';
+import {
+  acknowledgeNotes,
+  addCrewNote,
+  ApiError,
+  clockInStop,
+  clockOutStop,
+  endDrive,
+  pauseStop,
+  requestMaterials,
+  resumeStop,
+  skipVisit,
+  startDrive,
+  uploadVisitPhoto,
+  useJobProductMaterials,
+} from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 import {
   listPendingQueueItems,
   removeQueueItem,
+  resetOrphanedSyncingItems,
   setQueueItemStatus,
 } from './db';
 import {
   MAX_SYNC_ATTEMPTS,
+  type AddNotePayload,
   type AddPhotoPayload,
   type ClockInPayload,
   type ClockOutPayload,
   type QueueItem,
+  type RecordMaterialUsagePayload,
   type RequestMaterialsPayload,
+  type SkipServicePayload,
 } from './types';
 
 // Drains the local offline queue against the real API. Triggered by (a)
@@ -48,20 +66,59 @@ class ConnectivityStop extends Error {}
 
 let isDraining = false;
 
+/**
+ * Items whose request is actually in flight in THIS process right now. Only
+ * used by recoverOrphanedQueueItems() below, to tell "the app was killed
+ * mid-request and this row is stranded" apart from "this row is being sent
+ * as we speak". The SQLite status alone can't distinguish the two.
+ */
+const inFlightItemIds = new Set<string>();
+
+/**
+ * Puts 'syncing' rows nothing is currently sending back to 'pending'. Call
+ * once at startup (and whenever the signed-in user changes): a row flipped to
+ * 'syncing' just before the app was killed is otherwise invisible to the
+ * drain forever, and shows the crew a permanently locked "Sending…" card with
+ * no Retry or Discard.
+ */
+export async function recoverOrphanedQueueItems(userId: string): Promise<void> {
+  const recovered = await resetOrphanedSyncingItems(userId, Array.from(inFlightItemIds));
+  if (recovered > 0) notifyListeners();
+}
+
 async function processItem(item: QueueItem): Promise<void> {
   await setQueueItemStatus(item.id, 'syncing');
+  inFlightItemIds.add(item.id);
   notifyListeners();
 
   try {
     switch (item.type) {
       case 'clock_in': {
         const payload = item.payload as ClockInPayload;
-        await clockInVisit(item.visitId, payload.localTime, item.id);
+        // item.visitId is the stop's anchor visit id — see enqueueClockIn().
+        await clockInStop(item.visitId, payload.localTime, item.id);
         break;
       }
       case 'clock_out': {
         const payload = item.payload as ClockOutPayload;
-        await clockOutVisit(item.visitId, payload.localTime, item.id, payload.notes);
+        await clockOutStop(item.visitId, payload.localTime, item.id, payload.notes);
+        break;
+      }
+      case 'pause': {
+        await pauseStop(item.visitId, item.id);
+        break;
+      }
+      case 'resume': {
+        await resumeStop(item.visitId, item.id);
+        break;
+      }
+      case 'drive_start': {
+        // Day-level, not tied to item.visitId (which is the DRIVE_QUEUE_VISIT_ID sentinel) — see startDrive().
+        await startDrive(item.id);
+        break;
+      }
+      case 'drive_end': {
+        await endDrive(item.id);
         break;
       }
       case 'add_photo': {
@@ -87,16 +144,63 @@ async function processItem(item: QueueItem): Promise<void> {
         await requestMaterials(item.visitId, payload.productItemId, payload.quantity, item.id, payload.note);
         break;
       }
+      case 'record_material_usage': {
+        const payload = item.payload as RecordMaterialUsagePayload;
+        if (!payload.notUsed && !(typeof payload.usedQty === 'number' && payload.usedQty > 0)) {
+          // Defaulting a missing/zero usedQty to 0 used to send a "used none"
+          // request, which the server resolved as used-and-unbillable — a
+          // malformed payload silently wrote off the material. There is no
+          // safe value to guess here, so fail the item permanently (ApiError
+          // 4xx => no retries) and let the crew re-enter it.
+          throw new ApiError(400, "This material's quantity didn't save. Enter it again.");
+        }
+        await useJobProductMaterials(
+          item.visitId,
+          payload.jobProductId,
+          payload.notUsed
+            ? { notUsed: true }
+            : { usedQty: payload.usedQty as number, noInvoice: payload.noInvoice }
+        );
+        break;
+      }
+      case 'acknowledge_notes': {
+        // item.visitId is the stop's anchor visit id — see enqueueAcknowledgeNotes().
+        await acknowledgeNotes(item.visitId);
+        break;
+      }
+      case 'add_note': {
+        const payload = item.payload as AddNotePayload;
+        // The queue item's id doubles as the note's idempotency key, so a
+        // retry after a flaky partial success re-uses the same comment id
+        // server-side instead of appending the note twice.
+        await addCrewNote(item.visitId, payload.note, item.id);
+        break;
+      }
+      case 'skip_service': {
+        // item.visitId here is the individual service visit id, not the
+        // stop's anchor — see enqueueSkipVisit().
+        const payload = item.payload as SkipServicePayload;
+        await skipVisit(item.visitId, payload.reason);
+        break;
+      }
     }
     await removeQueueItem(item.id);
     notifyListeners();
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
-      // The server rejected this as a conflict (already clocked in/out from elsewhere) —
-      // surface it plainly rather than retrying forever or discarding silently.
+      // The server rejected this as a conflict — surface it plainly rather
+      // than retrying forever or discarding silently. The route's own
+      // sentence is preferred when it has one ("another crew already
+      // recorded this (used: 8)", "the office updated this job's notes"),
+      // because a generic message leaves the crew with nothing to act on;
+      // the fallbacks below only apply when the server sent no explanation.
       await setQueueItemStatus(item.id, 'failed', {
         attempts: item.attempts + 1,
-        lastError: "This didn't sync — a supervisor may have already updated this visit.",
+        lastError:
+          err.message ||
+          (item.type === 'record_material_usage'
+            ? "This didn't sync — this material's usage was already recorded."
+            : "This didn't sync — a supervisor may have already updated this visit."),
       });
       notifyListeners();
       return;
@@ -131,6 +235,8 @@ async function processItem(item: QueueItem): Promise<void> {
       // Looks like a connectivity failure rather than a server response — stop this pass.
       throw new ConnectivityStop(message);
     }
+  } finally {
+    inFlightItemIds.delete(item.id);
   }
 }
 
@@ -185,7 +291,10 @@ export function startSyncEngine(): void {
 
   intervalHandle = setInterval(() => void drainQueue(), 30_000);
 
-  // Attempt once immediately in case there's already a pending queue from a previous session.
+  // Attempt once immediately in case there's already a pending queue from a
+  // previous session. recoverOrphanedQueueItems() runs before this from the
+  // provider, so anything stranded in 'syncing' by a killed app is already
+  // back to 'pending' and gets picked up by this first pass.
   void drainQueue();
 }
 

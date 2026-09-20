@@ -74,6 +74,35 @@ export function formatDateShort(isoString: string | null | undefined): string {
   return `${mm}/${dd}/${yy}`;
 }
 
+/**
+ * The timezone the business operates in. "Today", "this service day" and any
+ * date derived from a timestamp mean the company's day, not the day the
+ * viewer's browser happens to be in — a manager checking the schedule from
+ * another timezone must see the same dates the crew and the office see.
+ * The reports layer already pinned to this (see the Daily Load List); this is
+ * the shared home for it now that a second caller needs the same rule.
+ */
+export const COMPANY_TIME_ZONE = "America/New_York";
+
+/**
+ * Formats an INSTANT (a timestamptz such as completed_at) as the calendar date
+ * it fell on in the company's operating timezone.
+ *
+ * Distinct from formatDate, which is for values that are already date-only:
+ * passing a timestamp to that renders it in the viewer's local timezone, so a
+ * visit completed at 00:53 UTC shows as one date in Boston and the previous
+ * date on the west coast.
+ */
+export function formatCompanyDate(
+  isoString: string | null | undefined,
+  opts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" }
+): string {
+  if (!isoString) return "—";
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", { ...opts, timeZone: COMPANY_TIME_ZONE }).format(d);
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")
@@ -212,6 +241,33 @@ export function toLocalISODate(d: Date): string {
 /** Today's local calendar date as "YYYY-MM-DD" — use for date-input defaults. */
 export function todayLocalISODate(): string {
   return toLocalISODate(new Date());
+}
+
+/**
+ * "YYYY-MM-DD" for an instant as it appears on the COMPANY's calendar
+ * (COMPANY_TIME_ZONE), regardless of where the viewer or the server is.
+ *
+ * Use this — not toLocalISODate — for anything operational: which service day
+ * the dispatch board opens on, what date an auto-created invoice carries, what
+ * "today" means in a report. toLocalISODate answers "what day is it where this
+ * browser is", which is a different (and usually wrong) question: a manager
+ * checking the board from Denver at 11pm MT must still see the crew's day, and
+ * server code has no local day at all — Vercel's Node runtime is UTC, where
+ * "today" flips at 8pm Eastern.
+ */
+export function toCompanyISODate(d: Date): string {
+  // en-CA formats as YYYY-MM-DD, which is already the wire format.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: COMPANY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/** Today's date on the company's calendar as "YYYY-MM-DD". */
+export function todayCompanyISODate(): string {
+  return toCompanyISODate(new Date());
 }
 
 /** Local calendar date `days` from today (negative = past) as "YYYY-MM-DD". */

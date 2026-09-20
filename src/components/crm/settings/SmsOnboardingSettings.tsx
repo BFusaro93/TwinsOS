@@ -23,8 +23,30 @@ import {
   type SmsRegistrationBusinessInfo,
   type SmsRegistrationStatus,
 } from "@/lib/hooks/use-sms-onboarding";
+import { TWILIO_BUSINESS_INDUSTRIES, industryLabel } from "@/lib/twilio/industries";
+import { GuideLink } from "@/components/docs/GuideLink";
 
-const EDITABLE_STATUSES: SmsRegistrationStatus[] = ["not_started", "profile_rejected", "brand_rejected", "campaign_rejected"];
+// Mirrors the API route's LOCKED_STATUSES (a blocklist, not an allowlist) —
+// editing is allowed any time nothing is actually in flight at Twilio right
+// now. An earlier version only allowed editing at not_started plus the
+// three _rejected statuses, which locked the form the moment the subaccount
+// was created — a correctable mistake (e.g. an invalid Industry value)
+// couldn't be fixed at all short of the 409 the save silently hit.
+const LOCKED_STATUSES: SmsRegistrationStatus[] = ["profile_submitted", "brand_submitted", "campaign_submitted", "complete"];
+
+// Statuses advanceRegistration() actually has a next step for (mirrors its
+// switch in provisioning.ts) — deliberately a SEPARATE list from whether the
+// form is editable: "not_started" is both editable (the form should be
+// fillable) and advanceable (there's a next step once it's saved), so
+// gating the button on "not editable" hid it at exactly the moment it's
+// needed most, right after the first save.
+const ADVANCEABLE_STATUSES: SmsRegistrationStatus[] = [
+  "not_started",
+  "subaccount_created",
+  "profile_approved",
+  "brand_approved",
+  "number_provisioned",
+];
 
 const STATUS_LABEL: Record<SmsRegistrationStatus, string> = {
   not_started: "Not started",
@@ -85,7 +107,7 @@ export function SmsOnboardingSettings() {
   }
 
   const status = registration?.status ?? "not_started";
-  const isEditable = EDITABLE_STATUSES.includes(status);
+  const isEditable = !LOCKED_STATUSES.includes(status);
   const failureReason = registration?.twilio_brand_failure_reason || registration?.twilio_campaign_failure_reason;
 
   async function handleSave() {
@@ -123,9 +145,9 @@ export function SmsOnboardingSettings() {
           Register your own business with carriers so appointment reminders and updates come from your own phone
           number instead of a shared one. This is a one-time setup that Twilio reviews — approval can take anywhere
           from a few hours to a few days.{" "}
-          <a href="/settings/support/sms-onboarding-guide" className="text-green-700 underline hover:text-green-800">
+          <GuideLink href="/settings/support/sms-onboarding-guide" className="text-green-700 underline hover:text-green-800">
             See the full guide
-          </a>{" "}
+          </GuideLink>{" "}
           for wording that gets approved on the first try.
         </p>
       </div>
@@ -144,7 +166,7 @@ export function SmsOnboardingSettings() {
               Check status
             </Button>
           )}
-          {!isEditable && status !== "complete" && !["profile_submitted", "brand_submitted", "campaign_submitted"].includes(status) && (
+          {ADVANCEABLE_STATUSES.includes(status) && (
             <Button size="sm" onClick={handleAdvance} disabled={advance.isPending}>
               {advance.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Continue setup
@@ -189,11 +211,20 @@ export function SmsOnboardingSettings() {
           </div>
           <div>
             <Label>Industry</Label>
-            <Input
-              value={form.business_industry}
-              onChange={(e) => setForm({ ...form, business_industry: e.target.value })}
-              placeholder="Landscaping"
-            />
+            <Select value={form.business_industry} onValueChange={(v) => setForm({ ...form, business_industry: v })}>
+              <SelectTrigger><SelectValue placeholder="Pick the closest fit" /></SelectTrigger>
+              <SelectContent>
+                {TWILIO_BUSINESS_INDUSTRIES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {industryLabel(value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-slate-500">
+              Twilio requires one of a fixed list — landscaping isn&apos;t its own category, so pick the closest (most
+              landscaping/lawn-care businesses fit under Construction or Agriculture).
+            </p>
           </div>
           <div>
             <Label>Website</Label>

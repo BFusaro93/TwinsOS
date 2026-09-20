@@ -3,7 +3,10 @@
     "key": "forms-summary",
     "section": "forms",
     "name": "Forms Summary",
-    "description": "Shows forms and the number of responses received in any given time frame."
+    "description": "Shows forms and the number of responses received in any given time frame.",
+    "notes": [
+      "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in Eastern time."
+    ]
   },
   {
     "key": "paused-services",
@@ -100,7 +103,7 @@
     "name": "Income Not Invoiced",
     "description": "Shows draft invoices — revenue already entered on a job but not yet finalized and sent to the client.",
     "notes": [
-      "Draft invoices only. A row drops off once the invoice is finalized/sent (or the underlying client_uninvoiced_cents balance clears)."
+      "Draft invoices only, by invoice date. A row drops off once the invoice is printed, sent, or voided. Completed visits that have not had an invoice created at all do not appear here."
     ],
     "dataset": "rpt_invoices",
     "columns": [
@@ -158,8 +161,9 @@
     "name": "Chemical Tracking Report",
     "description": "Post-application compliance record of chemicals actually applied — date, EPA #, quantities, conditions, applicator, and license number.",
     "notes": [
+      "Only chemicals marked as applied (Used) are included — planned applications that were never made are excluded. Service Date is the visit date when the application is tied to a visit.",
       "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
-      "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied."
+      "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied. The two can be in different units (e.g. Chemical Amount in ounces, Solution Amount in gallons) — see Unit of Measure vs. Solution Unit of Measure."
     ],
     "dataset": "rpt_chemical_applications",
     "columns": [
@@ -174,6 +178,7 @@
       "chemical_amount",
       "solution_amount",
       "unit_of_measure",
+      "solution_unit_of_measure",
       "targets",
       "areas_treated",
       "application_method",
@@ -194,7 +199,10 @@
     "key": "planned-chemical-usage-report",
     "section": "service",
     "name": "Planned Chemical Usage Report",
-    "description": "Chemical quantities needed for scheduled (not-yet-completed) visits — use to load the truck before the day's chemical jobs."
+    "description": "Chemical quantities needed for scheduled and dispatched (not-yet-started) visits — use to load the truck before the day's chemical jobs.",
+    "notes": [
+      "Includes visits in Scheduled or Dispatched status only; in-progress and completed visits are excluded."
+    ]
   },
   {
     "key": "material-resource-planning-report",
@@ -203,7 +211,19 @@
     "description": "For every product (chemical or general material): quantity needed for outstanding scheduled and waiting-list jobs, amount on hand, amount on order, and the resulting shortfall — with the ability to create a Requisition or PO directly from a shortfall.",
     "notes": [
       "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
-      "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product."
+      "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product, less any quantity already received against those PO lines.",
+      "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Job products already marked Invoiced or Used are excluded — their quantity has already come out of on-hand."
+    ]
+  },
+  {
+    "key": "daily-load-list-report",
+    "section": "service",
+    "name": "Daily Load List",
+    "description": "What each crew needs to load on the truck for a given day — chemicals (concentrate amount and finished spray-mix volume) and general materials, grouped by crew.",
+    "notes": [
+      "Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate x an Area Custom Field on the property (same estimate as Materials Needed).",
+      "Mix volume is the total finished spray solution (e.g. gallons of mix), computed from the product's default rate's dilution settings — it only appears when that rate has a Mixed with Water/Product ratio configured with convertible units.",
+      "Crew is the visit's crew override if set, otherwise the job's default crew. Visits/jobs with no crew assigned appear under Unassigned."
     ]
   },
   {
@@ -335,10 +355,11 @@
   {
     "key": "clients-by-completed-jobs",
     "section": "client",
-    "name": "Clients Report by Completed Jobs",
-    "description": "Shows which clients were served in any defined time frame.",
-    "dataset": "rpt_job_visits",
-    "columns": []
+    "name": "Clients Report by Completed Visits",
+    "description": "Shows which clients were served in any defined time frame — completed visits, revenue, and man-hours per client.",
+    "notes": [
+      "Counts completed visits (a recurring job contributes one row per completed visit), not distinct jobs."
+    ]
   },
   {
     "key": "client-contracts",
@@ -350,13 +371,19 @@
     "key": "clients-leads-monthly-matrix",
     "section": "client",
     "name": "Clients/Leads Monthly Matrix",
-    "description": "New clients, new leads, conversion rate, and terminations for the last 3 months."
+    "description": "New clients, new leads, conversion rate, and terminations for the last 3 months.",
+    "notes": [
+      "New Leads = accounts created in the month (any current status). Converted = accounts whose Client Since date falls in the month and that are/were clients. Conversion % = Converted ÷ New Leads."
+    ]
   },
   {
     "key": "clients-leads-stats",
     "section": "client",
     "name": "Clients and Leads",
-    "description": "New leads, converted leads, average days to convert, and cancellations for a date range, plus current totals."
+    "description": "New leads, converted leads, average days to convert, and cancellations for a date range, plus current totals.",
+    "notes": [
+      "New Leads = accounts created in range that are still leads (open or lost). Converted Leads = accounts whose Client Since date falls in range. Avg Days to Convert = created → Client Since, over converted accounts whose Client Since is after their created date (accounts created directly as clients are excluded). Total Clients = active + inactive + cancelled; Total Leads = open leads only."
+    ]
   },
   {
     "key": "contract-service-usage",
@@ -395,7 +422,8 @@
       "total_cents",
       "probability_pct",
       "age_days",
-      "sales_rep"
+      "sales_rep",
+      "reason"
     ]
   },
   {
@@ -403,6 +431,7 @@
     "section": "estimates",
     "name": "Accepted Estimates by Service",
     "description": "Shows every service line on accepted and invoiced estimates with hours, cost, and value.",
+    "notes": [],
     "dataset": "rpt_estimate_line_items",
     "columns": [
       "service_name",
@@ -423,6 +452,7 @@
     "section": "estimates",
     "name": "Accepted Estimates by Service (Summary)",
     "description": "Totals accepted and invoiced estimate lines by service — line count, value, hours, and cost.",
+    "notes": [],
     "dataset": "rpt_estimate_line_items",
     "columns": []
   },
@@ -436,7 +466,10 @@
     "key": "close-ratios-by-sales-rep",
     "section": "estimates",
     "name": "Close Ratios by Sales Rep",
-    "description": "Shows each sales rep's win rate by estimate count and by dollar value for a date range."
+    "description": "Shows each sales rep's win rate by estimate count and by dollar value for a date range.",
+    "notes": [
+      "Won = accepted or invoiced. Draft estimates were never presented to a client and are excluded from both counts and amounts."
+    ]
   },
   {
     "key": "sales-activity-last-7-days",
@@ -449,6 +482,9 @@
     "section": "financial",
     "name": "Invoiced Income by Client",
     "description": "Totals invoiced income per client — subtotal, tax, total, and amount paid.",
+    "notes": [
+      "Excludes draft and void invoices."
+    ],
     "dataset": "rpt_invoices",
     "columns": []
   },
@@ -457,6 +493,9 @@
     "section": "financial",
     "name": "Invoices with Balances",
     "description": "Shows every open invoice with a balance due and how many days overdue it is.",
+    "notes": [
+      "Excludes draft and void invoices — only issued invoices are receivables."
+    ],
     "dataset": "rpt_invoices",
     "columns": [
       "invoice_number",
@@ -475,12 +514,16 @@
     "section": "financial",
     "name": "Pre-Payments",
     "description": "Shows prepayments received, how much has been applied, and what remains.",
+    "notes": [
+      "Cash only: excludes account credits and AR write-offs. Applied Amount is net of refunds."
+    ],
     "dataset": "rpt_payments",
     "columns": [
       "payment_date",
       "client_name",
       "method",
       "amount_cents",
+      "refunded_amount_cents",
       "applied_amount_cents",
       "unused_amount_cents"
     ]
@@ -504,13 +547,17 @@
     "description": "Shows taxable, non-taxable, and collected sales tax totals by month."
   },
   {
+    "key": "financials-snapshot",
+    "section": "financial",
+    "name": "Financials",
+    "description": "Invoiced totals and cash collected for a date range, alongside current receivables aging."
+  },
+  {
     "key": "avb-hours-custom",
     "section": "job_hours",
     "name": "Actual v. Budgeted Hours (Custom Range)",
     "description": "Shows visits in any date range you pick — defaults to month to date — with budgeted vs actual hours and revenue, grouped by crew.",
     "notes": [
-      "Grouped by crew (Assigned Resources), with a subtotal row per crew.",
-      "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
       "Defaults to month to date (the 1st through today) — pick your own From/To dates to run any range."
     ],
     "dataset": "rpt_job_visits"
@@ -531,10 +578,15 @@
     "key": "job-cost-summary",
     "section": "job_costing",
     "name": "Job Cost Summary",
-    "description": "Shows completed visits with budgeted vs actual hours, revenue, and labor cost per visit.",
+    "description": "Shows completed visits with budgeted vs actual man-hours, revenue, and labor cost per visit.",
+    "notes": [
+      "Budgeted and Actual Man-Hours are both duration × number of men.",
+      "Worked Date is the completion date (Eastern time), or the scheduled date for visits completed without a timestamp — the same date the Job Costing page uses.",
+      "Revenue is the visit's own rate for per-service visits, otherwise the live sum of the job's included service lines (so re-pricing a line is reflected), otherwise the job rate."
+    ],
     "dataset": "rpt_job_visits",
     "columns": [
-      "scheduled_date",
+      "worked_date",
       "client_name",
       "service_names",
       "budget_methods",
@@ -542,9 +594,9 @@
       "men_count",
       "budgeted_hours",
       "actual_hours",
-      "man_hours",
       "revenue_cents",
       "actual_labor_cost_cents",
+      "labor_cost_source",
       "rev_per_man_hr_cents",
       "variance_hours"
     ]
@@ -567,6 +619,7 @@
     "description": "Compares each service's assumed production rate (sq ft per man-hour) against what crews actually achieved, to flag rates that need recalibrating.",
     "notes": [
       "Only includes services set to the 'production_rate' budget method — manual-rate services have nothing to compare against.",
+      "One row per completed visit × service. A recurring job's visits still in progress or not yet done are excluded, even if the job itself is marked complete.",
       "Rate Variance is actual vs. assumed, as a percentage. Negative means the job took longer than the assumed rate predicted (the rate may be set too aggressively); positive means it went faster (the rate may be too conservative)."
     ],
     "dataset": "rpt_job_services",
@@ -628,6 +681,28 @@
     "columns": []
   },
   {
+    "key": "drive-time-summary",
+    "section": "job_hours",
+    "name": "Drive Time Summary",
+    "description": "Shows total recorded drive time by crew in any defined time frame — day-level, not billed to clients.",
+    "dataset": "rpt_crew_drive_time",
+    "columns": []
+  },
+  {
+    "key": "drive-time-detail",
+    "section": "job_hours",
+    "name": "Drive Time Detail",
+    "description": "Shows individual drive segments (start/end and duration) recorded by each crew.",
+    "dataset": "rpt_crew_drive_time",
+    "columns": [
+      "work_date",
+      "crew_name",
+      "started_at",
+      "ended_at",
+      "minutes"
+    ]
+  },
+  {
     "key": "timesheet-detail",
     "section": "job_hours",
     "name": "Timesheet Detail",
@@ -651,15 +726,8 @@
     "section": "lead",
     "name": "New Leads Report",
     "description": "Shows new leads received in any defined time frame.",
-    "dataset": "rpt_clients",
-    "columns": [
-      "display_name",
-      "source",
-      "sales_rep",
-      "created_at",
-      "billing_city",
-      "primary_phone",
-      "primary_email"
+    "notes": [
+      "Accounts created in the range that started as a lead: still a lead (open or lost), or converted to a client after the day they were created. Accounts created directly as clients are excluded."
     ]
   },
   {
@@ -674,7 +742,7 @@
     "name": "Closed Leads Summary",
     "description": "Shows leads that were closed without converting, grouped by reason.",
     "notes": [
-      "Leads closed without ever converting to a client."
+      "Leads closed without ever converting to a client (status = lost)."
     ]
   },
   {
@@ -683,14 +751,30 @@
     "name": "Company Scorecard",
     "description": "Month-by-month view of new leads, conversions, terminations, and running client totals.",
     "notes": [
-      "New Leads counts accounts created that month; totals are as of month end."
+      "New Leads counts accounts created that month; totals are as of month end.",
+      "Client Total = accounts that had converted (Client Since) by month end, are/were clients, and had not been cancelled by then. Lead Total = accounts created by month end that were still a lead at month end (open, converted later, or lost later)."
     ]
   },
   {
     "key": "sales-summary-by-source",
     "section": "lead",
     "name": "Sales Summary by Source",
-    "description": "Shows lead, client, and cancellation counts by source with conversion percentage."
+    "description": "Shows lead, client, cancellation, and lost-lead counts by source with conversion percentage.",
+    "notes": [
+      "Conversion % = accounts that became clients (Clients + Cancelled) ÷ all accounts from the source (Leads + Clients + Cancelled + Lost)."
+    ]
+  },
+  {
+    "key": "kpi-week-over-week",
+    "section": "lead",
+    "name": "Key Performance Indicators (Month-to-Date)",
+    "description": "Compares this week to last week across leads, clients, estimates, calls, and payments."
+  },
+  {
+    "key": "statements",
+    "section": "receivables",
+    "name": "Statements",
+    "description": "Generate and email running-balance account statements for clients with an outstanding balance — a date range, an optional message, and a bulk send."
   },
   {
     "key": "ar-aging",
@@ -709,6 +793,9 @@
     "section": "revenue",
     "name": "Invoice Audit Summary",
     "description": "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
+    "notes": [
+      "Excludes line items on draft and void invoices."
+    ],
     "dataset": "rpt_invoice_line_items",
     "columns": [
       "client_name",
@@ -743,6 +830,9 @@
     "section": "revenue",
     "name": "Revenue by Postal Code",
     "description": "Totals invoiced revenue by billing postal code.",
+    "notes": [
+      "Excludes draft and void invoices."
+    ],
     "dataset": "rpt_invoices",
     "columns": []
   },
@@ -820,6 +910,30 @@
     "section": "revenue",
     "name": "Credit Card Charges",
     "description": "Shows credit card payments received, including processing fees where applicable."
+  },
+  {
+    "key": "sales-comparison-chart",
+    "section": "revenue",
+    "name": "Sales Comparison Chart",
+    "description": "Compares invoiced revenue this year to last year, month by month."
+  },
+  {
+    "key": "sales-comparison-chart-paid",
+    "section": "revenue",
+    "name": "Sales Comparison Chart (Paid)",
+    "description": "Compares cash collected this year to last year, month by month."
+  },
+  {
+    "key": "avg-gross-revenue-per-client",
+    "section": "revenue",
+    "name": "Avg. Gross Revenue per Year per Client",
+    "description": "Trends average invoiced revenue per client, year over year."
+  },
+  {
+    "key": "upcoming-jobs-no-contract",
+    "section": "schedule_lists",
+    "name": "Upcoming Jobs - No Contract",
+    "description": "Shows scheduled upcoming jobs that aren't tied to a signed contract."
   },
   {
     "key": "employee-directory",
@@ -942,6 +1056,9 @@
     "section": "service",
     "name": "Visits Report",
     "description": "Shows all visits in any defined time frame with hours, revenue, and location detail.",
+    "notes": [
+      "Budgeted Man-Hours and Actual Man-Hours are both duration × number of men."
+    ],
     "dataset": "rpt_job_visits",
     "columns": [
       "scheduled_date",
@@ -951,7 +1068,6 @@
       "status",
       "budgeted_hours",
       "actual_hours",
-      "man_hours",
       "revenue_cents",
       "rev_per_man_hr_cents",
       "service_city",
@@ -964,7 +1080,7 @@
     "name": "Backlog Services",
     "description": "Shows scheduled visits that have not been completed as of a cutoff date.",
     "notes": [
-      "Visits still in Scheduled status on or before the cutoff — work waiting to be completed."
+      "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started."
     ],
     "dataset": "rpt_job_visits",
     "columns": [
@@ -972,6 +1088,7 @@
       "client_name",
       "service_names",
       "crew_name",
+      "status",
       "budgeted_hours",
       "revenue_cents",
       "service_city"
@@ -981,13 +1098,20 @@
     "key": "client-count-by-service",
     "section": "service",
     "name": "Client Count by Service",
-    "description": "Shows how many clients receive each service and the share of the client base."
+    "description": "Shows how many clients receive each service and the share of the client base.",
+    "notes": [
+      "Counts distinct clients with at least one non-cancelled job for the service. Percent is of all clients that have any such job, not of the whole client list."
+    ]
   },
   {
     "key": "client-services-report",
     "section": "service",
     "name": "Client Services Report",
     "description": "Shows the active services each client is signed up for.",
+    "notes": [
+      "Scheduled Date is blank for recurring and package jobs — only their individual visits carry dates (see the Visits Report).",
+      "Rate is the job's per-visit rate, not a total — it is not summed in the totals row."
+    ],
     "dataset": "rpt_jobs",
     "columns": [
       "client_name",
@@ -1006,7 +1130,11 @@
     "key": "package-summary",
     "section": "service",
     "name": "Package Summary Report",
-    "description": "Shows visit progress and earned vs pending revenue for each service package."
+    "description": "Shows visit progress and earned vs pending revenue for each service package.",
+    "notes": [
+      "One row per package job (client + package). Total Visits counts every visit on the job, cancelled and skipped included; Completed counts visits in Completed status; Cancelled and Skipped count those statuses; Remaining is Total − Completed − Cancelled − Skipped.",
+      "Job Total is the package job's price: its total when set, otherwise its rate (kept in sync with the job's service lines). Earned is completed visits × the per-visit amount — the visit's own rate × qty when every completed visit has one, otherwise Job Total split evenly across the deliverable (non-cancelled, non-skipped) visits. Pending is remaining visits × that per-visit amount (Job Total − Earned when visits carry their own rates). A package job with no visits generated yet shows entirely as Pending."
+    ]
   },
   {
     "key": "skipped-visits",
@@ -1023,5 +1151,47 @@
       "budgeted_hours",
       "revenue_cents"
     ]
+  },
+  {
+    "key": "tickets-past-due",
+    "section": "tickets",
+    "name": "My Past Due Tickets",
+    "description": "Shows open tickets whose due date has already passed."
+  },
+  {
+    "key": "field-upsells",
+    "section": "service",
+    "name": "Field Upsells",
+    "description": "Every piece of work a crew flagged from the field, with the client, what they suggested, and whether it became a quote and a sale.",
+    "notes": [
+      "Outcome comes from the linked estimate's stage, not the ticket's status — a ticket can be closed without the work ever being quoted.",
+      "'Not quoted' means no estimate has been linked to the ticket yet. Use Create estimate on the ticket to make that link in one step.",
+      "Won Revenue counts only estimates that reached Accepted, Won or Invoiced, so summing it gives money actually sourced from the field rather than open pipeline."
+    ],
+    "dataset": "rpt_upsells",
+    "columns": [
+      "ticket_number",
+      "submitted_at",
+      "client_name",
+      "service_suggested",
+      "submitted_by",
+      "outcome",
+      "estimate_number",
+      "estimate_total_cents",
+      "won_revenue_cents"
+    ]
+  },
+  {
+    "key": "upsell-conversion-by-crew",
+    "section": "service",
+    "name": "Upsell Conversion by Crew Member",
+    "description": "Who is spotting work in the field, and how much of it turns into money — suggestions submitted against revenue won.",
+    "notes": [
+      "Grouped by the person who submitted the suggestion, so it works whether crews share one login or each member has their own.",
+      "Leave Outcome empty for the full picture: the row count is everything they submitted, Won Revenue is what came of it. Filter to Won to see only converted suggestions.",
+      "Won Revenue is the linked estimate's total, so a suggestion that grew into a larger job is credited at what was actually sold."
+    ],
+    "dataset": "rpt_upsells",
+    "columns": []
   }
 ]

@@ -31,7 +31,7 @@ export default function ComparePage() {
           How Landscapt &amp; Equipt stacks up.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#cfe6d8]">
-          An honest look at where we fit next to the other landscaping and field-service platforms you're evaluating.
+          An honest look at where we fit next to the other landscaping and field-service platforms you&apos;re evaluating.
         </p>
       </div>
 

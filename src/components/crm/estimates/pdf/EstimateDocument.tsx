@@ -8,7 +8,7 @@ import {
   Font,
 } from "@react-pdf/renderer";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
-import { computeInstallmentSchedule } from "@/lib/estimate-calc";
+import { complexityFactor, computeInstallmentSchedule } from "@/lib/estimate-calc";
 import { groupIntoSections, type DisplaySettings, type DisplaySection } from "@/lib/estimate-display-settings";
 
 // ── types ────────────────────────────────────────────────────────────────────
@@ -20,10 +20,35 @@ export interface EstimatePDFLineItem {
   estimateDesc: string | null;
   qty: number;
   unitType: string | null;
+  /** The line's BASE rate, before any complexity adjustment — pass the stored
+   *  adj_rate_cents ?? rate_cents and let this document scale it. */
   rateCents: number;
+  /** The line's complexity adjustment in basis points (10000 = 100%). Omit for
+   *  a line with no adjustment. See printedRateCents below for why the
+   *  document has to know: without it the Rate column and the Total column
+   *  disagree on a signed, client-facing page. */
+  complexityBps?: number | null;
   visits: number;
   totalCents: number;
   tier: "basic" | "standard" | "premium" | null;
+}
+
+/**
+ * The rate to PRINT next to a line's total.
+ *
+ * Every other adjustment an estimator can make is already folded into the
+ * stored rate by the time it reaches here — Adj Rate literally replaces
+ * rate_cents for pricing purposes — but complexity is applied downstream, to
+ * the total only. Printing the raw rate therefore put a rate on the client's
+ * copy that doesn't reconcile with the total beside it: a 5,000 sq ft line at
+ * $0.12 with a 125% complexity adjustment printed "Rate 0.12 / Total 750.00"
+ * on the document the client signs, and 5,000 x 0.12 is 600.00. Scaling the
+ * printed rate the same way the total is scaled makes the row's own arithmetic
+ * check out, for per-unit and fixed-total lines alike (a fixed line's total IS
+ * its rate, so both get the same factor).
+ */
+function printedRateCents(li: EstimatePDFLineItem): number {
+  return Math.round(li.rateCents * complexityFactor(li.complexityBps));
 }
 
 export interface EstimatePDFMilestone {
@@ -382,7 +407,7 @@ function LineItemSections({
               )}
               {settings.showLinePrices && (
                 <View style={S.cellNum}>
-                  <Text style={S.cellText}>{settings.hideZeroPrices && li.rateCents === 0 ? "" : cents(li.rateCents)}</Text>
+                  <Text style={S.cellText}>{settings.hideZeroPrices && li.rateCents === 0 ? "" : cents(printedRateCents(li))}</Text>
                 </View>
               )}
               {settings.showLineTotals && (
@@ -405,7 +430,10 @@ function LineItemSections({
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData; org: OrgPDFData }) {
+/** The Page(s) for a single estimate, with no <Document> wrapper — split out
+ *  from EstimateDocument so EstimateDocumentMulti can put several estimates'
+ *  pages inside one shared <Document> for a combined PDF. */
+function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgPDFData }) {
   const accentColor = org.brandColor || "#60ab45";
 
   const clientAddressLine2 = [estimate.clientCity, estimate.clientState, estimate.clientZip]
@@ -425,7 +453,7 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
     : [];
 
   return (
-    <Document title={`Estimate #${estimate.estimateNumber}`} author={org.name}>
+    <>
       <Page size="LETTER" style={S.page}>
 
         {/* ── header ─────────────────────────────────────────────────── */}
@@ -654,6 +682,27 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
           </View>
         </Page>
       )}
+    </>
+  );
+}
+
+export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData; org: OrgPDFData }) {
+  return (
+    <Document title={`Estimate #${estimate.estimateNumber}`} author={org.name}>
+      <EstimatePages estimate={estimate} org={org} />
+    </Document>
+  );
+}
+
+/** Combines several estimates' pages into a single PDF — used by the
+ *  Estimates list's "Print Selected" bulk action instead of opening one
+ *  popup window per estimate. */
+export function EstimateDocumentMulti({ items }: { items: { estimate: EstimatePDFData; org: OrgPDFData }[] }) {
+  return (
+    <Document title="Estimates" author={items[0]?.org.name}>
+      {items.map((item, i) => (
+        <EstimatePages key={i} estimate={item.estimate} org={item.org} />
+      ))}
     </Document>
   );
 }

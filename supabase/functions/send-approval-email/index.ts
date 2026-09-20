@@ -7,8 +7,8 @@
  *
  * Environment variables required (set via `supabase secrets set`):
  *   RESEND_API_KEY          — Resend API key (re_xxxxxxxxxxxx)
- *   FROM_EMAIL              — Verified sender address (e.g. noreply@twinsOS.com)
- *   APP_URL                 — Public app URL (e.g. https://app.twinsOS.com)
+ *   FROM_EMAIL              — Verified sender address (e.g. noreply@landscapt.com)
+ *   APP_URL                 — Public app URL (e.g. https://landscapt.com)
  *
  * Automatically available in Supabase Edge Functions:
  *   SUPABASE_URL
@@ -40,8 +40,8 @@ interface EmailMessage {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const RESEND_API_KEY          = Deno.env.get("RESEND_API_KEY") ?? "";
-const FROM_EMAIL              = Deno.env.get("FROM_EMAIL")     ?? "noreply@twinsOS.com";
-const APP_URL                 = Deno.env.get("APP_URL")        ?? "https://app.twinsOS.com";
+const FROM_EMAIL              = Deno.env.get("FROM_EMAIL")     ?? "noreply@landscapt.com";
+const APP_URL                 = Deno.env.get("APP_URL")        ?? "https://landscapt.com";
 const SUPABASE_URL            = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -389,7 +389,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const vendorName    = str(record.vendor_name);
   const grandTotal    = Number(record.grand_total ?? 0);
   const requesterId   = str(record.requested_by_id ?? record.created_by ?? "");
-  const appLink       = `${APP_URL}/${entityType === "requisition" ? "po/requisitions" : "po/orders"}`;
+  // `?id=` is what makes the list page auto-open this record — without it
+  // every approval email dead-ended on the plain list (same param the
+  // /api/approval-requests/notify route uses).
+  const appLink       = `${APP_URL}/${entityType === "requisition" ? "po/requisitions" : "po/orders"}?id=${entityId}`;
 
   const messages: EmailMessage[] = [];
 

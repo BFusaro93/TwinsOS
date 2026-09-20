@@ -39,22 +39,45 @@ export async function POST(request: Request) {
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
   const body = parsed.data;
 
+  // deleted_at IS NULL on every FK check here: a requisition pointing at a
+  // soft-deleted vendor, work order, job, product or project is a dangling
+  // reference the rest of the app will not resolve.
   let vendorName: string | null = null;
   if (body.vendorId) {
-    const { data: vendor } = await db.from("vendors").select("org_id, name").eq("id", body.vendorId).maybeSingle();
+    const { data: vendor } = await db
+      .from("vendors")
+      .select("org_id, name")
+      .eq("id", body.vendorId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!vendor || vendor.org_id !== auth.orgId) return jsonError("Vendor not found", 404);
     vendorName = vendor.name as string;
   }
   if (body.workOrderId) {
-    const { data: wo } = await db.from("work_orders").select("org_id").eq("id", body.workOrderId).maybeSingle();
+    const { data: wo } = await db
+      .from("work_orders")
+      .select("org_id")
+      .eq("id", body.workOrderId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!wo || wo.org_id !== auth.orgId) return jsonError("Work order not found", 404);
+  }
+  if (body.crmJobId) {
+    const { data: job } = await db
+      .from("crm_jobs")
+      .select("org_id")
+      .eq("id", body.crmJobId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!job || job.org_id !== auth.orgId) return jsonError("Job not found", 404);
   }
 
   const productIds = [...new Set(body.lineItems.map((li) => li.productItemId))];
   const { data: products } = await db
     .from("product_items")
     .select("id, org_id, name, part_number, unit_cost, category")
-    .in("id", productIds);
+    .in("id", productIds)
+    .is("deleted_at", null);
   const productMap = new Map((products ?? []).map((p) => [p.id as string, p]));
   for (const id of productIds) {
     const product = productMap.get(id);
@@ -68,7 +91,11 @@ export async function POST(request: Request) {
   const projectIds = [...new Set(body.lineItems.map((li) => li.projectId).filter((id): id is string => !!id))];
   const projectMap = new Map<string, { org_id: string }>();
   if (projectIds.length > 0) {
-    const { data: projects } = await db.from("projects").select("id, org_id").in("id", projectIds);
+    const { data: projects } = await db
+      .from("projects")
+      .select("id, org_id")
+      .in("id", projectIds)
+      .is("deleted_at", null);
     for (const p of projects ?? []) projectMap.set(p.id as string, p as { org_id: string });
   }
   for (const li of body.lineItems) {
@@ -95,10 +122,13 @@ export async function POST(request: Request) {
       vendorId: body.vendorId ?? null,
       vendorName,
       workOrderId: body.workOrderId ?? null,
+      crmJobId: body.crmJobId ?? null,
       requestedByName: "Public API",
       notes: body.notes ?? null,
       taxRatePercent: body.taxRatePercent,
       shippingCostCents: body.shippingCostCents,
+      discountCostCents: body.discountCostCents,
+      discountReducesTax: body.discountReducesTax,
       lineItems: body.lineItems.map((li) => ({
         productItemId: li.productItemId,
         quantity: li.quantity,

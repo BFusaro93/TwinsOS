@@ -16,6 +16,7 @@ export interface NotificationPrefs {
   emailEstimateApprovalRequired: boolean;
   emailEstimateClientAccepted: boolean;
   emailEstimateClientRejected: boolean;
+  emailEstimateDepositFailed: boolean;
   emailEstimateExpiring: boolean;
   emailNewTicket: boolean;
   emailTicketAssigned: boolean;
@@ -42,6 +43,7 @@ export interface NotificationPrefs {
   inAppEstimateApprovalRequired: boolean;
   inAppEstimateClientAccepted: boolean;
   inAppEstimateClientRejected: boolean;
+  inAppEstimateDepositFailed: boolean;
   inAppEstimateChangeRequest: boolean;
   inAppNewTicket: boolean;
   inAppTicketAssigned: boolean;
@@ -68,6 +70,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailEstimateApprovalRequired: true,
   emailEstimateClientAccepted: true,
   emailEstimateClientRejected: true,
+  emailEstimateDepositFailed: true,
   emailEstimateExpiring: true,
   emailNewTicket: true,
   emailTicketAssigned: true,
@@ -92,6 +95,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inAppEstimateApprovalRequired: true,
   inAppEstimateClientAccepted: true,
   inAppEstimateClientRejected: true,
+  inAppEstimateDepositFailed: true,
   inAppEstimateChangeRequest: true,
   inAppNewTicket: true,
   inAppTicketAssigned: true,

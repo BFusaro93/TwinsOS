@@ -1,18 +1,19 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
-import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
+import { EstimateDocument, EstimateDocumentMulti } from "@/components/crm/estimates/pdf/EstimateDocument";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 
-// Shared with the estimates/[id]/pdf route — extracted so the accepted-estimate
-// notification email (estimate-client-notify.ts) can attach the same PDF
-// without duplicating the fetch/build logic.
-export async function renderEstimatePDF(
+// Shared by the single-estimate and bulk PDF routes, plus the
+// accepted-estimate notification email (estimate-client-notify.ts) — the
+// fetch/build logic is identical either way, only what wraps the result
+// (one <EstimateDocument> vs. several inside <EstimateDocumentMulti>) differs.
+async function buildEstimatePDFData(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   estimateId: string,
   orgId: string
-): Promise<Buffer | null> {
+): Promise<{ estimate: EstimatePDFData; org: OrgPDFData } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est, error: estErr } = await (supabase as any)
     .from("estimates")
@@ -38,7 +39,7 @@ export async function renderEstimatePDF(
       amountCents: (m.amount_cents as number) ?? 0,
     }));
 
-  const { data: photoRows } = await (supabase as any)
+  const { data: photoRows } = await supabase
     .from("estimate_photos")
     .select("storage_path, caption, created_at")
     .eq("estimate_id", estimateId)
@@ -48,7 +49,7 @@ export async function renderEstimatePDF(
 
   const photos: EstimatePDFPhoto[] = [];
   for (const p of (photoRows ?? []) as Record<string, unknown>[]) {
-    const { data: signed } = await (supabase as any).storage
+    const { data: signed } = await supabase.storage
       .from("attachments")
       .createSignedUrl(p.storage_path as string, 3600);
     if (!signed?.signedUrl) continue;
@@ -63,7 +64,7 @@ export async function renderEstimatePDF(
     }
   }
 
-  const { data: org } = await (supabase as any)
+  const { data: org } = await supabase
     .from("organizations")
     .select("name, brand_color, address, customizations")
     .eq("id", est.org_id)
@@ -85,6 +86,13 @@ export async function renderEstimatePDF(
       visits: (li.visits as number) ?? 1,
       totalCents: (li.total_cents as number) ?? 0,
       tier: (li.tier as "basic" | "standard" | "premium" | null) ?? null,
+      // Without this the printed Rate is the UNSCALED rate while the Total
+      // carries the complexity multiplier, so a client reading their own
+      // proposal multiplies Qty x Rate and lands on a different number than
+      // the Total beside it (5,000 @ $0.12 at 125% prints "0.12" and
+      // "750.00"). EstimateDocument scales the printed rate from this field;
+      // the emailed copy already passes it.
+      complexityBps: (li.complexity_bps as number | null) ?? null,
     }));
 
   const addr = (org?.address as Record<string, string>) ?? {};
@@ -131,11 +139,48 @@ export async function renderEstimatePDF(
     logoUrl: (customizations.logoDataUrl as string) ?? null,
   };
 
+  return { estimate: estimateData, org: orgData };
+}
+
+export async function renderEstimatePDF(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  estimateId: string,
+  orgId: string
+): Promise<Buffer | null> {
+  const built = await buildEstimatePDFData(supabase, estimateId, orgId);
+  if (!built) return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const buffer = await renderToBuffer(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createElement(EstimateDocument as any, { estimate: estimateData, org: orgData }) as any
+      createElement(EstimateDocument as any, built) as any
+    );
+    return buffer as unknown as Buffer;
+  } catch (err) {
+    console.error("PDF render error:", err);
+    return null;
+  }
+}
+
+/** Combines several estimates into one PDF — used by the Estimates list's
+ *  "Print Selected" bulk action. Estimates that fail to load (deleted,
+ *  wrong org) are silently skipped rather than failing the whole batch. */
+export async function renderEstimatesPDF(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  estimateIds: string[],
+  orgId: string
+): Promise<Buffer | null> {
+  const items = (
+    await Promise.all(estimateIds.map((id) => buildEstimatePDFData(supabase, id, orgId)))
+  ).filter((x): x is { estimate: EstimatePDFData; org: OrgPDFData } => x !== null);
+  if (items.length === 0) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buffer = await renderToBuffer(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      createElement(EstimateDocumentMulti as any, { items }) as any
     );
     return buffer as unknown as Buffer;
   } catch (err) {

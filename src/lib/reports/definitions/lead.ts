@@ -400,5 +400,177 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
       );
     },
   },
+  {
+    key: "kpi-week-over-week",
+    section: "lead",
+    name: "Key Performance Indicators (Month-to-Date)",
+    description: "Compares this week to last week across leads, clients, estimates, calls, and payments.",
+    filters: [],
+    run: async ({ supabase }) => {
+      const iso = (d: Date) => d.toISOString().slice(0, 10);
+      const now = new Date();
+      const thisWeekStart = iso(new Date(now.getTime() - 6 * 86400000));
+      const thisWeekEnd = iso(now);
+      const lastWeekStart = iso(new Date(now.getTime() - 13 * 86400000));
+      const lastWeekEnd = iso(new Date(now.getTime() - 7 * 86400000));
+
+      async function countLeads(status: "lead" | "not_lead", dateCol: string, start: string, end: string) {
+        let q = supabase
+          .from("clients")
+          .select("id", { count: "exact", head: true })
+          .is("deleted_at", null)
+          .gte(dateCol, start)
+          .lte(dateCol, end);
+        q = status === "lead" ? q.eq("status", "lead") : q.neq("status", "lead");
+        const { count, error } = await q;
+        if (error) throw new Error(error.message);
+        return count ?? 0;
+      }
+
+      async function countEstimates(start: string, end: string) {
+        const { count, error } = await supabase
+          .from("estimates")
+          .select("id", { count: "exact", head: true })
+          .is("deleted_at", null)
+          .gte("estimate_date", start)
+          .lte("estimate_date", end);
+        if (error) throw new Error(error.message);
+        return count ?? 0;
+      }
+
+      async function countCalls(start: string, end: string) {
+        const { count, error } = await supabase
+          .from("crm_tickets")
+          .select("id", { count: "exact", head: true })
+          .is("deleted_at", null)
+          .eq("type", "call")
+          .gte("created_at", start)
+          .lte("created_at", end);
+        if (error) throw new Error(error.message);
+        return count ?? 0;
+      }
+
+      async function sumPayments(start: string, end: string) {
+        const { data, error } = await supabase
+          .from("crm_payments")
+          .select("amount_cents")
+          .is("deleted_at", null)
+          .eq("is_credit", false)
+          .gte("payment_date", start)
+          .lte("payment_date", end);
+        if (error) throw new Error(error.message);
+        return ((data ?? []) as { amount_cents: number | null }[]).reduce(
+          (sum, r) => sum + (r.amount_cents ?? 0),
+          0
+        );
+      }
+
+      async function sumInvoiced(start: string, end: string) {
+        const { data, error } = await supabase
+          .from("crm_invoices")
+          .select("total_cents")
+          .is("deleted_at", null)
+          .neq("status", "draft")
+          .neq("status", "void")
+          .gte("invoice_date", start)
+          .lte("invoice_date", end);
+        if (error) throw new Error(error.message);
+        return ((data ?? []) as { total_cents: number | null }[]).reduce(
+          (sum, r) => sum + (r.total_cents ?? 0),
+          0
+        );
+      }
+
+      const [
+        newLeadsCur,
+        newLeadsPrev,
+        newClientsCur,
+        newClientsPrev,
+        newEstimatesCur,
+        newEstimatesPrev,
+        newCallsCur,
+        newCallsPrev,
+        paymentsCur,
+        paymentsPrev,
+        invoicedCur,
+        invoicedPrev,
+      ] = await Promise.all([
+        countLeads("lead", "created_at", thisWeekStart, thisWeekEnd),
+        countLeads("lead", "created_at", lastWeekStart, lastWeekEnd),
+        countLeads("not_lead", "client_since", thisWeekStart, thisWeekEnd),
+        countLeads("not_lead", "client_since", lastWeekStart, lastWeekEnd),
+        countEstimates(thisWeekStart, thisWeekEnd),
+        countEstimates(lastWeekStart, lastWeekEnd),
+        countCalls(thisWeekStart, thisWeekEnd),
+        countCalls(lastWeekStart, lastWeekEnd),
+        sumPayments(thisWeekStart, thisWeekEnd),
+        sumPayments(lastWeekStart, lastWeekEnd),
+        sumInvoiced(thisWeekStart, thisWeekEnd),
+        sumInvoiced(lastWeekStart, lastWeekEnd),
+      ]);
+
+      const pctChange = (cur: number, prev: number) =>
+        prev !== 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : cur > 0 ? 100 : 0;
+
+      const rows = [
+        {
+          indicator: "New Leads",
+          period: "This Week vs Last Week",
+          current: newLeadsCur,
+          previous: newLeadsPrev,
+          change_pct: pctChange(newLeadsCur, newLeadsPrev),
+        },
+        {
+          indicator: "Payments Received ($)",
+          period: "This Week vs Last Week",
+          current: Math.round(paymentsCur) / 100,
+          previous: Math.round(paymentsPrev) / 100,
+          change_pct: pctChange(paymentsCur, paymentsPrev),
+        },
+        {
+          indicator: "Invoiced Total ($)",
+          period: "This Week vs Last Week",
+          current: Math.round(invoicedCur) / 100,
+          previous: Math.round(invoicedPrev) / 100,
+          change_pct: pctChange(invoicedCur, invoicedPrev),
+        },
+        {
+          indicator: "New Clients",
+          period: "This Week vs Last Week",
+          current: newClientsCur,
+          previous: newClientsPrev,
+          change_pct: pctChange(newClientsCur, newClientsPrev),
+        },
+        {
+          indicator: "New Estimates",
+          period: "This Week vs Last Week",
+          current: newEstimatesCur,
+          previous: newEstimatesPrev,
+          change_pct: pctChange(newEstimatesCur, newEstimatesPrev),
+        },
+        {
+          indicator: "New Calls",
+          period: "This Week vs Last Week",
+          current: newCallsCur,
+          previous: newCallsPrev,
+          change_pct: pctChange(newCallsCur, newCallsPrev),
+        },
+      ];
+
+      return buildResult(
+        [
+          col("indicator", "Indicator"),
+          col("period", "Period"),
+          col("current", "Current", "number", false),
+          col("previous", "Previous", "number", false),
+          col("change_pct", "Change", "percent"),
+        ],
+        rows,
+        [
+          "Payments Received and Invoiced Total are shown in dollars; all other indicators are counts.",
+        ]
+      );
+    },
+  },
 ];
 

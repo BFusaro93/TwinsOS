@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -6,45 +7,7 @@ import { createElement } from "react";
 import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
-
-// Renders a template against sample data so it can be previewed in Settings
-// without needing a real invoice — same renderer and override precedence as
-// the real invoice PDF route (/api/crm/invoices/[id]/pdf).
-const SAMPLE_INVOICE: Omit<InvoicePDFData, "invoiceNumber" | "invoiceDate"> = {
-  description: "Sample Invoice",
-  dueDate: null,
-  poNumber: null,
-  terms: "Due on receipt",
-  notes: "Thank you for your business! This is a sample note to show where notes appear on the invoice.",
-  clientName: "Jane Sample Client",
-  clientAddress: "123 Example Street",
-  clientCity: "Springfield",
-  clientState: "MA",
-  clientZip: "01101",
-  subtotalCents: 45000,
-  taxRateBps: 625,
-  taxCents: 2813,
-  discountCents: 0,
-  totalCents: 47813,
-  amountPaidCents: 0,
-  balanceCents: 47813,
-  lineItems: [
-    { name: "Lawn Mowing", description: "Weekly mowing service", qty: 4, rateCents: 7500, totalCents: 30000 },
-    { name: "Mulch Install", description: "3 yards double-shredded mulch", qty: 1, rateCents: 15000, totalCents: 15000 },
-  ],
-  statement: {
-    accountNumber: "10042",
-    previousBalanceCents: 47813,
-    accountBalanceCents: 95626,
-    lastPayment: { amountCents: 47813, date: new Date().toISOString().slice(0, 10), reference: "7219443587" },
-    priorInvoice: {
-      invoiceNumber: 1000,
-      amountCents: 47813,
-      date: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10),
-      daysPastDue: 1,
-    },
-  },
-};
+import { SAMPLE_INVOICE } from "@/lib/invoices/sample-invoice";
 
 export async function GET(
   _req: NextRequest,
@@ -87,7 +50,7 @@ export async function GET(
   const invoiceData: InvoicePDFData = {
     ...SAMPLE_INVOICE,
     invoiceNumber: 1001,
-    invoiceDate: new Date().toISOString().slice(0, 10),
+    invoiceDate: isoNy(new Date()),
     notes: template.show_notes === false
       ? null
       : ((template.default_notes as string | null) || SAMPLE_INVOICE.notes),

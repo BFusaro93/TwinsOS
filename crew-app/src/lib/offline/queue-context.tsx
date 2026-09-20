@@ -10,8 +10,8 @@ import {
   listAllQueueItems,
   retryQueueItem,
 } from './db';
-import { drainQueue, startSyncEngine, subscribeQueueChanges } from './sync-engine';
-import type { QueueItem } from './types';
+import { drainQueue, recoverOrphanedQueueItems, startSyncEngine, subscribeQueueChanges } from './sync-engine';
+import { DRIVE_QUEUE_VISIT_ID, type QueueItem } from './types';
 
 interface OfflineQueueContextValue {
   /** True once the SQLite table has been created and the initial queue read has completed. */
@@ -26,8 +26,14 @@ interface OfflineQueueContextValue {
   pendingCount: number;
   /** Items the sync engine gave up on (conflict, or exhausted retries) — need user attention. */
   failedItems: QueueItem[];
+  /** `visitId` here is the stop's anchor visit id (see CrewStop.anchorVisitId) — clock actions target the whole stop, not one underlying crm_job_visits row. */
   enqueueClockIn: (visitId: string, localTime: string) => Promise<void>;
   enqueueClockOut: (visitId: string, localTime: string, notes?: string) => Promise<void>;
+  enqueuePause: (anchorVisitId: string) => Promise<void>;
+  enqueueResume: (anchorVisitId: string) => Promise<void>;
+  /** Day-level — not tied to any one stop. See DRIVE_QUEUE_VISIT_ID. */
+  enqueueStartDrive: () => Promise<void>;
+  enqueueEndDrive: () => Promise<void>;
   enqueueAddPhoto: (
     visitId: string,
     localUri: string,
@@ -42,6 +48,23 @@ interface OfflineQueueContextValue {
     quantity: number,
     note?: string
   ) => Promise<void>;
+  /**
+   * `visitId` here is the stop's anchor visit id, same as clock actions — see
+   * the route's job-id lookup. `usedQty` alone stays billable (`used`);
+   * `noInvoice: true` is the deliberate don't-bill case.
+   */
+  enqueueRecordMaterialUsage: (
+    visitId: string,
+    jobProductId: string,
+    productName: string,
+    usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true }
+  ) => Promise<void>;
+  /** `visitId` here is the stop's anchor visit id, same as clock actions — gates Clock In, matching the web stop page. */
+  enqueueAcknowledgeNotes: (anchorVisitId: string) => Promise<void>;
+  /** `visitId` here is the stop's anchor visit id, same as clock actions. */
+  enqueueAddNote: (anchorVisitId: string, note: string) => Promise<void>;
+  /** `visitId` here is the individual service visit id, NOT the stop's anchor — each service in a stop can be skipped independently, matching the web stop page. */
+  enqueueSkipVisit: (visitId: string, reason: string, serviceName: string) => Promise<void>;
   /** Resets a failed item back to pending so the sync engine attempts it again. */
   retry: (id: string) => Promise<void>;
   /** Permanently discards a failed item (e.g. after the crew member acknowledges a conflict). */
@@ -79,6 +102,12 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     let isMounted = true;
     void (async () => {
       await initOfflineDb();
+      // Before the first read/drain: an app killed mid-request left its queue
+      // item stranded in 'syncing', which nothing ever reset — the card stayed
+      // on "Sending…" with no Retry or Discard and the sync chip never
+      // cleared. Safe to run alongside a live drain; it skips anything
+      // actually in flight.
+      if (userId) await recoverOrphanedQueueItems(userId);
       await refresh();
       if (!isMounted) return;
       setIsReady(true);
@@ -93,7 +122,7 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       isMounted = false;
       unsubscribe();
     };
-  }, [refresh]);
+  }, [refresh, userId]);
 
   const enqueueClockIn = useCallback(
     async (visitId: string, localTime: string) => {
@@ -120,6 +149,70 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
         visitId,
         userId,
         payload: { localTime, notes },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueuePause = useCallback(
+    async (anchorVisitId: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'pause',
+        visitId: anchorVisitId,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueResume = useCallback(
+    async (anchorVisitId: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'resume',
+        visitId: anchorVisitId,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueStartDrive = useCallback(
+    async () => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'drive_start',
+        visitId: DRIVE_QUEUE_VISIT_ID,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueEndDrive = useCallback(
+    async () => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'drive_end',
+        visitId: DRIVE_QUEUE_VISIT_ID,
+        userId,
+        payload: {},
       });
       await refresh();
       void drainQueue();
@@ -159,6 +252,81 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     [refresh, userId]
   );
 
+  const enqueueRecordMaterialUsage = useCallback(
+    async (
+      visitId: string,
+      jobProductId: string,
+      productName: string,
+      usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true }
+    ) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'record_material_usage',
+        visitId,
+        userId,
+        payload: {
+          jobProductId,
+          productName,
+          ...('notUsed' in usage
+            ? { notUsed: usage.notUsed }
+            : { usedQty: usage.usedQty, noInvoice: usage.noInvoice }),
+        },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueAcknowledgeNotes = useCallback(
+    async (anchorVisitId: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'acknowledge_notes',
+        visitId: anchorVisitId,
+        userId,
+        payload: {},
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueAddNote = useCallback(
+    async (anchorVisitId: string, note: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'add_note',
+        visitId: anchorVisitId,
+        userId,
+        payload: { note },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
+  const enqueueSkipVisit = useCallback(
+    async (visitId: string, reason: string, serviceName: string) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'skip_service',
+        visitId,
+        userId,
+        payload: { reason, serviceName },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
   const retry = useCallback(
     async (id: string) => {
       await retryQueueItem(id);
@@ -191,8 +359,16 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       failedItems,
       enqueueClockIn,
       enqueueClockOut,
+      enqueuePause,
+      enqueueResume,
+      enqueueStartDrive,
+      enqueueEndDrive,
       enqueueAddPhoto,
       enqueueRequestMaterials,
+      enqueueRecordMaterialUsage,
+      enqueueAcknowledgeNotes,
+      enqueueAddNote,
+      enqueueSkipVisit,
       retry,
       discard,
       syncNow,
@@ -202,8 +378,16 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     isReady,
     enqueueClockIn,
     enqueueClockOut,
+    enqueuePause,
+    enqueueResume,
+    enqueueStartDrive,
+    enqueueEndDrive,
     enqueueAddPhoto,
     enqueueRequestMaterials,
+    enqueueRecordMaterialUsage,
+    enqueueAcknowledgeNotes,
+    enqueueAddNote,
+    enqueueSkipVisit,
     retry,
     discard,
     syncNow,

@@ -35,9 +35,26 @@ export async function POST(request: Request) {
 
   let assetName = "";
   if (body.assetId) {
-    const { data: asset } = await db.from("assets").select("org_id, name").eq("id", body.assetId).maybeSingle();
+    const { data: asset } = await db
+      .from("assets")
+      .select("org_id, name")
+      .eq("id", body.assetId)
+      .is("deleted_at", null)
+      .maybeSingle();
     if (!asset || asset.org_id !== auth.orgId) return jsonError("Asset not found", 404);
     assetName = asset.name as string;
+  }
+
+  let assignedToName: string | null = null;
+  if (body.assignedToId) {
+    const { data: emp } = await db
+      .from("crm_employees")
+      .select("org_id, first_name, last_name")
+      .eq("id", body.assignedToId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!emp || emp.org_id !== auth.orgId) return jsonError("Employee not found", 404);
+    assignedToName = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();
   }
 
   const { data, error } = await db
@@ -50,6 +67,8 @@ export async function POST(request: Request) {
       frequency: body.frequency,
       next_due_date: body.nextDueDate,
       description: body.description ?? null,
+      assigned_to_id: body.assignedToId ?? null,
+      assigned_to_name: assignedToName,
     })
     .select(PM_SCHEDULE_SELECT)
     .single();

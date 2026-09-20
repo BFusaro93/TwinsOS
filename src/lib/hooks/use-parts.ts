@@ -175,7 +175,8 @@ export function useUpdatePart() {
         if (Object.keys(productSync).length > 0) {
           await supabase
             .from("product_items")
-            .update(productSync)
+            // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+            .update(productSync as never)
             .eq("id", data.product_item_id);
         }
       }

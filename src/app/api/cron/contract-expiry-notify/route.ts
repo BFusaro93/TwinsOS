@@ -104,7 +104,7 @@ export async function GET(request: Request) {
     const contractUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/accounting/contracts`;
 
     if (rep.user_id && prefs.inAppContractExpiring !== false) {
-      await (supabase as any)
+      await supabase
         .from("notifications")
         .insert({
           org_id: contract.org_id,

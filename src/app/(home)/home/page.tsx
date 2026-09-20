@@ -179,7 +179,7 @@ export default function HomePage() {
         </Link>
 
         {hasEquipt && (
-          <Link href="/dashboard" className={INTERNAL_BOX}>
+          <Link href="/equipt/home" className={INTERNAL_BOX}>
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
               <Wrench className="h-8 w-8" />
             </div>

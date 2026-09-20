@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { allocateStopHours } from "@/lib/utils/visit-hours";
-import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { isoNy } from "@/lib/reports/ny-date";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
@@ -66,19 +64,15 @@ const VISIT_SELECT = `
  * linked service's budgeted hours × team size — falling back to an even
  * split if none have a budget set. See allocateStopHours() for the
  * men-count-multiplication invariant this depends on.
+ *
+ * Accepts either the web app's cookie session or crew-app's bearer token —
+ * see getRouteAuth().
  */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ visitId: string }> }
 ) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getRouteAuth(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { visitId: anchorVisitId } = await params;

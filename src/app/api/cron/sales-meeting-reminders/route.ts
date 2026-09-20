@@ -5,10 +5,11 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { EMAIL_FROM } from "@/lib/email/send";
 
 /**
- * GET /api/cron/sales-meeting-reminders — called every 15 minutes by a
- * GitHub Actions workflow (.github/workflows/sales-meeting-reminders-cron.yml),
- * NOT Vercel Cron — Vercel's Hobby plan caps cron at once/day regardless of
- * schedule string (see report-schedules for the same fix).
+ * GET /api/cron/sales-meeting-reminders — called every 15 minutes by Vercel
+ * Cron (see vercel.json). Previously driven by a GitHub Actions workflow
+ * instead, because Vercel's Hobby plan caps cron at once/day regardless of
+ * schedule string (see report-schedules for the same history); moved back
+ * to native Vercel Cron after the 2026-09 upgrade to Pro.
  *
  * Two independent things happen here, same split as contract-expiry-notify:
  *  1. The meeting's sales rep gets a direct in-app + email reminder — this
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
     // (this fires every 15 min and isn't guaranteed exactly-once) can't also
     // pick it up and send a duplicate reminder. Same pattern as the campaign
     // send cron's claim-before-send guard.
-    const { data: claimed } = await (supabase as any)
+    const { data: claimed } = await supabase
       .from("crm_sales_meetings")
       .update({ reminder_sent_at: now.toISOString() })
       .eq("id", meeting.id)
@@ -98,7 +99,10 @@ export async function GET(request: Request) {
       minute: "2-digit",
       timeZone: "America/New_York",
     });
-    const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/sales-meetings`;
+    // `?open=` makes the calendar jump to the meeting's day and open it —
+    // without it the link only landed on whatever day the calendar defaults
+    // to, which is the wrong one for anything scheduled just after midnight.
+    const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/sales-meetings?open=${meeting.id as string}`;
 
     if (rep) {
       // crm_employees has no notification_prefs of its own — that lives on
@@ -108,7 +112,7 @@ export async function GET(request: Request) {
       // still gets the email via crm_employees.email, just no in-app row.
       let prefs: Record<string, unknown> = {};
       if (rep.user_id) {
-        const { data: profile } = await (supabase as any)
+        const { data: profile } = await supabase
           .from("profiles")
           .select("notification_prefs")
           .eq("id", rep.user_id)
@@ -118,7 +122,7 @@ export async function GET(request: Request) {
       const repName = `${rep.first_name} ${rep.last_name}`.trim();
 
       if (rep.user_id && prefs.inAppMeetingReminder !== false) {
-        await (supabase as any)
+        await supabase
           .from("notifications")
           .insert({
             org_id: meeting.org_id,

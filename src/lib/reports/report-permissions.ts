@@ -11,6 +11,8 @@
  * removed from the catalog as dead entries (see crm-roles.ts history).
  */
 export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
+  "field-upsells": ["sched_rpt_field_upsells"],
+  "upsell-conversion-by-crew": ["sched_rpt_upsell_conversion"],
   "forms-summary": ["crm_rpt_forms_summary"],
   "paused-services": ["sched_rpt_paused_services"],
   "sales-activity-detail": ["acct_rpt_sales_activity_detail"],
@@ -19,6 +21,13 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "product-service-usage": ["sched_rpt_product_service_usage"],
   "client-timeline": ["crm_rpt_client_timeline"],
   "lead-timeline": ["crm_rpt_lead_timeline"],
+  // The org-wide trail exposes every record type, including permission and
+  // credential changes, so it is gated rather than left open like most
+  // reports. "Change Activity by User" shares the plain audit-log key: it is
+  // the same rows, only counted.
+  "audit-log": ["admin_rpt_audit_log"],
+  "audit-activity-by-user": ["admin_rpt_audit_log"],
+  "security-audit": ["admin_rpt_security_audit"],
   "income-not-invoiced": ["acct_rpt_income_not_invoiced"],
   "unapplied-payments": ["acct_rpt_unapplied_payments"],
   "sales-commission-export": ["acct_rpt_sales_commission_export"],

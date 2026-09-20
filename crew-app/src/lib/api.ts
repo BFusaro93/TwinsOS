@@ -1,16 +1,24 @@
 import { File, UploadType } from 'expo-file-system';
 
 import { supabase } from '@/lib/supabase';
-import type { CrewVisitsResponse, PickerProduct, VisitPhoto, VisitRequisition } from '@/lib/types';
+import type {
+  CrewVisitsResponse,
+  JobProductMaterial,
+  PickerProduct,
+  VisitChemicalApplication,
+  VisitPhoto,
+  VisitRequisition,
+} from '@/lib/types';
 
 // Base URL for the Next.js app's API routes (src/app/api/...) — see
-// crew-app/.env for how this is configured per environment. clockInVisit()/
-// clockOutVisit()/uploadVisitPhoto() below are called by the offline sync
-// engine (src/lib/offline/sync-engine.ts), which is the only caller that
-// should invoke them directly — screens go through the queue instead so
-// actions survive being offline. Each accepts an `idempotencyKey` (the
-// queue item's own id) so a retried request after a flaky partial-success
-// doesn't double-submit; see the route files for how each endpoint uses it.
+// crew-app/.env for how this is configured per environment. clockInStop()/
+// clockOutStop()/pauseStop()/resumeStop()/startDrive()/endDrive()/
+// uploadVisitPhoto() below are called by the offline sync engine
+// (src/lib/offline/sync-engine.ts), which is the only caller that should
+// invoke them directly — screens go through the queue instead so actions
+// survive being offline. Each accepts an `idempotencyKey` (the queue item's
+// own id) so a retried request after a flaky partial-success doesn't
+// double-submit; see the route files for how each endpoint uses it.
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
@@ -73,21 +81,23 @@ export async function fetchCrewVisits(date: string): Promise<CrewVisitsResponse>
 }
 
 /**
- * POST /api/crm/crew/visits/:id/clock-in. Returns the raw updated DB row
- * (snake_case) — callers that need the list-shaped CrewVisit should refetch
- * fetchCrewVisits() afterwards rather than relying on this response's shape.
+ * POST /api/crm/crew/stops/:anchorVisitId/clock-in — clocks in every visit
+ * making up this stop (the anchor plus its same client/day/crew/address
+ * siblings — see src/lib/utils/visit-stops.ts) in one call. Returns
+ * `{ visitIds, visits }` (the raw updated DB rows) — callers that need the
+ * stop-shaped CrewStop should refetch fetchCrewVisits() afterwards rather
+ * than relying on this response's shape.
  *
- * The route is naturally idempotent (conditional `UPDATE ... WHERE
- * clocked_in_at IS NULL`, 409 if already clocked in) so `idempotencyKey` is
- * passed through only as a request-tracing header, not required for
- * correctness — see the route file for details.
+ * The route is idempotent (only touches siblings with `clocked_in_at IS
+ * NULL`) so `idempotencyKey` is passed through only as a request-tracing
+ * header, not required for correctness — see the route file for details.
  */
-export async function clockInVisit(
-  visitId: string,
+export async function clockInStop(
+  anchorVisitId: string,
   localTime: string,
   idempotencyKey: string
 ): Promise<unknown> {
-  return authedFetch(`/api/crm/crew/visits/${visitId}/clock-in`, {
+  return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/clock-in`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
     body: JSON.stringify({ localTime }),
@@ -95,22 +105,64 @@ export async function clockInVisit(
 }
 
 /**
- * POST /api/crm/crew/visits/:id/clock-out. Same response-shape note as
- * clockInVisit(). The route now guards on `clocked_out_at IS NULL` the same
- * way clock-in guards on `clocked_in_at IS NULL`, returning 409 if the visit
- * was already clocked out (e.g. by a supervisor from the web app) — the
- * sync engine treats that 409 as a conflict, not a transient failure.
+ * POST /api/crm/crew/stops/:anchorVisitId/clock-out. Same response-shape
+ * note as clockInStop(). Returns 409 if there was nothing open left to
+ * clock out (e.g. a supervisor already closed every visit in this stop from
+ * the web app) — the sync engine treats that as a conflict, not a transient
+ * failure.
  */
-export async function clockOutVisit(
-  visitId: string,
+export async function clockOutStop(
+  anchorVisitId: string,
   localTime: string,
   idempotencyKey: string,
   notes?: string
 ): Promise<unknown> {
-  return authedFetch(`/api/crm/crew/visits/${visitId}/clock-out`, {
+  return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/clock-out`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
     body: JSON.stringify({ notes, localTime }),
+  });
+}
+
+/**
+ * POST /api/crm/crew/stops/:anchorVisitId/pause — "take a break" on every
+ * open visit in this stop, without completing/billing it. See the route
+ * file: it 400s (non-retryable) if there's nothing open to pause, which the
+ * sync engine already treats as a permanent failure for any 4xx.
+ */
+export async function pauseStop(anchorVisitId: string, idempotencyKey: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/pause`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+}
+
+/** POST /api/crm/crew/stops/:anchorVisitId/resume — ends the current break, rolling elapsed time into break_minutes. */
+export async function resumeStop(anchorVisitId: string, idempotencyKey: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/resume`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+}
+
+/**
+ * POST /api/crm/crew/drive/start — opens a day-level drive-time segment for
+ * the caller's crew (not tied to any one visit/stop). Idempotent server-side
+ * (returns the already-open segment on a double-tap/retry rather than
+ * erroring).
+ */
+export async function startDrive(idempotencyKey: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/drive/start`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+}
+
+/** POST /api/crm/crew/drive/end — "Arrived". No-op (not an error) if there's nothing open. */
+export async function endDrive(idempotencyKey: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/drive/end`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
   });
 }
 
@@ -170,6 +222,11 @@ export async function fetchVisitPhotos(visitId: string): Promise<VisitPhoto[]> {
   return authedFetch(`/api/crm/crew/visits/${visitId}/photos`) as Promise<VisitPhoto[]>;
 }
 
+/** GET /api/crm/crew/visits/:id/chemicals — read-only chemical mix info for a visit. */
+export async function fetchVisitChemicals(visitId: string): Promise<VisitChemicalApplication[]> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/chemicals`) as Promise<VisitChemicalApplication[]>;
+}
+
 /**
  * POST /api/crm/crew/visits/:id/requisitions — creates a single-line draft
  * Requisition for the visit's CRM job (Equipt's "request materials" flow,
@@ -198,6 +255,82 @@ export async function requestMaterials(
 /** GET /api/crm/crew/visits/:id/requisitions — status list for this visit's "My Requests" section. */
 export async function fetchVisitRequisitions(visitId: string): Promise<VisitRequisition[]> {
   return authedFetch(`/api/crm/crew/visits/${visitId}/requisitions`) as Promise<VisitRequisition[]>;
+}
+
+/**
+ * GET /api/crm/crew/visits/:id/job-products — materials office staff already
+ * planned/called for on this visit's job, distinct from requestMaterials()
+ * above (an ad-hoc new request, not something already planned).
+ */
+export async function fetchJobProducts(visitId: string): Promise<JobProductMaterial[]> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/job-products`) as Promise<JobProductMaterial[]>;
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/job-products/:jobProductId/use-materials —
+ * records how much of a planned material was actually used (or that it
+ * wasn't used at all). `usedQty` alone records `used` — inventory comes down
+ * and the material STILL reaches the client's invoice; add
+ * `noInvoice: true` for the deliberate don't-bill case. Only valid while the
+ * row is still 'pending'; the route 409s on an already-resolved row and
+ * returns that row's current state in `material`. Called by the offline sync
+ * engine for queued 'record_material_usage' items, same pattern as
+ * requestMaterials() above.
+ */
+export async function useJobProductMaterials(
+  visitId: string,
+  jobProductId: string,
+  usage: { usedQty: number; noInvoice?: boolean } | { notUsed: true }
+): Promise<JobProductMaterial> {
+  return authedFetch(
+    `/api/crm/crew/visits/${visitId}/job-products/${jobProductId}/use-materials`,
+    { method: 'POST', body: JSON.stringify(usage) }
+  ) as Promise<JobProductMaterial>;
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/acknowledge — marks the office's notes-to-crew
+ * as read on this visit, gating Clock In the same way the web stop page does
+ * (see visit/[id].tsx). Idempotent server-side (just re-stamps `now`), so no
+ * idempotency key is needed.
+ */
+export async function acknowledgeNotes(visitId: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/acknowledge`, { method: 'POST' });
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/notes — appends a crew-authored note to the
+ * visit's job_comments, visible to dispatchers on the web board. Idempotent
+ * when `idempotencyKey` is supplied (the sync engine passes the queue item's
+ * id): the server uses it as the comment's own id and skips the append if a
+ * comment with that id is already there, so a retry after a flaky partial
+ * success can't double-post the note. The append itself happens inside the
+ * row lock server-side, so a dispatcher commenting at the same moment is no
+ * longer silently overwritten.
+ */
+export async function addCrewNote(
+  visitId: string,
+  note: string,
+  idempotencyKey?: string
+): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/notes`, {
+    method: 'POST',
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+    body: JSON.stringify({ note }),
+  });
+}
+
+/**
+ * POST /api/crm/crew/visits/:id/skip — skips one service line within a stop
+ * (as opposed to clock-out, which completes it). `visitId` here is the
+ * individual crm_job_visits row's id, not the stop's anchor — matching the
+ * web stop page, where each service row can be skipped independently.
+ */
+export async function skipVisit(visitId: string, reason: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/skip`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
 }
 
 /** GET /api/crm/crew/products?q=... — the "Request Materials" product picker's search. */

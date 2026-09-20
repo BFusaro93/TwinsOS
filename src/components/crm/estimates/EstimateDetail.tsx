@@ -28,7 +28,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule } from "@/lib/estimate-calc";
@@ -62,6 +62,7 @@ import { stripHtml } from "@/lib/utils/strip-html";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { EstimatePhotosTab } from "./EstimatePhotosTab";
 import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
@@ -434,6 +435,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const [saving,           setSaving]           = useState(false);
   const [recalcPending,    setRecalcPending]    = useState(false);
   const [headerEdits,      setHeaderEdits]      = useState<Record<string, string | boolean | number | null>>({});
+  const effectiveClientId = (headerEdits.client_id as string) ?? estimate?.clientId ?? "";
+  const { data: clientProperties } = useClientProperties(effectiveClientId);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [wonLostDialog, setWonLostDialog] = useState<"accepted" | "lost" | null>(null);
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
@@ -550,7 +553,19 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             unitType: li.unitType ?? undefined,
             productionRateSqftPerHr: li.productionRateSqftPerHr ?? undefined,
             budgetMethod: li.budgetMethod,
+            // Omitting this fell back to 100%, so a bulk increase recomputed
+            // every complexity-adjusted line as if it were standard — and then
+            // wrote the unscaled total back while leaving complexity_bps alone.
+            // A $750 line at 125% given "+10%" was rewritten to $660: a 10%
+            // increase landed as a 12% CUT, with the gauge still reading 125%,
+            // and any later cell edit silently re-inflated it to $825. The
+            // estimate's total depended on whether someone happened to touch a
+            // cell afterwards.
+            complexityBps: li.complexityBps,
           }, breakevenRateCents);
+          // A flat line discount can't survive a rate DECREASE unclamped —
+          // same floor the grid applies on every other write path.
+          const clampedDiscountCents = Math.max(0, Math.min(li.discountCents ?? 0, updated.totalCents));
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
@@ -564,6 +579,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               total_cost_cents: updated.totalCostCents,
               margin_bps: updated.marginBps,
               markup_bps: updated.markupBps,
+              ...(clampedDiscountCents !== (li.discountCents ?? 0) ? { discount_cents: clampedDiscountCents } : {}),
             },
           });
         })
@@ -857,28 +873,61 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               if (!estimate) return;
               try {
                 const today = todayLocalISODate();
+                const taxRateBps = estimate.taxRateBps ?? 0;
+                // recalcEstimateTotals taxes the whole discounted subtotal —
+                // estimate lines carry no per-line taxability — so every
+                // invoice line has to be taxable for the invoice to reproduce
+                // the tax the client was quoted.
+                const isTaxable = taxRateBps > 0;
+
+                const invoiceLines = (estimate.lineItems ?? [])
+                  .filter((li) => !li.deletedAt && li.status !== "lost")
+                  .map((li) => ({
+                    name: li.serviceName ?? li.serviceId ?? "Service",
+                    description: li.invoiceDesc ?? "",
+                    qty: li.qty,
+                    rateCents: li.rateCents,
+                    totalCents: li.totalCents,
+                    discountCents: li.discountCents,
+                    discountType: li.discountType,
+                    discountValue: li.discountValue,
+                    isTaxable,
+                  }));
+
+                // Derive the header from the lines actually being written,
+                // using the same arithmetic the invoice recalc uses
+                // (deleteInvoiceLineItemAndRecalc / useUpdateInvoiceFinancials),
+                // rather than copying the estimate's own rollups. Copying them
+                // produced an invoice whose stored header disagreed with its
+                // own lines, so the first edit "recalculated" the client's
+                // total to a different number.
+                //
+                // Note: estimate subitem revenue is not carried onto the
+                // invoice (there are no subitem rows in any org today). If
+                // subitems ever ship, they need their own invoice lines here —
+                // otherwise this subtotal would under-bill them.
+                const netLine = (li: { totalCents: number; discountCents?: number }) =>
+                  li.totalCents - (li.discountCents ?? 0);
+                const subtotalCents = invoiceLines.reduce((s, li) => s + netLine(li), 0);
+                const discountCents = Math.max(0, Math.min(estimate.discountCents ?? 0, subtotalCents));
+                const taxableBase = Math.max(0, (isTaxable ? subtotalCents : 0) - discountCents);
+                const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
+                const totalCents = subtotalCents - discountCents + taxCents;
+
                 const invoice = await createInvoice({
                   estimateId: estimate.id,
                   clientId: estimate.clientId,
                   salesRepId: estimate.salesRepId,
                   description: estimate.description ?? `Invoice for estimate #${estimate.estimateNumber}`,
                   invoiceDate: today,
-                  lineItems: (estimate.lineItems ?? [])
-                    .filter((li) => !li.deletedAt && li.status !== "lost")
-                    .map((li) => ({
-                      name: li.serviceName ?? li.serviceId ?? "Service",
-                      description: li.invoiceDesc ?? "",
-                      qty: li.qty,
-                      rateCents: li.rateCents,
-                      totalCents: li.totalCents,
-                      discountCents: li.discountCents,
-                      discountType: li.discountType,
-                      discountValue: li.discountValue,
-                    })),
-                  subtotalCents: estimate.subtotalCents ?? 0,
-                  taxRateBps: estimate.taxRateBps ?? 0,
-                  taxCents: estimate.taxCents ?? 0,
-                  totalCents: estimate.totalCents ?? 0,
+                  lineItems: invoiceLines,
+                  subtotalCents,
+                  discountCents,
+                  discountType: estimate.discountType,
+                  discountValue: estimate.discountValue,
+                  taxRateBps,
+                  taxCents,
+                  totalCents,
                 });
                 await updateStage({ id: estimate.id, stage: "invoiced" });
                 toast.success("Invoice created");
@@ -963,7 +1012,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       </div>
 
       {/* ── body ────────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row md:items-start gap-4 overflow-auto p-6">
+      {/* Main column + summary rail. Side by side only from xl: a 256px rail
+          plus this column's own internal splits needs more room than a tablet
+          has, and below xl the header card's fields start colliding. */}
+      <div className="flex min-h-0 flex-1 flex-col xl:flex-row xl:items-start gap-4 overflow-auto p-4 md:p-6">
 
         {/* ── left ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0 pb-3">
@@ -1000,12 +1052,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
               {/* Client info card + header form */}
               <div className="rounded-lg border bg-white shadow-sm overflow-hidden shrink-0">
-                <div className={cn("flex flex-col gap-0 sm:flex-row", compact && "flex-col")}>
+                <div className={cn("flex flex-col gap-0 lg:flex-row", compact && "flex-col")}>
 
                   {/* Client info card */}
                   <div className={cn(
                     "shrink-0 bg-slate-50 p-4 flex flex-col gap-2",
-                    compact ? "w-full border-b" : "w-full border-b sm:w-56 sm:border-b-0 sm:border-r"
+                    compact ? "w-full border-b" : "w-full border-b lg:w-56 lg:border-b-0 lg:border-r"
                   )}>
                     <p className="text-xs font-semibold text-slate-800 uppercase tracking-wide">
                       Client
@@ -1049,7 +1101,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
                   {/* Header form */}
                   <div className="flex-1 p-4 min-w-0">
-                    <div className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
 
                       {/* Left column */}
                       <div className="flex flex-col gap-3 min-w-0">
@@ -1088,6 +1140,30 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             </SelectContent>
                           </Select>
                         </FieldRow>
+                        {(clientProperties?.length ?? 0) > 0 && (
+                          <FieldRow label="Property">
+                            <Select
+                              value={(headerEdits.property_id as string) ?? (estimate.propertyId ?? "none")}
+                              onValueChange={(v) => {
+                                const propertyId = v === "none" ? null : v;
+                                patchHeader("property_id", propertyId);
+                                saveHeader({ ...headerEdits, property_id: propertyId });
+                              }}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="No property / general estimate" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No property / general estimate</SelectItem>
+                                {(clientProperties ?? []).map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.name ?? p.address ?? "Unnamed property"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FieldRow>
+                        )}
                         <FieldRow label="Sales Rep">
                           <Select
                             value={(headerEdits.sales_rep_id as string) ?? (estimate.salesRepId ?? "")}
@@ -1472,6 +1548,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               <EstimateLineItemsGrid
                 estimateId={estimate.id}
                 clientId={estimate.clientId}
+                propertyId={estimate.propertyId}
                 items={visibleLineItems}
                 selectedIds={selectedLineItemIds}
                 onSelectionChange={setSelectedLineItemIds}
@@ -1555,23 +1632,25 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 )}
                 <FieldRow label="Deposit Required" title="Upfront amount due before work begins, subtracted from the total before splitting into installments">
                   <div className="flex flex-col gap-1">
+                    {/* CurrencyInput, not a raw controlled <Input> formatted
+                        with toFixed(2): that re-formats after every keystroke,
+                        so typing "2000" landed each digit after the inserted
+                        ".00" and saved $2.01. Same D-19 bug that mangled
+                        contract amounts. */}
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-slate-400">$</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={
+                      <CurrencyInput
+                        cents={
                           headerEdits.deposit_required_cents !== undefined
-                            ? ((headerEdits.deposit_required_cents as number) / 100).toFixed(2)
-                            : (estimate.depositRequiredCents / 100).toFixed(2)
+                            ? (headerEdits.deposit_required_cents as number)
+                            : estimate.depositRequiredCents
                         }
-                        onChange={(e) =>
-                          patchHeader("deposit_required_cents", Math.round(Number(e.target.value) * 100))
+                        onChange={(cents) => patchHeader("deposit_required_cents", cents)}
+                        onCommit={(cents) =>
+                          saveHeader({ ...headerEdits, deposit_required_cents: cents })
                         }
-                        onBlur={() => saveHeader()}
                         className="h-8 w-28"
-                        placeholder="0"
+                        placeholder="0.00"
                       />
                     </div>
                     {estimate.depositCollectedCents > 0 && (
@@ -1580,6 +1659,49 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         {estimate.depositMethod ? ` via ${estimate.depositMethod}` : ""}
                         {estimate.depositCollectedAt
                           ? ` on ${new Date(estimate.depositCollectedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
+                    {/* Submitted but not settled. Only ever shown while no
+                        deposit has actually been recorded — the webhook clears
+                        these columns the moment the charge lands, but showing
+                        both at once would read as two deposits if a clear were
+                        ever missed. A bank debit takes days, so without this
+                        the office chases a client who has already paid. */}
+                    {/* Declined or returned by the bank. Staff arrive here
+                        from the "Deposit failed" notification, so this is the
+                        screen that has to explain what happened and what the
+                        client can do — the proposal link re-opens itself for a
+                        retry while this is set, which is not obvious. */}
+                    {estimate.depositCollectedCents === 0 && !!estimate.depositFailedAt && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700"
+                        title={`${estimate.depositFailedReason ?? "The payment was rejected."} The client can pay it again from their original proposal link — it re-opens automatically until a deposit is recorded.`}
+                      >
+                        {formatCurrency(estimate.depositFailedCents ?? 0)}{" "}
+                        {estimate.depositFailedMethod === "us_bank_account" ? "bank transfer" : "payment"} failed
+                        {estimate.depositFailedAt
+                          ? ` on ${new Date(estimate.depositFailedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
+                    {estimate.depositCollectedCents === 0 &&
+                      !estimate.depositFailedAt &&
+                      (estimate.depositPendingCents ?? 0) > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                        title={
+                          estimate.depositPendingMethod === "us_bank_account"
+                            ? "The client authorized a bank transfer. ACH debits take 3–5 business days to settle; the deposit is credited to their account automatically when it clears, and you'll be notified if it fails."
+                            : "The client's card payment is still being processed. It will be credited automatically once it completes."
+                        }
+                      >
+                        {formatCurrency(estimate.depositPendingCents ?? 0)}{" "}
+                        {estimate.depositPendingMethod === "us_bank_account"
+                          ? "bank transfer pending"
+                          : "payment pending"}
+                        {estimate.depositPendingAt
+                          ? ` — submitted ${new Date(estimate.depositPendingAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : ""}
                       </span>
                     )}
@@ -1661,7 +1783,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         </div>
 
         {/* ── right: summary panel ── */}
-        <div className="w-full md:w-64 md:shrink-0 pb-3">
+        <div className="w-full xl:w-64 xl:shrink-0 pb-3">
           <EstimateSummaryPanel
             estimate={estimate}
             onRecalculate={handleSaveFinancials}
@@ -1696,7 +1818,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             const stage = wonLostDialog;
             setWonLostDialog(null);
             handleStage(stage, reason);
-            if (stage === "accepted") setConvertDialogOpen(true);
+            // Only offer conversion when nothing has been created from this
+            // estimate yet. Re-confirming "Accepted" — to correct a won reason,
+            // say — used to reopen the convert dialog pre-populated even on an
+            // estimate that already had a job, and confirming it built a second
+            // job with a second set of visits and its own auto-invoice stream.
+            // The header button already swaps to "View Job" in this case; this
+            // was the path around it.
+            if (stage === "accepted" && estimateJobs.length === 0) setConvertDialogOpen(true);
           }}
           onCancel={() => setWonLostDialog(null)}
         />

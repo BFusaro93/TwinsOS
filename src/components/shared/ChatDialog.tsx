@@ -69,7 +69,7 @@ export function ChatDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[32rem] max-w-md flex-col gap-0 p-0">
+      <DialogContent className="flex h-[32rem] max-w-md flex-col gap-0 p-0 sm:p-0">
         <DialogHeader className="border-b p-4">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

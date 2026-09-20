@@ -16,6 +16,8 @@ import {
   LINE_ITEM_MUTATION_KEY,
   useVoidInvoice,
   voidBlockedMessage,
+  useUnappliedPayments,
+  useApplyCreditToInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -49,7 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
-import { parseCurrencyToCents } from "@/components/shared/CurrencyInput";
+import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
 import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
@@ -598,6 +600,9 @@ export function InvoiceDetail({
   const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const { mutateAsync: voidInvoice } = useVoidInvoice();
+  const applyCredit = useApplyCreditToInvoice();
+  const { data: unappliedPayments = [] } = useUnappliedPayments(invoice?.clientId);
+  const unappliedCents = unappliedPayments.reduce((s, p) => s + p.unusedAmountCents, 0);
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const { data: employees } = useSelectableEmployees();
@@ -1201,12 +1206,17 @@ export function InvoiceDetail({
                         </button>
                         {hasTax ? (
                           <div className="flex items-center gap-1.5">
-                            <Input
-                              type="number" step="0.25" min="0" max="30"
-                              value={(taxRateBps / 100).toFixed(2)}
-                              onChange={(e) => setTaxRateBps(Math.round(parseFloat(e.target.value || "0") * 100))}
+                            {/* Basis points are hundredths just like cents, so
+                                CurrencyInput's raw-text-while-focused handling
+                                applies verbatim — a toFixed(2)-formatted
+                                controlled input turned "6.25" into 6.03 by
+                                re-formatting mid-keystroke (D-19). */}
+                            <CurrencyInput
+                              cents={taxRateBps}
+                              onChange={setTaxRateBps}
                               className="h-7 w-24 text-right text-xs"
                               disabled={invoice.locked}
+                              aria-label="Tax rate percent"
                             />
                             <span className="text-slate-500 font-medium">%</span>
                           </div>
@@ -1219,7 +1229,10 @@ export function InvoiceDetail({
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium align-top">Discount</td>
                     <td className="py-2">
-                      <div className="flex items-center gap-1.5">
+                      {/* Wraps, and the saved-discount picker is capped to the
+                          cell: side by side these two overflow the details card
+                          on a narrow screen. */}
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-slate-500 font-medium">$</span>
                         <Input
                           type="number" step="0.01" min="0"
@@ -1231,7 +1244,7 @@ export function InvoiceDetail({
                         />
                         {activeDiscounts.length > 0 && (
                           <Select onValueChange={applyNamedDiscount} disabled={invoice.locked}>
-                            <SelectTrigger className="h-7 w-48 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
+                            <SelectTrigger className="h-7 w-48 max-w-full min-w-0 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
                               <SelectValue placeholder="Apply a saved discount…" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1470,6 +1483,53 @@ export function InvoiceDetail({
               </div>
             </div>
           </div>
+
+          {/* Unapplied money the client already has. A proposal deposit is
+              taken before any invoice exists and is never applied
+              automatically, so without this prompt a converted job gets
+              invoiced its full amount and the client is asked for money they
+              have already paid. */}
+          {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
+            <div className="mx-8 mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-blue-900">
+                  <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
+                  {unappliedPayments.length === 1 ? "payment" : "payments"} on this client
+                  {unappliedPayments.some((p) => p.isPrepayment) && " (including a deposit)"} —{" "}
+                  {formatCurrency(Math.min(unappliedCents, invoice.balanceCents))} can go to this invoice.
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={applyCredit.isPending}
+                  onClick={async () => {
+                    // Oldest money first, so a deposit taken at acceptance is
+                    // consumed before a later overpayment.
+                    let remaining = invoice.balanceCents;
+                    let total = 0;
+                    for (const p of [...unappliedPayments].sort((a, b) => a.paymentDate.localeCompare(b.paymentDate))) {
+                      if (remaining <= 0) break;
+                      const take = Math.min(p.unusedAmountCents, remaining);
+                      if (take <= 0) continue;
+                      try {
+                        const res = await applyCredit.mutateAsync({
+                          paymentId: p.id, invoiceId: invoice.id, amountCents: take,
+                        });
+                        total += res.appliedCents;
+                        remaining -= res.appliedCents;
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Couldn't apply the credit");
+                        break;
+                      }
+                    }
+                    if (total > 0) toast.success(`Applied ${formatCurrency(total)} to this invoice`);
+                  }}
+                >
+                  {applyCredit.isPending ? "Applying…" : "Apply to this invoice"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Payment history */}
           {payments.length > 0 && (

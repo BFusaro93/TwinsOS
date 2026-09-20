@@ -9,6 +9,8 @@ import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import {
   Dialog,
   DialogContent,
@@ -370,116 +372,144 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 h-[90vh] flex flex-col sm:p-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>{schedule ? 'Edit Schedule' : 'Add Schedule'}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col md:flex-row gap-5 pt-2">
-          {/* Left: form */}
-          <form onSubmit={handleSubmit} className="flex-1 space-y-4">
-            <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="e.g. Every Other Monday" required />
-            </div>
+        <Tabs defaultValue="details" className="flex flex-1 flex-col overflow-hidden">
+          <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-4 py-0 h-10 gap-0">
+            {[
+              { value: 'details', label: 'Schedule' },
+              // Nothing to show until the schedule exists.
+              ...(schedule ? [{ value: 'audit', label: 'Audit Trail' }] : []),
+            ].map((t) => (
+              <TabsTrigger
+                key={t.value}
+                value={t.value}
+                className="h-full rounded-none border-b-2 border-transparent px-3 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Frequency</Label>
-                <Select value={form.frequency} onValueChange={(v) => setField('frequency', v as CRMSchedule['frequency'])}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(FREQUENCY_LABELS) as CRMSchedule['frequency'][]).map((f) => (
-                      <SelectItem key={f} value={f}>{FREQUENCY_LABELS[f]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Day of Week</Label>
-                <Select value={form.dayOfWeek} onValueChange={(v) => setField('dayOfWeek', v as CRMSchedule['dayOfWeek'])}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DAY_OPTIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <TabsContent value="details" className="mt-0">
+              <div className="flex flex-col md:flex-row gap-5 pt-2">
+                {/* Left: form */}
+                <form onSubmit={handleSubmit} className="flex-1 space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Name</Label>
+                    <Input value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="e.g. Every Other Monday" required />
+                  </div>
 
-            {isMonthly && (
-              <div className="space-y-1.5">
-                <Label>Which Week</Label>
-                <Select value={form.weekOfMonth ?? 'first'} onValueChange={(v) => setField('weekOfMonth', v as CRMSchedule['weekOfMonth'])}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {WEEK_OF_MONTH_OPTIONS.map((w) => (
-                      <SelectItem key={w} value={w}>{WEEK_OF_MONTH_LABELS[w]} {form.dayOfWeek}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-slate-500">E.g. &ldquo;1st Monday&rdquo; of every month.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Frequency</Label>
+                      <Select value={form.frequency} onValueChange={(v) => setField('frequency', v as CRMSchedule['frequency'])}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(FREQUENCY_LABELS) as CRMSchedule['frequency'][]).map((f) => (
+                            <SelectItem key={f} value={f}>{FREQUENCY_LABELS[f]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Day of Week</Label>
+                      <Select value={form.dayOfWeek} onValueChange={(v) => setField('dayOfWeek', v as CRMSchedule['dayOfWeek'])}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {DAY_OPTIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {isMonthly && (
+                    <div className="space-y-1.5">
+                      <Label>Which Week</Label>
+                      <Select value={form.weekOfMonth ?? 'first'} onValueChange={(v) => setField('weekOfMonth', v as CRMSchedule['weekOfMonth'])}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {WEEK_OF_MONTH_OPTIONS.map((w) => (
+                            <SelectItem key={w} value={w}>{WEEK_OF_MONTH_LABELS[w]} {form.dayOfWeek}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-slate-500">E.g. &ldquo;1st Monday&rdquo; of every month.</p>
+                    </div>
+                  )}
+
+                  {isBiWeekly && (
+                    <div className="space-y-1.5">
+                      <Label>Week Pattern</Label>
+                      <Select value={form.weekPattern ?? 'none'} onValueChange={(v) => setField('weekPattern', (v === 'none' ? null : v) as CRMSchedule['weekPattern'])}>
+                        <SelectTrigger><SelectValue placeholder="Select pattern…" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Any week</SelectItem>
+                          <SelectItem value="even">Even Weeks</SelectItem>
+                          <SelectItem value="odd">Odd Weeks</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {showAnchor && (
+                    <div className="space-y-1.5">
+                      <Label>Anchor Date <span className="text-slate-400 font-normal">(optional)</span></Label>
+                      <Input type="date" value={form.anchorDate} onChange={(e) => setField('anchorDate', e.target.value)} />
+                      <p className="text-xs text-slate-500">A known service date used to determine even/odd week alignment.</p>
+                    </div>
+                  )}
+
+                  {/* Season window */}
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <p className="text-xs font-semibold text-slate-600">Season Window <span className="font-normal text-slate-400">(optional)</span></p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <MonthDayPicker label="Season Start" value={form.seasonStart} onChange={(v) => setField('seasonStart', v)} />
+                      <MonthDayPicker label="Season End" value={form.seasonEnd} onChange={(v) => setField('seasonEnd', v)} />
+                    </div>
+                    <p className="text-xs text-slate-400">E.g. April 1 – November 30 for mowing season. Leave blank for year-round.</p>
+                  </div>
+
+                  <DialogFooter className="pt-2">
+                    <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
+                    <Button type="submit" disabled={isPending || !form.name.trim()}>
+                      {isPending ? 'Saving…' : schedule ? 'Save Changes' : 'Add Schedule'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+
+                {/* Right: date preview */}
+                <div className="w-full md:w-52 md:shrink-0 flex flex-col rounded-lg border overflow-hidden self-start">
+                  <div className="text-white text-xs font-semibold px-3 py-2 flex items-center gap-1.5" style={{ backgroundColor: brandColor }}>
+                    <CalendarDays className="h-3.5 w-3.5" /> Upcoming Dates
+                  </div>
+                  <div className="divide-y text-xs max-h-80 overflow-y-auto">
+                    {previewDates.length === 0 ? (
+                      <p className="px-3 py-4 text-slate-400 text-center">No dates in season</p>
+                    ) : (
+                      previewDates.map((d, i) => (
+                        <div key={i} className="px-3 py-1.5 text-slate-700">{formatDate(d)}</div>
+                      ))
+                    )}
+                  </div>
+                  <div className="border-t bg-slate-50 px-3 py-1.5 text-[10px] text-slate-400">
+                    Next {previewDates.length} occurrences
+                  </div>
+                </div>
               </div>
+            </TabsContent>
+
+            {schedule && (
+              <TabsContent value="audit" className="mt-0">
+                <AuditTrailTab recordType="schedule" recordId={schedule.id} />
+              </TabsContent>
             )}
-
-            {isBiWeekly && (
-              <div className="space-y-1.5">
-                <Label>Week Pattern</Label>
-                <Select value={form.weekPattern ?? 'none'} onValueChange={(v) => setField('weekPattern', (v === 'none' ? null : v) as CRMSchedule['weekPattern'])}>
-                  <SelectTrigger><SelectValue placeholder="Select pattern…" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Any week</SelectItem>
-                    <SelectItem value="even">Even Weeks</SelectItem>
-                    <SelectItem value="odd">Odd Weeks</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {showAnchor && (
-              <div className="space-y-1.5">
-                <Label>Anchor Date <span className="text-slate-400 font-normal">(optional)</span></Label>
-                <Input type="date" value={form.anchorDate} onChange={(e) => setField('anchorDate', e.target.value)} />
-                <p className="text-xs text-slate-500">A known service date used to determine even/odd week alignment.</p>
-              </div>
-            )}
-
-            {/* Season window */}
-            <div className="rounded-lg border p-3 space-y-3">
-              <p className="text-xs font-semibold text-slate-600">Season Window <span className="font-normal text-slate-400">(optional)</span></p>
-              <div className="grid grid-cols-2 gap-3">
-                <MonthDayPicker label="Season Start" value={form.seasonStart} onChange={(v) => setField('seasonStart', v)} />
-                <MonthDayPicker label="Season End" value={form.seasonEnd} onChange={(v) => setField('seasonEnd', v)} />
-              </div>
-              <p className="text-xs text-slate-400">E.g. April 1 – November 30 for mowing season. Leave blank for year-round.</p>
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
-              <Button type="submit" disabled={isPending || !form.name.trim()}>
-                {isPending ? 'Saving…' : schedule ? 'Save Changes' : 'Add Schedule'}
-              </Button>
-            </DialogFooter>
-          </form>
-
-          {/* Right: date preview */}
-          <div className="w-full md:w-52 md:shrink-0 flex flex-col rounded-lg border overflow-hidden self-start">
-            <div className="text-white text-xs font-semibold px-3 py-2 flex items-center gap-1.5" style={{ backgroundColor: brandColor }}>
-              <CalendarDays className="h-3.5 w-3.5" /> Upcoming Dates
-            </div>
-            <div className="divide-y text-xs max-h-80 overflow-y-auto">
-              {previewDates.length === 0 ? (
-                <p className="px-3 py-4 text-slate-400 text-center">No dates in season</p>
-              ) : (
-                previewDates.map((d, i) => (
-                  <div key={i} className="px-3 py-1.5 text-slate-700">{formatDate(d)}</div>
-                ))
-              )}
-            </div>
-            <div className="border-t bg-slate-50 px-3 py-1.5 text-[10px] text-slate-400">
-              Next {previewDates.length} occurrences
-            </div>
           </div>
-        </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

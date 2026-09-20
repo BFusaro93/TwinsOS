@@ -47,6 +47,7 @@ export interface EstimateLineItem {
   unitType: string | null;               // sqft, lf, cuyd, hr, each, acres
   productionRateSqftPerHr: number | null; // from service record — drives budgetedHours auto-calc when budgetMethod is 'production_rate'
   budgetMethod: BudgetMethod;             // snapshotted from the service when the line item is added
+  complexityBps: number;                  // 10000 = 100% (no adjustment) — scales totalCents and totalCostCents/budgetedHours together
   sortOrder: number;
   // per-line-item notes (Sprint 3a)
   estimateDesc: string | null;  // shown on client-facing estimate document
@@ -82,7 +83,10 @@ export interface EstimateDirectCost {
 export interface EstimateMilestone {
   id: string;
   orgId: string;
-  estimateId: string;
+  /** Null for a milestone added straight onto a project that had no estimate. */
+  estimateId: string | null;
+  /** Set once the estimate is converted, or immediately for a project-authored milestone. */
+  projectId: string | null;
   name: string;
   milestoneType: 'flat' | 'percent';
   /** Cents if milestoneType is 'flat', basis points (0-10000) if 'percent'. */
@@ -90,6 +94,8 @@ export interface EstimateMilestone {
   /** Snapshotted dollar amount actually billed — the source of truth for invoicing. */
   amountCents: number;
   sortOrder: number;
+  /** Optional planned billing date — milestones are triggered by progress, not dates. */
+  targetDate: string | null;
   status: 'pending' | 'invoiced';
   invoiceId: string | null;
   createdAt: string;
@@ -103,6 +109,11 @@ export interface Estimate {
   orgId: string;
   estimateNumber: number;
   clientId: string;
+  /** Which of the client's properties this estimate is for — null for most
+   *  estimates today. Drives Rate Matrix lookups (a property's custom field
+   *  values); with no property, production_rate/Rate Matrix falls back to
+   *  the flat behavior every estimate already had. */
+  propertyId: string | null;
   description: string;
   salesRepId: string | null;
   source: string | null;
@@ -151,6 +162,20 @@ export interface Estimate {
   depositReference: string | null;
   depositNotes: string | null;
   depositCollectedAt: string | null;
+  /** A deposit the client has submitted that Stripe has not settled yet.
+   *  An ACH debit sits in `processing` for 3–5 business days and writes
+   *  nothing to crm_payments until it clears, so without these the estimate
+   *  looks exactly like one where the client skipped the deposit. */
+  depositPendingCents: number | null;
+  depositPendingMethod: 'card' | 'us_bank_account' | null;
+  depositPendingAt: string | null;
+  /** The last deposit attempt the bank returned or the card network declined.
+   *  Cleared as soon as a deposit is recorded. While set with no deposit
+   *  collected, the client's proposal link is re-opened for a retry. */
+  depositFailedCents: number | null;
+  depositFailedMethod: 'card' | 'us_bank_account' | null;
+  depositFailedReason: string | null;
+  depositFailedAt: string | null;
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: DisplaySettings;
@@ -232,6 +257,7 @@ export interface EstimateTemplateItem {
 
 export interface NewEstimateFormValues {
   clientId: string;
+  propertyId: string | null;
   description: string;
   salesRepId: string;
   source: string;

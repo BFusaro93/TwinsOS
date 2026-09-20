@@ -26,6 +26,7 @@ export interface AppNotification {
     | "estimate_change_request"
     | "estimate_client_accepted"
     | "estimate_client_rejected"
+    | "estimate_deposit_failed"
     | "ticket_created"
     | "ticket_assigned"
     | "ticket_comment"

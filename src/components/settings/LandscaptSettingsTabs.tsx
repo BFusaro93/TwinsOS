@@ -699,6 +699,20 @@ function CRMTab() {
       <AccordionSection title="Custom Client Fields" count={0} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
         <CustomFieldDefsEditor />
       </AccordionSection>
+      <AccordionSection title="Email Templates" defaultOpen={false} description="Templates used when emailing clients now live in Documents, alongside every other template type.">
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
+          <p className="text-sm text-slate-600">
+            Build and edit client email templates in <span className="font-medium">Documents</span> — create a
+            document with type &quot;Client&quot;, and it&apos;ll show up in the template picker for the Dispatch
+            Board / Waiting List &quot;Email Selected Clients&quot; bulk action.
+          </p>
+          <Link href="/crm/settings/documents" className="w-fit">
+            <Button size="sm" variant="outline" className="h-8 text-xs">
+              Go to Documents
+            </Button>
+          </Link>
+        </div>
+      </AccordionSection>
     </div>
   );
 }
@@ -812,7 +826,7 @@ function CustomFieldDefsEditor() {
       {/* Built-in read-only list */}
       <div className="pb-3">
         <p className="text-xs text-slate-400 mb-2">Built-in takeoffs (always available, stored on the client record)</p>
-        {["Turf Sq. Ft.", "Mulch Bed Sq. Ft.", "Gross Sq. Ft.", "Linear Ft. Perimeter", "Linear Ft. Edging", "Yards of Mulch"].map((f) => (
+        {["Turf Sq. Ft.", "Mulch Bed Sq. Ft.", "Gross Sq. Ft.", "Linear Ft. Perimeter", "Linear Ft. Edging", "Yards of Mulch", "Parking Lot Sq. Ft."].map((f) => (
           <div key={f} className="flex items-center gap-2 py-1.5 text-sm text-slate-600">
             <GripVertical className="h-3.5 w-3.5 text-slate-200" />
             <span className="flex-1">{f}</span>
@@ -892,7 +906,7 @@ function CustomFieldDefsEditor() {
                 autoFocus
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g. Parking Lot Sq. Ft."
+                placeholder="e.g. Fence Linear Ft."
                 onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); if (e.key === "Escape") setAdding(false); }}
                 className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
               />
@@ -1793,20 +1807,19 @@ function GoogleMapsCard() {
     if (!apiKey.trim()) return;
     setTesting(true);
     try {
-      const res = await fetch("/api/crm/route-optimize", {
+      const res = await fetch("/api/crm/route-optimize?test=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitIds: ["test-ping"] }),
       });
-      const data = await res.json() as { error?: string };
-      // A 422 with "Not enough visits" means the key was found — good
-      // A 422 with "not configured" means key was not saved yet
-      if (data.error?.includes("not configured")) {
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (data.ok) {
+        toast.success("API key is valid and reachable");
+      } else if (data.error?.includes("not configured")) {
         toast.error("Save the key first, then test.");
       } else if (data.error?.includes("Google Maps API error")) {
         toast.error(`Key rejected by Google: ${data.error}`);
       } else {
-        toast.success("API key is valid and reachable");
+        toast.error(data.error ?? "Test failed");
       }
     } catch {
       toast.error("Could not reach the route-optimize endpoint");
@@ -1817,8 +1830,8 @@ function GoogleMapsCard() {
 
   return (
     <IntegrationCard
-      title="Google Maps — Route Optimization"
-      description="Optimize crew routes on the Dispatch Board using the Distance Matrix API. Requires a Google Maps Platform API key with Distance Matrix enabled."
+      title="Google Maps"
+      description="Powers route optimization on the Dispatch Board, the Nearby Waiting List lookup, and the Aerial Measurement tool. Requires a Google Maps Platform API key with Distance Matrix, Geocoding, and Maps JavaScript enabled."
       status={isConfigured ? "connected" : "not_connected"}
     >
       <div className="space-y-4">
@@ -1826,8 +1839,8 @@ function GoogleMapsCard() {
           <p className="font-semibold mb-1">Setup instructions</p>
           <ol className="list-decimal ml-4 space-y-0.5">
             <li>Go to <span className="font-mono">console.cloud.google.com</span> → APIs &amp; Services</li>
-            <li>Enable <strong>Distance Matrix API</strong> and <strong>Directions API</strong></li>
-            <li>Create an API key and restrict it to those two APIs</li>
+            <li>Enable <strong>Distance Matrix API</strong>, <strong>Geocoding API</strong>, and <strong>Maps JavaScript API</strong></li>
+            <li>Create an API key and restrict it to those three APIs</li>
             <li>Paste the key below and click Save</li>
           </ol>
         </div>

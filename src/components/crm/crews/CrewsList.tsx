@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import {
   Dialog,
   DialogContent,
@@ -579,11 +580,12 @@ function CrewDialog({
   const tabList = [
     { value: "details", label: "Team Details" },
     { value: "assignments", label: "Team Assignments", disabled: !activeCrew },
+    { value: "audit", label: "Audit Trail", disabled: !activeCrew },
   ];
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setActiveCrew(crew); setForm(crew ? crewToForm(crew) : emptyForm); } onOpenChange(o); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-2xl p-0 gap-0 h-[90vh] flex flex-col sm:p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="text-xl font-bold">{title}</DialogTitle>
         </DialogHeader>
@@ -613,6 +615,9 @@ function CrewDialog({
             </TabsContent>
             <TabsContent value="assignments" className="mt-0">
               {activeCrew && <TeamAssignmentsTab crew={activeCrew} />}
+            </TabsContent>
+            <TabsContent value="audit" className="mt-0">
+              {activeCrew && <AuditTrailTab recordType="crew" recordId={activeCrew.id} />}
             </TabsContent>
           </div>
         </Tabs>

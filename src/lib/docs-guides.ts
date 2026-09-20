@@ -10,6 +10,7 @@ import {
   Container,
   Gauge,
   Users,
+  HardHat,
   Calculator,
   CalendarDays,
   Map,
@@ -42,6 +43,7 @@ import {
   ClipboardCheck,
   CreditCard,
   Handshake,
+  DollarSign,
   MessageSquare,
   type LucideIcon,
 } from "lucide-react";
@@ -116,11 +118,25 @@ export const DOC_GUIDES: DocGuide[] = [
     icon: CalendarDays,
   },
   {
+    slug: "services-pricing-guide",
+    kicker: "Landscapt (CRM)",
+    title: "Services & Pricing",
+    description: "The service catalog, bulk catalog price changes, and Price Adjustment runs — which prices seed new work and which ones actually bill.",
+    icon: DollarSign,
+  },
+  {
     slug: "dispatch-board-guide",
     kicker: "Landscapt (CRM)",
     title: "The Dispatch Board",
     description: "The daily scheduling screen crews and dispatchers live in — visits, crews, status, and how actual hours get calculated.",
     icon: Map,
+  },
+  {
+    slug: "crew-app-guide",
+    kicker: "Landscapt (CRM)",
+    title: "The Crew App",
+    description: "What a crew sees on their phone — the day's stops, clocking on and off, breaks, photos, and sending work back to the office.",
+    icon: HardHat,
   },
   {
     slug: "sales-meetings-guide",
@@ -330,4 +346,37 @@ export function groupedDocGuides(): { kicker: string; guides: DocGuide[] }[] {
   return order
     .map((kicker) => ({ kicker, guides: DOC_GUIDES.filter((g) => g.kicker === kicker) }))
     .filter((group) => group.guides.length > 0);
+}
+
+/**
+ * Where guide links should point given the shell the reader is currently in.
+ * The same guide bodies are mounted under all three shells, so a guide opened
+ * from Landscapt stays in Landscapt instead of dumping the reader into the
+ * Settings nav. Defaults to the Settings path, which is where every
+ * hard-coded "Full guide" link in docs-content.ts and every external/MCP
+ * reference points.
+ */
+export function guideBasePath(pathname: string | null | undefined): string {
+  if (!pathname) return "/settings/support";
+  if (pathname === "/crm" || pathname.startsWith("/crm/")) return "/crm/docs";
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return "/settings/support";
+  return "/docs";
+}
+
+/**
+ * Docs pages mounted in every shell: the guides, plus the public API + MCP
+ * endpoint reference. "library" is deliberately absent — it exists only under
+ * Settings, so a link to it must not be rewritten.
+ */
+export const SHELL_MOUNTED_DOC_SLUGS = new Set([...DOC_GUIDE_SLUGS, "api-docs"]);
+
+/**
+ * Rewrites a hard-coded "/settings/support/<slug>" docs link (docs-content.ts
+ * and the guide bodies store them that way) to the equivalent link in the
+ * reader's current shell. Anything not mounted per-shell is returned untouched.
+ */
+export function localizeGuideHref(href: string, pathname: string | null | undefined): string {
+  const match = /^\/settings\/support\/([^/#?]+)(.*)$/.exec(href);
+  if (!match || !SHELL_MOUNTED_DOC_SLUGS.has(match[1])) return href;
+  return `${guideBasePath(pathname)}/${match[1]}${match[2]}`;
 }

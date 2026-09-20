@@ -14,7 +14,16 @@ import {
   useReturnVisitToWaitingList,
   useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
-import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
+import { useCreateInvoiceFromJob, useInvoiceForVisit } from "@/lib/hooks/use-invoices";
+import { useOrgTags } from "@/lib/hooks/use-clients";
+// Property-scoped defs, NOT the client-level ones: the property values these
+// columns render come from crm_property_custom_field_values, which keys off
+// crm_rate_matrix_field_defs. Reading the client-level def table here is what
+// made every custom takeoff column permanently blank.
+import { usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
+import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
+import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -35,8 +44,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime, formatDateShort, todayLocalISODate, formatHours } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort, todayCompanyISODate, formatHours } from "@/lib/utils";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
+import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -65,8 +75,13 @@ import {
   Clock,
   Undo2,
   Car,
+  Flame,
+  Tag,
+  Mail,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
+import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
+import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,8 +94,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
-import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
+import type { CRMJob, CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
+import { useCrews, useCrewDailyMembers, useCrewDailyMembersRange, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
@@ -96,6 +111,10 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 // memoization keyed on this array's identity.
 const EMPTY_MEMBER_TIMES: CrewMemberTime[] = [];
 
+// Same stable-empty-array reasoning as EMPTY_MEMBER_TIMES, for per-day crew
+// headcount overrides.
+const EMPTY_DAILY_OVERRIDES: { id: string; member_id: string; crew_id: string }[] = [];
+
 // Formats a "HH:MM" / "HH:MM:SS" 24h time string (the shape a native
 // <input type="time"> value/DB `time` column uses) into "3:00 PM" for
 // read-only display.
@@ -106,6 +125,33 @@ function formatTimeShort(value: string): string {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
+
+/**
+ * The crew a visit actually runs with.
+ *
+ * crm_job_visits.crew_id is null whenever the visit inherits its crew from
+ * the job — which is the common case, since assigning a crew on the job is
+ * how most recurring work is set up and nothing writes the value down onto
+ * each generated visit. Every consumer MUST resolve through this, not through
+ * raw `v.crewId`: the two disagreeing is what let a job-inherited visit be
+ * grouped under its crew visually while being numbered, dragged, filtered and
+ * PRINTED as if it were unassigned.
+ *
+ * Module-level rather than a closure inside the board so the print path and
+ * the totals row resolve crews the same way the table does.
+ */
+export function effectiveCrewId(
+  v: { crewId: string | null; job?: { crewId?: string | null } | null }
+): string | null {
+  return v.crewId ?? v.job?.crewId ?? null;
+}
+
+/**
+ * Bucket key for visits with no crew. Stop numbering, drag/drop and route
+ * optimization are all scoped per crew, so the crewless visits need a key of
+ * their own rather than being lumped in with some real crew's block.
+ */
+const UNASSIGNED_CREW_KEY = "unassigned";
 
 // How many people are actually on a crew for a given day — the crew's default
 // roster (crm_crew_members), with any same-day-only reassignments from the
@@ -296,7 +342,8 @@ function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving
 
 // ── column visibility ─────────────────────────────────────────────────────────
 
-type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "variance" | "men" | "qty" | "rate" | "amt" | "icons";
+type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "variance" | "men" | "qty" | "rate" | "amt" | "icons"
+  | "priority" | "sales_rep" | "notes_to_crew" | "gate_code" | "turf_sqft" | "mulch_sqft" | "gross_sqft" | "lin_perimeter" | "lin_edging" | "yards_mulch" | "parking_sqft";
 
 const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "service",  label: "Service" },
@@ -316,6 +363,59 @@ const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "amt",      label: "Amount" },
   { key: "icons",    label: "Notes/Icons" },
 ];
+
+/** Extra columns not shown by default — fields from Client/Property records
+ *  that SA-style dispatch boards let you add. Appended after the fixed
+ *  columns above so they render at the end of the row. */
+const EXTRA_COL_DEFS: { key: ColKey; label: string }[] = [
+  { key: "priority",      label: "Priority" },
+  { key: "sales_rep",     label: "Sales Rep" },
+  { key: "notes_to_crew", label: "Notes to Crew" },
+  { key: "gate_code",     label: "Gate/Lock Code" },
+  { key: "turf_sqft",     label: "Turf Sq. Ft." },
+  { key: "mulch_sqft",    label: "Mulch Bed Sq. Ft." },
+  { key: "gross_sqft",    label: "Gross Sq. Ft." },
+  { key: "lin_perimeter", label: "Linear Ft. of Perimeter" },
+  { key: "lin_edging",    label: "Linear Ft. of Edging" },
+  { key: "yards_mulch",   label: "Yards of Mulch" },
+  { key: "parking_sqft",  label: "Parking Lot Sq. Ft." },
+];
+
+function customColKey(fieldDefId: string) { return `custom:${fieldDefId}`; }
+
+function formatSqft(n: number | null | undefined): string {
+  return n != null ? n.toLocaleString() : "—";
+}
+
+function extraColCellText(key: ColKey, job: CRMJob | null | undefined): string {
+  switch (key) {
+    case "sales_rep":     return job?.salesRepName ?? "—";
+    case "notes_to_crew": return job?.propertyNotesToCrew ?? job?.notesToCrew ?? "—";
+    case "gate_code":     return job?.propertyGateCode ?? "—";
+    case "turf_sqft":     return formatSqft(job?.propertyTurfSqft);
+    case "mulch_sqft":    return formatSqft(job?.propertyMulchBedSqft);
+    case "gross_sqft":    return formatSqft(job?.propertyGrossSqft);
+    case "lin_perimeter": return formatSqft(job?.propertyLinearFtPerimeter);
+    case "lin_edging":    return formatSqft(job?.propertyLinearFtEdging);
+    case "yards_mulch":   return formatSqft(job?.propertyYardsOfMulch);
+    case "parking_sqft":  return formatSqft(job?.propertyParkingLotSqft);
+    default:              return "—";
+  }
+}
+
+/** Raw numeric value behind an EXTRA_COL_DEFS cell, for the Totals row — null for text columns (sales rep, notes, gate code). */
+function extraColNumericValue(key: ColKey, job: CRMJob | null | undefined): number | null {
+  switch (key) {
+    case "turf_sqft":     return job?.propertyTurfSqft ?? null;
+    case "mulch_sqft":    return job?.propertyMulchBedSqft ?? null;
+    case "gross_sqft":    return job?.propertyGrossSqft ?? null;
+    case "lin_perimeter": return job?.propertyLinearFtPerimeter ?? null;
+    case "lin_edging":    return job?.propertyLinearFtEdging ?? null;
+    case "yards_mulch":   return job?.propertyYardsOfMulch ?? null;
+    case "parking_sqft":  return job?.propertyParkingLotSqft ?? null;
+    default:              return null;
+  }
+}
 
 // ── job detail sheet ──────────────────────────────────────────────────────────
 
@@ -359,6 +459,7 @@ function JobDetailSheet({
   const { mutateAsync: updateVisit } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
+  const { data: existingInvoice } = useInvoiceForVisit(visit.id);
   const { currentUser } = useCurrentUserStore();
 
   const job  = visit.job;
@@ -420,6 +521,10 @@ function JobDetailSheet({
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
   const [budgetedHoursInput, setBudgetedHoursInput] = useState(hoursInputValue(computeBudgetedHours(visit)));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
+  // null = inherit the job's High Priority flag (the common case); true/false
+  // explicitly overrides it for just this one visit.
+  const [highPriorityOverride, setHighPriorityOverride] = useState<boolean | null>(visit.isHighPriority);
+  useEffect(() => { setHighPriorityOverride(visit.isHighPriority); }, [visit.id, visit.isHighPriority]);
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
          : rateFallbackCents != null ? rateFallbackCents / 100
@@ -527,10 +632,10 @@ function JobDetailSheet({
       // Targets the stop's shared anchor visit id, not this visit's own id
       // — see EditJobTimesDialog for why crm_crew_member_times always lives
       // against the anchor even for a sibling service visit like this one.
-      const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
+      const visitCrewId = effectiveCrewId(visit);
       const targets = memberTimes.length > 0
         ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
-        : effectiveCrewMemberIds(effectiveCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet)
+        : effectiveCrewMemberIds(visitCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet)
             .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
       await Promise.all(targets.map((t) => upsertMemberTimeForSheet.mutateAsync({
         visitId: anchorVisitId,
@@ -592,6 +697,7 @@ function JobDetailSheet({
       rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null,
       notes_to_client: notesToClient || null,
       invoice_description: invoiceDesc || null,
+      is_high_priority: highPriorityOverride,
     };
     if (status === "completed" && visit.status !== "completed") {
       updates.completed_at = new Date().toISOString();
@@ -636,14 +742,23 @@ function JobDetailSheet({
   }
 
   async function handleInvoice() {
+    // Belt-and-suspenders against the button somehow firing anyway (e.g. a
+    // stale render before the query resolves) — visit.status === "completed"
+    // auto-invoices in the background, and this manual button previously had
+    // no idempotency check at all, so a second click created a duplicate,
+    // numberless invoice missing the products swept into the first one.
+    if (existingInvoice) {
+      router.push(`/crm/accounting/invoices/${existingInvoice.id}`);
+      return;
+    }
     try {
-      const serviceDate = visit.scheduledDate ?? todayLocalISODate();
+      const serviceDate = visit.scheduledDate ?? todayCompanyISODate();
       // invoiceDescription is authored via a rich-text editor on the Service
       // (and carried down onto the job/visit) — stripHtml() it before it
       // reaches an actual generated invoice, or a client-facing invoice
       // literally shows raw markup like "<p>...</p>".
       const masterDescription = stripHtml(visit.invoiceDescription || job?.invoiceDescription || "") || null;
-      const lineItems = services.map((s) => ({
+      const svcLineItems = services.map((s) => ({
         name: s.serviceName,
         description: masterDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName,
         qty: s.qty ?? 1,
@@ -651,12 +766,32 @@ function JobDetailSheet({
         totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),
         serviceDate,
       }));
+      // Sweep in unresolved (pending) Products/materials too — mirrors
+      // JobDetail.tsx's buildPendingProductLineItems(), which this popup's
+      // invoice creation was missing, silently leaving materials off the
+      // invoice and stuck on "Pending" forever.
+      const productLineItems = jobProducts
+        .filter((p) => p.status === "pending")
+        .map((p) => {
+          const billedQty = p.invoiceQty ?? p.qty;
+          return {
+            name: p.productName,
+            description: p.productName,
+            qty: billedQty,
+            rateCents: p.unitPriceCents,
+            totalCents: p.unitPriceCents * billedQty,
+            serviceDate,
+            productId: p.productId,
+            jobProductId: p.id,
+          };
+        });
+      const lineItems = [...svcLineItems, ...productLineItems];
       const subtotalCents = lineItems.reduce((sum, li) => sum + li.totalCents, 0);
       const invoice = await createInvoice({
         jobId: visit.jobId,
         clientId: visit.clientId,
         description: masterDescription ?? serviceName,
-        invoiceDate: visit.scheduledDate ?? todayLocalISODate(),
+        invoiceDate: visit.scheduledDate ?? todayCompanyISODate(),
         lineItems,
         subtotalCents,
         taxRateBps: 0,
@@ -675,13 +810,16 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[680px] md:w-[680px] p-0 flex flex-col gap-0"
+        className="w-full sm:max-w-[800px] md:w-[800px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 px-5 py-4 pr-14">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <SheetTitle className="text-base font-bold text-slate-900 leading-tight truncate">
+              <SheetTitle className="flex items-center gap-1.5 text-base font-bold text-slate-900 leading-tight truncate">
+                {(highPriorityOverride ?? job?.isHighPriority) && (
+                  <span title="High priority"><Flame className="h-4 w-4 shrink-0 text-red-500" /></span>
+                )}
                 {serviceName}
               </SheetTitle>
               {visit.clientName && (
@@ -713,7 +851,9 @@ function JobDetailSheet({
                   disabled={invoicing}
                 >
                   <FileText className="mr-1 h-3 w-3" />
-                  Invoice
+                  {existingInvoice
+                    ? `View Invoice${existingInvoice.invoiceNumber != null ? ` #${existingInvoice.invoiceNumber}` : ""}`
+                    : "Invoice"}
                 </Button>
               )}
             </div>
@@ -824,6 +964,30 @@ function JobDetailSheet({
                       {SUB_STATUS_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Priority — per-visit override of the job's High Priority
+                    flag. "Job default" clears the override so the visit goes
+                    back to inheriting whatever the job is set to. */}
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                    Priority
+                  </label>
+                  <Select
+                    value={highPriorityOverride === null ? "default" : highPriorityOverride ? "high" : "normal"}
+                    onValueChange={(v) => setHighPriorityOverride(v === "default" ? null : v === "high")}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default" className="text-xs">
+                        Job default ({job?.isHighPriority ? "High" : "Normal"})
+                      </SelectItem>
+                      <SelectItem value="high" className="text-xs">High priority</SelectItem>
+                      <SelectItem value="normal" className="text-xs">Normal priority</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1100,38 +1264,16 @@ function JobDetailSheet({
                 </table>
               </div>
             )}
-            {/* Products (materials) section */}
-            {jobProducts.length > 0 && (
-              <div className="border-t">
-                <div className="bg-slate-50 border-b px-4 py-2">
-                  <p className="text-xs font-semibold text-slate-600">Products ({jobProducts.length})</p>
-                </div>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b bg-slate-50 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      <th className="px-4 py-2">Product</th>
-                      <th className="px-2 py-2 text-right">Qty</th>
-                      <th className="px-2 py-2 text-right">Unit Price</th>
-                      <th className="px-2 py-2 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobProducts.map((p) => (
-                      <tr key={p.id} className="border-b">
-                        <td className="px-4 py-2 text-slate-700">{p.productName}</td>
-                        <td className="px-2 py-2 text-right text-slate-500">{p.qty}</td>
-                        <td className="px-2 py-2 text-right text-slate-500">{formatCurrency(p.unitPriceCents)}</td>
-                        <td className="px-2 py-2 text-right font-medium text-slate-700">{formatCurrency(p.unitPriceCents * p.qty)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Products (materials) section — used vs. billed qty can differ, see JobProductsSection */}
+            {job && (
+              <div className="border-t px-4 py-3">
+                <JobProductsSection jobId={job.id} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
               </div>
             )}
           </div>
 
           {/* Right: costing panel */}
-          <div className="w-44 shrink-0 border-l bg-slate-50 flex flex-col">
+          <div className="w-56 shrink-0 border-l bg-slate-50 flex flex-col">
             <div className="px-4 pt-4 pb-3 border-b">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
                 Job Costing
@@ -1249,6 +1391,35 @@ function JobDetailSheet({
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
+import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey } from "@/lib/hooks/use-route-order";
+
+/** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
+function WriteInBlank({ className = "" }: { className?: string }) {
+  return <span className={cn("inline-block border-b border-slate-400", className)}>&nbsp;</span>;
+}
+
+function crewNotesFor(v: CRMJobVisit): string {
+  return v.notesToCrew ?? v.job?.notesToCrew ?? v.job?.propertyNotesToCrew ?? "";
+}
+
+/** "1.5" -> "1 hrs / 30 mins", matching the SA route-sheet Est. format. */
+function formatEstHrsMins(hours: number | null | undefined): string {
+  if (hours == null) return "—";
+  const totalMins = Math.round(hours * 60);
+  return `${Math.floor(totalMins / 60)} hrs / ${totalMins % 60} mins`;
+}
+
+function formatLongDate(iso: string): string {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(d);
+}
+
+const VISIT_STATUS_LABELS: Record<string, string> = {
+  scheduled: "Scheduled", dispatched: "Dispatched", in_progress: "In Progress",
+  completed: "Completed", cancelled: "Cancelled", skipped: "Skipped",
+};
 
 function PrintDialog({
   open, onOpenChange, visits, crews, selectedDate,
@@ -1259,11 +1430,20 @@ function PrintDialog({
   crews: { id: string; name: string }[];
   selectedDate: string;
 }) {
-  const byCrew = (crews).map((c) => ({
+  const [format, setFormat] = useState<"compact" | "detailed">("detailed");
+  const { data: richCrews } = useCrews(false);
+  const rosterByCrewId = new Map((richCrews ?? []).map((c) => [c.id, c.members ?? []]));
+
+  // Group on the EFFECTIVE crew (see effectiveCrewId) — grouping on the raw
+  // column printed every job-inherited visit on one "Unassigned" sheet while
+  // the crew that's actually running them got no sheet at all.
+  const byCrew = crews.map((c) => ({
     crew: c,
-    visits: visits.filter((v) => v.crewId === c.id),
+    members: rosterByCrewId.get(c.id) ?? [],
+    visits: visits.filter((v) => effectiveCrewId(v) === c.id),
   })).filter((x) => x.visits.length > 0);
-  const unassigned = visits.filter((v) => !v.crewId);
+  const unassigned = visits.filter((v) => !effectiveCrewId(v));
+  const dateLabel = formatLongDate(selectedDate);
 
   function printRouteTable(cv: CRMJobVisit[]) {
     return (
@@ -1274,8 +1454,10 @@ function PrintDialog({
             <th className="border border-slate-300 px-2 py-1 text-left">Client</th>
             <th className="border border-slate-300 px-2 py-1 text-left">Address</th>
             <th className="border border-slate-300 px-2 py-1 text-left">Service</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Time</th>
+            <th className="border border-slate-300 px-2 py-1 text-left">Sched.</th>
             <th className="border border-slate-300 px-2 py-1 text-center">B Hrs</th>
+            <th className="border border-slate-300 px-2 py-1 text-center w-16">Start</th>
+            <th className="border border-slate-300 px-2 py-1 text-center w-16">End</th>
             <th className="border border-slate-300 px-2 py-1 text-left">Notes to Crew</th>
           </tr>
         </thead>
@@ -1292,7 +1474,9 @@ function PrintDialog({
                 <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
                 <td className="border border-slate-200 px-2 py-1 text-center">{computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{(v as any).notesToCrew ?? ""}</td>
+                <td className="border border-slate-200 px-2 py-1"><WriteInBlank className="w-full" /></td>
+                <td className="border border-slate-200 px-2 py-1"><WriteInBlank className="w-full" /></td>
+                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{crewNotesFor(v)}</td>
               </tr>
             );
           })}
@@ -1301,42 +1485,169 @@ function PrintDialog({
     );
   }
 
+  function renderCrewRosterHeader(members: { id: string; employeeName?: string; resourceCode?: string | null }[], jobCount: number) {
+    const rows = members.length > 0 ? members : [null];
+    return (
+      <div className="flex items-start gap-4 mb-3">
+        <table className="flex-1 text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className="pb-1 text-left font-semibold">Assigned Resource:</th>
+              <th className="pb-1 text-left font-semibold w-20">Start:</th>
+              <th className="pb-1 text-left font-semibold w-20">End:</th>
+              <th className="pb-1 text-left font-semibold w-24">Total Hrs:</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((m, i) => (
+              <tr key={m?.id ?? i}>
+                <td className="py-1.5 pr-3 border-b border-slate-300">
+                  {m ? `${m.employeeName ?? "—"}${m.resourceCode ? ` (${m.resourceCode})` : ""}` : <>&nbsp;</>}
+                </td>
+                <td className="py-1.5 pr-3 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
+                <td className="py-1.5 pr-3 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
+                <td className="py-1.5 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="w-48 shrink-0 space-y-2 pt-5 text-xs">
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">Truck #:</span><WriteInBlank className="flex-1" /></div>
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">Start Mileage:</span><WriteInBlank className="flex-1" /></div>
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">End Mileage:</span><WriteInBlank className="flex-1" /></div>
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold shrink-0">Job Count:</span><span className="font-bold">{jobCount}</span></div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderJobCard(v: CRMJobVisit, i: number) {
+    const job = v.job;
+    const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
+    const addr = [job?.serviceAddress, [job?.serviceCity, job?.serviceZip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    const title = [v.clientName, addr].filter(Boolean).join(" - ");
+    const notes = crewNotesFor(v);
+    const gateCode = job?.propertyGateCode;
+    const turfSqft = job?.propertyTurfSqft;
+
+    return (
+      <div key={v.id} className="border-b border-slate-300 py-2.5 break-inside-avoid">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 inline-block h-3.5 w-3.5 border border-slate-600 shrink-0" />
+            <div>
+              <p className="font-bold text-sm leading-snug">{title || "—"}</p>
+              <p className="text-xs text-slate-600">{svc || "—"}</p>
+            </div>
+          </div>
+          <div className="text-right text-xs shrink-0 space-y-0.5">
+            <p><span className="text-slate-500">Status:</span> <span className="font-semibold">{VISIT_STATUS_LABELS[v.status] ?? v.status}</span></p>
+            <p className="text-slate-500">Map Code: {job?.mapCode ?? "—"}</p>
+            <p><span className="text-slate-500">Priority:</span> <span className="font-semibold">{v.effectiveHighPriority ? "High" : "Normal"}</span></p>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-xs">
+          <span className="flex items-baseline gap-1">Start Time: <WriteInBlank className="w-14" /></span>
+          <span className="flex items-baseline gap-1">End Time: <WriteInBlank className="w-14" /></span>
+          <span>Est: {formatEstHrsMins(computeBudgetedHours(v))}</span>
+          <span className="flex items-baseline gap-1"># of Men: <WriteInBlank className="w-8" /></span>
+          <span className="flex items-baseline gap-1">Materials Used: <WriteInBlank className="w-28" /></span>
+          {job?.lastServiceDate && <span>Last: {formatDateShort(job.lastServiceDate)}</span>}
+        </div>
+        {turfSqft != null && (
+          <p className="mt-1 text-xs"><span className="font-semibold">Turf Sq. Ft.</span> {turfSqft.toLocaleString()}</p>
+        )}
+        {gateCode && (
+          <p className="mt-1 text-xs"><span className="font-semibold">Gate/Lock Code</span> {gateCode}</p>
+        )}
+        {notes && (
+          <p className="mt-1 text-xs text-slate-700"><span className="font-semibold">Notes to Crew</span> <span className="italic">{notes}</span></p>
+        )}
+      </div>
+    );
+  }
+
+  function renderDetailedSheet(label: string, members: { id: string; employeeName?: string; resourceCode?: string | null }[], cv: CRMJobVisit[], pageBreak: boolean) {
+    return (
+      <div style={pageBreak ? { pageBreakBefore: "always" } : undefined}>
+        <div className="flex items-baseline justify-between border-b-2 border-slate-800 pb-1 mb-3">
+          <h2 className="text-base font-bold">{label}</h2>
+          <span className="text-sm font-medium text-slate-600">{dateLabel}</span>
+        </div>
+        {renderCrewRosterHeader(members, cv.length)}
+        {cv.map((v, i) => renderJobCard(v, i))}
+      </div>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
-        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
+      <DialogContent className="max-w-3xl p-0 gap-0 pt-10 sm:pt-10 max-h-[90vh] flex flex-col [&>button:last-child]:top-3">
+        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white pl-5 pr-12 py-3 flex-row items-center justify-between">
           <DialogTitle className="text-sm font-semibold">
             Print Route Sheets — {selectedDate}
           </DialogTitle>
+          <div className="flex items-center rounded-md border border-white/30 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setFormat("detailed")}
+              className={cn("rounded px-2.5 py-1", format === "detailed" ? "bg-white text-slate-900" : "text-white/80 hover:text-white")}
+            >
+              Detailed
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormat("compact")}
+              className={cn("rounded px-2.5 py-1", format === "compact" ? "bg-white text-slate-900" : "text-white/80 hover:text-white")}
+            >
+              Compact
+            </button>
+          </div>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto p-5 space-y-8">
           {byCrew.length === 0 && unassigned.length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8">No visits to print for this date.</p>
           )}
-          {byCrew.map(({ crew, visits: cv }) => (
+          {byCrew.map(({ crew, members, visits: cv }, idx) => (
             <div key={crew.id}>
-              <div className="border-b-2 border-slate-800 pb-1 mb-2 flex items-baseline justify-between">
-                <h2 className="text-sm font-bold">{crew.name}</h2>
-                <span className="text-xs text-slate-500">{cv.length} stop{cv.length !== 1 ? "s" : ""} · {selectedDate}</span>
-              </div>
-              {printRouteTable(cv)}
+              {format === "detailed" ? (
+                renderDetailedSheet(crew.name, members, cv, idx > 0)
+              ) : (
+                <>
+                  <div className="border-b-2 border-slate-800 pb-1 mb-2 flex items-baseline justify-between">
+                    <h2 className="text-sm font-bold">{crew.name}</h2>
+                    <span className="text-xs text-slate-500">{cv.length} stop{cv.length !== 1 ? "s" : ""} · {selectedDate}</span>
+                  </div>
+                  {printRouteTable(cv)}
+                </>
+              )}
             </div>
           ))}
           {unassigned.length > 0 && (
             <div>
-              <div className="border-b-2 border-amber-600 pb-1 mb-2 flex items-baseline justify-between">
-                <h2 className="text-sm font-bold text-amber-700">Unassigned</h2>
-                <span className="text-xs text-amber-600">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""} · {selectedDate}</span>
-              </div>
-              {printRouteTable(unassigned)}
+              {format === "detailed" ? (
+                renderDetailedSheet("Unassigned", [], unassigned, byCrew.length > 0)
+              ) : (
+                <>
+                  <div className="border-b-2 border-amber-600 pb-1 mb-2 flex items-baseline justify-between">
+                    <h2 className="text-sm font-bold text-amber-700">Unassigned</h2>
+                    <span className="text-xs text-amber-600">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""} · {selectedDate}</span>
+                  </div>
+                  {printRouteTable(unassigned)}
+                </>
+              )}
             </div>
           )}
         </div>
         <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between">
-          <p className="text-[11px] text-slate-400">Uses your browser&apos;s print dialog</p>
+          <p className="text-[11px] text-slate-400">Opens your browser&apos;s print dialog in a new window</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
-            <Button size="sm" className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={() => window.print()}>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+              onClick={() => printRouteSheets(selectedDate, format, byCrew.map(({ crew, members }) => ({ id: crew.id, name: crew.name, members })), visits)}
+            >
               <Printer className="mr-1.5 h-3.5 w-3.5" />
               Print
             </Button>
@@ -1370,6 +1681,14 @@ function TeamAssignDialog({
   const [pending, setPending] = useState(false);
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
   const [dragMemberId, setDragMemberId] = useState<string | null>(null);
+  // Tap-to-place fallback for touch. iOS Safari never fires HTML5 drag events,
+  // so on a tablet every drag path below is dead — tap an item to pick it up,
+  // then tap a crew (or Unassigned) to drop it. Drag still works with a mouse.
+  const [held, setHeld] = useState<{ kind: "visit" | "member"; id: string; label: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) setHeld(null);
+  }, [open]);
 
   // Use crews-with-members data so member names show up; fall back to the prop
   const richCrews = crewsWithMembers ?? [];
@@ -1410,6 +1729,36 @@ function TeamAssignDialog({
     }
   }
 
+  /** Pick an item up, or put it back down if it's the one already held. */
+  function toggleHold(item: NonNullable<typeof held>) {
+    setHeld((h) => (h && h.kind === item.kind && h.id === item.id ? null : item));
+  }
+
+  /** Drop the held item on a crew. Dropping it where it already is is a no-op,
+   *  which is how tapping the held item a second time cancels the move. */
+  async function placeOnCrew(crewId: string) {
+    const item = held;
+    setHeld(null);
+    if (!item) return;
+    if (item.kind === "visit") {
+      const v = visits.find((x) => x.id === item.id);
+      if (v && v.crewId !== crewId) await reassign(item.id, crewId, v.jobId);
+      return;
+    }
+    const current = overrideCrewByMember.get(item.id) ?? defaultCrewByMember.get(item.id);
+    if (current !== crewId) await moveMember(item.id, crewId);
+  }
+
+  /** Drop the held visit back in the pool. Members always belong to a crew, so
+   *  the pool ignores them. */
+  async function placeUnassigned() {
+    const item = held;
+    setHeld(null);
+    if (item?.kind !== "visit") return;
+    const v = visits.find((x) => x.id === item.id);
+    if (v?.crewId) await reassign(item.id, null, v.jobId);
+  }
+
   async function dispatchAll() {
     setPending(true);
     try {
@@ -1433,7 +1782,16 @@ function TeamAssignDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent
+        className="max-w-3xl p-0 gap-0 pt-10 sm:pt-10 max-h-[90vh] flex flex-col [&>button:last-child]:top-3"
+        // Escape cancels a pick-up first; a second press closes the dialog.
+        onEscapeKeyDown={(e) => {
+          if (held) {
+            e.preventDefault();
+            setHeld(null);
+          }
+        }}
+      >
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">
             Team Assignment —{" "}
@@ -1441,29 +1799,67 @@ function TeamAssignDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {held ? (
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 bg-brand-50 px-5 py-2">
+            <p className="text-xs text-brand-800">
+              Moving <span className="font-semibold">{held.label}</span> —{" "}
+              {held.kind === "visit"
+                ? "tap a crew, or Unassigned, to place it."
+                : `tap the crew they should work with on ${selectedDate}.`}
+            </p>
+            <button
+              onClick={() => setHeld(null)}
+              className="shrink-0 rounded border border-brand-300 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p className="shrink-0 border-b bg-slate-50 px-5 py-1.5 text-[11px] text-slate-400">
+            Drag a visit or crew member, or tap one to pick it up and tap where it should go.
+          </p>
+        )}
+
         <div className="flex flex-1 overflow-hidden">
           {/* Unassigned pool — drop target to un-assign */}
           <div
-            className="w-52 shrink-0 border-r bg-green-50 p-4"
+            className={cn(
+              "w-52 shrink-0 border-r bg-green-50 p-4",
+              held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
+            )}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, null, jId); setDragVisitId(null); } }}
+            onClick={() => void placeUnassigned()}
           >
             <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">
               Unassigned ({unassigned.length})
             </p>
             <div className="space-y-1.5">
               {unassigned.length === 0 ? (
-                <p className="text-xs text-green-600 italic">All visits assigned</p>
+                <p className="text-xs text-green-600 italic">
+                  {held?.kind === "visit" ? "Tap to unassign" : "All visits assigned"}
+                </p>
               ) : (
                 unassigned.map((v) => {
                   const svcName = v.job?.services?.[0]?.serviceName ?? "Visit";
+                  const isHeld = held?.kind === "visit" && held.id === v.id;
                   return (
                     <div
                       key={v.id}
                       draggable
-                      onDragStart={() => setDragVisitId(v.id)}
+                      onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                       onDragEnd={() => setDragVisitId(null)}
-                      className="rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing"
+                      // With something already held, let the click through to the
+                      // pool so it lands there; otherwise pick this card up.
+                      onClick={(e) => {
+                        if (held) return;
+                        e.stopPropagation();
+                        toggleHold({ kind: "visit", id: v.id, label: v.clientName ?? "Visit" });
+                      }}
+                      className={cn(
+                        "rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing",
+                        isHeld && "ring-2 ring-brand-500 border-brand-300"
+                      )}
                     >
                       <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                       <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
@@ -1471,7 +1867,7 @@ function TeamAssignDialog({
                         {crews.map((c) => (
                           <button
                             key={c.id}
-                            onClick={() => reassign(v.id, c.id, v.jobId)}
+                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, c.id, v.jobId); }}
                             className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5 transition-colors"
                           >
                             → {c.name}
@@ -1491,7 +1887,10 @@ function TeamAssignDialog({
               {byCrew.map(({ crew, visits: crewVisits, members }) => (
                 <div
                   key={crew.id}
-                  className="w-52 shrink-0 border-r p-4"
+                  className={cn(
+                    "w-52 shrink-0 border-r p-4",
+                    held && "cursor-pointer ring-2 ring-inset ring-brand-400"
+                  )}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
                     if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); }
@@ -1500,39 +1899,61 @@ function TeamAssignDialog({
                       setDragMemberId(null);
                     }
                   }}
+                  onClick={() => void placeOnCrew(crew.id)}
                 >
                   <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-1">
                     {crew.name} ({crewVisits.length})
                   </p>
-                  {/* Draggable member chips — amber means "on loan" from another
-                      crew for selectedDate only; drag back to their own crew (or
-                      click) to send them back. */}
+                  {/* Member chips — amber means "on loan" from another crew for
+                      selectedDate only. Drag them, or tap to pick up and tap the
+                      destination crew; the ↩ sends a loaned member straight home. */}
                   <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
                     {members.map((m) => {
                       const onLoan = defaultCrewByMember.get(m.id) !== crew.id;
+                      const home = defaultCrewByMember.get(m.id);
+                      const isHeld = held?.kind === "member" && held.id === m.id;
+                      const name = m.employeeName ?? m.employeeId;
                       return (
                         <div
                           key={m.id}
                           draggable
-                          onDragStart={() => setDragMemberId(m.id)}
+                          onDragStart={() => { setHeld(null); setDragMemberId(m.id); }}
                           onDragEnd={() => setDragMemberId(null)}
-                          onClick={() => { const home = defaultCrewByMember.get(m.id); if (onLoan && home) void moveMember(m.id, home); }}
+                          onClick={(e) => {
+                            if (held) return;
+                            e.stopPropagation();
+                            toggleHold({ kind: "member", id: m.id, label: name });
+                          }}
                           className={cn(
                             "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none",
                             onLoan
                               ? "bg-amber-100 border-amber-300 text-amber-700"
-                              : "bg-brand-100 border-brand-200 text-brand-700"
+                              : "bg-brand-100 border-brand-200 text-brand-700",
+                            isHeld && "ring-2 ring-brand-500"
                           )}
                           title={onLoan
-                            ? `On loan from their usual crew for ${selectedDate} only — click to send back`
-                            : "Drag to move to another crew for today only"}
+                            ? `On loan from their usual crew for ${selectedDate} only — ↩ sends them back`
+                            : "Drag, or tap then tap another crew, to move them for today only"}
                         >
-                          {m.employeeName ?? m.employeeId}
+                          {name}
+                          {onLoan && home && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setHeld(null); void moveMember(m.id, home); }}
+                              // Negative margins absorb the padding, so the hit
+                              // area is finger-sized without growing the chip.
+                              className="-my-1.5 -mr-1.5 rounded-full px-1.5 py-1.5 leading-none text-amber-500 hover:text-amber-800"
+                              title="Send back to their usual crew"
+                            >
+                              ↩
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                     {members.length === 0 && (
-                      <p className="text-[10px] text-slate-300 italic">No members — drag here</p>
+                      <p className="text-[10px] text-slate-300 italic">
+                        {held?.kind === "member" ? "Tap to place here" : "No members"}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-1.5 min-h-[40px]">
@@ -1542,16 +1963,27 @@ function TeamAssignDialog({
                         <div
                           key={v.id}
                           draggable
-                          onDragStart={() => setDragVisitId(v.id)}
+                          onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                           onDragEnd={() => setDragVisitId(null)}
-                          className="rounded bg-slate-50 border px-2 py-1.5 group relative cursor-grab active:cursor-grabbing"
+                          onClick={(e) => {
+                            if (held) return;
+                            e.stopPropagation();
+                            toggleHold({ kind: "visit", id: v.id, label: v.clientName ?? "Visit" });
+                          }}
+                          className={cn(
+                            // pr-7 keeps the client name clear of the ✕, which
+                            // sits in the corner permanently on touch screens.
+                            "rounded bg-slate-50 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
+                            held?.kind === "visit" && held.id === v.id && "ring-2 ring-brand-500"
+                          )}
                         >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                           <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
                           <VisitStatusIcon status={v.status} />
                           <button
-                            onClick={() => reassign(v.id, null, v.jobId)}
-                            className="absolute top-1 right-1 flex md:hidden md:group-hover:flex text-[9px] text-slate-400 hover:text-red-500"
+                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
+                            className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
+                            title="Unassign"
                           >
                             ✕
                           </button>
@@ -1960,6 +2392,8 @@ function VisitRow({
   anchorVisitId,
   allVisits,
   drivingCrewIds,
+  customFieldDefs,
+  dailyOverrides,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1974,7 +2408,7 @@ function VisitRow({
   onDragOver: (id: string) => void;
   onDragEnd: () => void;
   isDragOver: boolean;
-  isVisible: (col: ColKey) => boolean;
+  isVisible: (col: string) => boolean;
   serviceCodeById: Map<string, string>;
   crewCodeById: Map<string, string>;
   onReorder?: (id: string, newIndex: number) => void;
@@ -1994,6 +2428,11 @@ function VisitRow({
    * only — see useDrivingCrewIds). Used to swap this row's status icon for
    * a driving icon when this is that crew's next not-yet-started stop. */
   drivingCrewIds: Set<string>;
+  /** Org custom-field definitions (Settings), for the dynamic trailing columns. */
+  customFieldDefs: PropertyCustomFieldDef[];
+  /** This visit's own scheduledDate slice of the board's batched per-day crew
+   * headcount overrides — see dailyOverridesByDate in DispatchBoard. */
+  dailyOverrides: { id: string; member_id: string; crew_id: string }[];
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -2015,16 +2454,16 @@ function VisitRow({
   // instead of each service's own rate.
   // Σ services before job.rateCents — same reasoning as the sheet (C-03).
   const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null)));
-  const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
+  const visitCrewId = effectiveCrewId(visit);
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
-  const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
+  const effectiveCrew = (visitCrewId && crewCodeById.get(visitCrewId)) || effectiveCrewName;
   // Swap this row's status icon for a driving icon when the crew is
   // currently driving AND this is the next stop they haven't started yet —
   // ordered by `priority` (what manual drag/route-optimize saves, see
   // handleSaveOrder), not allVisits' own array order.
-  const isDrivingToThis = !!effectiveCrewId && drivingCrewIds.has(effectiveCrewId) && (() => {
+  const isDrivingToThis = !!visitCrewId && drivingCrewIds.has(visitCrewId) && (() => {
     const nextForCrew = allVisits
-      .filter((v) => (v.crewId ?? v.job?.crewId ?? null) === effectiveCrewId)
+      .filter((v) => effectiveCrewId(v) === visitCrewId)
       .filter((v) => v.status === "scheduled" || v.status === "dispatched")
       .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))[0];
     return nextForCrew?.id === visit.id;
@@ -2058,11 +2497,12 @@ function VisitRow({
   const endButtonRef = useRef<HTMLButtonElement>(null);
 
   const { data: richCrewsForSize } = useCrews(false);
-  // Must key off this visit's own date, not the board's global selectedDate —
-  // on a multi-day (From/To range) view, a visit from day 2+ of the range
-  // would otherwise resolve its headcount override against day 1's roster.
-  // JobDetailSheet does this correctly (useCrewDailyMembers(visit.scheduledDate)).
-  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(visit.scheduledDate);
+  // dailyOverrides is keyed off this visit's own date via the prop (see
+  // dailyOverridesByDate in DispatchBoard), not the board's global
+  // selectedDate — on a multi-day (From/To range) view, a visit from day 2+
+  // of the range would otherwise resolve its headcount override against day
+  // 1's roster. JobDetailSheet does this correctly too (useCrewDailyMembers(visit.scheduledDate)).
+  const dailyOverridesForSize = dailyOverrides;
   const upsertMemberTime = useUpsertCrewMemberTime();
 
   // Does the crew actually on this visit have different punch times from each
@@ -2104,7 +2544,7 @@ function VisitRow({
     // there for why this is a warning, not a block.
     const conflictWith = findOverlappingCrewVisit(
       allVisits,
-      { id: visit.id, crewId: effectiveCrewId, scheduledDate: visit.scheduledDate },
+      { id: visit.id, crewId: visitCrewId, scheduledDate: visit.scheduledDate },
       newStart,
       newEnd
     );
@@ -2198,7 +2638,10 @@ function VisitRow({
 
   // Fixed cols (checkbox, #, St, Client) + whichever toggleable cols are shown —
   // used so the note/comment banner rows below can span the full table width.
-  const totalCols = 4 + COL_DEFS.filter((c) => isVisible(c.key)).length;
+  const totalCols = 4
+    + COL_DEFS.filter((c) => isVisible(c.key)).length
+    + EXTRA_COL_DEFS.filter((c) => isVisible(c.key)).length
+    + customFieldDefs.filter((d) => isVisible(customColKey(d.id))).length;
   const crewNoteBanner = visit.notesToCrew ?? visit.job?.notesToCrew ?? null;
 
   return (
@@ -2263,21 +2706,26 @@ function VisitRow({
 
       {/* Client (+ address below, like the Jobs screen — City/Zip stay in
           their own columns since they're used for routing) */}
-      <td className="min-w-[140px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
-        <Link
-          href={`/crm/clients/${visit.clientId}`}
-          className="block truncate max-w-[140px] font-medium text-brand-600 hover:underline"
-        >
-          {visit.clientName ?? "—"}
-        </Link>
+      <td className="min-w-[200px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
+          {visit.effectiveHighPriority && (
+            <span title="High priority" className="shrink-0"><Flame className="h-3 w-3 text-red-500" /></span>
+          )}
+          <Link
+            href={`/crm/clients/${visit.clientId}`}
+            className="block truncate max-w-[200px] font-medium text-brand-600 hover:underline"
+          >
+            {visit.clientName ?? "—"}
+          </Link>
+        </div>
         {job?.serviceAddress && (
-          <p className="truncate max-w-[140px] text-[10px] text-slate-400">{job.serviceAddress}</p>
+          <p className="truncate max-w-[200px] text-[10px] text-slate-400">{job.serviceAddress}</p>
         )}
       </td>
 
       {/* Service */}
       {isVisible("service") && (
-        <td className="min-w-[110px] px-2 py-2">
+        <td className="px-2 py-2">
           <span className={cn(
             "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold border truncate max-w-[110px]",
             serviceColor
@@ -2322,7 +2770,7 @@ function VisitRow({
               type="button"
               onClick={() => onEditTimes(visit)}
               title="Crew members have different clock-in times — open Edit Job Times"
-              className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
+              className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
             >
               Multiple times
             </button>
@@ -2354,13 +2802,13 @@ function VisitRow({
                       if (document.activeElement === endButtonRef.current) setEditingEnd(true);
                     }, 0);
                   }}
-                  className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
                 />
               ) : (
                 <button
                   type="button"
                   onClick={() => setEditingStart(true)}
-                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
                 >
                   {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 italic">—</span>}
                 </button>
@@ -2391,7 +2839,7 @@ function VisitRow({
                   type="button"
                   onClick={() => onEditTimes(visit)}
                   title="Crew members have different clock-out times — open Edit Job Times"
-                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
                 >
                   Multiple times
                 </button>
@@ -2408,14 +2856,14 @@ function VisitRow({
                     setEndTouched(false);
                     void saveVisitTime("end_time", endVal);
                   }}
-                  className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
                 />
               ) : (
                 <button
                   type="button"
                   ref={endButtonRef}
                   onClick={() => setEditingEnd(true)}
-                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
                 >
                   {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 italic">—</span>}
                 </button>
@@ -2524,14 +2972,23 @@ function VisitRow({
           being crammed/truncated into this column. */}
       {isVisible("icons") && (() => {
         const latestComment = visit.jobComments.length > 0 ? visit.jobComments[visit.jobComments.length - 1] : null;
+        // Whether the service(s) THIS visit actually covers have a product
+        // linked to them — not just "the job has products anywhere" (the old
+        // productTotalCents check, which is a stale snapshot that never
+        // updates once materials are added via the Products tab, and didn't
+        // distinguish which service on a multi-service job they belong to).
+        const serviceIdsWithProducts = visit.job?.serviceIdsWithProducts ?? [];
+        const hasLinkedProduct = visit.jobServiceId
+          ? serviceIdsWithProducts.includes(visit.jobServiceId)
+          : serviceIdsWithProducts.length > 0;
         return (
           <td className="px-2 py-2">
             <div className="flex items-center gap-1.5">
               {crewNoteBanner && (
                 <span title={crewNoteBanner} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
               )}
-              {(visit.job?.productTotalCents ?? 0) > 0 && (
-                <span title="Has products" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
+              {hasLinkedProduct && (
+                <span title="Service has a linked product" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
               )}
               {visit.job?.callAhead && visit.clientPhone && (
                 <a
@@ -2555,6 +3012,30 @@ function VisitRow({
           </td>
         );
       })()}
+      {isVisible("priority") && (
+        <td className="px-2 py-2 whitespace-nowrap">
+          <div className="flex items-center gap-1">
+            {visit.effectiveHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500" /></span>}
+            <span className="text-[11px] capitalize text-slate-500">{job?.clientPriority ?? visit.clientPriority ?? "normal"}</span>
+          </div>
+        </td>
+      )}
+      {EXTRA_COL_DEFS.filter((d) => d.key !== "priority").map((d) => isVisible(d.key) && (
+        <td key={d.key} className="px-2 py-2 text-slate-500 max-w-[160px] truncate" title={extraColCellText(d.key, job)}>
+          {extraColCellText(d.key, job)}
+        </td>
+      ))}
+      {customFieldDefs.map((def) => {
+        const key = customColKey(def.id);
+        if (!isVisible(key)) return null;
+        const val = job?.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
+        const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
+        return (
+          <td key={key} className="px-2 py-2 text-slate-500 max-w-[160px] truncate" title={display}>
+            {display}
+          </td>
+        );
+      })}
     </tr>
     {/* Job Notes intentionally has no banner row here — they can run long
         (see the Job Notes tab) and would clog up the board; the sticky-note
@@ -2599,11 +3080,41 @@ function countsTowardTotals(visit: CRMJobVisit): boolean {
 
 // ── totals row ─────────────────────────────────────────────────────────────────
 
-function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
+function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit[]; isVisible: (col: string) => boolean; customFieldDefs: PropertyCustomFieldDef[] }) {
   const counted   = visits.filter(countsTowardTotals);
   const totalBHrs = counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
+  // Variance must compare like with like: totalAct deliberately includes time
+  // punched on skipped/cancelled stops (it's real time), but totalBHrs doesn't
+  // budget for them, so subtracting one from the other reported a phantom
+  // overrun. The variance cell uses the counted population on both sides.
+  const countedAct = counted.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
+  const variance   = countedAct - totalBHrs;
   const totalAmt  = counted.reduce((s, v) => s + visitAmountCents(v), 0);
+  // Men is a multiplier per stop, not a quantity to accumulate — summing it
+  // reported "Men 60" for one 3-man crew doing 20 stops. What the dispatcher
+  // actually wants here is headcount on the road, so take each crew's largest
+  // stop and add those up. Stops with no crew are counted individually, since
+  // there's nothing yet saying they'll be run by the same people.
+  const menByCrew = new Map<string, number>();
+  for (const v of counted) {
+    const key = effectiveCrewId(v) ?? `unassigned:${v.id}`;
+    menByCrew.set(key, Math.max(menByCrew.get(key) ?? 0, v.menCount ?? 0));
+  }
+  const totalMen  = [...menByCrew.values()].reduce((s, n) => s + n, 0);
+  const totalQty  = counted.reduce((s, v) => s + (v.qty ?? 0), 0);
+
+  // Takeoffs are properties of a PROPERTY, not of a visit: a package job with
+  // two services on the same day produces two visits pointing at one property,
+  // and summing per visit double-counted its 12,000 sq ft as 24,000. Collapse
+  // to one row per property first (keyed by client when the property was
+  // resolved via the client's sole property and so has no id of its own here).
+  const byProperty = new Map<string, CRMJobVisit>();
+  for (const v of counted) {
+    const key = v.job?.propertyId ?? `client:${v.clientId}`;
+    if (!byProperty.has(key)) byProperty.set(key, v);
+  }
+  const propertyRows = [...byProperty.values()];
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
   // Toggleable cols that appear before B Hrs:
@@ -2616,15 +3127,31 @@ function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (c
       {isVisible("b_hrs")   && <td className="px-2 py-1.5 text-right">{totalBHrs > 0 ? totalBHrs.toFixed(2) : "—"}</td>}
       {isVisible("actual")  && <td className="px-2 py-1.5 text-right">{totalAct  > 0 ? totalAct.toFixed(2)  : "—"}</td>}
       {isVisible("variance") && (
-        <td className={cn("px-2 py-1.5 text-right", totalAct > 0 && totalAct > totalBHrs ? "text-red-600" : totalAct > 0 && totalAct < totalBHrs ? "text-green-600" : "")}>
-          {totalAct > 0 ? `${totalAct > totalBHrs ? "+" : ""}${(totalAct - totalBHrs).toFixed(2)}` : "—"}
+        <td className={cn("px-2 py-1.5 text-right", countedAct > 0 && variance > 0 ? "text-red-600" : countedAct > 0 && variance < 0 ? "text-green-600" : "")}>
+          {countedAct > 0 ? `${variance > 0 ? "+" : ""}${variance.toFixed(2)}` : "—"}
         </td>
       )}
-      {isVisible("men")     && <td />}
-      {isVisible("qty")     && <td />}
+      {isVisible("men")     && <td className="px-2 py-1.5 text-center">{totalMen > 0 ? totalMen : "—"}</td>}
+      {isVisible("qty")     && <td className="px-2 py-1.5 text-right">{totalQty > 0 ? totalQty.toFixed(1) : "—"}</td>}
+      {/* Rate is a per-unit price — summing it across jobs isn't meaningful, unlike Amount below. */}
       {isVisible("rate")    && <td />}
       {isVisible("amt")     && <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>}
       {isVisible("icons")   && <td />}
+      {EXTRA_COL_DEFS.map((d) => {
+        if (!isVisible(d.key)) return null;
+        const total = propertyRows.reduce((s, v) => s + (extraColNumericValue(d.key, v.job) ?? 0), 0);
+        return <td key={d.key} className="px-2 py-1.5 text-right">{total > 0 ? total.toLocaleString() : "—"}</td>;
+      })}
+      {customFieldDefs.map((def) => {
+        const key = customColKey(def.id);
+        if (!isVisible(key)) return null;
+        if (def.fieldType !== "number") return <td key={def.id} />;
+        const total = propertyRows.reduce((s, v) => {
+          const val = v.job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === def.id);
+          return s + (val?.valueNumber ?? 0);
+        }, 0);
+        return <td key={def.id} className="px-2 py-1.5 text-right">{total > 0 ? total.toLocaleString() : "—"}</td>;
+      })}
     </tr>
   );
 }
@@ -2640,6 +3167,17 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: "completed",  label: "Completed" },
   { value: "cancelled",  label: "Cancelled" },
   { value: "skipped",    label: "Skipped" },
+];
+
+const PRIORITY_FILTER_JOB_OPTIONS = [
+  { value: "job_high",   label: "High priority" },
+  { value: "job_normal", label: "Normal priority" },
+];
+
+const PRIORITY_FILTER_CLIENT_OPTIONS = [
+  { value: "client_high",   label: "High" },
+  { value: "client_normal", label: "Normal" },
+  { value: "client_low",    label: "Low" },
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -2676,10 +3214,10 @@ export function DispatchBoard() {
   const urlRouter    = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
-  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayLocalISODate());
+  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayCompanyISODate());
   useEffect(() => {
     const current = searchParams.get("date");
-    const isToday = selectedDate === todayLocalISODate();
+    const isToday = selectedDate === todayCompanyISODate();
     // Keep the URL clean on the default day; otherwise mirror the selection.
     if ((isToday && current === null) || current === selectedDate) return;
     const params = new URLSearchParams(searchParams.toString());
@@ -2690,6 +3228,11 @@ export function DispatchBoard() {
   }, [selectedDate, searchParams, pathname, urlRouter]);
   const [endDate,         setEndDate]         = useState("");
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
+  const [tagFilters,      setTagFilters]       = useState<string[]>([]);
+  // Values are "job_high" (the new high-priority job/visit flag) plus the
+  // existing client priority levels — one control covering both "priority"
+  // concepts, same as the crew filter's multi-select checklist.
+  const [priorityFilters, setPriorityFilters]  = useState<string[]>([]);
   const [statusFilter,    setStatusFilter]    = useState<FilterTab>("all");
   const [search,          setSearch]          = useState("");
   // IDs, not the visit objects themselves — looked up fresh from `visits` on
@@ -2705,8 +3248,12 @@ export function DispatchBoard() {
   // Bulk "Change Status" → Skipped/Cancelled waits on the reason dialog.
   const [bulkOutcome,     setBulkOutcome]     = useState<OutcomeStatus | null>(null);
   const [bulkOutcomePending, setBulkOutcomePending] = useState(false);
+  const [bulkEmailOpen,   setBulkEmailOpen]   = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
+  // Service filter is multi-select (unlike the other Select-a-Filter text
+  // filters), so it gets its own array instead of sharing colFilterValue.
+  const [serviceFilters,  setServiceFilters]  = useState<string[]>([]);
   const [dragId,          setDragId]          = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [manualOrder,     setManualOrder]     = useState<string[] | null>(null);
@@ -2717,7 +3264,18 @@ export function DispatchBoard() {
   // order (identical to the current one) and popping the Save/Clear Order
   // bar despite nothing actually having moved.
   const [manualRouteMode, setManualRouteMode] = useState(false);
-  const [visibleKeys,     setVisibleKeys]     = useState<string[]>(COL_DEFS.map((d) => d.key));
+  const [visibleKeys,     setVisibleKeys]     = usePersistedColumns("dispatch_board", COL_DEFS.map((d) => d.key));
+  const { data: customFieldDefs = [] } = usePropertyCustomFieldDefs();
+  const allColumnDefs = useMemo(
+    () => [
+      ...COL_DEFS,
+      // Off by default for everyone, so they don't count toward the chooser's
+      // "N hidden" badge — see ColumnDef.defaultHidden.
+      ...EXTRA_COL_DEFS.map((d) => ({ ...d, defaultHidden: true })),
+      ...customFieldDefs.map((d) => ({ key: customColKey(d.id), label: d.name, defaultHidden: true })),
+    ],
+    [customFieldDefs]
+  );
   const [statsOpen,       setStatsOpen]       = useState(false);
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
   const [printOpen,       setPrintOpen]       = useState(false);
@@ -2733,16 +3291,43 @@ export function DispatchBoard() {
   const [optimizedOrder,     setOptimizedOrder]     = useState<string[] | null>(null);
   const [driveTimeMap,       setDriveTimeMap]       = useState<Map<string, number>>(new Map());
   const [totalDriveMins,     setTotalDriveMins]     = useState<number | null>(null);
+  const [shopLegMins,        setShopLegMins]        = useState<number | null>(null);
+  // How many crews the last optimize actually routed — each crew is solved as
+  // its own tour, so the banner totals are sums across that many routes.
+  const [routedCrewCount,    setRoutedCrewCount]    = useState(0);
+  // Nearest-first leaves the shop and takes the closest stop each time;
+  // furthest-first drives out to the far end and works back in, so the crew
+  // finishes near the yard.
+  const [routeStrategy,      setRouteStrategy]      = useState<"nearest_first" | "furthest_first">("nearest_first");
 
   const effectiveEnd = endDate || undefined;
   const { data: visits, isLoading, refetch } = useVisitsForDate(selectedDate, effectiveEnd);
   const { data: crews }             = useCRMCrews();
   const { data: allServices }       = useCRMServices();
+  const orgTags                    = useOrgTags();
   // Batched by date, not per-row — every VisitRow needs its own visit's member
   // times to detect per-member time divergence, and firing one query per
   // visible row would be its own N+1 problem.
   const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
   const { data: drivingCrewIds = new Set<string>() } = useDrivingCrewIds(selectedDate);
+  // Batched by date range, not per-row — every VisitRow needs the headcount
+  // override for its own visit date (which can differ from the board's
+  // selectedDate on a multi-day From/To view), and firing one
+  // useCrewDailyMembers query per distinct date among the visible rows was
+  // its own N+1 (Sentry-flagged repeating spans on this route).
+  const { data: allDailyOverrides = [] } = useCrewDailyMembersRange(selectedDate, effectiveEnd ?? selectedDate);
+  const dailyOverridesByDate = useMemo(() => {
+    const m = new Map<string, { id: string; member_id: string; crew_id: string }[]>();
+    for (const o of allDailyOverrides) {
+      const list = m.get(o.work_date);
+      if (list) list.push(o); else m.set(o.work_date, [o]);
+    }
+    return m;
+  }, [allDailyOverrides]);
+  // Remembered per-(crew, weekday) stop order, used to seed a day that has
+  // never been saved so a recurring route doesn't have to be re-dragged weekly.
+  const { data: rememberedOrder } = useCrewRouteOrder(selectedDate, effectiveEnd);
+  const saveRouteOrder = useSaveRouteOrder();
   const allVisits = visits ?? [];
   // A "stop" (same client/day/crew/address) clocks in and out as one unit —
   // crm_crew_member_times rows are only ever written against the stop's
@@ -2832,37 +3417,133 @@ export function DispatchBoard() {
     (v.job?.services ?? []).some((s) => s.serviceId && chemicalServiceIds.has(s.serviceId))
   );
 
+  /**
+   * Each crew drives its own truck out of its own yard, so a route is only
+   * meaningful within a crew. Optimizing the whole board as one tour used to
+   * interleave crews — a MAINT1 stop could land between two TESTCREW stops —
+   * and because the tour had no single starting yard it wasn't anchored to a
+   * shop either. Route each crew's stops separately (in parallel) and splice
+   * each crew's result back into its own block, leaving every other crew's
+   * positions untouched — the same technique handleReorder uses for drags.
+   */
   async function handleOptimizeRoute() {
-    const targets = filtered.filter((v) => v.job?.serviceAddress);
-    if (targets.length < 2) {
-      toast.error("Need at least 2 visits with a service address to optimize. Try assigning visits to a crew first.");
+    const scope = routeScope();
+    const targets = displayVisits.filter((v) => v.job?.serviceAddress && scope.has(v.id));
+    const groups = new Map<string, typeof targets>();
+    for (const v of targets) {
+      const key = effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY;
+      const list = groups.get(key);
+      if (list) list.push(v); else groups.set(key, [v]);
+    }
+    // Unassigned stops share no yard and no truck, so there's no route to
+    // solve for them as a block — they keep their current position.
+    const routable = [...groups.entries()].filter(
+      ([key, list]) => key !== UNASSIGNED_CREW_KEY && list.length >= 2
+    );
+    if (routable.length === 0) {
+      toast.error(
+        scope.scoped
+          ? "Each crew needs at least 2 selected stops with a service address to optimize. Select more stops, or clear the selection to route the whole board."
+          : "Each crew needs at least 2 stops with a service address to optimize. Try assigning visits to a crew first."
+      );
       return;
     }
+
     setOptimizing(true);
     try {
-      const res = await fetch("/api/crm/route-optimize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitIds: targets.map((v) => v.id) }),
-      });
-      const data = await res.json() as {
-        orderedVisitIds?: string[];
-        driveTimes?: { visitId: string; minutesToNext: number }[];
-        totalDriveMinutes?: number;
-        error?: string;
-      };
-      if (!res.ok || data.error) {
-        toast.error(data.error ?? "Route optimization failed");
+      const results = await Promise.all(
+        routable.map(async ([crewId, list]) => {
+          try {
+            const res = await fetch("/api/crm/route-optimize", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                visitIds: list.map((v) => v.id),
+                strategy: routeStrategy,
+                crewId,
+              }),
+            });
+            const data = await res.json() as {
+              orderedVisitIds?: string[];
+              driveTimes?: { visitId: string; minutesToNext: number }[];
+              totalDriveMinutes?: number;
+              shopLegMinutes?: number | null;
+              anchoredToShop?: boolean;
+              error?: string;
+            };
+            if (!res.ok || data.error) {
+              return { crewId, error: data.error ?? "Route optimization failed" };
+            }
+            return { crewId, data };
+          } catch {
+            return { crewId, error: "Failed to reach route optimizer" };
+          }
+        })
+      );
+
+      const failures = results.filter((r) => "error" in r && r.error) as { crewId: string; error: string }[];
+      const successes = results.filter((r) => "data" in r && r.data) as {
+        crewId: string;
+        data: {
+          orderedVisitIds?: string[];
+          driveTimes?: { visitId: string; minutesToNext: number }[];
+          totalDriveMinutes?: number;
+          shopLegMinutes?: number | null;
+          anchoredToShop?: boolean;
+        };
+      }[];
+
+      if (successes.length === 0) {
+        toast.error(failures[0]?.error ?? "Route optimization failed");
         return;
       }
-      setOptimizedOrder(data.orderedVisitIds ?? null);
+
+      // Per-crew queue of that crew's ids in their new order, then splice each
+      // queue back over the positions that crew already occupies. Visits the
+      // optimizer didn't place (no address, or a crew that wasn't routed)
+      // stay exactly where they are.
+      const queues = new Map<string, { ids: string[]; members: Set<string> }>();
+      for (const { crewId, data } of successes) {
+        const ordered = data.orderedVisitIds ?? [];
+        const placed = new Set(ordered);
+        const rest = (groups.get(crewId) ?? []).map((v) => v.id).filter((id) => !placed.has(id));
+        const ids = [...ordered, ...rest];
+        queues.set(crewId, { ids, members: new Set(ids) });
+      }
+      const pointers = new Map<string, number>();
+      const merged = displayVisits.map((v) => {
+        const key = effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY;
+        const queue = queues.get(key);
+        // Only the routed subset of a crew's block gets rewritten; a visit
+        // with no service address isn't in the queue and keeps its slot.
+        if (!queue || !queue.members.has(v.id)) return v.id;
+        const ptr = pointers.get(key) ?? 0;
+        pointers.set(key, ptr + 1);
+        return queue.ids[ptr] ?? v.id;
+      });
+      setOptimizedOrder(merged);
+
       const dtMap = new Map<string, number>();
-      for (const dt of data.driveTimes ?? []) dtMap.set(dt.visitId, dt.minutesToNext);
+      for (const { data } of successes) {
+        for (const dt of data.driveTimes ?? []) dtMap.set(dt.visitId, dt.minutesToNext);
+      }
       setDriveTimeMap(dtMap);
-      setTotalDriveMins(data.totalDriveMinutes ?? null);
-      toast.success(`Route optimized — ${data.totalDriveMinutes} min total drive time`);
-    } catch {
-      toast.error("Failed to reach route optimizer");
+      setTotalDriveMins(successes.reduce((s, r) => s + (r.data.totalDriveMinutes ?? 0), 0));
+      const legs = successes
+        .map((r) => r.data.shopLegMinutes)
+        .filter((m): m is number => m != null);
+      setShopLegMins(legs.length > 0 ? legs.reduce((s, m) => s + m, 0) : null);
+      setRoutedCrewCount(successes.length);
+
+      const crewWord = successes.length === 1 ? "crew" : "crews";
+      const unanchored = successes.filter((r) => !r.data.anchoredToShop).length;
+      toast.success(
+        `Routed ${successes.length} ${crewWord} separately${scope.scoped ? " (selected stops only)" : ""}.` +
+          (unanchored > 0
+            ? ` ${unanchored} ${unanchored === 1 ? "crew has" : "crews have"} no starting address, so ${unanchored === 1 ? "its" : "their"} route isn't anchored to a shop.`
+            : "") +
+          (failures.length > 0 ? ` ${failures.length} failed: ${failures[0].error}` : "")
+      );
     } finally {
       setOptimizing(false);
     }
@@ -2872,13 +3553,41 @@ export function DispatchBoard() {
     setOptimizedOrder(null);
     setDriveTimeMap(new Map());
     setTotalDriveMins(null);
+    setShopLegMins(null);
+    setRoutedCrewCount(0);
   }
 
-  function isVisible(col: ColKey) { return visibleKeys.includes(col); }
+  function isVisible(col: string) { return visibleKeys.includes(col); }
+
+  /** See effectiveCrewId at the top of this file. */
+  const effectiveCrewIdOf = effectiveCrewId;
 
   const filtered = allVisits.filter((v) => {
-    if (crewFilters.length > 0 && !crewFilters.includes(v.crewId ?? "")) return false;
+    // Effective crew, not the raw column — a visit that inherits its crew from
+    // the job would otherwise never match its own crew's filter chip.
+    if (crewFilters.length > 0 && !crewFilters.includes(effectiveCrewIdOf(v) ?? "")) return false;
     if (statusFilter !== "all" && v.status !== statusFilter) return false;
+    if (tagFilters.length > 0) {
+      const tags = v.clientTags ?? [];
+      if (!tagFilters.some((t) => tags.includes(t))) return false;
+    }
+    if (priorityFilters.length > 0) {
+      // clients.priority is nullable and null MEANS normal — that's how the
+      // Priority column renders it (`?? "normal"`). Testing the raw value hid
+      // every client who had never had a priority set, which on real data is
+      // about half of them.
+      const matches =
+        (priorityFilters.includes("job_high") && v.effectiveHighPriority) ||
+        (priorityFilters.includes("job_normal") && !v.effectiveHighPriority) ||
+        (priorityFilters.includes("client_high") && v.clientPriority === "high") ||
+        (priorityFilters.includes("client_normal") && (v.clientPriority ?? "normal") === "normal") ||
+        (priorityFilters.includes("client_low") && v.clientPriority === "low");
+      if (!matches) return false;
+    }
+    if (serviceFilters.length > 0) {
+      const names = (v.job?.services ?? []).map((s) => s.serviceName);
+      if (!serviceFilters.some((sv) => names.includes(sv))) return false;
+    }
     if (search) {
       const q   = search.toLowerCase();
       const cli = (v.clientName ?? "").toLowerCase();
@@ -2890,11 +3599,20 @@ export function DispatchBoard() {
       const q = colFilterValue.toLowerCase();
       switch (colFilterKey) {
         case "client":  if (!(v.clientName ?? "").toLowerCase().includes(q)) return false; break;
-        case "service": if (!(v.job?.services ?? []).map((s) => s.serviceName).join(" ").toLowerCase().includes(q)) return false; break;
-        case "date":    if (!(v.scheduledDate ?? "").includes(q)) return false; break;
+        case "date":    if ((v.scheduledDate ?? "") !== colFilterValue) return false; break;
         case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
         case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
-        case "crew":    if (!(v.crewName ?? "").toLowerCase().includes(q)) return false; break;
+        case "crew": {
+          // Match on either the full crew name or its abbreviated team code
+          // (Settings > Team) — the Assigned column shows the code, so typing
+          // what's actually on screen (e.g. "MAINT1") must match too, not
+          // just the underlying full name ("Maintenance 1").
+          const effId = effectiveCrewIdOf(v);
+          const code = effId ? crewCodeById.get(effId) ?? "" : "";
+          const name = v.crewName ?? v.job?.crewName ?? "";
+          if (!name.toLowerCase().includes(q) && !code.toLowerCase().includes(q)) return false;
+          break;
+        }
       }
     }
     return true;
@@ -2914,24 +3632,68 @@ export function DispatchBoard() {
         if (bi === -1) return -1;
         return ai - bi;
       })
-    : [...filtered].sort((a, b) => {
-        const an = a.crewName ?? "";
-        const bn = b.crewName ?? "";
-        if (!an && bn) return 1;
-        if (an && !bn) return -1;
-        return an.localeCompare(bn);
-      });
+    : (() => {
+        // Crew, then this day's saved priority, then the order this crew was
+        // last routed in on this weekday.
+        //
+        // The remembered order is a TIEBREAKER rather than a fallback because
+        // crm_job_visits.priority is `not null default 1` — every visit has a
+        // priority from birth, so "has this day been saved?" cannot be read off
+        // the value itself. A saved day has distinct priorities 1..N and never
+        // reaches the tiebreak; an unsaved day has every visit sitting on the
+        // default 1, so the remembered position decides and next Monday comes
+        // up in the sequence this Monday was routed in. Jobs with nothing
+        // remembered sort last, which is the right prompt to place them.
+        const crewOf = effectiveCrewIdOf;
+        const rememberedPos = (v: typeof filtered[number]) => {
+          const crew = crewOf(v);
+          if (!crew || !v.jobId) return Number.MAX_SAFE_INTEGER;
+          return rememberedOrder?.get(routeOrderKey(crew, v.jobId)) ?? Number.MAX_SAFE_INTEGER;
+        };
+
+        // Group on the EFFECTIVE crew name, not visit.crewName alone. A visit
+        // that inherits its crew from the job leaves crm_job_visits.crew_id
+        // null, so the crm_crews(name) join is null too — and grouping on that
+        // raw value sorted such a visit to the very end as if it were
+        // unassigned, even though every other part of this board (the crew
+        // column, the crew filter, the per-crew stop numbering) resolves it
+        // through the same `?? job` fallback used here.
+        const crewNameOf = (v: typeof filtered[number]) =>
+          v.crewName ?? v.job?.crewName ?? "";
+
+        return [...filtered].sort((a, b) => {
+          const an = crewNameOf(a);
+          const bn = crewNameOf(b);
+          if (!an && bn) return 1;
+          if (an && !bn) return -1;
+          const byCrew = an.localeCompare(bn);
+          if (byCrew !== 0) return byCrew;
+
+          const byPriority = (a.priority ?? 0) - (b.priority ?? 0);
+          if (byPriority !== 0) return byPriority;
+
+          const ap = rememberedPos(a);
+          const bp = rememberedPos(b);
+          if (ap !== bp) return ap - bp;
+          // Equal on every key — keep the query's own start_time/created_at
+          // order, which Array.sort preserves.
+          return 0;
+        });
+      })();
 
   // Order numbers and drag/drop reordering are scoped per crew — each crew
   // runs its own separate route, so "#3" should mean the 3rd stop for THAT
   // crew, and reordering one crew's stops must never renumber another's.
   const visitById = new Map(displayVisits.map((v) => [v.id, v]));
-  const crewKeyOf = (id: string) => visitById.get(id)?.crewId ?? "unassigned";
+  const crewKeyOf = (id: string) => {
+    const v = visitById.get(id);
+    return (v ? effectiveCrewIdOf(v) : null) ?? UNASSIGNED_CREW_KEY;
+  };
   const crewOrderNumById = new Map<string, number>();
   {
     const counters = new Map<string, number>();
     for (const v of displayVisits) {
-      const key = v.crewId ?? "unassigned";
+      const key = effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY;
       const next = (counters.get(key) ?? 0) + 1;
       counters.set(key, next);
       crewOrderNumById.set(v.id, next);
@@ -2989,22 +3751,22 @@ export function DispatchBoard() {
     let ptr = 0;
     const order = fullOrder.map((id) => (changedIds.has(id) ? changedOrder[ptr++] : id));
 
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await Promise.all(order.map((id, i) => (supabase as any).from("crm_job_visits").update({ priority: i + 1 }).eq("id", id)));
-    // Without this, the just-saved priorities only exist in the database —
-    // the visits list in memory still has the OLD priority values, so
-    // clearing manualOrder (which was the only thing keeping the new order
-    // on screen) snapped the table back to how it looked before saving,
-    // until something else happened to trigger a refetch.
-    await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    // One RPC instead of N parallel UPDATEs: those could half apply and leave
+    // a scrambled sequence with no sign anything failed. It also records the
+    // per-(crew, weekday) remembered order in the same transaction, so the
+    // next occurrence of this weekday comes up already in this sequence.
+    try {
+      await saveRouteOrder.mutateAsync(order);
+    } catch {
+      toast.error("Couldn't save the route order. Nothing was changed.");
+      return;
+    }
     setManualOrder(null);
     // An optimized-but-not-dragged order is saved via this same button (see
     // the banner below) — clear it too so the stale "Route optimized"
     // banner/highlight don't linger once the order is actually persisted.
     clearOptimization();
-    toast.success("Route order saved");
+    toast.success("Route order saved — this crew's order is remembered for this weekday.");
   }
 
   function handleDragStart(id: string) {
@@ -3040,22 +3802,89 @@ export function DispatchBoard() {
     setDragOverId(null);
   }
 
+  /**
+   * Rearranges each crew's stops independently and splices every crew's
+   * result back over exactly the positions that crew already occupies.
+   *
+   * A board-wide reorder is meaningless here: each crew drives its own truck
+   * on its own route, so reversing or zip-sorting the whole list interleaves
+   * crews and renumbers stops belonging to a different truck. `rearrange`
+   * therefore only ever sees one crew's ids and must return the same ids.
+   * Same technique handleReorder uses for a single drag and handleOptimizeRoute
+   * uses to merge its per-crew tours.
+   */
+  function reorderWithinCrews(
+    order: string[],
+    rearrange: (crewVisitIds: string[]) => string[],
+    inScope: (id: string) => boolean = () => true
+  ): string[] {
+    const byCrew = new Map<string, string[]>();
+    for (const id of order) {
+      if (!inScope(id)) continue;
+      const key = crewKeyOf(id);
+      const list = byCrew.get(key);
+      if (list) list.push(id); else byCrew.set(key, [id]);
+    }
+    const rearranged = new Map<string, string[]>();
+    for (const [key, ids] of byCrew) rearranged.set(key, rearrange(ids));
+    const pointers = new Map<string, number>();
+    return order.map((id) => {
+      // Out-of-scope stops hold their exact slot, so the result is always a
+      // permutation of `order` no matter how narrow the scope is.
+      if (!inScope(id)) return id;
+      const key = crewKeyOf(id);
+      const ptr = pointers.get(key) ?? 0;
+      pointers.set(key, ptr + 1);
+      // Falling back to the original id keeps this total even if a future
+      // `rearrange` ever returned a short list.
+      return rearranged.get(key)?.[ptr] ?? id;
+    });
+  }
+
+  /**
+   * Scope for the three route tools (Optimize, Reverse, Group Stops): the
+   * checked rows when there are any, otherwise everything the filters leave
+   * visible. Read through displayVisits rather than selectedIds directly, so
+   * a stale check on a row a filter has since hidden can't narrow a run down
+   * to nothing.
+   */
+  function routeScope(): { has: (id: string) => boolean; scoped: boolean } {
+    const ids = new Set(
+      displayVisits.filter((v) => selectedIds.has(v.id)).map((v) => v.id)
+    );
+    const scoped = ids.size > 0;
+    return { has: (id: string) => !scoped || ids.has(id), scoped };
+  }
+
+  // displayVisits is the visible set already ordered by any unsaved drag or
+  // optimize, so it — not manualOrder, which can outlive a filter change — is
+  // the right base for these two.
   function handleReverseRoute() {
-    const cur = manualOrder ?? displayVisits.map((v) => v.id);
-    setManualOrder([...cur].reverse());
+    const cur = displayVisits.map((v) => v.id);
+    const scope = routeScope();
+    setManualOrder(reorderWithinCrews(cur, (ids) => [...ids].reverse(), scope.has));
     if (optimizedOrder) clearOptimization();
-    toast.success("Route order reversed");
+    toast.success(
+      `Each crew's route order reversed${scope.scoped ? " (selected stops only)" : ""}`
+    );
   }
 
   function handleGroupStops() {
-    const sorted = [...displayVisits].sort((a, b) => {
-      const za = (a.job?.serviceZip ?? "").slice(0, 3);
-      const zb = (b.job?.serviceZip ?? "").slice(0, 3);
-      return za.localeCompare(zb);
-    });
-    setManualOrder(sorted.map((v) => v.id));
+    const cur = displayVisits.map((v) => v.id);
+    const scope = routeScope();
+    const zipAreaOf = (id: string) =>
+      (visitById.get(id)?.job?.serviceZip ?? "").slice(0, 3);
+    setManualOrder(
+      reorderWithinCrews(
+        cur,
+        (ids) => [...ids].sort((a, b) => zipAreaOf(a).localeCompare(zipAreaOf(b))),
+        scope.has
+      )
+    );
     if (optimizedOrder) clearOptimization();
-    toast.success("Stops grouped by zip code area");
+    toast.success(
+      `Stops grouped by zip code area within each crew${scope.scoped ? " (selected stops only)" : ""}`
+    );
   }
 
   function handleExportCSV() {
@@ -3081,7 +3910,7 @@ export function DispatchBoard() {
         v.endTime ?? "",
         computeBudgetedHours(v)?.toFixed(2) ?? "",
         computeActualHours(v)?.toFixed(2) ?? "",
-        (v as any).menCount ?? "",
+        v.menCount ?? "",
         (rateCents / 100).toFixed(2),
         (rateCents / 100).toFixed(2),
       ];
@@ -3103,7 +3932,7 @@ export function DispatchBoard() {
   const dispatchedCount = filtered.filter((v) => v.status === "dispatched").length;
 
   const crewStatsList = (crews ?? []).map((c) => {
-    const cv = displayVisits.filter((v) => v.crewId === c.id);
+    const cv = displayVisits.filter((v) => effectiveCrewIdOf(v) === c.id);
     const counted = cv.filter(countsTowardTotals);
     return {
       id: c.id,
@@ -3113,7 +3942,7 @@ export function DispatchBoard() {
       amt: counted.reduce((s, v) => s + visitAmountCents(v), 0),
     };
   }).filter((s) => s.count > 0);
-  const unassignedVisits     = displayVisits.filter((v) => !v.crewId);
+  const unassignedVisits     = displayVisits.filter((v) => !effectiveCrewIdOf(v));
   const unassignedStatCount  = unassignedVisits.length;
   const unassignedStatBHrs   = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const unassignedStatAmt    = unassignedVisits.filter(countsTowardTotals).reduce((s, v) => s + visitAmountCents(v), 0);
@@ -3138,24 +3967,34 @@ export function DispatchBoard() {
         description="Schedule and dispatch daily job visits"
       />
 
-      {/* Week strip + date range + actions */}
-      <div className="flex items-center gap-3 px-4 shrink-0 overflow-x-auto flex-nowrap">
+      {/* Week strip + date range + actions. Wraps rather than scrolling: this
+          row is ~1600px wide, so on a tablet the right-hand controls were half
+          a screen off to the side with no hint they were there. Trimmed to be
+          as narrow as it can (short labels, tight gaps) so it stays on one
+          line at more common laptop viewport widths — it was wrapping around
+          1600-1700px of available content width. The From/To date inputs
+          need w-36 with an explicit md:text-xs — Input's base classes end
+          in md:text-sm, which tailwind-merge won't dedupe against a bare
+          text-xs (different responsive variant), so without the md:
+          override the box renders at 14px text and clips the native
+          calendar-picker icon off the right edge at desktop widths. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
-        <div className="flex items-center gap-2 text-xs text-slate-500 ml-2 shrink-0">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-1 shrink-0">
           <span className="font-medium">From</span>
           <Input
             type="date"
             value={selectedDate}
             onChange={(e) => { setSelectedDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-36 text-xs"
+            className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); clearOptimization(); }}
-            className="h-7 w-36 text-xs"
+            className="h-7 w-36 px-2 text-xs md:text-xs"
           />
           {endDate && (
             <button
@@ -3168,26 +4007,44 @@ export function DispatchBoard() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <Button size="sm" variant="outline" className="h-9 text-sm gap-1 px-2.5"
             onClick={() => setTeamAssignOpen(true)}
           >
             <Users className="h-4 w-4" />
             Team Assign
           </Button>
-          <Button size="sm" variant="outline"
-            className={cn("h-9 text-sm gap-1.5 px-3", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
-            onClick={handleOptimizeRoute}
-            disabled={optimizing}
-          >
-            <Route className="h-4 w-4" />
-            {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
-          </Button>
-          <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
+          <div className="flex items-center shrink-0">
+            <Button size="sm" variant="outline"
+              className={cn("h-9 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
+              onClick={handleOptimizeRoute}
+              disabled={optimizing}
+            >
+              <Route className="h-4 w-4" />
+              {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
+            </Button>
+            {/* Which way round the crew works the route. Nearest-first is the
+                shortest total drive; furthest-first ends the day near the
+                yard, which is usually what a crew actually wants. */}
+            <Select
+              value={routeStrategy}
+              onValueChange={(v) => { setRouteStrategy(v as "nearest_first" | "furthest_first"); clearOptimization(); }}
+            >
+              <SelectTrigger className={cn("h-9 w-[112px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nearest_first" className="text-xs">Nearest</SelectItem>
+                <SelectItem value="furthest_first" className="text-xs">Furthest</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button size="sm" variant="outline" className="h-9 text-sm gap-1 px-2.5"
             onClick={() => { setNearbyOpen(true); findNearby(allVisits); }}
+            title="Nearby Waiting List"
           >
             <MapPin className="h-4 w-4" />
-            Nearby Waiting List
+            Nearby Jobs
           </Button>
         </div>
       </div>
@@ -3214,10 +4071,11 @@ export function DispatchBoard() {
         </div>
       )}
 
-      {/* Select a Filter bar — ABOVE dark bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2 shrink-0">
+      {/* Select a Filter bar — ABOVE dark bar. Wraps on a narrow screen so the
+          action buttons drop to their own line instead of running off it. */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-white px-4 py-2 shrink-0">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-1">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
             const label = key === "client" ? "Client" : key === "service" ? "Service" : key === "date" ? "Date" : key === "city" ? "City" : key === "zip" ? "Zip" : "Crew";
             return (
@@ -3230,38 +4088,42 @@ export function DispatchBoard() {
                 )}
               >
                 {label}
-                {colFilterKey === key && colFilterValue && (
+                {key === "service" && serviceFilters.length > 0 && (
+                  <span className="ml-1 text-brand-500">· {serviceFilters.length}</span>
+                )}
+                {key !== "service" && colFilterKey === key && colFilterValue && (
                   <span className="ml-1 text-brand-500">· {colFilterValue}</span>
                 )}
               </button>
             );
           })}
 
-          {/* Service: popover with list */}
+          {/* Service: popover with a multi-select checklist (can filter to
+              more than one service at once, unlike the other text filters). */}
           {colFilterKey === "service" && (
-            <Popover defaultOpen>
+            <Popover defaultOpen onOpenChange={(o) => { if (!o) setColFilterKey(null); }}>
               <PopoverTrigger className="sr-only" />
-              <PopoverContent className="w-56 p-1" align="start" onInteractOutside={() => { if (!colFilterValue) { setColFilterKey(null); } }}>
+              <PopoverContent className="w-56 p-1" align="start">
                 <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Services</p>
                 {(allServices ?? []).length === 0 && (
                   <p className="px-2 py-2 text-xs text-slate-400 italic">No services found</p>
                 )}
                 {(allServices ?? []).map((svc) => (
-                  <button
+                  <FilterOptionRow
                     key={svc.id}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100",
-                      colFilterValue === svc.name && "bg-brand-50 text-brand-700 font-medium"
+                    checked={serviceFilters.includes(svc.name)}
+                    onToggle={() => setServiceFilters((prev) =>
+                      prev.includes(svc.name) ? prev.filter((x) => x !== svc.name) : [...prev, svc.name]
                     )}
-                    onClick={() => setColFilterValue(colFilterValue === svc.name ? "" : svc.name)}
+                    className={serviceFilters.includes(svc.name) ? "bg-brand-50 text-brand-700 font-medium" : undefined}
                   >
                     {svc.name}
-                  </button>
+                  </FilterOptionRow>
                 ))}
                 <div className="border-t mt-1 pt-1">
                   <button
                     className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100"
-                    onClick={() => { setColFilterKey(null); setColFilterValue(""); }}
+                    onClick={() => { setServiceFilters([]); setColFilterKey(null); }}
                   >
                     <XIcon className="h-3 w-3" /> Clear filter
                   </button>
@@ -3270,8 +4132,26 @@ export function DispatchBoard() {
             </Popover>
           )}
 
+          {/* Date: a real date picker instead of freeform text — the stored
+              value is already an ISO date (YYYY-MM-DD), same format a native
+              date input produces, so an exact match is correct here. */}
+          {colFilterKey === "date" && (
+            <>
+              <Input
+                autoFocus
+                type="date"
+                value={colFilterValue}
+                onChange={(e) => setColFilterValue(e.target.value)}
+                className="ml-2 h-6 w-36 text-xs"
+              />
+              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+
           {/* Other filters: text input */}
-          {colFilterKey && colFilterKey !== "service" && (
+          {colFilterKey && colFilterKey !== "service" && colFilterKey !== "date" && (
             <>
               <Input
                 autoFocus
@@ -3356,11 +4236,11 @@ export function DispatchBoard() {
             <GripVertical className="h-3.5 w-3.5" />
             Manual Route
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse route order">
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse each crew's route order">
             <ArrowUpDown className="h-3.5 w-3.5" />
             Reverse
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group stops by zip area">
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group each crew's stops by zip area">
             <MapPin className="h-3.5 w-3.5" />
             Group Stops
           </Button>
@@ -3376,7 +4256,10 @@ export function DispatchBoard() {
       </div>
 
       {/* Dark action bar */}
-      <div className="bg-[#4a4a4a] px-4 py-2 flex items-center gap-3 shrink-0">
+      {/* Wraps below xl. At desktop widths this bar already fits by letting the
+          search box shrink, so keep it on one line there rather than wrapping
+          Columns onto a second row. */}
+      <div className="bg-[#4a4a4a] px-4 py-2 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 shrink-0">
         {/* Refresh — far left */}
         <button
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
@@ -3428,24 +4311,93 @@ export function DispatchBoard() {
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-48 p-1" align="start">
-            <button
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-              onClick={() => setCrewFilters([])}
-            >
-              <Checkbox checked={crewFilters.length === 0} className="h-3.5 w-3.5" />
+            <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
               All Crews
-            </button>
+            </FilterOptionRow>
             {(crews ?? []).map((c) => (
-              <button
+              <FilterOptionRow
                 key={c.id}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
-                onClick={() => setCrewFilters((prev) =>
+                checked={crewFilters.includes(c.id)}
+                onToggle={() => setCrewFilters((prev) =>
                   prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
                 )}
               >
-                <Checkbox checked={crewFilters.includes(c.id)} className="h-3.5 w-3.5" />
                 {c.name}
-              </button>
+              </FilterOptionRow>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Tag filter — client tags, "is any of" (OR) */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <Tag className="h-3 w-3" />
+              {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1 max-h-72 overflow-y-auto" align="start">
+            <FilterOptionRow checked={tagFilters.length === 0} onToggle={() => setTagFilters([])}>
+              All Tags
+            </FilterOptionRow>
+            {orgTags.length === 0 && (
+              <p className="px-2 py-1.5 text-[11px] text-slate-400">No client tags yet</p>
+            )}
+            {orgTags.map((tag) => (
+              <FilterOptionRow
+                key={tag}
+                checked={tagFilters.includes(tag)}
+                onToggle={() => setTagFilters((prev) =>
+                  prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
+                )}
+              >
+                <span className="truncate">{tag}</span>
+              </FilterOptionRow>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Priority filter — covers both the new high-priority job/visit flag
+            and the existing client priority (Low/Normal/High); any match shows. */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <Flame className="h-3 w-3" />
+              {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-52 p-1" align="start">
+            <FilterOptionRow checked={priorityFilters.length === 0} onToggle={() => setPriorityFilters([])}>
+              All Priorities
+            </FilterOptionRow>
+            <div className="my-1 border-t" />
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Job</p>
+            {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
+              <FilterOptionRow
+                key={o.value}
+                checked={priorityFilters.includes(o.value)}
+                onToggle={() => setPriorityFilters((prev) =>
+                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                )}
+              >
+                {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500" />}
+                {o.label}
+              </FilterOptionRow>
+            ))}
+            <div className="my-1 border-t" />
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Client</p>
+            {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
+              <FilterOptionRow
+                key={o.value}
+                checked={priorityFilters.includes(o.value)}
+                onToggle={() => setPriorityFilters((prev) =>
+                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                )}
+              >
+                {o.label}
+              </FilterOptionRow>
             ))}
           </PopoverContent>
         </Popover>
@@ -3564,6 +4516,20 @@ export function DispatchBoard() {
 
               <DropdownMenuSeparator />
 
+              {/* Email Selected Clients — same permission as any other outbound
+                  client email (Email Activity's Send), which this bypassed. */}
+              {can("email_activity_send") && (
+                <DropdownMenuItem
+                  className="text-xs"
+                  onSelect={() => setBulkEmailOpen(true)}
+                >
+                  <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  Email Selected Clients
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator />
+
               {/* Return to Waiting List — only when every selected visit
                   belongs to a waiting-list job that never got done. */}
               {displayVisits.filter((v) => selectedIds.has(v.id)).every((v) => v.job?.jobType === "waiting_list") && (
@@ -3654,7 +4620,7 @@ export function DispatchBoard() {
         {/* Columns selector — far right of dark bar */}
         <div className="ml-auto">
           <ColumnChooser
-            columns={COL_DEFS}
+            columns={allColumnDefs}
             visibleKeys={visibleKeys}
             onVisibleKeysChange={setVisibleKeys}
           />
@@ -3708,7 +4674,15 @@ export function DispatchBoard() {
         {optimizedOrder && totalDriveMins !== null && (
           <span className="ml-auto flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-blue-700 font-medium">
             <Route className="h-3 w-3" />
-            Route optimized · {totalDriveMins} min drive total
+            Route optimized · {routedCrewCount} {routedCrewCount === 1 ? "crew" : "crews"} ·{" "}
+            {routeStrategy === "furthest_first" ? "furthest first" : "nearest first"} ·{" "}
+            {totalDriveMins} min between stops
+            {shopLegMins !== null && (
+              <>
+                {" "}· {shopLegMins} min{" "}
+                {routeStrategy === "furthest_first" ? "back to shop" : "out from shop"}
+              </>
+            )}
           </span>
         )}
       </div>
@@ -3727,8 +4701,8 @@ export function DispatchBoard() {
               </th>
               <th className="w-10 px-1 py-2.5">#</th>
               <th className="w-8  px-2 py-2.5">St</th>
-              <th className="min-w-[140px] px-2 py-2.5">Client</th>
-              {isVisible("service")  && <th className="min-w-[110px] px-2 py-2.5">Service</th>}
+              <th className="min-w-[200px] px-2 py-2.5">Client</th>
+              {isVisible("service")  && <th className="px-2 py-2.5">Service</th>}
               {isVisible("date")     && <th className="px-2 py-2.5">Date</th>}
               {isVisible("city")     && <th className="px-2 py-2.5">City</th>}
               {isVisible("zip")      && <th className="px-2 py-2.5">Zip</th>}
@@ -3744,11 +4718,15 @@ export function DispatchBoard() {
               {isVisible("rate")     && <th className="px-2 py-2.5 text-right">Rate</th>}
               {isVisible("amt")      && <th className="px-2 py-2.5 text-right">Amt</th>}
               {isVisible("icons")    && <th className="px-2 py-2.5">Notes</th>}
+              {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <th key={d.key} className="px-2 py-2.5 whitespace-nowrap">{d.label}</th>)}
+              {customFieldDefs.map((def) => isVisible(customColKey(def.id)) && (
+                <th key={def.id} className="px-2 py-2.5 whitespace-nowrap">{def.name}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {!isLoading && displayVisits.length > 0 && (
-              <TotalsRow visits={displayVisits} isVisible={isVisible} />
+              <TotalsRow visits={displayVisits} isVisible={isVisible} customFieldDefs={customFieldDefs} />
             )}
 
             {isLoading ? (
@@ -3794,6 +4772,8 @@ export function DispatchBoard() {
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                   allVisits={allVisits}
                   drivingCrewIds={drivingCrewIds}
+                  customFieldDefs={customFieldDefs}
+                  dailyOverrides={dailyOverridesByDate.get(visit.scheduledDate) ?? EMPTY_DAILY_OVERRIDES}
                 />
               ))
             )}
@@ -3815,6 +4795,11 @@ export function DispatchBoard() {
           try { await applyBulkStatus(bulkOutcome, reason); } finally { setBulkOutcomePending(false); setBulkOutcome(null); }
         }}
         onCancel={() => setBulkOutcome(null)}
+      />
+      <BulkEmailClientsDialog
+        open={bulkEmailOpen}
+        onClose={() => setBulkEmailOpen(false)}
+        clientIds={[...new Set(displayVisits.filter((v) => selectedIds.has(v.id)).map((v) => v.clientId))]}
       />
       {detailVisit && (
         <JobDetailSheet

@@ -5,6 +5,8 @@ export type ChemicalLookupType =
   | "area_unit"
   | "areas_treated";
 
+export type ChemicalUnitClass = "volume" | "mass";
+
 export interface ChemicalLookupItem {
   id: string;
   orgId: string;
@@ -15,6 +17,13 @@ export interface ChemicalLookupItem {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  // Conversion metadata for volume_unit rows (which also carry the org's mass
+  // units) — null for a custom/renamed unit the calc can't safely convert, in
+  // which case calcChemicalAndSolution refuses the mix rather than guessing.
+  // baseFactor is relative to a canonical base per class: fluid ounce for
+  // volume, gram for mass.
+  unitClass: ChemicalUnitClass | null;
+  baseFactor: number | null;
 }
 
 export type ChemicalMixType = "none" | "water" | "product";
@@ -76,6 +85,10 @@ export interface ChemicalApplication {
   chemicalAmount: number | null;
   solutionAmount: number | null;
   unitOfMeasureId: string | null;
+  // Unit for solutionAmount — kept separate from unitOfMeasureId since the
+  // finished-mix volume is often expressed in a different unit than the
+  // concentrate amount (e.g. ounces of chemical, gallons of solution).
+  solutionUnitOfMeasureId: string | null;
   targetIds: string[];
   areasTreatedIds: string[];
   applicationMethodId: string | null;
@@ -100,6 +113,7 @@ export interface ChemicalApplication {
   deletedAt: string | null;
   // joined display fields
   productName?: string | null;
+  solutionUnitOfMeasureName?: string | null;
 }
 
 export type ChemicalConditionsDisplay = "weather" | "ph" | "both" | "neither";

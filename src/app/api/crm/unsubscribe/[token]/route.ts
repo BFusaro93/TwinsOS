@@ -67,7 +67,7 @@ export async function GET(
       // campaignId is caller-supplied via the query string — scope to this
       // client's own org so it can't be used to increment another org's
       // campaign counter.
-      const { data: campaign } = await (admin as any)
+      const { data: campaign } = await admin
         .from("crm_campaigns")
         .select("unsubscribed_count")
         .eq("id", campaignId)

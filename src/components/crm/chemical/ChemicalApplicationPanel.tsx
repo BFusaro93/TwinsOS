@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Mail, Plus, Trash2 } from "lucide-react";
 import {
-  calcAutoQuantity,
+  calcChemicalAndSolution,
   useChemicalApplicationRates,
   useChemicalApplicationsForVisit,
   useChemicalLookupItems,
@@ -91,6 +91,9 @@ function ApplicationRow({
   const [chemicalAmount, setChemicalAmount] = useState(application.chemicalAmount?.toString() ?? "");
   const [solutionAmount, setSolutionAmount] = useState(application.solutionAmount?.toString() ?? "");
   const [unitOfMeasureId, setUnitOfMeasureId] = useState(application.unitOfMeasureId ?? "");
+  const [solutionUnitOfMeasureId, setSolutionUnitOfMeasureId] = useState(
+    application.solutionUnitOfMeasureId ?? ""
+  );
   const [applicationMethodId, setApplicationMethodId] = useState(application.applicationMethodId ?? "");
   const [targetIds, setTargetIds] = useState<string[]>(application.targetIds);
   const [areasTreatedIds, setAreasTreatedIds] = useState<string[]>(application.areasTreatedIds);
@@ -123,6 +126,7 @@ function ApplicationRow({
         chemicalAmount: chemicalAmount ? parseFloat(chemicalAmount) : null,
         solutionAmount: solutionAmount ? parseFloat(solutionAmount) : null,
         unitOfMeasureId: unitOfMeasureId || null,
+        solutionUnitOfMeasureId: solutionUnitOfMeasureId || null,
         applicationMethodId: applicationMethodId || null,
         targetIds,
         areasTreatedIds,
@@ -163,9 +167,9 @@ function ApplicationRow({
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div className="grid gap-1">
-          <label className="text-xs text-slate-500">Chemical Amt</label>
+          <label className="text-xs text-slate-500">Chemical Amt (active)</label>
           <Input
             className="h-8 text-xs"
             type="number"
@@ -175,7 +179,21 @@ function ApplicationRow({
           />
         </div>
         <div className="grid gap-1">
-          <label className="text-xs text-slate-500">Solution Amt</label>
+          <label className="text-xs text-slate-500">Unit</label>
+          <Select value={unitOfMeasureId || "none"} onValueChange={(v) => setUnitOfMeasureId(v === "none" ? "" : v)}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Unit" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">—</SelectItem>
+              {units.map((u) => (
+                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1">
+          <label className="text-xs text-slate-500">Solution Amt (finished mix)</label>
           <Input
             className="h-8 text-xs"
             type="number"
@@ -185,8 +203,11 @@ function ApplicationRow({
           />
         </div>
         <div className="grid gap-1">
-          <label className="text-xs text-slate-500">Unit</label>
-          <Select value={unitOfMeasureId || "none"} onValueChange={(v) => setUnitOfMeasureId(v === "none" ? "" : v)}>
+          <label className="text-xs text-slate-500">Solution Unit</label>
+          <Select
+            value={solutionUnitOfMeasureId || "none"}
+            onValueChange={(v) => setSolutionUnitOfMeasureId(v === "none" ? "" : v)}
+          >
             <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="Unit" />
             </SelectTrigger>
@@ -280,6 +301,7 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
   const [addingProductId, setAddingProductId] = useState("");
   const { data: addingProductRates = [] } = useChemicalApplicationRates(addingProductId || undefined);
   const { data: propertyFieldValues = [] } = usePropertyCustomFieldValues(propertyId ?? "");
+  const unitsById = new Map(units.map((u) => [u.id, u]));
 
   const employees = employeesRaw.map((e) => ({
     id: e.id,
@@ -322,6 +344,8 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
     let chemicalAmount: number | null | undefined;
     let unitOfMeasureId: string | null | undefined;
     let applicationMethodId: string | null | undefined;
+    let solutionAmount: number | null | undefined;
+    let solutionUnitOfMeasureId: string | null | undefined;
 
     if (settings?.autoCalcQuantity && settings.areaCustomFieldId) {
       const defaultRate = addingProductRates.find((r) => r.isDefault) ?? addingProductRates[0];
@@ -329,11 +353,15 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
         (v) => v.fieldDefId === settings.areaCustomFieldId
       )?.valueNumber;
       if (defaultRate && areaValue != null) {
-        const computed = calcAutoQuantity(defaultRate, areaValue);
+        const computed = calcChemicalAndSolution(defaultRate, areaValue, unitsById);
         if (computed != null) {
-          chemicalAmount = Math.round(computed * 10000) / 10000;
-          unitOfMeasureId = defaultRate.unitOfMeasureId;
+          chemicalAmount = Math.round(computed.chemicalAmount * 10000) / 10000;
+          unitOfMeasureId = computed.chemicalUnitOfMeasureId;
           applicationMethodId = defaultRate.applicationMethodId;
+          if (computed.solutionAmount != null) {
+            solutionAmount = Math.round(computed.solutionAmount * 100) / 100;
+            solutionUnitOfMeasureId = computed.solutionUnitOfMeasureId;
+          }
         }
       }
     }
@@ -350,6 +378,8 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
         ...(chemicalAmount !== undefined && { chemicalAmount }),
         ...(unitOfMeasureId !== undefined && { unitOfMeasureId }),
         ...(applicationMethodId !== undefined && { applicationMethodId }),
+        ...(solutionAmount !== undefined && { solutionAmount }),
+        ...(solutionUnitOfMeasureId !== undefined && { solutionUnitOfMeasureId }),
       },
       { onError: () => toast.error("Failed to add chemical") }
     );

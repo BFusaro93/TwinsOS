@@ -3,8 +3,13 @@ import { ArrowRight } from "lucide-react";
 import { DocsEyebrow } from "@/components/docs/DocsBrand";
 import { groupedDocGuides } from "@/lib/docs-guides";
 
-/** Grouped card grid of every advanced guide — used on the Docs landing pages and the standalone guide library. */
-export function GuideGrid() {
+/**
+ * Grouped card grid of every advanced guide — used on the Docs landing pages
+ * and the standalone guide library. `basePath` is the shell the cards should
+ * open into (each shell mounts the same guides under its own path), so a guide
+ * opened from Landscapt or Equipt doesn't drop the reader into Settings.
+ */
+export function GuideGrid({ basePath = "/settings/support" }: { basePath?: string }) {
   const groups = groupedDocGuides();
 
   return (
@@ -18,7 +23,7 @@ export function GuideGrid() {
               return (
                 <Link
                   key={guide.slug}
-                  href={`/settings/support/${guide.slug}`}
+                  href={`${basePath}/${guide.slug}`}
                   className="group flex items-start gap-3 rounded-lg border border-[#e6e6e0] bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
                 >
                   <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#eef4e2]">

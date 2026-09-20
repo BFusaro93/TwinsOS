@@ -109,10 +109,26 @@ export async function sendCampaignEmails(
 
   let query = db
     .from("clients")
-    .select("id, display_name, primary_email, balance_outstanding_cents, unsubscribe_token")
+    .select(`
+      id, display_name, first_name, last_name, primary_email, phones,
+      account_number, invoice_delivery, balance_outstanding_cents,
+      billing_address, billing_city, billing_state, billing_zip,
+      service_address, service_city, service_state, service_zip,
+      turf_sqft, gross_sqft, mulch_bed_sqft, yards_of_mulch,
+      linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew,
+      referred_by, unsubscribe_token,
+      sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name),
+      referring_client:referred_by_client_id(display_name)
+    `)
     .eq("org_id", orgId)
     .is("deleted_at", null)
     .eq("do_not_market", false)
+    // A hard bounce is tracked separately from the marketing opt-out now (see
+    // 20260919010000_client_email_bounce_suppression.sql). The Resend webhook
+    // used to fold bounces into do_not_market, so this filter caught them for
+    // free; it no longer does, and a campaign must never re-send to an address
+    // that already bounced.
+    .is("email_bounced_at", null)
     .not("primary_email", "is", null);
 
   if (campaign.target_segment === "custom") {
@@ -170,14 +186,72 @@ export async function sendCampaignEmails(
   interface Recipient {
     id: string;
     display_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
     primary_email: string;
+    phones: { phone: string; type: string }[] | null;
+    account_number: string | null;
+    invoice_delivery: string | null;
     balance_outstanding_cents: number | null;
+    billing_address: string | null;
+    billing_city: string | null;
+    billing_state: string | null;
+    billing_zip: string | null;
+    service_address: string | null;
+    service_city: string | null;
+    service_state: string | null;
+    service_zip: string | null;
+    turf_sqft: number | null;
+    gross_sqft: number | null;
+    mulch_bed_sqft: number | null;
+    yards_of_mulch: number | null;
+    linear_ft_perimeter: number | null;
+    linear_ft_edging: number | null;
+    gate_lock_code: string | null;
+    notes_to_crew: string | null;
+    referred_by: string | null;
     unsubscribe_token: string;
+    sales_rep: { first_name: string; last_name: string } | null;
+    referring_client: { display_name: string } | null;
   }
 
   await sendInBatches(recipients as Recipient[], async (recipient) => {
-    const client = { displayName: recipient.display_name, balanceOutstandingCents: recipient.balance_outstanding_cents };
-    const org = { name: orgName, addressPhone: orgAddress?.phone ?? null };
+    const client = {
+      displayName: recipient.display_name,
+      firstName: recipient.first_name,
+      lastName: recipient.last_name,
+      balanceOutstandingCents: recipient.balance_outstanding_cents,
+      primaryEmail: recipient.primary_email,
+      phones: recipient.phones,
+      accountNumber: recipient.account_number,
+      invoiceDelivery: recipient.invoice_delivery,
+      billingAddress: recipient.billing_address,
+      billingCity: recipient.billing_city,
+      billingState: recipient.billing_state,
+      billingZip: recipient.billing_zip,
+      serviceAddress: recipient.service_address,
+      serviceCity: recipient.service_city,
+      serviceState: recipient.service_state,
+      serviceZip: recipient.service_zip,
+      turfSqft: recipient.turf_sqft,
+      grossSqft: recipient.gross_sqft,
+      mulchBedSqft: recipient.mulch_bed_sqft,
+      yardsOfMulch: recipient.yards_of_mulch,
+      linearFtPerimeter: recipient.linear_ft_perimeter,
+      linearFtEdging: recipient.linear_ft_edging,
+      gateLockCode: recipient.gate_lock_code,
+      notesToCrew: recipient.notes_to_crew,
+      salesRepName: recipient.sales_rep ? `${recipient.sales_rep.first_name} ${recipient.sales_rep.last_name}`.trim() : null,
+      referringClientName: recipient.referring_client?.display_name ?? recipient.referred_by ?? null,
+    };
+    const org = {
+      name: orgName,
+      addressPhone: orgAddress?.phone ?? null,
+      addressStreet: orgAddress?.street ?? null,
+      addressCity: orgAddress?.city ?? null,
+      addressState: orgAddress?.state ?? null,
+      addressZip: orgAddress?.zip ?? null,
+    };
     // Two separate maps: the subject is plain text delivered verbatim to an
     // inbox, never rendered as HTML, so it must use raw (unescaped) values —
     // only the HTML body needs escaping. Using the escaped map for both would

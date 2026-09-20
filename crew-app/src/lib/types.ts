@@ -49,11 +49,78 @@ export interface CrewVisit {
   budgetedHours: number | null;
 }
 
+// Mirrors one row of GET /api/crm/crew/visits' `stops` array — the
+// crew-tablet grouping of "everything at one client/address today" into a
+// single card with one clock-in/out, computed server-side by the SAME
+// groupVisitsIntoStops() the web crew page uses
+// (src/lib/utils/visit-stops.ts, via src/app/api/crm/crew/visits/route.ts).
+// This is what home.tsx and visit/[id].tsx render — CrewVisit above is kept
+// only because `visits` is still returned alongside `stops` for anything
+// that hasn't moved over.
+export interface CrewStopVisit {
+  id: string;
+  jobServiceId: string | null;
+  serviceName: string | null;
+  budgetedHours: number | null;
+  teamSize: number | null;
+  status: VisitStatus;
+  startTime: string | null;
+  endTime: string | null;
+  actualHours: number | null;
+  completionNotes: string | null;
+  acknowledgedNotesAt: string | null;
+  skipReason: string | null;
+  jobComments: unknown[];
+}
+
+export interface CrewStop {
+  /** Stable grouping key (client/day/crew/address) — use as the list key, not anchorVisitId (see below). */
+  key: string;
+  /** The visit whose id is the target for clock-in/out/pause/resume and photos/materials — same visit the web stop page anchors on. */
+  anchorVisitId: string;
+  clientName: string | null;
+  clientPhone: string | null;
+  /** Pre-joined "line1, city" — already a display string server-side, unlike CrewVisit.address. */
+  address: string | null;
+  propertyId: string | null;
+  derivedStatus: VisitStatus;
+  clockedInAt: string | null;
+  clockedOutAt: string | null;
+  /** Set while the stop is on a break — see crm_job_visits.paused_at. */
+  pausedAt: string | null;
+  breakMinutes: number;
+  notesToCrew: string | null;
+  /**
+   * When the office last edited those notes. An acknowledgment older than
+   * this no longer counts — see isNotesAcknowledgmentCurrent() on the web
+   * side, which the clock-in route enforces server-side.
+   */
+  notesToCrewUpdatedAt: string | null;
+  scheduledDate: string;
+  visits: CrewStopVisit[];
+}
+
+// Mirrors one row of crm_crew_drive_segments as returned by the `drive` field
+// of GET /api/crm/crew/visits — day-level, not tied to any one visit/stop.
+export interface DriveSegment {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  minutes: number | null;
+}
+
+export interface CrewDriveInfo {
+  openSegment: DriveSegment | null;
+  totalMinutes: number;
+}
+
 export interface CrewVisitsResponse {
   date: string;
   crewId: string | null;
   crewName: string | null;
   visits: CrewVisit[];
+  stops: CrewStop[];
+  drive: CrewDriveInfo;
 }
 
 // Mirrors GET /api/crm/crew/visits/:id/photos — a confirmed (already-uploaded)
@@ -78,6 +145,43 @@ export interface PickerProduct {
   partNumber: string;
   unitCostCents: number;
   category: 'stocked_material' | 'project_material';
+}
+
+// Mirrors GET /api/crm/crew/visits/:id/chemicals — read-only chemical mix
+// info (see src/app/api/crm/crew/visits/[visitId]/chemicals/route.ts).
+// solutionAmount/solutionUnitName are only populated when the office has
+// auto-calc on and the rate's units were convertible; null means "ask the
+// office for the mix ratio" rather than a wrong guess.
+export interface VisitChemicalApplication {
+  id: string;
+  productName: string | null;
+  used: boolean;
+  chemicalAmount: number | null;
+  unitName: string | null;
+  solutionAmount: number | null;
+  solutionUnitName: string | null;
+  applicationRateLabel: string | null;
+}
+
+// Mirrors GET/POST .../job-products[/:id/use-materials] — materials office
+// staff already planned/called for on this job (crm_job_products), distinct
+// from VisitRequisition below (an ad-hoc new request for something NOT
+// already planned). plannedQty is the original called-for amount; qty is
+// the current value, which becomes "quantity actually used" once status
+// leaves 'pending' (see supabase/migrations/
+// 20260918050000_crm_job_products_planned_qty.sql).
+// 'used' = used, inventory decremented, STILL TO BE INVOICED — what the
+// crew's "Mark Used" button records, and what JobDetail.tsx sweeps into the
+// job's invoice. 'used_no_invoice' is the deliberate don't-bill variant
+// behind the secondary "Used — don't bill" action.
+export type JobProductStatus = 'pending' | 'invoiced' | 'used' | 'used_no_invoice' | 'not_used';
+
+export interface JobProductMaterial {
+  id: string;
+  productName: string;
+  plannedQty: number;
+  qty: number;
+  status: JobProductStatus;
 }
 
 export type RequisitionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'ordered' | 'closed';

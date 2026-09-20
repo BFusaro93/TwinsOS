@@ -26,6 +26,8 @@ function mapLookupItem(row: any): ChemicalLookupItem {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
+    unitClass: row.unit_class ?? null,
+    baseFactor: row.base_factor !== null && row.base_factor !== undefined ? Number(row.base_factor) : null,
   };
 }
 
@@ -90,6 +92,7 @@ function mapApplication(row: any): ChemicalApplication {
     chemicalAmount: row.chemical_amount !== null ? Number(row.chemical_amount) : null,
     solutionAmount: row.solution_amount !== null ? Number(row.solution_amount) : null,
     unitOfMeasureId: row.unit_of_measure_id,
+    solutionUnitOfMeasureId: row.solution_unit_of_measure_id,
     targetIds: row.target_ids ?? [],
     areasTreatedIds: row.areas_treated_ids ?? [],
     applicationMethodId: row.application_method_id,
@@ -114,6 +117,7 @@ function mapApplication(row: any): ChemicalApplication {
     createdBy: row.created_by,
     deletedAt: row.deleted_at,
     productName: row.product?.name ?? null,
+    solutionUnitOfMeasureName: row.solution_unit_of_measure?.name ?? null,
   };
 }
 
@@ -141,11 +145,21 @@ export function useChemicalLookupItems(listType?: ChemicalLookupType) {
 export function useCreateChemicalLookupItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { listType: ChemicalLookupType; name: string }) => {
+    mutationFn: async (input: {
+      listType: ChemicalLookupType;
+      name: string;
+      unitClass?: ChemicalLookupItem["unitClass"];
+      baseFactor?: number | null;
+    }) => {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("crm_chemical_lookup_items")
-        .insert({ list_type: input.listType, name: input.name })
+        .insert({
+          list_type: input.listType,
+          name: input.name,
+          ...(input.unitClass !== undefined && { unit_class: input.unitClass }),
+          ...(input.baseFactor !== undefined && { base_factor: input.baseFactor }),
+        })
         .select()
         .single();
       if (error) throw error;
@@ -248,16 +262,13 @@ export function useUpdateChemicalSettings() {
 }
 
 // ── pure helpers ──────────────────────────────────────────────────────────────
+// calcAutoQuantity/calcChemicalAndSolution live in chemical-mix-calc.ts (no
+// "use client", no react-query/browser-client deps) so server-side report
+// code can reuse them too. Re-exported here for existing importers (e.g.
+// ChemicalApplicationPanel).
 
-/**
- * Quantity to apply = (property's area value / rate's area basis) * rate's applied qty,
- * e.g. rate "1 oz per 1,000 sqft" against a 12,000 sqft property = 12 oz.
- * Not tiered like the Rate Matrix — chemical rates are a single ratio.
- */
-export function calcAutoQuantity(rate: ChemicalApplicationRate, areaValue: number): number | null {
-  if (!rate.areaQty || rate.rateQty == null) return null;
-  return (areaValue / rate.areaQty) * rate.rateQty;
-}
+export { calcAutoQuantity, calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
+export type { ChemicalCalcResult } from "@/lib/chemical-mix-calc";
 
 // ── application rates (per chemical product) ────────────────────────────────
 
@@ -411,7 +422,7 @@ export function useChemicalApplicationsForVisit(visitId: string | undefined) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("crm_chemical_applications")
-        .select("*, product:product_id(name)")
+        .select("*, product:product_id(name), solution_unit_of_measure:solution_unit_of_measure_id(name)")
         .eq("visit_id", visitId!)
         .is("deleted_at", null)
         .order("created_at");
@@ -469,6 +480,9 @@ export function useSaveChemicalApplication() {
         ...(input.chemicalAmount !== undefined && { chemical_amount: input.chemicalAmount }),
         ...(input.solutionAmount !== undefined && { solution_amount: input.solutionAmount }),
         ...(input.unitOfMeasureId !== undefined && { unit_of_measure_id: input.unitOfMeasureId }),
+        ...(input.solutionUnitOfMeasureId !== undefined && {
+          solution_unit_of_measure_id: input.solutionUnitOfMeasureId,
+        }),
         ...(input.targetIds !== undefined && { target_ids: input.targetIds }),
         ...(input.areasTreatedIds !== undefined && { areas_treated_ids: input.areasTreatedIds }),
         ...(input.applicationMethodId !== undefined && { application_method_id: input.applicationMethodId }),

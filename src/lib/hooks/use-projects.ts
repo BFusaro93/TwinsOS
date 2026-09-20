@@ -122,7 +122,10 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived" | "progressPct" | "clientId" | "clientName" | "estimatedCostCents"> & { clientId?: string | null; progressPct?: number; estimatedCostCents?: number }
+      // originalContractPrice is excluded: callers pass `contractPrice`, which
+      // this hook writes to original_contract_price. The revised contract_price
+      // is derived by a DB trigger and is never an input.
+      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived" | "progressPct" | "clientId" | "clientName" | "estimatedCostCents" | "originalContractPrice"> & { clientId?: string | null; progressPct?: number; estimatedCostCents?: number }
     ) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -142,7 +145,7 @@ export function useCreateProject() {
           status: input.status,
           start_date: input.startDate || null,
           end_date: input.endDate,
-          contract_price: input.contractPrice ?? 0,
+          original_contract_price: input.contractPrice ?? 0,
           estimated_cost_cents: input.estimatedCostCents ?? 0,
           labor_hours: input.laborHours ?? null,
           budget_hours: input.budgetHours ?? null,
@@ -184,7 +187,7 @@ export function useUpdateProject() {
           ...(input.status !== undefined && { status: input.status }),
           ...(input.startDate !== undefined && { start_date: input.startDate || null }),
           ...(input.endDate !== undefined && { end_date: input.endDate }),
-          ...(input.contractPrice !== undefined && { contract_price: input.contractPrice }),
+          ...(input.contractPrice !== undefined && { original_contract_price: input.contractPrice }),
           ...(input.estimatedCostCents !== undefined && { estimated_cost_cents: input.estimatedCostCents }),
           ...(input.laborHours !== undefined && { labor_hours: input.laborHours }),
           ...(input.budgetHours !== undefined && { budget_hours: input.budgetHours }),
@@ -209,7 +212,10 @@ export function useUpdateProject() {
       if (address !== undefined) patch.address = address;
       if (startDate !== undefined) patch.startDate = startDate ?? null;
       if (endDate !== undefined) patch.endDate = endDate;
-      if (contractPrice !== undefined) patch.contractPrice = contractPrice;
+      // contract_price is derived (original + approved COs) and recomputed by a
+      // DB trigger, so the optimistic patch can only safely move the original;
+      // the refetch brings back the true revised figure.
+      if (contractPrice !== undefined) patch.originalContractPrice = contractPrice;
       if (estimatedCostCents !== undefined) patch.estimatedCostCents = estimatedCostCents;
       if (laborHours !== undefined) patch.laborHours = laborHours;
       if (budgetHours !== undefined) patch.budgetHours = budgetHours;

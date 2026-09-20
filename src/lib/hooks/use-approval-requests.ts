@@ -447,7 +447,8 @@ export function useDecideApproval(entityId: string) {
 
         const { error: entityErr } = await supabase
           .from(cfg.table)
-          .update({ [cfg.statusColumn]: newEntityStatus })
+          // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+          .update({ [cfg.statusColumn]: newEntityStatus } as never)
           .eq("id", entityId)
           .select("id")
           .single();
@@ -532,7 +533,8 @@ export function useDecideApproval(entityId: string) {
 
           const { error: entityErr } = await supabase
             .from(cfg.table)
-            .update({ [cfg.statusColumn]: newEntityStatus })
+            // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+            .update({ [cfg.statusColumn]: newEntityStatus } as never)
             .eq("id", entityId)
             .select("id")
             .single();

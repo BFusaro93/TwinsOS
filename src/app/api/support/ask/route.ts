@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { searchDocs, searchDataDictionary } from "@/lib/docs-search";
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
 
   // Cap Ask AI at 100 requests/org/day so no single tenant can run up the
   // shared ANTHROPIC_API_KEY bill. Atomic RPC avoids a check-then-write race.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = isoNy(new Date());
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: withinLimit, error: usageError } = await (supabase as any).rpc(
     "try_increment_ai_chat_usage",

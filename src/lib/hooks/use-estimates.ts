@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
@@ -43,6 +44,7 @@ function mapLineItem(row: any): EstimateLineItem {
     unitType: row.unit_type ?? null,
     productionRateSqftPerHr: row.production_rate_sqft_per_hr ? Number(row.production_rate_sqft_per_hr) : null,
     budgetMethod: row.budget_method ?? "manual",
+    complexityBps: row.complexity_bps ?? 10000,
     sortOrder: row.sort_order,
     estimateDesc: row.estimate_desc ?? null,
     jobNote: row.job_note ?? null,
@@ -83,6 +85,7 @@ function mapEstimate(row: any): Estimate {
     orgId: row.org_id,
     estimateNumber: row.estimate_number,
     clientId: row.client_id,
+    propertyId: row.property_id ?? null,
     description: row.description,
     salesRepId: row.sales_rep_id,
     source: row.source,
@@ -123,6 +126,13 @@ function mapEstimate(row: any): Estimate {
     depositReference: (row.deposit_reference as string | null) ?? null,
     depositNotes: (row.deposit_notes as string | null) ?? null,
     depositCollectedAt: (row.deposit_collected_at as string | null) ?? null,
+    depositPendingCents: (row.deposit_pending_cents as number | null) ?? null,
+    depositPendingMethod: (row.deposit_pending_method as Estimate['depositPendingMethod']) ?? null,
+    depositPendingAt: (row.deposit_pending_at as string | null) ?? null,
+    depositFailedCents: (row.deposit_failed_cents as number | null) ?? null,
+    depositFailedMethod: (row.deposit_failed_method as Estimate['depositFailedMethod']) ?? null,
+    depositFailedReason: (row.deposit_failed_reason as string | null) ?? null,
+    depositFailedAt: (row.deposit_failed_at as string | null) ?? null,
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     displaySettings: toDisplaySettings(row.display_settings),
@@ -214,6 +224,7 @@ export function useCreateEstimate() {
   return useMutation({
     mutationFn: async (values: {
       clientId: string;
+      propertyId?: string | null;
       description: string;
       salesRepId?: string;
       estimateDate: string;
@@ -243,6 +254,7 @@ export function useCreateEstimate() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          property_id: values.propertyId ?? null,
           description: values.description,
           sales_rep_id: values.salesRepId ?? null,
           estimate_date: values.estimateDate,
@@ -303,7 +315,7 @@ export function useBulkImportEstimates() {
           created_by: user?.id ?? null,
           client_id: clientId,
           description,
-          estimate_date: r.estimateDate?.trim() || new Date().toISOString().split("T")[0],
+          estimate_date: r.estimateDate?.trim() || isoNy(new Date()),
           valid_until_date: r.validUntilDate?.trim() || null,
           po_number: r.poNumber?.trim() || null,
           stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",

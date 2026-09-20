@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 
 // Public route — no auth. Uses service role to read across RLS.
 const serviceClient = () =>
@@ -81,7 +82,7 @@ export async function GET(
   // Fetch org
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, brand_color, address, customizations")
+    .select("name, brand_color, address, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled")
     .eq("id", shareToken.org_id)
     .single();
 
@@ -142,6 +143,29 @@ export async function GET(
 
     depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
     depositCollectedCents: (est.deposit_collected_cents as number) ?? 0,
+    // A deposit the bank returned or the card declined. Drives the retry
+    // screen an already-accepted proposal shows instead of the plain thank-you
+    // — the only route back for a client whose ACH bounced days later. The
+    // reason is Stripe's own wording; it says nothing about the payment
+    // instrument beyond what the payer already knows.
+    depositFailedCents: (est.deposit_failed_cents as number | null) ?? null,
+    depositFailedReason: (est.deposit_failed_reason as string | null) ?? null,
+    depositFailedMethod: (est.deposit_failed_method as "card" | "us_bank_account" | null) ?? null,
+    depositFailedAt: (est.deposit_failed_at as string | null) ?? null,
+    // Whether the deposit step can offer a real card charge, or only the
+    // self-reported "I'll send a check" methods. Gated on the platform having
+    // Stripe keys AND this org having finished Connect onboarding — an org
+    // that hasn't still gets the manual methods and the Skip button.
+    cardDepositAvailable:
+      (isStripeConfigured() || isStripeTestConfigured()) &&
+      !!org?.stripe_connect_account_id &&
+      !!org?.stripe_connect_charges_enabled,
+    orgLivemode: org?.stripe_connect_livemode ?? true,
+    // The org-level toggle only. Whether the connected account actually has
+    // the ACH capability is a Stripe API call, too slow to make on every
+    // proposal view — the deposit-intent route does that check and returns a
+    // clear "pay by card instead" error if it isn't really available.
+    achDepositAvailable: !!org?.ach_payments_enabled,
 
     lineItems,
     photos,

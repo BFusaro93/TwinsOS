@@ -421,7 +421,8 @@ export type ReportSectionKey =
   | "receivables"
   | "revenue"
   | "schedule_lists"
-  | "service";
+  | "service"
+  | "tickets";
 
 export const REPORT_SECTIONS: { key: ReportSectionKey; label: string }[] = [
   { key: "audits", label: "Audits" },
@@ -436,6 +437,7 @@ export const REPORT_SECTIONS: { key: ReportSectionKey; label: string }[] = [
   { key: "revenue", label: "Revenue" },
   { key: "schedule_lists", label: "Schedule Lists" },
   { key: "service", label: "Service Reports" },
+  { key: "tickets", label: "Tickets" },
 ];
 
 export type ReportFilterInputType =

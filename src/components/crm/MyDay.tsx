@@ -108,10 +108,16 @@ export function MyDay() {
       {/* Greeting bar */}
       <div className="flex items-center justify-between rounded-lg border bg-white px-5 py-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
+          {/* getGreeting()/getTodayLong() read the local clock, which can
+              legitimately differ between the server that rendered this page
+              and the browser hydrating it (different timezone, or a request
+              that straddles the hour/day boundary) — that mismatch is
+              expected, not a bug, so it's suppressed rather than "fixed" by
+              forcing a spurious re-render. */}
+          <h1 className="text-xl font-semibold text-slate-900" suppressHydrationWarning>
             {getGreeting()}, {firstName}
           </h1>
-          <p className="text-sm text-slate-400 mt-0.5">{getTodayLong()}</p>
+          <p className="text-sm text-slate-400 mt-0.5" suppressHydrationWarning>{getTodayLong()}</p>
         </div>
         <Link
           href="/crm/tickets"
@@ -135,9 +141,9 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{(openTickets ?? []).length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {ticketsLoading ? <Skeleton className="h-3 w-20" /> : `${overdueCount} overdue`}
-          </p>
+          </div>
         </div>
 
         {/* Pending Estimates */}
@@ -151,13 +157,13 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{pendingEstimates.length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {estimatesLoading ? (
               <Skeleton className="h-3 w-24" />
             ) : (
               `${formatCurrency(pipelineValueCents)} pipeline`
             )}
-          </p>
+          </div>
         </div>
 
         {/* Outstanding Invoices */}
@@ -171,13 +177,13 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{outstandingInvoices.length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {invoicesLoading ? (
               <Skeleton className="h-3 w-24" />
             ) : (
               `${formatCurrency(totalBalanceCents)} outstanding`
             )}
-          </p>
+          </div>
         </div>
 
         {/* Active Clients */}
@@ -191,22 +197,25 @@ export function MyDay() {
           ) : (
             <p className="text-3xl font-bold text-slate-900">{activeClients.length}</p>
           )}
-          <p className="text-xs text-slate-400 mt-1">
+          <div className="text-xs text-slate-400 mt-1">
             {clientsLoading ? (
               <Skeleton className="h-3 w-24" />
             ) : (
               `${newThisMonth} added this month`
             )}
-          </p>
+          </div>
         </div>
       </div>
 
       {showRevenueSnapshot && <RevenueSnapshot />}
 
-      {/* Two-column content */}
+      {/* Two-column content. min-w-0 on both columns is load-bearing: an fr
+          track won't shrink below its content's min-content width, so one long
+          ticket subject or client name in the left column widens that track and
+          shoves the right column off the right edge. */}
       <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 flex-1">
         {/* Left column */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {/* Open Tickets */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <SectionHeader title="Open Tickets" href="/crm/tickets?status=open" />
@@ -243,7 +252,7 @@ export function MyDay() {
                       </span>
                     )}
                     {t.category && (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
+                      <span className="max-w-[140px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
                         {t.category}
                       </span>
                     )}
@@ -350,7 +359,7 @@ export function MyDay() {
         </div>
 
         {/* Right column */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {/* Outstanding Invoices */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices" />

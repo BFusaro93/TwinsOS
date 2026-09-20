@@ -1,4 +1,4 @@
-import type { CrewVisit } from '@/lib/types';
+import type { CrewDriveInfo, CrewStop, CrewVisit } from '@/lib/types';
 
 import type { ClockOutPayload, QueueItem } from './types';
 
@@ -51,4 +51,106 @@ export function applyQueueOverlay(visit: CrewVisit, queueItemsForVisit: QueueIte
     status,
     hasPendingClockAction: active.length > 0,
   };
+}
+
+/** A CrewStop with pending local clock/pause queue actions optimistically applied. */
+export interface EffectiveStop extends CrewStop {
+  hasPendingClockAction: boolean;
+  hasPendingPauseAction: boolean;
+}
+
+/**
+ * Stop-model counterpart to applyQueueOverlay() above — merges a
+ * server-fetched CrewStop with the pending/syncing queue items keyed to its
+ * anchorVisitId (clock_in/clock_out/pause/resume all target the anchor, same
+ * as the web stop page — see src/lib/utils/visit-stops.ts). Failed items are
+ * excluded here for the same reason as applyQueueOverlay(): they're
+ * surfaced separately so the crew member decides to retry or discard rather
+ * than silently redefining the stop's state.
+ */
+export function applyStopQueueOverlay(stop: CrewStop, queueItemsForStop: QueueItem[]): EffectiveStop {
+  const clockItems = queueItemsForStop.filter(
+    (i) => (i.type === 'clock_in' || i.type === 'clock_out') && i.status !== 'failed'
+  );
+  const pauseItems = queueItemsForStop.filter(
+    (i) => (i.type === 'pause' || i.type === 'resume') && i.status !== 'failed'
+  );
+  const acknowledgeItem = queueItemsForStop.find(
+    (i) => i.type === 'acknowledge_notes' && i.status !== 'failed'
+  );
+
+  let clockedInAt = stop.clockedInAt;
+  let clockedOutAt = stop.clockedOutAt;
+  let derivedStatus = stop.derivedStatus;
+
+  for (const item of clockItems) {
+    if (item.type === 'clock_in') {
+      clockedInAt = clockedInAt ?? item.createdAt;
+      if (derivedStatus === 'scheduled' || derivedStatus === 'dispatched') derivedStatus = 'in_progress';
+    } else {
+      clockedOutAt = clockedOutAt ?? item.createdAt;
+      derivedStatus = 'completed';
+    }
+  }
+
+  // Oldest-first (queue items are always read in that order — see db.ts),
+  // so applying each in sequence lands on the correct final pausedAt even
+  // across multiple pause/resume cycles still in flight.
+  let pausedAt = stop.pausedAt;
+  for (const item of pauseItems) {
+    pausedAt = item.type === 'pause' ? (pausedAt ?? item.createdAt) : null;
+  }
+
+  // Optimistically mark the anchor visit's notes as acknowledged, mirroring
+  // web's `anchor.acknowledgedNotesAt` gate (see visit/[id].tsx) — otherwise
+  // Clock In would stay disabled until the next refetch even though the tap
+  // already queued successfully.
+  const visits = acknowledgeItem
+    ? stop.visits.map((v) =>
+        v.id === stop.anchorVisitId
+          ? { ...v, acknowledgedNotesAt: v.acknowledgedNotesAt ?? acknowledgeItem.createdAt }
+          : v
+      )
+    : stop.visits;
+
+  return {
+    ...stop,
+    visits,
+    clockedInAt,
+    clockedOutAt,
+    pausedAt,
+    derivedStatus,
+    hasPendingClockAction: clockItems.length > 0,
+    hasPendingPauseAction: pauseItems.length > 0,
+  };
+}
+
+/** CrewDriveInfo with a pending local drive_start/drive_end queue action optimistically applied. */
+export interface EffectiveDriveInfo extends CrewDriveInfo {
+  hasPendingDriveAction: boolean;
+}
+
+/**
+ * Merges the day-level drive info with any pending/syncing drive_start /
+ * drive_end queue items — same optimistic-UI reasoning as the stop/visit
+ * overlays above, so "Start Drive"/"Arrived" flips immediately rather than
+ * waiting on a round trip. A pending drive_start synthesizes a placeholder
+ * open segment (no real id yet); a pending drive_end simply hides whatever
+ * segment the server last reported as open.
+ */
+export function applyDriveOverlay(drive: CrewDriveInfo, driveQueueItems: QueueItem[]): EffectiveDriveInfo {
+  const active = driveQueueItems.filter(
+    (i) => (i.type === 'drive_start' || i.type === 'drive_end') && i.status !== 'failed'
+  );
+
+  let openSegment = drive.openSegment;
+  for (const item of active) {
+    if (item.type === 'drive_start') {
+      openSegment = openSegment ?? { id: `pending-${item.id}`, startedAt: item.createdAt, endedAt: null, minutes: null };
+    } else {
+      openSegment = null;
+    }
+  }
+
+  return { ...drive, openSegment, hasPendingDriveAction: active.length > 0 };
 }

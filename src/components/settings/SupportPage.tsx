@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   LifeBuoy,
@@ -22,6 +23,7 @@ import {
   type DocArticle,
   type FAQCategory,
 } from "@/lib/docs-content";
+import { localizeGuideHref } from "@/lib/docs-guides";
 import { DocsEyebrow } from "@/components/docs/DocsBrand";
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -160,6 +162,9 @@ function GuideCard({
   cardRef: (el: HTMLDivElement | null) => void;
 }) {
   const Icon = guide.icon;
+  // Guide links are stored as /settings/support/<slug>; point them at whichever
+  // shell (Equipt, Landscapt, Settings) this Support page is rendering in.
+  const pathname = usePathname();
   return (
     <div ref={cardRef} className="scroll-mt-4 rounded-lg border border-[#e6e6e0] bg-white shadow-sm">
       <button
@@ -193,7 +198,7 @@ function GuideCard({
                   <p className="mt-1 text-sm leading-relaxed text-[#5a5a56]">{s.detail}</p>
                   {s.href && (
                     <Link
-                      href={s.href}
+                      href={localizeGuideHref(s.href, pathname)}
                       className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-[#60ab45] hover:text-[#4a8a33]"
                     >
                       {s.linkLabel ?? "Learn more"}

@@ -532,7 +532,7 @@ export function JobPhotosPage() {
       <div className="flex h-full flex-col gap-4">
         {/* Header */}
         <PageHeader
-          title="Jobs"
+          title="Job Photos"
           description="Photo documentation by job site"
           action={
             <>

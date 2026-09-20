@@ -38,12 +38,23 @@ function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
+    let res: Response;
+    let data: { error?: string };
+    try {
+      res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      data = await res.json();
+    } catch {
+      // Request never completed (offline, server unreachable, non-JSON error
+      // page from a proxy). Without this the rejection escapes and the button
+      // stays stuck on "Signing in…" with nothing shown to the user.
+      setError("Couldn't reach the server. Check your connection and try again.");
+      setLoading(false);
+      return;
+    }
 
     if (!res.ok) {
       setError(data.error ?? "Something went wrong. Please try again.");

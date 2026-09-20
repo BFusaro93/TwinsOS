@@ -1,11 +1,68 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
+import { buildResult, col } from "@/lib/reports/helpers";
 import type { AnalysisFilter } from "@/types/crm-reports";
+import { isoNy } from "@/lib/reports/ny-date";
 
 // ============================================================
 // Schedule Lists section — pre-built reports.
 // ============================================================
 
 export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
+  {
+    key: "upcoming-jobs-no-contract",
+    section: "schedule_lists",
+    name: "Upcoming Jobs - No Contract",
+    description: "Shows scheduled upcoming jobs that aren't tied to a signed contract.",
+    filters: [],
+    run: async ({ supabase }) => {
+      // "Upcoming" means upcoming on the company's calendar. toISOString() is
+      // UTC, which after 8pm Eastern is already tomorrow — that dropped the
+      // current service day's jobs off this list every evening.
+      const today = isoNy(new Date());
+      const { data, error } = await supabase
+        .from("crm_jobs")
+        .select(
+          "job_number, job_type, scheduled_date, rate_cents, clients(display_name), crm_crews(name)"
+        )
+        .is("deleted_at", null)
+        .is("contract_id", null)
+        .not("status", "in", "(cancelled,skipped)")
+        .gte("scheduled_date", today)
+        .order("scheduled_date", { ascending: true })
+        .limit(2000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        job_number: number | null;
+        job_type: string | null;
+        scheduled_date: string | null;
+        rate_cents: number | null;
+        clients: { display_name: string | null } | null;
+        crm_crews: { name: string | null } | null;
+      };
+
+      const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+        job_number: r.job_number,
+        client_name: r.clients?.display_name ?? "",
+        job_type: r.job_type,
+        scheduled_date: r.scheduled_date,
+        crew_name: r.crm_crews?.name ?? "",
+        rate_cents: r.rate_cents ?? 0,
+      }));
+
+      return buildResult(
+        [
+          col("job_number", "Job #", "number", false),
+          col("client_name", "Client"),
+          col("job_type", "Job Type"),
+          col("scheduled_date", "Scheduled Date", "date"),
+          col("crew_name", "Crew"),
+          col("rate_cents", "Rate", "money"),
+        ],
+        rows
+      );
+    },
+  },
   {
     key: "employee-directory",
     section: "schedule_lists",

@@ -38,8 +38,9 @@ import { GET as listRequisitions, POST as createRequisition } from "@/app/api/v1
 import { GET as getRequisition } from "@/app/api/v1/requisitions/[id]/route";
 import { createRequisitionSchema } from "@/app/api/v1/requisitions/validation";
 
-import { GET as listPurchaseOrders } from "@/app/api/v1/purchase-orders/route";
+import { GET as listPurchaseOrders, POST as createPurchaseOrder } from "@/app/api/v1/purchase-orders/route";
 import { GET as getPurchaseOrder } from "@/app/api/v1/purchase-orders/[id]/route";
+import { createPurchaseOrderSchema } from "@/app/api/v1/purchase-orders/validation";
 
 import { GET as listJobs, POST as createJob } from "@/app/api/v1/jobs/route";
 import { GET as getJob, PATCH as updateJob } from "@/app/api/v1/jobs/[id]/route";
@@ -52,8 +53,9 @@ import { createEstimateSchema } from "@/app/api/v1/estimates/validation";
 import { GET as listInvoices } from "@/app/api/v1/invoices/route";
 import { GET as getInvoice } from "@/app/api/v1/invoices/[id]/route";
 
-import { GET as listContracts } from "@/app/api/v1/contracts/route";
+import { GET as listContracts, POST as createContract } from "@/app/api/v1/contracts/route";
 import { GET as getContract } from "@/app/api/v1/contracts/[id]/route";
+import { createContractSchema } from "@/app/api/v1/contracts/validation";
 
 /**
  * MCP tool set for the public API, generated from a resource registry
@@ -68,16 +70,36 @@ import { GET as getContract } from "@/app/api/v1/contracts/[id]/route";
  * why the MCP route's own connection-level auth doesn't also charge it).
  *
  * Per src/lib/api/scopes.ts's write:sensitive tier, no tool here ever
- * performs a create/update that the REST API itself doesn't expose —
- * invoices, contracts, and purchase orders are read-only, and requisitions
- * have no update tool (status transitions go through the app's approval
- * flow only). estimates is the one exception: create_estimates exists, but
- * only as the narrow one-line-from-a-catalog-service path in
- * src/app/api/v1/estimates/route.ts — every dollar figure is still computed
- * by the app's own budget-engine functions, never caller-supplied. See the
- * "public API / MCP: estimate creation stays read-only" entry in TASKS.md
- * for the fuller reasoning and what's still out of scope (multi-line
- * estimates, discounts, tiers, milestones).
+ * performs a create/update that the REST API itself doesn't expose. Invoices
+ * are read-only, and requisitions/purchase_orders have no update tool
+ * (status transitions — approval, rejection, ordering — go through the
+ * app's approval flow only; see guard_procurement_approval_status() in
+ * supabase/migrations/20260806203310_guard_procurement_approval_status.sql).
+ * create_purchase_orders always lands at status "requested" — the same
+ * starting point the app's own "New PO" dialog produces — so it can create
+ * a PO but never approve or advance one. estimates is a narrower exception
+ * still: create_estimates exists, but only as the one-line-from-a-
+ * catalog-service path in src/app/api/v1/estimates/route.ts — every dollar
+ * figure is still computed by the app's own budget-engine functions, never
+ * caller-supplied. See the "public API / MCP: estimate creation stays
+ * read-only" entry in TASKS.md for that reasoning.
+ *
+ * create_contracts is the one resource here that legitimately differs from
+ * the app's own creation flow: it accepts a historical signedAt/signedBy,
+ * meant for recording a contract already executed outside the app (e.g.
+ * signed via DocuSign) for billing purposes — not fabricating a new
+ * agreement. It still defaults to status "draft", which does NOT bill, so an
+ * agent recording a contract can't start charging a real client by accident;
+ * the caller has to pass an explicit "signed"/"active" status to opt in. See
+ * src/app/api/v1/contracts/validation.ts.
+ *
+ * Tool and field descriptions: the generated one-liners ("Creates a new
+ * contracts.") are kept for simple resources, but anything that moves money
+ * carries a real description (createDescription/updateDescription below) and
+ * real per-field docs via `.describe()` on its Zod schema. Those are the only
+ * place a calling model can learn that contract amounts are per-invoice, that
+ * job budgetedHours are man-hours, or that a PO lands unapproved — none of
+ * which it can read out of openapi.ts or a source comment.
  */
 
 type ListHandler = (request: Request) => Promise<Response>;
@@ -95,11 +117,31 @@ interface ResourceToolDef {
   update?: IdHandler;
   updateScope?: string;
   updateSchema?: z.ZodObject<ZodRawShape>;
+  /**
+   * Overrides for the generated one-liners ("Creates a new contracts.").
+   * Auto-generated descriptions are fine for a vendor or an asset, but for
+   * anything that moves money they were actively dangerous: every semantic
+   * warning about per-invoice amounts, billing cadence, approval gates and
+   * man-hour units lived only in openapi.ts and source comments, which the
+   * model calling these tools never sees. An agent recording an annual
+   * contract had no way to learn that "monthlyAmountCents" is per-invoice,
+   * or that the contract would start billing on its own. Field-level
+   * guidance comes from `.describe()` on the Zod schemas (which flows into
+   * inputSchema automatically); these cover the tool as a whole.
+   */
+  createDescription?: string;
+  updateDescription?: string;
+  listDescription?: string;
 }
 
 const RESOURCE_TOOLS: ResourceToolDef[] = [
   {
     resource: "clients",
+    createDescription:
+      "Creates a customer account (never a supplier — those are vendors). Defaults to status 'lead'. defaultTaxRateBps is in BASIS POINTS (700 = 7%). " +
+      "Setting smsOptIn true records SMS consent with a timestamp and source for A2P 10DLC compliance: only set it when the customer actually consented, and say how via smsOptInSource.",
+    updateDescription:
+      "Updates a client. Pass null to clear a nullable field. Turning smsOptIn on records a fresh consent timestamp and source; leaving it on does not overwrite the original consent date.",
     list: listClients,
     listScope: "clients:read",
     get: getClient,
@@ -152,6 +194,14 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
   },
   {
     resource: "products",
+    createDescription:
+      "Adds an item to the purchasing catalog (the single source of truth for anything a requisition or PO can order — free-text line items are not allowed). " +
+      "Money fields are in CENTS. Category matters: 'maintenance_part' is also mirrored into the CMMS parts inventory and is the only category a goods receipt can move into stock; " +
+      "'stocked_material' and 'project_material' are the only categories whose PO/requisition lines may carry a projectId. " +
+      "quantityOnHand here is an OPENING count only — after creation, stock rises only through a goods receipt.",
+    updateDescription:
+      "Edits a catalog item. Changes are mirrored into the linked CMMS part. Changing category to 'maintenance_part' creates that mirrored part; " +
+      "changing away from it retires the part. Stock on hand cannot be set here at all — it changes only through a goods receipt.",
     list: listProducts,
     listScope: "products:read",
     get: getProduct,
@@ -165,6 +215,9 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
   },
   {
     resource: "projects",
+    createDescription:
+      "Creates a landscaping project/job that PO and requisition lines can be costed to. All money is in CENTS. " +
+      "contractPriceCents sets the ORIGINAL contract price; the project's live contract price is derived by the database as original + approved change orders and can never be written directly.",
     list: listProjects,
     listScope: "projects:read",
     get: getProject,
@@ -191,6 +244,10 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
   },
   {
     resource: "parts",
+    createDescription:
+      "Adds a spare part to the CMMS inventory. unitCostCents is in CENTS. Part numbers must be unique within the organization — including the blank one, which only one part may hold. " +
+      "Stock on hand cannot be set here: it rises only through a goods receipt against a purchase order.",
+    updateDescription: "Edits a part's catalog fields. Stock on hand is not settable — it changes only through a goods receipt.",
     list: listParts,
     listScope: "parts:read",
     get: getPart,
@@ -204,6 +261,9 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
   },
   {
     resource: "requisitions",
+    createDescription:
+      "Creates an internal purchase REQUEST (pre-PO) in 'draft'. It does not order anything and does not commit any spend: someone in the app has to review it and submit it into the org's approval chain. " +
+      "Every line must reference a products-catalog item. Money fields are in CENTS; taxRatePercent is a percent, not basis points.",
     list: listRequisitions,
     listScope: "requisitions:read",
     get: getRequisition,
@@ -214,13 +274,26 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
   },
   {
     resource: "purchase_orders",
+    createDescription:
+      "Creates a purchase order against a vendor, always at status 'requested' — it is NOT approved and NOT sent. Approving or advancing a PO is only possible through the app's approval chain, never through this API. " +
+      "Every line must reference a products-catalog item, and a 'maintenance_part' line must have a whole-number quantity. " +
+      "All money is in CENTS (integers); taxRatePercent is a percent, not basis points; the discount is clamped to the subtotal so a total can never go negative.",
     list: listPurchaseOrders,
     listScope: "purchase_orders:read",
     get: getPurchaseOrder,
     getScope: "purchase_orders:read",
+    create: createPurchaseOrder,
+    createScope: "purchase_orders:write:safe",
+    createSchema: createPurchaseOrderSchema,
   },
   {
     resource: "jobs",
+    createDescription:
+      "Schedules a Landscapt service job for a client. With a serviceId it also creates the job's service line and — for a dated job type — the dispatch-board visit. " +
+      "budgetedHours is TOTAL MAN-HOURS (hours on site x crew size), not hours per person. Dates are YYYY-MM-DD: passing a timestamp risks landing on the previous day. " +
+      "A 'waiting_list' job deliberately gets NO dispatch-board visit — its date becomes an availability window instead. rateCents is in CENTS.",
+    updateDescription:
+      "Updates a job's status, schedule, crew, rate or notes. Dates are YYYY-MM-DD and rateCents is in CENTS. Pass null to clear a nullable field.",
     list: listJobs,
     listScope: "jobs:read",
     get: getJob,
@@ -234,6 +307,9 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
   },
   {
     resource: "estimates",
+    createDescription:
+      "Creates a single-line estimate for a client and a catalog service. Deliberately narrow: you choose WHAT to quote (client, service, quantity) and the app computes every dollar figure " +
+      "from the org's own service catalog, production rates, labor burden and overhead settings. No price, cost or margin can be supplied. Multi-line estimates, discounts and milestones need the app.",
     list: listEstimates,
     listScope: "estimates:read",
     get: getEstimate,
@@ -251,10 +327,20 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
   },
   {
     resource: "contracts",
+    createDescription:
+      "Records a recurring-billing contract for a client — including one already signed outside the app, via signedAt/signedBy. " +
+      "IT GENERATES REAL INVOICES: once status is 'signed' or 'active', a nightly job bills the client on this contract's own cadence with no further human step. " +
+      "That is why it defaults to status 'draft', which does not bill; pass an explicit status only when billing really should start. " +
+      "monthlyAmountCents is the amount charged on EACH invoice, in CENTS — not an annualised figure. An annual $12,000 contract is billingFrequency 'annual' with monthlyAmountCents 1200000, and bills $12,000 once a year. " +
+      "billingFrequency genuinely controls the cadence (weekly, biweekly, monthly, quarterly, annual, one_time), anchored on startDate. " +
+      "Supports a bulk batch via `contracts`.",
     list: listContracts,
     listScope: "contracts:read",
     get: getContract,
     getScope: "contracts:read",
+    create: createContract,
+    createScope: "contracts:write:safe",
+    createSchema: createContractSchema,
   },
 ];
 
@@ -305,7 +391,7 @@ export function registerResourceTools(server: McpServer, request: Request, scope
         `list_${def.resource}`,
         {
           title: `List ${def.resource}`,
-          description: `Lists the organization's ${def.resource.replace(/_/g, " ")}.`,
+          description: def.listDescription ?? `Lists the organization's ${def.resource.replace(/_/g, " ")}.`,
           inputSchema: PAGINATION_SHAPE,
         },
         async (args) => toToolResult(await def.list(buildRequest(authHeader, "GET", path, { query: args })))
@@ -330,7 +416,7 @@ export function registerResourceTools(server: McpServer, request: Request, scope
         `create_${def.resource}`,
         {
           title: `Create a ${def.resource.replace(/_/g, " ")}`,
-          description: `Creates a new ${def.resource.replace(/_/g, " ")}.`,
+          description: def.createDescription ?? `Creates a new ${def.resource.replace(/_/g, " ")}.`,
           inputSchema: def.createSchema.shape,
         },
         async (args) => toToolResult(await def.create!(buildRequest(authHeader, "POST", path, { body: args })))
@@ -343,7 +429,7 @@ export function registerResourceTools(server: McpServer, request: Request, scope
         `update_${def.resource}`,
         {
           title: `Update a ${def.resource.replace(/_/g, " ")}`,
-          description: `Updates fields on an existing ${def.resource.replace(/_/g, " ")}.`,
+          description: def.updateDescription ?? `Updates fields on an existing ${def.resource.replace(/_/g, " ")}.`,
           inputSchema: updateShape,
         },
         async ({ id, ...body }) =>

@@ -81,6 +81,8 @@ export interface CRMInvoice {
   clientId: string;
   estimateId: string | null;
   crmJobId: string | null;
+  /** Project this invoice bills against — derived from crmJobId by a DB trigger when unset. */
+  projectId: string | null;
   salesRepId: string | null;
   description: string;
   status: InvoiceStatus;
@@ -228,7 +230,13 @@ export interface CRMContractNote {
 
 /** Which React PDF component renders the invoice. Add a new key here (and a
  *  matching case in InvoiceDocument.tsx) when adding a new visual layout. */
-export type InvoicePDFLayoutKey = "default" | "compact" | "statement" | "statement_invoice_only";
+export type InvoicePDFLayoutKey =
+  | "default"
+  | "compact"
+  | "statement"
+  | "statement_no_stub"
+  | "statement_invoice_only"
+  | "statement_invoice_only_no_stub";
 
 export interface InvoicePDFTemplate {
   id: string;

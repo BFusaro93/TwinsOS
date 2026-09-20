@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   useInvoices,
   useUpdateInvoiceStatus,
+  useSetInvoiceLock,
   useBulkImportInvoices,
   voidBlockedMessage,
 } from "@/lib/hooks/use-invoices";
@@ -26,6 +27,7 @@ import { useChargeAutopayInvoice, DuplicateChargeError } from "@/lib/hooks/use-a
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
 import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
+import { BulkEmailInvoicesDialog } from "./BulkEmailInvoicesDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
@@ -147,13 +149,39 @@ function isChargeableBy(i: CRMInvoice, method: "card" | "us_bank_account") {
   );
 }
 
+/** How long a marker is believed before it's treated as stale. A card intent
+ * parks in requires_action for at most a day; an ACH debit settles in a few
+ * business days, with a fortnight of slack for holidays and returns.
+ *
+ * The marker is cleared by a Stripe event (succeeded / payment_failed /
+ * canceled), so if one never arrives — a webhook secret misconfigured, an
+ * event Stripe gave up retrying — the invoice would otherwise be excluded from
+ * the charge queue permanently, with no UI anywhere to clear it. Expiring the
+ * marker fails back to the old behaviour (the invoice is offered again) rather
+ * than to an uncollectable invoice; the server-side duplicate-charge guard
+ * still refuses a genuine second charge. */
+const PENDING_CHARGE_TTL_MS = {
+  us_bank_account: 14 * 24 * 60 * 60 * 1000,
+  card: 24 * 60 * 60 * 1000,
+} as const;
+
+function pendingChargeIsStale(i: CRMInvoice): boolean {
+  if (!i.pendingPaymentAt) return false;
+  const ttl = i.pendingPaymentMethod === "us_bank_account"
+    ? PENDING_CHARGE_TTL_MS.us_bank_account
+    : PENDING_CHARGE_TTL_MS.card;
+  const at = new Date(i.pendingPaymentAt).getTime();
+  if (Number.isNaN(at)) return false;
+  return Date.now() - at > ttl;
+}
+
 /** True when a Stripe charge is already in flight against this invoice. An ACH
  * debit stays in flight for days and writes nothing to crm_payments until it
  * settles, so the invoice keeps its full balance and stays in this queue the
  * whole time — the marker is the only thing distinguishing it from an invoice
  * nobody has charged yet. */
 function hasPaymentInFlight(i: CRMInvoice) {
-  return i.pendingPaymentCents != null;
+  return i.pendingPaymentCents != null && !pendingChargeIsStale(i);
 }
 
 /** Says what's pending and since when, so staff don't have to guess whether a
@@ -220,6 +248,7 @@ export function InvoicesList({ clientId }: Props) {
   const effectiveClientId = clientId ?? (searchParams.get("clientId") || undefined);
   const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(effectiveClientId);
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
+  const { mutateAsync: setLock } = useSetInvoiceLock();
   const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
@@ -248,7 +277,7 @@ export function InvoicesList({ clientId }: Props) {
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [emailingSelected, setEmailingSelected] = useState(false);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [sortKey, setSortKey] = useState<string>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -421,37 +450,33 @@ export function InvoicesList({ clientId }: Props) {
     await bulkUpdateStatus("void");
   }
 
-  // Actually sends an email per selected invoice (via the same endpoint the
-  // single-invoice "Email" button uses) — this used to just flip status to
-  // "sent" with a fake success toast and never email anyone.
-  async function bulkEmailSelected() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    setEmailingSelected(true);
-    try {
-      const results = await Promise.allSettled(
-        ids.map((invoiceId) =>
-          fetch("/api/crm/invoices/email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ invoiceId }),
-          }).then(async (res) => {
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              throw new Error(data.error ?? "Failed to email invoice");
-            }
-          })
-        )
-      );
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - succeeded;
-      if (succeeded > 0) toast.success(`Emailed ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
-      if (failed > 0) toast.error(`Failed to email ${failed} invoice${failed !== 1 ? "s" : ""} — check they have a client email on file`);
-      setSelectedIds(new Set());
-      refetchInvoices();
-    } finally {
-      setEmailingSelected(false);
+  // Opens BulkEmailInvoicesDialog (template/PDF-layout/subject/body picker,
+  // same as the single-invoice "Email" button) instead of blind-sending with
+  // no chance to review what's about to go out to every selected client.
+  function bulkEmailSelected() {
+    if (selectedIds.size === 0) return;
+    setBulkEmailOpen(true);
+  }
+
+  // Opens one combined PDF of every selected invoice's real server-rendered
+  // page and prints it — a single tab instead of one popup per invoice.
+  // Still applies the same lock + draft->printed side effect InvoiceDetail's
+  // single-invoice handlePrint does, since printing this way is just as much
+  // "sent to the client on paper" as printing one at a time.
+  function bulkPrintSelected() {
+    const selected = allInvoices.filter((i) => selectedIds.has(i.id));
+    if (selected.length === 0) return;
+    const ids = selected.map((i) => i.id).join(",");
+    const win = window.open(`/api/crm/invoices/bulk-pdf?ids=${ids}`, "_blank");
+    if (win) win.addEventListener("load", () => win.print(), { once: true });
+    for (const inv of selected) {
+      const wasDraft = inv.status === "draft";
+      void Promise.all([
+        setLock({ id: inv.id, locked: true }),
+        wasDraft ? updateStatus({ id: inv.id, status: "printed" }) : Promise.resolve(),
+      ]).catch(() => {});
     }
+    toast.info(`Opening ${selected.length} invoice${selected.length !== 1 ? "s" : ""} to print…`);
   }
 
   const chargeInvoice = useChargeAutopayInvoice();
@@ -711,14 +736,14 @@ export function InvoicesList({ clientId }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
-                disabled={!someSelected || emailingSelected}
-                onSelect={() => void bulkEmailSelected()}
+                disabled={!someSelected}
+                onSelect={bulkEmailSelected}
               >
-                {emailingSelected ? "Emailing…" : "Email Selected"}
+                Email Selected
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!someSelected}
-                onSelect={() => { toast.info("Opening print view…"); window.print(); }}
+                onSelect={bulkPrintSelected}
               >
                 Print Selected
               </DropdownMenuItem>
@@ -1090,6 +1115,13 @@ export function InvoicesList({ clientId }: Props) {
           onClose={() => { setMergeOpen(false); setSelectedIds(new Set()); }}
         />
       )}
+
+      <BulkEmailInvoicesDialog
+        invoiceIds={Array.from(selectedIds)}
+        open={bulkEmailOpen}
+        onClose={() => setBulkEmailOpen(false)}
+        onSent={() => { setSelectedIds(new Set()); refetchInvoices(); }}
+      />
     </div>
   );
 }

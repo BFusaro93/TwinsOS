@@ -10,17 +10,30 @@ function mapMilestone(row: any): EstimateMilestone {
   return {
     id: row.id,
     orgId: row.org_id,
-    estimateId: row.estimate_id,
+    estimateId: row.estimate_id ?? null,
+    projectId: row.project_id ?? null,
     name: row.name,
     milestoneType: row.milestone_type,
     milestoneValue: row.milestone_value,
     amountCents: row.amount_cents,
     sortOrder: row.sort_order,
+    targetDate: row.target_date ?? null,
     status: row.status,
     invoiceId: row.invoice_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+// A milestone can be reached from two query scopes (its estimate and its
+// project), and a converted one lives in both at once. Every mutation must
+// refresh both or the surface you weren't looking at goes stale.
+function invalidateMilestoneScopes(
+  qc: ReturnType<typeof useQueryClient>,
+  vars: { estimateId?: string | null; projectId?: string | null },
+) {
+  if (vars.estimateId) qc.invalidateQueries({ queryKey: ["estimate-milestones", vars.estimateId] });
+  if (vars.projectId) qc.invalidateQueries({ queryKey: ["project-milestones", vars.projectId] });
 }
 
 export function useEstimateMilestones(estimateId: string) {
@@ -42,35 +55,65 @@ export function useEstimateMilestones(estimateId: string) {
   });
 }
 
+/**
+ * The billing schedule for a project. Same rows as useEstimateMilestones --
+ * a milestone converted from an estimate carries both ids, so invoicing it
+ * here marks it invoiced on the estimate too. There is one schedule, not a
+ * copy per surface.
+ */
+export function useProjectMilestones(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["project-milestones", projectId],
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabase = createClient() as any;
+      const { data, error } = await supabase
+        .from("estimate_milestones")
+        .select("*")
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data.map(mapMilestone)) as EstimateMilestone[];
+    },
+    enabled: !!projectId,
+  });
+}
+
 export function useCreateEstimateMilestone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: {
-      estimateId: string;
+      /** At least one of estimateId / projectId is required by a DB CHECK. */
+      estimateId?: string | null;
+      projectId?: string | null;
       name: string;
       milestoneType: "flat" | "percent";
       milestoneValue: number;
       amountCents: number;
       sortOrder: number;
+      targetDate?: string | null;
     }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any;
       const { data, error } = await supabase
         .from("estimate_milestones")
         .insert({
-          estimate_id: values.estimateId,
+          estimate_id: values.estimateId ?? null,
+          project_id: values.projectId ?? null,
           name: values.name,
           milestone_type: values.milestoneType,
           milestone_value: values.milestoneValue,
           amount_cents: values.amountCents,
           sort_order: values.sortOrder,
+          target_date: values.targetDate ?? null,
         })
         .select()
         .single();
       if (error) throw error;
       return mapMilestone(data);
     },
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["estimate-milestones", vars.estimateId] }),
+    onSuccess: (_d, vars) => invalidateMilestoneScopes(qc, vars),
   });
 }
 
@@ -80,16 +123,19 @@ export function useUpdateEstimateMilestone() {
     mutationFn: async ({
       id,
       estimateId,
+      projectId,
       patch,
     }: {
       id: string;
-      estimateId: string;
+      estimateId?: string | null;
+      projectId?: string | null;
       patch: Partial<{
         name: string;
         milestoneType: "flat" | "percent";
         milestoneValue: number;
         amountCents: number;
         sortOrder: number;
+        targetDate: string | null;
       }>;
     }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,18 +146,19 @@ export function useUpdateEstimateMilestone() {
       if (patch.milestoneValue !== undefined) row.milestone_value = patch.milestoneValue;
       if (patch.amountCents !== undefined) row.amount_cents = patch.amountCents;
       if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+      if (patch.targetDate !== undefined) row.target_date = patch.targetDate;
       const { error } = await supabase.from("estimate_milestones").update(row).eq("id", id);
       if (error) throw error;
-      return { id, estimateId };
+      return { id, estimateId, projectId };
     },
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["estimate-milestones", vars.estimateId] }),
+    onSuccess: (_d, vars) => invalidateMilestoneScopes(qc, vars),
   });
 }
 
 export function useDeleteEstimateMilestone() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id }: { id: string; estimateId: string }) => {
+    mutationFn: async ({ id }: { id: string; estimateId?: string | null; projectId?: string | null }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any;
       const { error } = await supabase
@@ -120,7 +167,7 @@ export function useDeleteEstimateMilestone() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["estimate-milestones", vars.estimateId] }),
+    onSuccess: (_d, vars) => invalidateMilestoneScopes(qc, vars),
   });
 }
 
@@ -128,15 +175,18 @@ export function useDeleteEstimateMilestone() {
 export function useCreateInvoiceFromMilestone() {
   const qc = useQueryClient();
   return useMutation({
+    // estimateId/projectId aren't used to build the call — the RPC resolves
+    // both from the milestone row itself — but they're what onSuccess
+    // invalidates, so callers still pass them.
     mutationFn: async ({
       milestone,
-      estimateId,
       clientId,
       salesRepId,
       poNumber,
     }: {
       milestone: EstimateMilestone;
-      estimateId: string;
+      estimateId?: string | null;
+      projectId?: string | null;
       clientId: string;
       salesRepId?: string | null;
       poNumber?: string | null;
@@ -168,8 +218,9 @@ export function useCreateInvoiceFromMilestone() {
       return mapInvoice(inv);
     },
     onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: ["estimate-milestones", vars.estimateId] });
+      invalidateMilestoneScopes(qc, vars);
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
     },
   });
 }

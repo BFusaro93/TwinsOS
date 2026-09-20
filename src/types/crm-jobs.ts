@@ -24,6 +24,9 @@ export interface CRMService {
   defaultBCostCents: number;
   showInSnowDispatch: boolean;
   onlyForEstimates: boolean;
+  /** Crews can suggest this service from the crew app — see field upsells. */
+  showInFieldUpsells: boolean;
+  upsellPitch: string | null;
   trackChemicals: boolean;
   invoiceDescription: string | null;
   descriptionOnEstimate: string | null;
@@ -130,6 +133,8 @@ export interface CRMJob {
   invoiceDescription: string | null;
   projectId: string | null;
   priority: number;
+  /** Dispatcher-set "high priority" flag shown as a stand-out icon on the dispatch board. Distinct from `priority` above (route order). */
+  isHighPriority: boolean;
   contractId: string | null;
   schedule: string | null;
   scheduleDays: string[];
@@ -166,11 +171,31 @@ export interface CRMJob {
   clientName?: string;
   clientPhone?: string;
   clientPriority?: string | null;
+  clientTags?: string[];
   crewName?: string;
   salesRepName?: string | null;
+  /** Joined from the job's property (client_properties), for dispatch board / waiting list columns. */
+  propertyTurfSqft?: number | null;
+  propertyMulchBedSqft?: number | null;
+  propertyGrossSqft?: number | null;
+  propertyLinearFtPerimeter?: number | null;
+  propertyLinearFtEdging?: number | null;
+  propertyYardsOfMulch?: number | null;
+  propertyParkingLotSqft?: number | null;
+  propertyGateCode?: string | null;
+  propertyNotesToCrew?: string | null;
+  /** Org custom-field values for the job's property (field_def_id -> value). */
+  propertyCustomFieldValues?: { fieldDefId: string; valueNumber: number | null; valueText: string | null }[];
   services?: CRMJobService[];
   /** Populated only by useJobsList — the job's actual scheduled/generated visit occurrences. */
   visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null; jobServiceId: string | null }[];
+  /**
+   * job_service_id of every crm_job_services row on this job that has at
+   * least one active (not soft-deleted, not "not_used") product linked to
+   * it — powers the dispatch board's "this service has a product" icon.
+   * Populated only where the query embeds crm_job_products (useVisitsForDate).
+   */
+  serviceIdsWithProducts?: string[];
 }
 
 export interface NewJobFormValues {
@@ -269,6 +294,8 @@ export interface CRMJobVisit {
   materialsUsed: SnowVisitMaterial[]
   clientName?: string | null
   clientPhone?: string | null
+  clientPriority?: string | null
+  clientTags?: string[]
   crewId: string | null
   crewName?: string | null
   scheduledDate: string
@@ -282,6 +309,10 @@ export interface CRMJobVisit {
   budgetedHours: number | null
   completedAt: string | null
   priority: number
+  /** Per-visit override of the job's high-priority flag. Null inherits the job's `isHighPriority`. */
+  isHighPriority: boolean | null
+  /** Resolved value — `isHighPriority` if set, otherwise the parent job's flag. Use this to decide whether to show the stand-out icon. */
+  effectiveHighPriority: boolean
   notesToCrew: string | null
   notesToClient: string | null
   invoiceDescription: string | null

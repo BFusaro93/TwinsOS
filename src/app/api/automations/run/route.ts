@@ -119,7 +119,7 @@ async function executeAction(
           const resend = new Resend(resendKey);
           const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
           const subject = `New maintenance request: ${acTitle}`;
-          const link = `${siteUrl}/cmms/work-orders`;
+          const link = `${siteUrl}/cmms/requests?id=${mr.id}`;
           await Promise.allSettled(
             eligible.map((p: { email: string | null; name: string | null }) =>
               resend.emails.send({
@@ -381,7 +381,7 @@ async function handleRun(request: Request) {
         if (po) await notifyZapierSubscribers(adminClient, callerOrgId, "po_approved", config.map(po));
       }
 
-      let autoQuery = (adminClient as AdminClient)
+      const autoQuery = (adminClient as AdminClient)
         .from("automations")
         .select("*")
         .eq("trigger_type", eventTrigger)

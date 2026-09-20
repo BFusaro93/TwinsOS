@@ -89,6 +89,39 @@ function allocateHeaderDiscount(
   return result;
 }
 
+/**
+ * The (qty, per-visit unit rate) pair a job service must carry so that
+ * qty x rate_cents x visits reproduces `net`, the amount the client actually
+ * accepted for that line.
+ *
+ * Holds for both calc types: a per-unit line's total is qty x rate x visits,
+ * and a fixed-total line's total IS the rate (estimate-calc.ts), so a fixed
+ * line with qty > 1 also needs the qty divided back out or the invoice bills
+ * it qty times over.
+ *
+ * crm_job_services stores only qty and an integer rate_cents — there is no
+ * total column — and the visit-completion auto-invoice bills qty x rate_cents.
+ * So whenever `net` isn't exactly divisible by the unit count, NO integer rate
+ * can reproduce it against the estimate's qty, and rounding to the nearest cent
+ * gets multiplied by the qty: a 5,000 sq ft line accepted at $690.00 rounded
+ * 13.8c up to 14c and billed 5,000 x 14c = $700.00. The client signed $690.
+ *
+ * The signed amount is the thing that must not move, so when the qty can't
+ * carry the rate exactly the service falls back to a single-unit
+ * representation (qty 1 at the whole per-visit price), which always can. The
+ * measured quantity is only descriptive on a job service — it stays on the
+ * estimate line, which is the priced document — whereas rate_cents is what
+ * gets billed.
+ */
+function jobServicePricing(li: EstimateLineItem, net: number): { qty: number; rateCents: number } {
+  const visits = Math.max(1, li.visits || 1);
+  const units = (li.qty || 0) * visits;
+  if (units <= 0) return { qty: li.qty, rateCents: li.adjRateCents ?? li.rateCents };
+  const exactRate = net / units;
+  if (Number.isInteger(exactRate)) return { qty: li.qty, rateCents: exactRate };
+  return { qty: 1, rateCents: Math.round(net / visits) };
+}
+
 interface Props {
   open: boolean;
   estimate: Estimate;
@@ -219,6 +252,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       const { jobId } = await createJobs.mutateAsync({
         estimateId: estimate.id,
         clientId: estimate.clientId,
+        propertyId: estimate.propertyId,
         jobType,
         scheduledDate: scheduledDate || null,
         crewId: crewId || null,
@@ -229,10 +263,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         eacHintCents,
         salesRepId,
         dateSold: dateSold || null,
-        services: selectedItems.map((li) => ({
+        services: selectedItems.map((li) => {
+          const pricing = jobServicePricing(li, netByLineId.get(li.id) ?? 0);
+          return {
           serviceName:   li.serviceName ?? "Service",
           serviceId:     li.serviceId ?? null,
-          qty:           li.qty,
+          qty:           pricing.qty,
           // The estimate's own total is priced off adjRateCents when the
           // estimator used the Adj Rate column (estimate-calc.ts uses
           // `adjRateCents ?? rateCents`) -- sending the un-adjusted rate
@@ -240,15 +276,35 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           // service, so anything re-deriving a price from qty x rate
           // (job value rollups, invoice line items) billed a different
           // number than the client actually accepted.
-          // When a header discount applies, re-derive the unit rate from the
-          // net line total so qty x rate still reproduces what the job bills.
-          rateCents:     netByLineId.get(li.id) === li.totalCents - li.discountCents
-            ? (li.adjRateCents ?? li.rateCents)
-            : (li.qty > 0 ? Math.round((netByLineId.get(li.id) ?? 0) / li.qty) : (li.adjRateCents ?? li.rateCents)),
+          // crm_job_services.rate_cents is a PER-VISIT unit rate: the
+          // visit-completion auto-invoice bills qty x rate_cents on every
+          // completed visit (complete-visit-side-effects.ts). The estimate
+          // line's net, by contrast, covers the whole engagement --
+          // totalCents is qty x rate x visits for a per-unit line
+          // (estimate-calc.ts) -- so the rate has to be divided back out by
+          // BOTH qty and visits.
+          //
+          // Dividing by qty alone left rate_cents holding rate x visits, and
+          // every single visit then billed the entire multi-visit contract:
+          // a 30-visit mow at $60 with any header discount produced
+          // rate_cents = $1,620, i.e. $48,600 billed instead of $1,620.
+          //
+          // Always deriving from the net (rather than only when a header
+          // discount is detected) also fixes the other half of that branch:
+          // the equality check treated "no header discount" as "use the raw
+          // rate", which silently dropped any LINE-level discount. With no
+          // discount at all, net = qty x rate x visits, so this reduces to
+          // the raw rate exactly.
+          rateCents:     pricing.rateCents,
           totalCents:    netByLineId.get(li.id) ?? 0,
+          // budgetedHoursFromLineItem applies the line's complexity: the stored
+          // budgeted_hours is the unscaled base (estimate-calc.ts), but the job
+          // is budgeted — and later measured — in the hours the crew will
+          // actually spend.
           budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
           budgetMethod:  li.budgetMethod,
-        })),
+        };
+        }),
         materials: selectedMaterialItems.map((dc) => ({
           productItemId:  dc.productItemId as string,
           productName:    dc.description,
@@ -260,8 +316,11 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.success("Job created from estimate");
       onConverted(jobId);
       onClose();
-    } catch {
-      toast.error("Failed to create job");
+    } catch (err) {
+      // Show the real reason where there is one — "already converted" in
+      // particular is actionable, and a bare "Failed to create job" invites
+      // the user to keep clicking.
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to create job");
     }
   }
 

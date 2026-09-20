@@ -164,7 +164,8 @@ export function useUpdateOrgSettings() {
       // Select the updated row back so a blocked write is a real error.
       const { data: updated, error } = await supabase
         .from("organizations")
-        .update(patch)
+        // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+        .update(patch as never)
         .eq("id", profile.orgId)
         .select("id");
       if (error) throw error;

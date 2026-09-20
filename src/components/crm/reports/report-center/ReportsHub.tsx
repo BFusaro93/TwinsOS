@@ -22,6 +22,22 @@ export function ReportsHub() {
   const searchParams = useSearchParams();
   const { can, isLoading: permissionsLoading } = usePermissions();
 
+  const raw = searchParams.get("tab") ?? "dashboard";
+  const active: TabKey = (TAB_KEYS as readonly string[]).includes(raw)
+    ? (raw as TabKey)
+    : "dashboard";
+
+  // Every hook has to run before the permission gate below: the first render
+  // happens while permissions are still loading, so bailing out early on the
+  // second one would drop a hook and crash the component instead of showing
+  // the "No access" state.
+  const setTab = useCallback(
+    (tab: string) => {
+      router.replace(`${pathname}?tab=${tab}`, { scroll: false });
+    },
+    [router, pathname]
+  );
+
   if (!permissionsLoading && !can("view_report_center")) {
     return (
       <EmptyState
@@ -31,18 +47,6 @@ export function ReportsHub() {
       />
     );
   }
-
-  const raw = searchParams.get("tab") ?? "dashboard";
-  const active: TabKey = (TAB_KEYS as readonly string[]).includes(raw)
-    ? (raw as TabKey)
-    : "dashboard";
-
-  const setTab = useCallback(
-    (tab: string) => {
-      router.replace(`${pathname}?tab=${tab}`, { scroll: false });
-    },
-    [router, pathname]
-  );
 
   return (
     <div className="flex h-full flex-col gap-4">

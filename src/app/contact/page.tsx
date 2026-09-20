@@ -64,7 +64,7 @@ export default function ContactPage() {
           Talk to a real person.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#cfe6d8]">
-          Whether you're sizing up the platform or already running on it, here's the fastest way to reach us.
+          Whether you&apos;re sizing up the platform or already running on it, here&apos;s the fastest way to reach us.
         </p>
       </div>
 

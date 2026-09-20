@@ -13,6 +13,8 @@ export interface CRMTicket {
   body: string | null;
   category: string | null;
   clientId: string | null;
+  /** Only on crew-submitted upsell tickets — the service the crew suggested. */
+  upsellServiceId: string | null;
   clientName: string | null;
   assignedTo: string | null;
   /** profiles.id of the assignee, resolved from crm_employees.user_id at

@@ -3,13 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
-
-function resolveMergeTags(template: string, vars: Record<string, string>): string {
-  return template.replace(/\[(\w+)\]/g, (match) => {
-    const key = match.toLowerCase();
-    return vars[key] ?? match;
-  });
-}
+import { resolveMergeTags } from "@/lib/utils/document-template-renderer";
 
 export async function POST(
   req: NextRequest,

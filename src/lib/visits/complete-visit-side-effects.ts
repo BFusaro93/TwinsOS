@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { isoNy } from "@/lib/reports/ny-date";
 import type { Database } from "@/types/supabase";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { logger } from "@/lib/logger";
@@ -131,6 +132,11 @@ type AutoInvoiceLine = {
   total_cents: number;
   service_date: string | null;
   is_taxable: boolean;
+  // Present only for a line swept in from a job Product (materials) —
+  // links the inserted invoice line back to crm_job_products so it can be
+  // flipped to 'invoiced' below, same as the manual "Create Invoice" paths.
+  jobProductId?: string;
+  productId?: string | null;
 };
 
 export async function applyVisitCompletionSideEffects(
@@ -138,7 +144,7 @@ export async function applyVisitCompletionSideEffects(
 ): Promise<VisitCompletionSideEffectsResult> {
   const { supabase, orgId, visitId, userId } = args;
   const fireAutomations = args.fireAutomations ?? true;
-  const today = args.today ?? new Date().toISOString().slice(0, 10);
+  const today = args.today ?? isoNy(new Date());
 
   const result: VisitCompletionSideEffectsResult = {
     ok: false,
@@ -291,7 +297,7 @@ export async function applyVisitCompletionSideEffects(
         // Description precedence per line: this visit's own override, then the job-level
         // master override (Job > Invoice Desc tab), then the service's own invoice
         // description (set in Services settings), then its plain name.
-        const lineItems: AutoInvoiceLine[] = services.length > 0
+        const serviceLines: AutoInvoiceLine[] = services.length > 0
           ? services.map((s) => {
               const description = visitInvoiceDescription || j.invoice_description || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
               return {
@@ -308,6 +314,56 @@ export async function applyVisitCompletionSideEffects(
             ? [{ name: visitInvoiceDescription ?? j.invoice_description ?? "Service", description: visitInvoiceDescription ?? j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents, total_cents: j.rate_cents, service_date: visitDate, is_taxable: false }]
             : [];
 
+        // Sweep in unresolved Products/materials the office called for on this
+        // job. This auto-invoice path (fired on visit completion) used to bill
+        // services only, silently leaving materials off every automatically
+        // generated invoice and stuck on "Pending" forever — see the manual
+        // "Create Invoice" buttons in DispatchBoard.tsx / JobDetail.tsx for the
+        // same sweep. Swept at most once: each included row is flipped to
+        // 'invoiced' below, so a job with several visits (or a second visit
+        // appending to the same open period invoice) can't re-bill the same
+        // material twice.
+        //
+        // BOTH billable statuses are swept, not just 'pending'. 'used' means the
+        // crew recorded actual usage and inventory is already decremented, but
+        // the material is still to be billed (see JobDetail.tsx's
+        // BILLABLE_JOB_PRODUCT_STATUSES and
+        // 20260918120000_job_products_used_status_and_crew_guard.sql). Filtering
+        // 'pending' alone would re-create the bug that status split up to fix:
+        // the crew confirms 10 bags of mulch, the visit completes, and the
+        // material silently never reaches the customer's invoice. Flipping
+        // 'used' -> 'invoiced' does NOT double-decrement stock, because
+        // set_job_product_status treats both as used states.
+        const { data: pendingProductRows } = await supabase
+          .from("crm_job_products")
+          .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents")
+          .eq("job_id", j.id)
+          .in("status", ["pending", "used"])
+          .is("deleted_at", null);
+        type PendingProductRow = {
+          id: string;
+          product_id: string | null;
+          product_name: string;
+          qty: number;
+          invoice_qty: number | null;
+          unit_price_cents: number;
+        };
+        const productLines: AutoInvoiceLine[] = ((pendingProductRows ?? []) as PendingProductRow[]).map((p) => {
+          const billedQty = p.invoice_qty ?? p.qty;
+          return {
+            name: p.product_name,
+            description: p.product_name,
+            qty: billedQty,
+            rate_cents: p.unit_price_cents,
+            total_cents: p.unit_price_cents * billedQty,
+            service_date: visitDate,
+            is_taxable: false,
+            jobProductId: p.id,
+            productId: p.product_id,
+          };
+        });
+
+        const lineItems: AutoInvoiceLine[] = [...serviceLines, ...productLines];
         const subtotal = lineItems.reduce((s, li) => s + li.total_cents, 0);
         const taxableSubtotal = lineItems.filter((li) => li.is_taxable).reduce((s, li) => s + li.total_cents, 0);
         const taxCents = Math.round((taxableSubtotal * taxRateBps) / 10000);
@@ -327,9 +383,35 @@ export async function applyVisitCompletionSideEffects(
             total_cents: li.total_cents,
             service_date: li.service_date,
             is_taxable: li.is_taxable,
+            product_id: li.productId ?? null,
             sort_order: sortOffset + i,
             visit_id: i === 0 ? visitId : null,
           }));
+
+        // Mirrors useCreateInvoiceFromJob's productLinks step: link each
+        // inserted line back to the job product it came from and flip it to
+        // 'invoiced' via set_job_product_status(), which decrements
+        // product_items.quantity_on_hand server-side when that product
+        // tracks inventory. insertedLineItems is positional — same order as
+        // toLineRows/lineItems.
+        async function linkProductLines(insertedLineItems: { id: string }[] | null) {
+          if (!insertedLineItems) return;
+          const links = lineItems
+            .map((li, i) => ({ li, insertedId: insertedLineItems[i]?.id }))
+            .filter((x): x is { li: AutoInvoiceLine; insertedId: string } => !!x.li.jobProductId && !!x.insertedId);
+          await Promise.all(
+            links.map(async ({ li, insertedId }) => {
+              await supabase
+                .from("crm_job_products")
+                .update({ invoice_line_item_id: insertedId })
+                .eq("id", li.jobProductId as string);
+              await supabase.rpc("set_job_product_status", {
+                p_job_product_id: li.jobProductId,
+                p_new_status: "invoiced",
+              });
+            })
+          );
+        }
 
         if (subtotal <= 0) {
           result.invoiceSkipReason = "zero_subtotal";
@@ -373,10 +455,12 @@ export async function applyVisitCompletionSideEffects(
               .select("id", { count: "exact", head: true })
               .eq("invoice_id", invoiceId);
 
-            const { error: lineErr } = await supabase
+            const { data: insertedLines, error: lineErr } = await supabase
               .from("crm_invoice_line_items")
-              .insert(toLineRows(invoiceId, existingItemCount ?? 0));
+              .insert(toLineRows(invoiceId, existingItemCount ?? 0))
+              .select("id");
             if (lineErr) throw lineErr;
+            await linkProductLines(insertedLines as { id: string }[] | null);
 
             // Atomic increment — two visits for the same client completing
             // concurrently must not both read the same stale totals and have
@@ -418,10 +502,12 @@ export async function applyVisitCompletionSideEffects(
             const newInvoiceId = (newInvoice as { id: string }).id;
 
             if (lineItems.length > 0) {
-              const { error: lineErr } = await supabase
+              const { data: insertedLines, error: lineErr } = await supabase
                 .from("crm_invoice_line_items")
-                .insert(toLineRows(newInvoiceId, 0));
+                .insert(toLineRows(newInvoiceId, 0))
+                .select("id");
               if (lineErr) throw lineErr;
+              await linkProductLines(insertedLines as { id: string }[] | null);
             }
 
             if (j.client_id) {

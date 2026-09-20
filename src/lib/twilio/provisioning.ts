@@ -1,7 +1,31 @@
 import { parentRequest, subaccountRequest, getOrgTwilioCreds, createParentSubaccount } from "./client";
 
+// Twilio's actual accepted enum strings for the customer_profile_business_
+// information EndUser type — confirmed against Twilio's "Gather the
+// Required Business Information" docs, 2026-09-11, after a submission
+// failed evaluation with every one of these fields flagged invalid. Twilio
+// has no Sole Proprietor entry here at all — that business type requires an
+// entirely different EndUser type (a "vertical" field instead of
+// business_type/business_industry) that this pipeline doesn't build.
+const TWILIO_BUSINESS_TYPE: Partial<Record<string, string>> = {
+  llc: "Limited Liability Corporation",
+  corporation: "Corporation",
+  partnership: "Partnership",
+  nonprofit: "Non-profit Corporation",
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
+
+/** Normalizes a US-shaped phone number to E.164 ("508-796-2940" -> "+15087962940") — Twilio rejects anything else outright. */
+function toE164(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (phone.trim().startsWith("+")) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return phone; // Already-unusual shape — pass through rather than guess wrong.
+}
 
 const TRUSTHUB = "https://trusthub.twilio.com/v1";
 const MESSAGING = "https://messaging.twilio.com/v1";
@@ -58,15 +82,14 @@ async function patch(supabase: AnyClient, orgId: string, fields: Record<string, 
   if (error) throw new Error(`Failed to update org_sms_registrations: ${error.message}`);
 }
 
-/** Finds a Trust Hub policy SID by matching its friendly_name, rather than hardcoding a SID that can differ by account/region. */
-async function resolvePolicySid(creds: { apiKeySid: string; apiKeySecret: string }, nameIncludes: string): Promise<string> {
-  const result = await subaccountRequest(TRUSTHUB, "/Policies?PageSize=50", creds, { method: "GET" });
-  const match = (result.results ?? []).find((p: { friendly_name: string }) =>
-    p.friendly_name.toLowerCase().includes(nameIncludes.toLowerCase())
-  );
-  if (!match) throw new Error(`No Trust Hub policy found matching "${nameIncludes}"`);
-  return match.sid;
-}
+// Twilio-wide constant, not per-account — Twilio's own onboarding docs say
+// verbatim "do not change the policy_sid" in every language's code sample.
+// An earlier version of this file tried to discover it dynamically via a
+// GET /v1/Policies friendly_name search, which doesn't work: the policy's
+// friendly_name doesn't actually contain "Customer Profile Information" (or
+// any predictable substring), and there's no need to search at all since
+// this SID never varies by account/region.
+const SECONDARY_CUSTOMER_PROFILE_POLICY_SID = "RNdfbf3fae0e1107f8aded0e7cead80bf5";
 
 // ---------------------------------------------------------------------------
 // Step 1 — Subaccount + subaccount-scoped API Key (stored: SID plaintext,
@@ -122,24 +145,49 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     );
   }
 
-  const policySid = await resolvePolicySid(creds, "Customer Profile Information");
+  const policySid = SECONDARY_CUSTOMER_PROFILE_POLICY_SID;
 
   const profile = await subaccountRequest(TRUSTHUB, "/CustomerProfiles", creds, {
     body: { PolicySid: policySid, FriendlyName: reg.legal_business_name ?? `org:${reg.org_id}`, Email: reg.contact_email ?? "" },
   });
   const profileSid = profile.sid;
 
+  const twilioBusinessType = TWILIO_BUSINESS_TYPE[reg.business_type ?? ""];
+  if (!twilioBusinessType) {
+    throw new Error(
+      `Business type "${reg.business_type}" isn't supported by this pipeline yet — Twilio has no Sole Proprietor ` +
+        "path built here (it requires a different EndUser type entirely). Pick LLC, Corporation, Partnership, or Nonprofit."
+    );
+  }
+
   const businessInfo = await subaccountRequest(TRUSTHUB, "/EndUsers", creds, {
     body: {
       Type: "customer_profile_business_information",
       FriendlyName: "Business Information",
-      "Attributes.business_name": reg.legal_business_name ?? "",
-      "Attributes.business_registration_number": reg.ein ?? "",
-      "Attributes.business_type": reg.business_type ?? "",
-      "Attributes.business_industry": reg.business_industry ?? "",
-      "Attributes.business_regions_of_operation": reg.business_regions_of_operation ?? "usa_only",
-      "Attributes.business_registration_identifier": "EIN",
-      "Attributes.website_url": reg.business_website ?? "",
+      // Twilio's EndUsers API silently ignores dot-flattened "Attributes.x"
+      // form params — confirmed by testing directly against the real API:
+      // the created resource comes back with attributes: {}, no error, no
+      // rejection, just silently empty. It requires ONE Attributes param
+      // whose value is the JSON-stringified object.
+      Attributes: JSON.stringify({
+        business_name: reg.legal_business_name ?? "",
+        business_registration_number: reg.ein ?? "",
+        business_type: twilioBusinessType,
+        business_industry: reg.business_industry ?? "",
+        // Twilio's enum has no "USA only" distinct from "USA and Canada" —
+        // every org here operates only in the US, so this always resolves to
+        // the one value Twilio actually has for North America regardless of
+        // which of the two options the org picked in the form (that choice
+        // still matters for the org's own consent-scope description, just
+        // not to Twilio).
+        business_regions_of_operation: "USA_AND_CANADA",
+        business_registration_identifier: "EIN",
+        website_url: reg.business_website ?? "",
+        // Every org onboarding through this pipeline is Landscapt's own
+        // direct customer, receiving service directly rather than reselling
+        // messaging to further sub-customers of its own.
+        business_identity: "direct_customer",
+      }),
     },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {
@@ -150,10 +198,16 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     body: {
       Type: "authorized_representative_1",
       FriendlyName: "Authorized Representative",
-      "Attributes.first_name": reg.contact_first_name ?? "",
-      "Attributes.last_name": reg.contact_last_name ?? "",
-      "Attributes.email": reg.contact_email ?? "",
-      "Attributes.phone_number": reg.contact_phone ?? "",
+      Attributes: JSON.stringify({
+        first_name: reg.contact_first_name ?? "",
+        last_name: reg.contact_last_name ?? "",
+        email: reg.contact_email ?? "",
+        // Twilio requires E.164 ("+15085551234") and rejects anything else
+        // outright — confirmed live: "508-796-2940" as typed by an admin
+        // failed evaluation with "Phone number ... is invalid." Normalizing
+        // here means the form never has to force a specific typed format.
+        phone_number: toE164(reg.contact_phone),
+      }),
     },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {
@@ -173,7 +227,15 @@ async function submitCustomerProfile(supabase: AnyClient, reg: Registration) {
     },
   });
   const addressDoc = await subaccountRequest(TRUSTHUB, "/SupportingDocuments", creds, {
-    body: { Type: "customer_profile_address", FriendlyName: "Business Address", "Attributes.address_sids": address.sid },
+    body: {
+      Type: "customer_profile_address",
+      FriendlyName: "Business Address",
+      // A single string SID, NOT a JSON array — confirmed directly against
+      // the real API: wrapping it in an array makes Twilio reject the whole
+      // request body as unparseable JSON (a lower-level type-schema failure,
+      // not a normal 400 validation error), while a bare string is accepted.
+      Attributes: JSON.stringify({ address_sids: address.sid }),
+    },
   });
   await subaccountRequest(TRUSTHUB, `/CustomerProfiles/${profileSid}/EntityAssignments`, creds, {
     body: { ObjectSid: addressDoc.sid },

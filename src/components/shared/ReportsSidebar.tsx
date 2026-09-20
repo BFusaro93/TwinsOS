@@ -16,7 +16,7 @@ import {
   Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { BrandMark } from "./BrandMark";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
@@ -82,7 +82,7 @@ function NavLink({
 
 export function ReportsSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed } = useUIStore();
+  const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const isAdmin = currentUser.role === "admin";

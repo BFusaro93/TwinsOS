@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
@@ -8,9 +9,59 @@ import { roundHours, formatMonthDay, todayLocalISODate } from "@/lib/utils";
 import { isoNy } from "@/lib/reports/ny-date";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import type { TriggerType } from "@/types/crm-automations";
-import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow, BudgetMethod } from "@/types/crm-jobs";
+import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
+
+/**
+ * The property whose takeoffs/gate code/crew notes a job should display.
+ *
+ * `crm_jobs.property_id` is optional and, in practice, usually null — most
+ * jobs are created straight off a client without anyone picking a property —
+ * so reading `client_properties` through that FK alone left the takeoff
+ * columns, the gate code and the property-level notes-to-crew blank on the
+ * large majority of jobs. When the client owns exactly one live property there
+ * is nothing to disambiguate, so fall back to it. Two or more properties stays
+ * blank on purpose: sending a crew to a guessed address is worse than showing
+ * nothing.
+ *
+ * `clientProperties` is the client's property list, embedded by the queries
+ * that render these columns; callers that don't embed it just get the explicit
+ * property or nothing.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function resolveJobProperty(explicit: any, clientProperties: any): any {
+  if (explicit) return explicit;
+  if (!Array.isArray(clientProperties)) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const live = clientProperties.filter((p: any) => p && !p.deleted_at);
+  return live.length === 1 ? live[0] : null;
+}
+
+/** The property-derived half of a CRMJob, from whichever property resolveJobProperty picked. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapJobPropertyFields(property: any) {
+  return {
+    propertyTurfSqft: property?.turf_sqft ?? null,
+    propertyMulchBedSqft: property?.mulch_bed_sqft ?? null,
+    propertyGrossSqft: property?.gross_sqft ?? null,
+    propertyLinearFtPerimeter: property?.linear_ft_perimeter ?? null,
+    propertyLinearFtEdging: property?.linear_ft_edging ?? null,
+    propertyYardsOfMulch: property?.yards_of_mulch ?? null,
+    propertyParkingLotSqft: property?.parking_lot_sqft ?? null,
+    propertyGateCode: property?.gate_lock_code ?? null,
+    propertyNotesToCrew: property?.notes_to_crew ?? null,
+    propertyCustomFieldValues: ((property?.crm_property_custom_field_values ?? []) as {
+      field_def_id: string;
+      value_number: number | null;
+      value_text: string | null;
+    }[]).map((v) => ({
+      fieldDefId: v.field_def_id,
+      valueNumber: v.value_number ?? null,
+      valueText: v.value_text ?? null,
+    })),
+  };
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapJob(row: any): CRMJob {
@@ -80,6 +131,7 @@ export function mapJob(row: any): CRMJob {
     projectId: row.project_id,
     estimateId: row.estimate_id ?? null,
     priority: row.priority ?? 1,
+    isHighPriority: row.is_high_priority ?? false,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -87,9 +139,19 @@ export function mapJob(row: any): CRMJob {
     // joined
     clientName: row.clients?.display_name ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
+    clientPriority: row.clients?.priority ?? null,
+    clientTags: (row.clients?.client_tags ?? []).map((t: { tag: string }) => t.tag),
     crewName: row.crm_crews?.name ?? null,
     salesRepName: row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null : null,
+    ...mapJobPropertyFields(resolveJobProperty(row.client_properties, row.clients?.client_properties)),
     services: (row.crm_job_services ?? []).map(mapJobServiceFull),
+    serviceIdsWithProducts: Array.isArray(row.crm_job_products)
+      ? [...new Set(
+          (row.crm_job_products as { job_service_id: string | null; status: string; deleted_at: string | null }[])
+            .filter((p) => !p.deleted_at && p.status !== "not_used" && p.job_service_id)
+            .map((p) => p.job_service_id as string)
+        )]
+      : undefined,
     visits: row.crm_job_visits
       ? (row.crm_job_visits as { id: string; scheduled_date: string; status: string; deleted_at: string | null; job_service_id: string | null; crm_crews: { name: string } | null }[])
           .filter((v) => !v.deleted_at)
@@ -116,6 +178,8 @@ function mapService(row: any): CRMService {
     defaultBHrs: Number(row.default_b_hrs ?? 0),
     defaultBCostCents: row.default_b_cost_cents ?? 0,
     showInSnowDispatch: row.show_in_snow_dispatch ?? false,
+    showInFieldUpsells: row.show_in_field_upsells ?? false,
+    upsellPitch: row.upsell_pitch ?? null,
     onlyForEstimates: row.only_for_estimates ?? false,
     trackChemicals: row.track_chemicals ?? false,
     invoiceDescription: row.invoice_description ?? null,
@@ -181,6 +245,29 @@ export function useJobsForDate(date: string) {
 
 // ── waiting list ──────────────────────────────────────────────────────────────
 
+/**
+ * The waiting-list select is `*` plus four nested relations; these are the
+ * parts the filtering below actually reads. Everything else on the row is
+ * passed straight through to mapJob, hence the index signature.
+ */
+type WaitingListRow = {
+  job_type: string;
+  service_address: string | null;
+  service_city: string | null;
+  service_state: string | null;
+  service_zip: string | null;
+  clients?: {
+    display_name: string | null;
+    billing_address: string | null;
+    billing_city: string | null;
+    billing_state: string | null;
+    billing_zip: string | null;
+  } | null;
+  crm_job_visits?: { id: string; deleted_at: string | null; job_service_id: string | null; status: string }[] | null;
+  crm_job_services?: { id: string }[] | null;
+  [column: string]: unknown;
+};
+
 export function useWaitingListJobs(startDate?: string, endDate?: string) {
   return useQuery({
     queryKey: ["crm-jobs", "waiting-list", startDate, endDate],
@@ -191,9 +278,10 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         .from("crm_jobs")
         .select(`
           *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews(name),
           sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
+          client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
           crm_job_services(*),
           crm_job_visits(id, deleted_at, job_service_id, status)
         `)
@@ -212,10 +300,9 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       // A one-time waiting-list job that's already been dispatched (has an active
       // visit) is done waiting — drop it. Packages keep multiple visits over their
       // lifetime, so they stay until their date window says otherwise.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = (data as any[]).filter((row) => {
+      const rows = (data as WaitingListRow[]).filter((row) => {
         if (row.job_type !== "waiting_list") return true;
-        const hasActiveVisit = (row.crm_job_visits ?? []).some((v: any) => !v.deleted_at);
+        const hasActiveVisit = (row.crm_job_visits ?? []).some((v) => !v.deleted_at);
         return !hasActiveVisit;
       });
 
@@ -230,12 +317,11 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         if (row.job_type !== "package") continue;
         const dispatchedServiceIds = new Set(
           (row.crm_job_visits ?? [])
-            .filter((v: any) => !v.deleted_at && v.job_service_id && v.status !== "scheduled")
-            .map((v: any) => v.job_service_id)
+            .filter((v) => !v.deleted_at && v.job_service_id && v.status !== "scheduled")
+            .map((v) => v.job_service_id)
         );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         row.crm_job_services = (row.crm_job_services ?? []).filter(
-          (s: any) => !dispatchedServiceIds.has(s.id)
+          (s) => !dispatchedServiceIds.has(s.id)
         );
       }
 
@@ -442,6 +528,13 @@ function mapJobFull(row: any): CRMJob {
     totalCents: row.total_cents ?? 0,
     notes: row.notes ?? null,
     services: (row.crm_job_services ?? []).map(mapJobServiceFull),
+    serviceIdsWithProducts: Array.isArray(row.crm_job_products)
+      ? [...new Set(
+          (row.crm_job_products as { job_service_id: string | null; status: string; deleted_at: string | null }[])
+            .filter((p) => !p.deleted_at && p.status !== "not_used" && p.job_service_id)
+            .map((p) => p.job_service_id as string)
+        )]
+      : undefined,
   };
 }
 
@@ -516,23 +609,33 @@ import type { NewClientJobFormValues, CRMJobService, CRMJobVisit, VisitStatus } 
 
 // ── visit helpers ─────────────────────────────────────────────────────────────
 
+/** The columns applyJobServiceFallback reads off each nested crm_job_services row. */
+type JobServiceFallback = {
+  id: string;
+  service_id: string | null;
+  service_name: string | null;
+  rate_cents: number | null;
+  /** numeric in Postgres, so it can arrive as a string. */
+  budgeted_hours: number | string | null;
+  qty: number | null;
+};
+
 // When a visit has no rate_cents / budgeted_hours of its own, fall back to the
 // sum of the parent job's services (the common case for auto-generated visits).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const services: any[] = row.crm_jobs?.crm_job_services ?? [];
+  const services: JobServiceFallback[] = row.crm_jobs?.crm_job_services ?? [];
   // Package jobs link each visit to a single service (e.g. "Fert 2 of 5") via
   // job_service_id — use that one service's own rate/hours/name instead of
   // summing across every service on the job, which double/quintuple-counts.
   const linkedService = visit.jobServiceId
-    ? services.find((s: any) => s.id === visit.jobServiceId)
+    ? services.find((s) => s.id === visit.jobServiceId)
     : null;
   if (visit.rateCents == null) {
     if (linkedService) {
       visit.rateCents = (linkedService.rate_cents ?? 0) * (linkedService.qty ?? 1);
     } else {
-      const total = services.reduce((sum: number, s: any) => sum + (s.rate_cents ?? 0) * (s.qty ?? 1), 0);
+      const total = services.reduce((sum, s) => sum + (s.rate_cents ?? 0) * (s.qty ?? 1), 0);
       if (total > 0) visit.rateCents = total;
     }
     // Also try direct job rate_cents
@@ -542,7 +645,7 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
     if (linkedService) {
       visit.budgetedHours = Number(linkedService.budgeted_hours ?? 0) * (linkedService.qty ?? 1);
     } else {
-      const total = services.reduce((sum: number, s: any) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
+      const total = services.reduce((sum, s) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
       if (total > 0) visit.budgetedHours = total;
     }
     if (visit.budgetedHours == null && row.crm_jobs?.budgeted_hours != null) visit.budgetedHours = Number(row.crm_jobs.budgeted_hours);
@@ -551,8 +654,8 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
     visit.serviceNames = linkedService.service_name ? [linkedService.service_name as string] : [];
     visit.serviceIds = [(linkedService.service_id as string | null) ?? null];
   } else if (services.length > 0) {
-    visit.serviceNames = services.map((s: any) => s.service_name as string).filter(Boolean);
-    visit.serviceIds = services.map((s: any) => (s.service_id as string | null) ?? null);
+    visit.serviceNames = services.map((s) => s.service_name as string).filter(Boolean);
+    visit.serviceIds = services.map((s) => s.service_id ?? null);
   }
   return visit;
 }
@@ -575,6 +678,11 @@ export function mapVisit(row: any): CRMJobVisit {
       : [],
     clientName: row.clients?.display_name ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
+    clientPriority: row.clients?.priority ?? null,
+    clientTags: Array.isArray(row.clients?.client_tags)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? row.clients.client_tags.map((t: any) => t.tag)
+      : [],
     crewId: row.crew_id ?? null,
     crewName: row.crm_crews?.name ?? null,
     scheduledDate: row.scheduled_date,
@@ -588,6 +696,8 @@ export function mapVisit(row: any): CRMJobVisit {
     budgetedHours: row.budgeted_hours ?? null,
     completedAt: row.completed_at ?? null,
     priority: row.priority ?? 1,
+    isHighPriority: row.is_high_priority ?? null,
+    effectiveHighPriority: row.is_high_priority ?? row.crm_jobs?.is_high_priority ?? false,
     notesToCrew: row.notes_to_crew ?? null,
     notesToClient: row.notes_to_client ?? null,
     invoiceDescription: row.invoice_description ?? null,
@@ -612,6 +722,11 @@ export function mapVisit(row: any): CRMJobVisit {
     deletedAt:           row.deleted_at ?? null,
     job: row.crm_jobs ? mapJob({
       ...row.crm_jobs,
+      // The client embed hangs off the VISIT here, not the nested job, so hand
+      // mapJob just the property list it needs for the sole-property takeoff
+      // fallback (see resolveJobProperty) — everything else about the client is
+      // already mapped onto the visit itself above.
+      clients: { client_properties: row.clients?.client_properties },
       // Fall back to client billing address when job has no service address set
       service_address: row.crm_jobs.service_address ?? row.clients?.billing_address ?? null,
       service_city:    row.crm_jobs.service_city    ?? row.clients?.billing_city    ?? null,
@@ -631,9 +746,9 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         .from('crm_job_visits')
         .select(`
           *,
-          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)))
+          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
@@ -975,6 +1090,7 @@ export function useUpdateVisit() {
         skip_reason: string | null;
         job_comments: unknown;
         priority: number;
+        is_high_priority: boolean | null;
         assigned_employee_id: string | null;
         dispatched_at: string | null;
         completed_at: string | null;
@@ -1080,8 +1196,16 @@ export function useUpdateVisit() {
           const body = await res.json() as { error?: string };
           throw new Error(body.error ?? 'Failed to complete job');
         }
-        const body = await res.json() as { clientId?: string };
+        const body = await res.json() as { clientId?: string; invoiceSkipReason?: string | null };
         clientId = body.clientId;
+        // The visit completed but auto-invoicing threw and was swallowed so it
+        // couldn't take the rest of the completion down with it. Without this
+        // the only trace is a server log, and the visit sits completed and
+        // unbilled with nobody aware. Marking Complete again re-runs the
+        // invoice step, which is idempotent.
+        if (body.invoiceSkipReason === "error") {
+          toast.warning("Visit completed, but the invoice could not be created. Mark it complete again to retry billing.");
+        }
       }
 
       // Deliberately NOT cascading crew_id to the parent job here: this
@@ -1585,87 +1709,6 @@ export function useDeleteCRMService() {
   });
 }
 
-// ── rate matrix ───────────────────────────────────────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRateMatrixRow(row: any): CRMServiceRateMatrixRow {
-  return {
-    id: row.id,
-    orgId: row.org_id,
-    serviceId: row.service_id,
-    fromQty: Number(row.from_qty),
-    toQty: Number(row.to_qty),
-    rateCents: row.rate_cents,
-    budgetedHours: Number(row.budgeted_hours),
-    budgetedCostCents: row.budgeted_cost_cents,
-    sortOrder: row.sort_order,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-export function useServiceRateMatrix(serviceId: string) {
-  return useQuery({
-    queryKey: ["crm-service-rate-matrix", serviceId],
-    queryFn: async () => {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_service_rate_matrix")
-        .select("*")
-        .eq("service_id", serviceId)
-        .order("sort_order");
-      if (error) throw error;
-      return (data.map(mapRateMatrixRow)) as CRMServiceRateMatrixRow[];
-    },
-    enabled: !!serviceId,
-  });
-}
-
-export function useUpsertRateMatrixRow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      serviceId,
-      row,
-    }: {
-      serviceId: string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      row: Record<string, any>;
-    }) => {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_service_rate_matrix")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .upsert({ service_id: serviceId, ...row } as any);
-      if (error) throw error;
-    },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["crm-service-rate-matrix", vars.serviceId] });
-    },
-  });
-}
-
-export function useDeleteRateMatrixRow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, serviceId }: { id: string; serviceId: string }) => {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_service_rate_matrix")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-      return { serviceId };
-    },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["crm-service-rate-matrix", vars.serviceId] });
-    },
-  });
-}
-
 // ── jobs list (all jobs, filterable) ─────────────────────────────────────────
 
 export function useJobsList(filters?: {
@@ -1741,6 +1784,7 @@ export function useCreateJobsFromEstimate() {
     mutationFn: async ({
       estimateId,
       clientId,
+      propertyId,
       jobType,
       scheduledDate,
       crewId,
@@ -1756,6 +1800,8 @@ export function useCreateJobsFromEstimate() {
     }: {
       estimateId: string;
       clientId: string;
+      /** Estimate's property (client_properties.id), if any — carried onto the job so job-level Rate Matrix / production-rate lookups can resolve it. */
+      propertyId?: string | null;
       jobType: string;
       scheduledDate: string | null;
       crewId: string | null;
@@ -1786,6 +1832,25 @@ export function useCreateJobsFromEstimate() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
+      // One estimate, one job. The UI hides the convert entry points once a
+      // job exists, but that was the only thing preventing a second
+      // conversion — and it was bypassable by re-confirming the "Accepted"
+      // stage, which reopened the dialog pre-populated. A second job means a
+      // second set of visits, each completing into its own invoice, so the
+      // client is billed the estimate twice. Checked here so every caller is
+      // covered, not just the one dialog.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingJobs } = await (supabase as any)
+        .from("crm_jobs")
+        .select("id")
+        .eq("estimate_id", estimateId)
+        .is("deleted_at", null)
+        .limit(1);
+      if (existingJobs && existingJobs.length > 0) {
+        throw new Error("This estimate has already been converted to a job.");
+      }
+
       const jobManCount = Math.max(1, Math.round(manCount ?? 1));
       const totalBudgetedHours = roundHours(services.reduce((s, sv) => s + (sv.budgetedHours ?? 0), 0));
 
@@ -1832,6 +1897,7 @@ export function useCreateJobsFromEstimate() {
         .insert({
           created_by: user?.id ?? null,
           client_id: clientId,
+          property_id: propertyId ?? null,
           estimate_id: estimateId,
           job_type: jobType,
           project_id: jobType === "project" ? (projectId ?? null) : null,
@@ -1883,7 +1949,19 @@ export function useCreateJobsFromEstimate() {
               rate_cents: s.rateCents,
               sort_order: i,
               included: true,
-              budgeted_hours: roundHours(s.budgetedHours ?? 0),
+              // An estimate line's budgeted hours are MAN-hours: the estimate
+              // engine has no crew dimension (total_budgeted_hours is just
+              // hours × visits, and the cost auto-fill is hours × a
+              // per-man-hour breakeven rate), and a production rate is
+              // sq ft per man-hour. crm_job_services.budgeted_hours is
+              // per-person — crm_recompute_job_budgeted_hours rolls the job up
+              // as Σ(budgeted_hours × team_size). Writing man-hours straight in
+              // alongside team_size = crew size multiplied them a second time,
+              // so a 12-man-hour line on a 3-man crew reported 36 everywhere
+              // (job rollup, rpt_job_visits, rpt_job_services), inflating every
+              // budget-vs-actual variance and rev-per-man-hour by the crew size
+              // and leaving the estimate and the job disagreeing.
+              budgeted_hours: roundHours((s.budgetedHours ?? 0) / jobManCount),
               budget_method: s.budgetMethod ?? 'manual',
               team_size: jobManCount,
               days_count: 1,
@@ -1930,27 +2008,24 @@ export function useCreateJobsFromEstimate() {
       // crew doesn't lose site-visit photos the estimator already captured.
       // Best-effort: a copy failure here shouldn't block job creation.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: estimatePhotos } = await (supabase as any)
+        const { data: estimatePhotos } = await supabase
           .from("estimate_photos")
           .select("storage_path, file_name, file_size, mime_type")
           .eq("estimate_id", estimateId)
           .is("deleted_at", null);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: estimateAttachments } = await (supabase as any)
+        const { data: estimateAttachments } = await supabase
           .from("attachments")
           .select("storage_path, file_name, file_size, file_type")
           .eq("record_type", "estimate")
           .eq("record_id", estimateId)
           .is("deleted_at", null);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sources: { storage_path: string; file_name: string; file_size: number | null; file_type: string | null }[] = [
-          ...((estimatePhotos ?? []) as any[]).map((p) => ({
+          ...(estimatePhotos ?? []).map((p) => ({
             storage_path: p.storage_path, file_name: p.file_name, file_size: p.file_size, file_type: p.mime_type,
           })),
-          ...((estimateAttachments ?? []) as any[]).map((a) => ({
+          ...(estimateAttachments ?? []).map((a) => ({
             storage_path: a.storage_path, file_name: a.file_name, file_size: a.file_size, file_type: a.file_type,
           })),
         ];
@@ -2001,15 +2076,33 @@ export function useCreateJobsFromEstimate() {
           .eq("estimated_cost_cents", 0);
       }
 
-      return { jobId, clientId, jobType, projectId };
+      // Carry the estimate's milestone billing schedule onto the project. The
+      // rows aren't copied — stamping project_id makes the same milestones
+      // reachable (and invoiceable) from the project, so an 'invoiced' flag
+      // can never disagree between the two surfaces. Only untouched
+      // milestones move: one already billed from the estimate keeps whatever
+      // project it was billed against.
+      if (projectId && jobType === "project") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("estimate_milestones")
+          .update({ project_id: projectId })
+          .eq("estimate_id", estimateId)
+          .is("project_id", null)
+          .is("deleted_at", null);
+      }
+
+      return { jobId, clientId, jobType, projectId, estimateId };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
       qc.invalidateQueries({ queryKey: ["clients", data.clientId, "activity"] });
+      qc.invalidateQueries({ queryKey: ["estimate-milestones", data.estimateId] });
       if (data.projectId) {
         qc.invalidateQueries({ queryKey: ["projects"] });
         qc.invalidateQueries({ queryKey: ["client-projects"] });
+        qc.invalidateQueries({ queryKey: ["project-milestones", data.projectId] });
       }
       fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType] });
       if (data.jobType === "package") {
@@ -2099,6 +2192,10 @@ export function useUpdateJob() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', vars.id] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      // Job-level fields (e.g. is_high_priority) are denormalized onto the
+      // dispatch board's visit query via the crm_jobs join — that lives
+      // under a different key prefix and isn't covered by 'crm-jobs' above.
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
     },
   });
 }
@@ -2400,11 +2497,23 @@ export function useDeleteJobService() {
 
 // ── CRM Job Products ──────────────────────────────────────────────────────────
 
-export type JobProductStatus = "pending" | "invoiced" | "used_no_invoice" | "not_used";
+// 'used' means used-and-still-to-be-invoiced: the crew has recorded actual
+// usage (so inventory is already decremented) but the material has NOT been
+// written off. It exists because 'used_no_invoice' was doing both jobs, and the
+// crew app's "Mark Used" button used it — silently removing the material from
+// the customer's invoice, since invoice generation only sweeps billable rows.
+// See 20260918120000_job_products_used_status_and_crew_guard.sql.
+export type JobProductStatus = "pending" | "used" | "invoiced" | "used_no_invoice" | "not_used";
 
 export interface CRMJobProduct {
   id: string;
   jobId: string;
+  // Which Service this material belongs to — required on every new row (the
+  // Add Product form won't submit without one), mirroring how Estimates
+  // attach a product to a specific service line rather than letting it float
+  // on the job. Nullable in the DB only because rows created before this
+  // feature existed have no service to backfill onto.
+  jobServiceId: string | null;
   productId: string | null;
   productName: string;
   qty: number;
@@ -2423,6 +2532,7 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
   return {
     id: row.id as string,
     jobId: row.job_id as string,
+    jobServiceId: row.job_service_id as string | null,
     productId: row.product_id as string | null,
     productName: row.product_name as string,
     qty: Number(row.qty),
@@ -2459,6 +2569,9 @@ export function useAddCRMJobProduct() {
   return useMutation({
     mutationFn: async (p: {
       jobId: string;
+      // Required — every new job product must belong to a Service (see
+      // migration 20260919000000_job_products_require_service_link).
+      jobServiceId: string;
       productId: string | null;
       productName: string;
       qty: number;
@@ -2469,6 +2582,7 @@ export function useAddCRMJobProduct() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_products').insert({
         job_id: p.jobId,
+        job_service_id: p.jobServiceId,
         product_id: p.productId,
         product_name: p.productName,
         qty: p.qty,
@@ -2490,6 +2604,7 @@ export function useUpdateCRMJobProduct() {
     mutationFn: async (p: {
       id: string;
       jobId: string;
+      jobServiceId?: string;
       qty?: number;
       // undefined = leave unchanged; null = reset to "same as qty"
       invoiceQty?: number | null;
@@ -2497,14 +2612,36 @@ export function useUpdateCRMJobProduct() {
       notes?: string | null;
     }) => {
       const supabase = createClient();
+      // Only a still-pending row may be edited. The UI disables the pencil once
+      // a row has been used/invoiced, but this mutation writes by id, so an
+      // office edit saved from a stale screen could otherwise overwrite the qty
+      // the crew had already recorded — and since the inventory adjustment was
+      // made against the OLD qty, the difference becomes permanent stock drift.
+      // Conditioning the UPDATE itself (rather than re-reading first) makes it
+      // race-safe against the crew recording usage at the same moment, the same
+      // way the crew's own use-materials route guards its write.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('crm_job_products').update({
-        ...(p.qty !== undefined && { qty: p.qty }),
+      const { data, error } = await (supabase as any).from('crm_job_products').update({
+        // planned_qty is the "called for" snapshot the crew app shows, captured
+        // once on insert (20260918050000). But an office revision before the
+        // crew arrives IS a change to what was called for, and leaving the
+        // snapshot behind made the crew's screen read "Called for: 8" after the
+        // office had already bumped it to 20 — so they'd confirm the stale
+        // number. Re-snapshot here, where the edit is the office revising the
+        // plan. Deliberately NOT done as a BEFORE UPDATE trigger: the crew's
+        // use-materials route also writes qty on a still-pending row (that
+        // write is the ACTUAL-used figure), and a trigger couldn't tell the two
+        // apart, so it would destroy the very snapshot it exists to keep.
+        ...(p.jobServiceId !== undefined && { job_service_id: p.jobServiceId }),
+        ...(p.qty !== undefined && { qty: p.qty, planned_qty: p.qty }),
         ...(p.invoiceQty !== undefined && { invoice_qty: p.invoiceQty }),
         ...(p.unitPriceCents !== undefined && { unit_price_cents: p.unitPriceCents }),
         ...(p.notes !== undefined && { notes: p.notes }),
-      }).eq('id', p.id);
+      }).eq('id', p.id).eq('status', 'pending').select('id');
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("This material's usage was already recorded — reopen it to Pending before editing.");
+      }
     },
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });

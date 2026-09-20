@@ -4,6 +4,12 @@
 
 @layer base {
   :root {
+    /* This app has no dark-mode toggle or theme provider — the .dark
+       tokens below are unused shadcn/ui scaffolding. Without this, a
+       browser in dark mode renders native form controls (unstyled
+       input backgrounds, checkboxes, date pickers, scrollbars) using
+       its own dark theme regardless of our light-only design. */
+    color-scheme: light;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -85,5 +91,29 @@
   a {
     color: inherit !important;
     text-decoration: underline !important;
+  }
+}
+
+/* Hover-revealed row actions (delete ✕, inline edit pencils, per-row button
+   clusters) are unreachable on a touch screen — there's no hover to trigger
+   them, so on an iPad the control simply never appears. Reveal them
+   permanently wherever the primary pointer can't hover. Keyed off the same
+   utility pairs the components already use, so this covers new ones too. */
+@media (hover: none) {
+  .opacity-0.group-hover\:opacity-100,
+  .group:focus-within .opacity-0.group-hover\:opacity-100 {
+    opacity: 1;
+  }
+  .hidden.group-hover\:flex {
+    display: flex;
+  }
+  .hidden.group-hover\:inline-flex {
+    display: inline-flex;
+  }
+  .hidden.group-hover\:block {
+    display: block;
+  }
+  .hidden.group-hover\:grid {
+    display: grid;
   }
 }

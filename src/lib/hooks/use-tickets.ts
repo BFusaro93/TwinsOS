@@ -19,6 +19,7 @@ function mapTicket(row: any): CRMTicket {
     body: row.body,
     category: row.category,
     clientId: row.client_id,
+    upsellServiceId: row.upsell_service_id ?? null,
     clientName: row.clients?.display_name ?? null,
     assignedTo: row.assigned_to,
     assignedToId: row.assigned_to_id ?? null,

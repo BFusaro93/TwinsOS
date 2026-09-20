@@ -81,22 +81,31 @@ export async function POST(request: Request) {
   // multiple times shouldn't keep moving the recorded timestamp forward.
   const { data: updated, error } = await supabase
     .from("client_activity")
-    .update({ [column]: event.data.created_at ?? new Date().toISOString() })
+    // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+    .update({ [column]: event.data.created_at ?? new Date().toISOString() } as never)
     .eq("resend_message_id", messageId)
     .is(column, null)
     .select("client_id")
     .maybeSingle();
   if (error) console.error(`[resend webhook] failed to update ${column}:`, error);
 
-  // A bounce was logged but nothing ever stopped future sends to that
-  // address — campaigns and automation emails only check do_not_market, so
-  // the same bounced address kept getting re-sent to indefinitely. Suppress
-  // future marketing sends the same way an explicit unsubscribe does.
+  // A bounce was logged but nothing ever stopped future sends to that address,
+  // so the same dead address kept getting re-sent to indefinitely.
+  //
+  // This used to set do_not_market, which overloaded a MARKETING PREFERENCE
+  // with a DELIVERABILITY FACT — staff saw "skipped (Do Not Market)" for
+  // clients who had never opted out of anything, and there was no safe way to
+  // let a service notice reach a genuine opt-out without also resurrecting
+  // dead addresses. email_bounced_at keeps the two separate: every sender
+  // excludes a bounced address (marketing or transactional), while
+  // do_not_market now means only what its name says.
+  // See 20260919010000_client_email_bounce_suppression.sql.
   if (event.type === "email.bounced" && updated?.client_id) {
     const { error: suppressErr } = await supabase
       .from("clients")
-      .update({ do_not_market: true })
-      .eq("id", updated.client_id);
+      .update({ email_bounced_at: event.data.created_at ?? new Date().toISOString() })
+      .eq("id", updated.client_id)
+      .is("email_bounced_at", null);
     if (suppressErr) console.error("[resend webhook] failed to suppress bounced client:", suppressErr);
   }
 

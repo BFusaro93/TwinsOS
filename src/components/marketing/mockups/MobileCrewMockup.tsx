@@ -11,7 +11,7 @@ export function MobileCrewMockup() {
     <div className="flex h-[420px] items-center justify-center bg-slate-100 py-6">
       <div className="flex h-full w-[230px] flex-col overflow-hidden rounded-[26px] border-[6px] border-[#0a0a0a] bg-white shadow-xl">
         <div className="flex items-center justify-between bg-[#005642] px-3 py-2.5 text-white">
-          <span className="text-[11px] font-bold">Today's Stops</span>
+          <span className="text-[11px] font-bold">Today&apos;s Stops</span>
           <Clock className="h-3.5 w-3.5" />
         </div>
         <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50 p-2.5">

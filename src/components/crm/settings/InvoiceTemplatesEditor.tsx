@@ -5,13 +5,6 @@ import { Star, Trash2, X, Pencil, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   useInvoicePDFTemplates,
@@ -25,12 +18,68 @@ import { useConfirm } from "@/components/shared/useConfirm";
 
 // Add an entry here when a new layoutKey is implemented in InvoiceDocument.tsx
 // (e.g. after importing a customer's own Service Autopilot-style template).
-const LAYOUT_OPTIONS: { value: InvoicePDFLayoutKey; label: string }[] = [
-  { value: "default", label: "Default" },
-  { value: "compact", label: "Compact" },
-  { value: "statement", label: "Statement (running account balance + payment stub)" },
-  { value: "statement_invoice_only", label: "Statement (this invoice's balance only + payment stub)" },
+const LAYOUT_OPTIONS: { value: InvoicePDFLayoutKey; label: string; description: string }[] = [
+  { value: "default", label: "Standard Invoice", description: "One invoice per page — line items, totals, and balance due." },
+  { value: "compact", label: "Compact", description: "Denser, monochrome version of the standard invoice for shorter print jobs." },
+  { value: "statement", label: "Statement — Running Balance", description: "Account-wide balance, older open invoices, and a tear-off payment stub." },
+  { value: "statement_no_stub", label: "Statement — Running Balance (no stub)", description: "Same as above without reserving the bottom third for a payment stub." },
+  { value: "statement_invoice_only", label: "Statement — This Invoice Only", description: "Statement layout highlighting just this invoice's own total, with a payment stub." },
+  { value: "statement_invoice_only_no_stub", label: "Statement — This Invoice Only (no stub)", description: "Same as above without the payment stub." },
 ];
+
+/** Radio-card gallery for comparing the available PDF layouts side by side —
+ *  each card links to a live-rendered preview (using the org's own logo/brand
+ *  color) instead of a static thumbnail, since layouts are structural only —
+ *  color is already a separate, freely-editable field per template. */
+function LayoutFormatPicker({
+  value,
+  onChange,
+}: {
+  value: InvoicePDFLayoutKey;
+  onChange: (v: InvoicePDFLayoutKey) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {LAYOUT_OPTIONS.map((o) => {
+        const selected = o.value === value;
+        return (
+          <div
+            key={o.value}
+            role="button"
+            tabIndex={0}
+            onClick={() => onChange(o.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onChange(o.value); }}
+            className={`flex cursor-pointer flex-col gap-1 rounded-md border p-2.5 text-left transition-colors ${
+              selected ? "border-brand-400 bg-brand-50" : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <span
+                className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
+                  selected ? "border-brand-500 bg-brand-500" : "border-slate-300"
+                }`}
+              />
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-slate-800">{o.label}</div>
+                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{o.description}</p>
+              </div>
+            </div>
+            <a
+              href={`/api/crm/invoice-templates/layout-preview?layoutKey=${o.value}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="ml-6 flex w-fit items-center gap-1 text-[11px] text-brand-600 hover:text-brand-700 hover:underline"
+            >
+              <Eye className="h-3 w-3" />
+              Preview
+            </a>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate; onClose: () => void }) {
   const update = useUpdateInvoicePDFTemplate();
@@ -61,18 +110,11 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
 
   return (
     <div className="space-y-3 rounded-md border bg-slate-50 p-3">
+      <div>
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Layout</label>
+        <LayoutFormatPicker value={layoutKey} onChange={setLayoutKey} />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Layout</label>
-          <Select value={layoutKey} onValueChange={(v) => setLayoutKey(v as InvoicePDFLayoutKey)}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {LAYOUT_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Accent Color</label>
           <div className="flex items-center gap-2">
@@ -242,34 +284,24 @@ export function InvoiceTemplatesEditor() {
       ))}
 
       {adding ? (
-        <div className="flex items-center gap-2 py-2.5">
-          <input
-            autoFocus
-            placeholder="e.g. Standard Invoice"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitAdd();
-              if (e.key === "Escape") { setAdding(false); setName(""); }
-            }}
-            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
-          />
-          <Select value={layoutKey} onValueChange={(v) => setLayoutKey(v as InvoicePDFLayoutKey)}>
-            <SelectTrigger className="h-8 w-36 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LAYOUT_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <button onClick={commitAdd} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">
-            Add
-          </button>
-          <button onClick={() => { setAdding(false); setName(""); }} className="rounded p-1 text-slate-400 hover:text-slate-600">
-            <X className="h-4 w-4" />
-          </button>
+        <div className="space-y-2 py-2.5">
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              placeholder="e.g. Standard Invoice"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") { setAdding(false); setName(""); } }}
+              className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            />
+            <button onClick={commitAdd} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">
+              Add
+            </button>
+            <button onClick={() => { setAdding(false); setName(""); }} className="rounded p-1 text-slate-400 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <LayoutFormatPicker value={layoutKey} onChange={setLayoutKey} />
         </div>
       ) : (
         <div className="py-3">

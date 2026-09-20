@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
@@ -151,6 +152,7 @@ export function mapInvoice(row: any): CRMInvoice {
     clientId: row.client_id,
     estimateId: row.estimate_id,
     crmJobId: row.crm_job_id,
+    projectId: row.project_id ?? null,
     salesRepId: row.sales_rep_id ?? null,
     description: row.description,
     status: row.status,
@@ -206,10 +208,22 @@ export function mapInvoice(row: any): CRMInvoice {
 // pull open invoices for a parent client AND its child sub-accounts in one
 // query (a property-manager parent can record one payment allocated across
 // several sub-accounts' invoices).
-export function useInvoices(clientId?: string | string[]) {
+/**
+ * Invoices, optionally narrowed. `projectId` is a genuine filter, not a hint:
+ * pass it and you get only that project's invoices, never the rest of the
+ * client's unrelated billing. Passing `projectId: null` explicitly (rather
+ * than undefined) yields nothing, which is what a project with no link should
+ * show -- see the Projects Billing tab.
+ */
+export function useInvoices(
+  clientId?: string | string[],
+  opts?: { projectId?: string | null },
+) {
   const clientIds = Array.isArray(clientId) ? clientId : clientId ? [clientId] : [];
+  const projectId = opts?.projectId;
+  const projectKey = projectId === undefined ? "any" : projectId ?? "none";
   return useQuery({
-    queryKey: ["crm-invoices", clientIds.length > 0 ? [...clientIds].sort() : "all"],
+    queryKey: ["crm-invoices", clientIds.length > 0 ? [...clientIds].sort() : "all", { projectId: projectKey }],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -227,10 +241,14 @@ export function useInvoices(clientId?: string | string[]) {
         .order("invoice_number", { ascending: false });
       if (clientIds.length === 1) q = q.eq("client_id", clientIds[0]);
       else if (clientIds.length > 1) q = q.in("client_id", clientIds);
+      if (projectId) q = q.eq("project_id", projectId);
       const { data, error } = await q;
       if (error) throw error;
       return data.map(mapInvoice) as CRMInvoice[];
     },
+    // An explicit null project means "this project can't own invoices yet" --
+    // don't fetch the client's whole ledger just to throw it away.
+    enabled: projectId !== null,
   });
 }
 
@@ -304,6 +322,9 @@ export function useCreateInvoiceFromEstimate() {
       poNumber,
       lineItems,
       subtotalCents,
+      discountCents,
+      discountType,
+      discountValue,
       taxRateBps,
       taxCents,
       totalCents,
@@ -318,8 +339,17 @@ export function useCreateInvoiceFromEstimate() {
       lineItems: {
         name?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
         discountCents?: number; discountType?: "percent" | "flat" | null; discountValue?: number | null;
+        isTaxable?: boolean;
       }[];
       subtotalCents: number;
+      // The estimate's header discount. Previously not passed at all, so the
+      // invoice was born with discount_cents = 0 while total_cents already had
+      // the discount taken off it. The first recalc (deleting a line, or any
+      // financial edit) recomputed total as subtotal - 0 + tax and silently
+      // added the discount back onto what the client owed.
+      discountCents?: number;
+      discountType?: "percent" | "flat" | null;
+      discountValue?: number | null;
       taxRateBps: number;
       taxCents: number;
       totalCents: number;
@@ -345,6 +375,9 @@ export function useCreateInvoiceFromEstimate() {
           due_date: dueDate ?? null,
           po_number: poNumber ?? null,
           subtotal_cents: subtotalCents,
+          discount_cents: discountCents ?? 0,
+          discount_type: discountType ?? null,
+          discount_value: discountValue ?? null,
           tax_rate_bps: taxRateBps,
           tax_cents: taxCents,
           total_cents: totalCents,
@@ -369,6 +402,11 @@ export function useCreateInvoiceFromEstimate() {
             discount_cents: li.discountCents ?? 0,
             discount_type: li.discountType ?? null,
             discount_value: li.discountValue ?? null,
+            // crm_invoice_line_items.is_taxable defaults to false and, unlike
+            // crm_job_services, has no trigger to fill it in. Leaving it unset
+            // made every invoice-from-estimate untaxable, so the first recalc
+            // wiped the tax the client had been quoted.
+            is_taxable: li.isTaxable ?? false,
             sort_order: i,
           }))
         );
@@ -395,6 +433,8 @@ export function useCreateInvoice() {
       description: string;
       invoiceDate: string;
       dueDate?: string;
+      /** Bills this invoice against a Projects row (milestone / progress billing). */
+      projectId?: string | null;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -410,6 +450,7 @@ export function useCreateInvoice() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          project_id: values.projectId ?? null,
           sales_rep_id: values.salesRepId ?? null,
           description: values.description,
           invoice_date: values.invoiceDate,
@@ -466,7 +507,7 @@ export function useBulkImportInvoices() {
             created_by: user?.id ?? null,
             client_id: clientId,
             description: r.description.trim(),
-            invoice_date: r.invoiceDate?.trim() || new Date().toISOString().split("T")[0],
+            invoice_date: r.invoiceDate?.trim() || isoNy(new Date()),
             due_date: r.dueDate?.trim() || null,
             po_number: r.poNumber?.trim() || null,
             status: r.status?.trim().toLowerCase() || "draft",
@@ -1299,7 +1340,7 @@ export function useBulkImportPayments() {
           invoice_id: invoiceId,
           amount_cents: amountCents,
           unused_amount_cents: invoiceId ? 0 : amountCents,
-          payment_date: r.paymentDate?.trim() || new Date().toISOString().split("T")[0],
+          payment_date: r.paymentDate?.trim() || isoNy(new Date()),
           method,
           reference: r.reference?.trim() || null,
           memo: r.memo?.trim() || null,
@@ -1327,22 +1368,127 @@ export function useBulkImportPayments() {
   });
 }
 
-export function usePayments(clientId?: string) {
-  return useQuery({
-    queryKey: ["crm-payments", clientId ?? "all"],
+/** A client's payments that still have money on them not applied to anything —
+ * proposal deposits, prepayments, overpayments. Narrow and guarded on purpose:
+ * usePayments() with no clientId would pull every payment in the org. */
+export interface UnappliedPayment {
+  id: string;
+  paymentDate: string;
+  method: string;
+  memo: string | null;
+  unusedAmountCents: number;
+  isPrepayment: boolean;
+}
+
+export function useUnappliedPayments(clientId: string | undefined) {
+  return useQuery<UnappliedPayment[]>({
+    queryKey: ["crm-payments", "unapplied", clientId ?? "none"],
+    enabled: !!clientId,
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payments")
+        .select("id, payment_date, method, memo, unused_amount_cents, is_prepayment")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .gt("unused_amount_cents", 0)
+        .order("payment_date", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        paymentDate: r.payment_date as string,
+        method: r.method as string,
+        memo: (r.memo as string) ?? null,
+        unusedAmountCents: (r.unused_amount_cents as number) ?? 0,
+        isPrepayment: (r.is_prepayment as boolean) ?? false,
+      }));
+    },
+  });
+}
+
+/**
+ * Applies money already sitting unapplied on a client's payment (a proposal
+ * deposit, a prepayment, an overpayment) to one invoice.
+ *
+ * Until now the only way to do this was to open the payment and edit its
+ * allocations, which meant staff had to know the money existed at all — a
+ * converted job invoices its full amount with no deposit deducted, so an
+ * unnoticed deposit meant billing a client for money they had already paid.
+ *
+ * Applies the SMALLER of what's unapplied and what the invoice still owes, so
+ * it can never over-allocate; the remainder stays available for the next
+ * invoice. The allocation guard trigger enforces the same rule server-side.
+ */
+export function useApplyCreditToInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      paymentId,
+      invoiceId,
+      amountCents,
+    }: { paymentId: string; invoiceId: string; amountCents: number }) => {
+      const supabase = createClient();
+      // One RPC, one transaction. This used to be four separate statements from
+      // the browser (insert allocation, decrement unused_amount_cents, apply to
+      // the invoice, sync the balance), which had two defects: a failure
+      // part-way left the credit consumed with the invoice untouched, and
+      // unused_amount_cents was written as an absolute value from a stale read,
+      // so two tabs applying the same deposit to different invoices each wrote
+      // the same figure and left phantom credit that no allocation could spend.
+      // crm_apply_credit_to_invoice takes FOR UPDATE on the payment and
+      // recomputes least(requested, unapplied, owing) from the locked rows.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)("crm_apply_credit_to_invoice", {
+        p_payment_id: paymentId,
+        p_invoice_id: invoiceId,
+        p_amount_cents: amountCents,
+      });
+      if (error) throw new Error(error.message ?? "Couldn't apply the credit");
+      return { appliedCents: (data as number) ?? 0 };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["crm-clients"] });
+    },
+  });
+}
+
+/**
+ * Payments, optionally narrowed. Payments have no project_id of their own --
+ * a payment belongs to a project via the invoice it was applied to, so
+ * `projectId` filters on the joined invoice. An unapplied payment (no
+ * invoice_id) therefore belongs to no project, which is correct: it's client
+ * credit, not project revenue.
+ */
+export function usePayments(clientId?: string, opts?: { projectId?: string | null }) {
+  const projectId = opts?.projectId;
+  const projectKey = projectId === undefined ? "any" : projectId ?? "none";
+  return useQuery({
+    queryKey: ["crm-payments", clientId ?? "all", { projectId: projectKey }],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // !inner only when filtering by project: an inner join would drop
+      // unapplied payments (invoice_id null) from the unfiltered list, which
+      // is exactly where they need to show up.
+      const invoiceJoin = projectId
+        ? "crm_invoices!inner(invoice_number, project_id)"
+        : "crm_invoices(invoice_number, project_id)";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_payments")
-        .select("*, clients(display_name, billing_address), crm_invoices(invoice_number)")
+        .select(`*, clients(display_name, billing_address), ${invoiceJoin}`)
         .is("deleted_at", null)
         .order("payment_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
+      if (projectId) q = q.eq("crm_invoices.project_id", projectId);
       const { data, error } = await q;
       if (error) throw error;
       return data.map(mapPaymentFull) as CRMPayment[];
     },
+    enabled: projectId !== null,
   });
 }
 
@@ -1420,6 +1566,64 @@ export function usePaymentAllocations(paymentId: string | undefined) {
       return (data ?? []) as { invoice_id: string; amount_cents: number }[];
     },
     enabled: !!paymentId,
+  });
+}
+
+// Whether a visit has already produced an invoice line — same idempotency
+// check applyVisitCompletionSideEffects() uses (crm_invoice_line_items.visit_id
+// is tagged on the first line of whatever invoice a visit's completion billed
+// into, whichever completion path got there first). The manual "Create
+// Invoice" button in DispatchBoard/JobDetail has no other guard against
+// re-invoicing an already-billed visit, which double-bills the client with a
+// numberless duplicate invoice — this is what that button checks before
+// deciding whether to invoice or just link to the existing one.
+export function useInvoiceForVisit(visitId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["crm-invoices", "for-visit", visitId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_invoice_line_items")
+        .select("invoice_id, crm_invoices(id, invoice_number)")
+        .eq("visit_id", visitId)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const invoice = (data as { crm_invoices: { id: string; invoice_number: number | null } | null }).crm_invoices;
+      return invoice ? { id: invoice.id, invoiceNumber: invoice.invoice_number } : null;
+    },
+    enabled: !!visitId,
+  });
+}
+
+// Whether a job already has an invoice at all — mirrors
+// applyVisitCompletionSideEffects()'s "job_already_invoiced" guard for
+// one_time/waiting_list jobs with no per-service visit split. JobDetail.tsx's
+// job-level "Invoice" button bills every pending service/product on the job
+// in one shot and had no check against re-running that after the job was
+// already invoiced (by either that same button or the visit-completion
+// auto-invoice), so a second click re-billed the whole job as a duplicate.
+export function useInvoiceForJob(jobId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["crm-invoices", "for-job", jobId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_invoices")
+        .select("id, invoice_number")
+        .eq("crm_job_id", jobId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return { id: (data as { id: string }).id, invoiceNumber: (data as { invoice_number: number | null }).invoice_number };
+    },
+    enabled: !!jobId,
   });
 }
 

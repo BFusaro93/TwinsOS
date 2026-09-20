@@ -71,6 +71,8 @@ interface FormState {
   isActive: boolean;
   showInSnowDispatch: boolean;
   onlyForEstimates: boolean;
+  showInFieldUpsells: boolean;
+  upsellPitch: string;
   trackChemicals: boolean;
   invoiceDescription: string;
   descriptionOnEstimate: string;
@@ -94,6 +96,7 @@ function emptyForm(): FormState {
     taskColor: "#3B82F6",
     isActive: true, showInSnowDispatch: false,
     onlyForEstimates: false, trackChemicals: false,
+    showInFieldUpsells: false, upsellPitch: "",
     invoiceDescription: "", descriptionOnEstimate: "",
     rateMatrixField: "", rateMatrixCalc: "qty_x_rate_x_visits",
     matrixTailEveryQty: "", matrixTailOverQty: "",
@@ -120,6 +123,8 @@ function serviceToForm(s: CRMService): FormState {
     isActive: s.isActive,
     showInSnowDispatch: s.showInSnowDispatch,
     onlyForEstimates: s.onlyForEstimates,
+    showInFieldUpsells: s.showInFieldUpsells,
+    upsellPitch: s.upsellPitch ?? "",
     trackChemicals: s.trackChemicals,
     invoiceDescription: s.invoiceDescription ?? "",
     descriptionOnEstimate: s.descriptionOnEstimate ?? "",
@@ -174,11 +179,22 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
   }, [currentFieldId, selectedFieldId]);
 
   function addRow() {
+    // crm_service_rate_matrix.custom_field_id is NOT NULL — a row can't exist
+    // without knowing what it measures against. Adding one before picking a
+    // lookup field used to send an explicit null and surface the constraint
+    // violation as a generic "Failed to add rate matrix row" toast, which the
+    // hint below actively invited by suggesting you could add rows first.
+    // Refuse up front and say why (the button is disabled too; this is the
+    // backstop).
+    if (!selectedFieldId) {
+      toast.error("Pick a lookup field first — rate matrix rows need to know what value to measure against");
+      return;
+    }
     const nextSort = rows.length;
     upsert.mutate({
       serviceId,
       row: {
-        custom_field_id: selectedFieldId || null,
+        custom_field_id: selectedFieldId,
         calc_type: 1,
         from_val: 0,
         to_val: null,
@@ -213,8 +229,18 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
 
   function handleFieldChange(newFieldId: string) {
     setSelectedFieldId(newFieldId);
+    // Same NOT NULL constraint as addRow: clearing the picker back to "None"
+    // can't null out the existing rows' field. Clear the local selection so
+    // the picker reads None, but leave the rows pointing at whatever they
+    // already measure — deleting them is the way to start over.
+    if (!newFieldId) {
+      if (rows.length > 0) {
+        toast.error("Existing rows still need a lookup field — pick another field or delete the rows");
+      }
+      return;
+    }
     for (const row of rows) {
-      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId || null } }, {
+      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId } }, {
         onError: () => toast.error("Failed to update lookup field"),
       });
     }
@@ -311,11 +337,11 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           </tbody>
         </table>
         <div className="p-2 border-t bg-slate-50 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={addRow} className="text-xs">
+          <Button variant="ghost" size="sm" onClick={addRow} className="text-xs" disabled={!selectedFieldId}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
           </Button>
-          {!selectedFieldId && rows.length === 0 && (
-            <span className="text-xs text-slate-400">Tip: pick a lookup field above so rows know what to measure against</span>
+          {!selectedFieldId && (
+            <span className="text-xs text-slate-400">Pick a lookup field above so rows know what to measure against</span>
           )}
         </div>
       </div>
@@ -686,6 +712,8 @@ export function ServiceDialog({ open, service, onClose }: Props) {
       is_active: form.isActive,
       show_in_snow_dispatch: form.showInSnowDispatch,
       only_for_estimates: form.onlyForEstimates,
+      show_in_field_upsells: form.showInFieldUpsells,
+      upsell_pitch: form.upsellPitch.trim() || null,
       track_chemicals: form.trackChemicals,
       invoice_description: form.invoiceDescription.trim() || null,
       description_on_estimate: form.descriptionOnEstimate.trim() || null,
@@ -725,7 +753,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
+      <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 sm:p-0">
         <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <DialogTitle>
             {activeService ? `Edit Service: ${activeService.name}` : "Add Service"}
@@ -963,6 +991,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
               {([
                 { key: "isActive",           label: "Active" },
                 { key: "showInSnowDispatch", label: "Show in Snow Dispatch" },
+                { key: "showInFieldUpsells", label: "Show in Field Upsells" },
                 { key: "onlyForEstimates",   label: "Only for Estimates" },
                 { key: "trackChemicals",     label: "Track Chemicals" },
               ] as { key: keyof FormState; label: string }[]).map(({ key, label }) => (
@@ -975,6 +1004,23 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                 </label>
               ))}
             </div>
+
+            {/* The crew-facing cue for this service — crews see the name and
+                this line, never a price. */}
+            {form.showInFieldUpsells && (
+              <Field label="Field upsell prompt">
+                <Input
+                  value={form.upsellPitch}
+                  onChange={(e) => setForm({ ...form, upsellPitch: e.target.value })}
+                  placeholder="e.g. Beds look thin or washed out?"
+                  className="text-sm"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Shown under the service name when a crew suggests work, so they know what to
+                  look for.
+                </p>
+              </Field>
+            )}
           </div>
         )}
 

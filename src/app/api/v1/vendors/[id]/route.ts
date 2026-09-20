@@ -49,6 +49,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.notes !== undefined && { notes: body.notes }),
       ...(body.vendorType !== undefined && { vendor_type: body.vendorType }),
       ...(body.isActive !== undefined && { is_active: body.isActive }),
+      ...(body.w9Status !== undefined && { w9_status: body.w9Status }),
+      ...(body.w9ReceivedDate !== undefined && { w9_received_date: body.w9ReceivedDate }),
+      ...(body.w9ExpirationDate !== undefined && { w9_expiration_date: body.w9ExpirationDate }),
     })
     .eq("org_id", auth.orgId)
     .eq("id", id)

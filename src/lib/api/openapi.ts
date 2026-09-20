@@ -9,6 +9,8 @@ import { createProjectSchema, updateProjectSchema } from "@/app/api/v1/projects/
 import { createPmScheduleSchema, updatePmScheduleSchema } from "@/app/api/v1/pm-schedules/validation";
 import { createPartSchema, updatePartSchema } from "@/app/api/v1/parts/validation";
 import { createRequisitionSchema } from "@/app/api/v1/requisitions/validation";
+import { createPurchaseOrderSchema } from "@/app/api/v1/purchase-orders/validation";
+import { createContractSchema } from "@/app/api/v1/contracts/validation";
 import { createJobSchema, updateJobSchema } from "@/app/api/v1/jobs/validation";
 import { createEstimateSchema } from "@/app/api/v1/estimates/validation";
 import type { ApiScopeTier } from "@/lib/api/scopes";
@@ -147,7 +149,8 @@ const ENDPOINTS: EndpointDef[] = [
   {
     method: "post",
     path: "/products",
-    summary: "Create a product catalog entry",
+    summary:
+      "Create a product catalog entry (a maintenance_part is also mirrored into CMMS parts; quantityOnHand is an OPENING count only — stock rises solely via goods receipt)",
     scope: "products:write:safe",
     agentTier: "write:safe",
     requestSchema: createProductSchema,
@@ -163,7 +166,8 @@ const ENDPOINTS: EndpointDef[] = [
   {
     method: "patch",
     path: "/products/{id}",
-    summary: "Update a product catalog entry",
+    summary:
+      "Update a product catalog entry (changes mirror into the linked CMMS part; a category change to/from maintenance_part creates/retires that part). quantityOnHand is not settable here.",
     scope: "products:write:safe",
     agentTier: "write:safe",
     requestSchema: updateProductSchema,
@@ -174,7 +178,8 @@ const ENDPOINTS: EndpointDef[] = [
   {
     method: "post",
     path: "/projects",
-    summary: "Create a project",
+    summary:
+      "Create a project (contractPriceCents sets original_contract_price only; the live contract price is DB-derived as original + approved change orders)",
     scope: "projects:write:safe",
     agentTier: "write:safe",
     requestSchema: createProjectSchema,
@@ -296,12 +301,24 @@ const ENDPOINTS: EndpointDef[] = [
     agentTier: "read",
     hasIdParam: true,
   },
+  {
+    method: "post",
+    path: "/purchase-orders",
+    summary:
+      "Create a PO with line items (always status \"requested\" — approval happens in the app, never via this API). " +
+      "A maintenance_part line must have a whole-number quantity, and the discount is clamped to the subtotal so the total can never go negative.",
+    scope: "purchase_orders:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createPurchaseOrderSchema,
+  },
 
   { method: "get", path: "/jobs", summary: "List Landscapt jobs", scope: "jobs:read", agentTier: "read" },
   {
     method: "post",
     path: "/jobs",
-    summary: "Create a job",
+    summary:
+      "Create a job (with its service line and, for a dated job type, its dispatch-board visit). " +
+      "budgetedHours is TOTAL MAN-HOURS, not per person; dates are YYYY-MM-DD; a waiting_list job deliberately gets no visit.",
     scope: "jobs:write:safe",
     agentTier: "write:safe",
     requestSchema: createJobSchema,
@@ -367,6 +384,18 @@ const ENDPOINTS: EndpointDef[] = [
     agentTier: "read",
     hasIdParam: true,
   },
+  {
+    method: "post",
+    path: "/contracts",
+    summary:
+      "Record a recurring-billing contract (accepts historical signedAt/signedBy; supports bulk via `contracts`). " +
+      "Defaults to status \"draft\", which does NOT bill — invoicing needs status \"signed\"/\"active\", which the caller must set deliberately. " +
+      "monthlyAmountCents is the amount charged on EACH invoice, in cents, at every frequency — an annual $12,000 contract is billingFrequency \"annual\" with monthlyAmountCents 1200000 and bills once a year. " +
+      "billingFrequency drives the real cadence (weekly/biweekly/monthly/quarterly/annual/one_time), anchored on startDate; see src/lib/contract-billing.ts.",
+    scope: "contracts:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createContractSchema,
+  },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -411,7 +440,15 @@ export function buildOpenApiDocument(): Record<string, any> {
       version: "0.1.0",
       description:
         "Scoped, API-key-authenticated access to Equipt (CMMS/PO) and Landscapt (CRM) resources. " +
-        "Create keys under Settings > Integrations. Every response is scoped to the calling key's organization.",
+        "Create keys under Settings > Integrations. Every response is scoped to the calling key's organization.\n\n" +
+        "Conventions: every *Cents field is an integer number of cents, never dollars or a decimal. " +
+        "Every date-only field is YYYY-MM-DD — an ISO instant is cast in UTC and can land on the previous day for a US-Eastern operation. " +
+        "A *RatePercent field is a percent (7 = 7%); a *Bps field is basis points (700 = 7%).\n\n" +
+        "Contract billing: crm_contracts.monthly_amount_cents is the amount charged on EACH generated invoice at every billing frequency — " +
+        "it is not an annualised or monthly-equivalent figure that gets scaled per cadence. An annual contract stores its full yearly price " +
+        "and is invoiced once a year. billing_frequency (weekly, biweekly, monthly, quarterly, annual, one_time) genuinely drives the cadence, " +
+        "anchored on start_date (falling back to signed_at), and re-running a billing pass inside the same period never produces a second invoice. " +
+        "Contracts created through this API default to status \"draft\", which does not bill.",
     },
     servers: [{ url: "/api/v1" }],
     components: {

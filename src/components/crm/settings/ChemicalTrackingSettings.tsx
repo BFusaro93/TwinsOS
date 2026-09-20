@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Pencil, Star, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -24,15 +22,7 @@ import {
   useUpdateChemicalLookupItem,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useCustomFieldDefs } from "@/lib/hooks/use-rate-matrix";
-import {
-  useEmailTemplates,
-  useUpsertEmailTemplate,
-  useDeleteEmailTemplate,
-} from "@/lib/hooks/use-email-templates";
-import { CHEMICAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
-import type { CRMEmailTemplate } from "@/types/crm-proposals";
-import type { ChemicalConditionsDisplay, ChemicalLookupType } from "@/types/chemical-tracking";
-import { useConfirm } from "@/components/shared/useConfirm";
+import type { ChemicalConditionsDisplay, ChemicalLookupType, ChemicalUnitClass } from "@/types/chemical-tracking";
 
 function Section({
   title,
@@ -172,12 +162,90 @@ function GeneralChemicalSettings() {
 // empty list. Other lookup types (e.g. Areas Treated) are site-specific and
 // have no universal defaults, so they're left for the user to define.
 // Matches Service Autopilot's Units of Measure list (liquid + weight + metric).
+// unitClass/baseFactor let the mix calc (calcChemicalAndSolution) convert
+// between these units — a factor to a canonical base unit (fluid ounce for
+// volume, gram for mass). Keep in sync with the backfill in migration
+// 20260918030000_chemical_mix_volume_calc.sql, which tags these same names
+// for orgs that seeded their list before this factor data existed.
+const DEFAULT_VOLUME_UNITS: { name: string; unitClass: ChemicalUnitClass; baseFactor: number }[] = [
+  { name: "Cups", unitClass: "volume", baseFactor: 8 },
+  { name: "Gallons", unitClass: "volume", baseFactor: 128 },
+  { name: "Grams", unitClass: "mass", baseFactor: 1 },
+  { name: "Kilograms", unitClass: "mass", baseFactor: 1000 },
+  { name: "Liters", unitClass: "volume", baseFactor: 33.814 },
+  { name: "Milliliters", unitClass: "volume", baseFactor: 0.033814 },
+  { name: "Ounces - Liquid", unitClass: "volume", baseFactor: 1 },
+  { name: "Ounces - Weight", unitClass: "mass", baseFactor: 28.3495 },
+  { name: "Pints", unitClass: "volume", baseFactor: 16 },
+  { name: "Pounds", unitClass: "mass", baseFactor: 453.592 },
+  { name: "Quarts", unitClass: "volume", baseFactor: 32 },
+  { name: "Tablespoons", unitClass: "volume", baseFactor: 0.5 },
+  { name: "Teaspoons", unitClass: "volume", baseFactor: 1 / 6 },
+];
+
+/**
+ * Alternate spellings a user is likely to type for one of the standard units
+ * above, so a hand-added unit still carries the unitClass/baseFactor the mix
+ * calc needs. Without that metadata calcChemicalAndSolution can't convert the
+ * unit and silently drops the mix volume for every rate that uses it, which is
+ * indistinguishable from "this rate has no mix".
+ *
+ * Deliberately absent: a bare "Ounce"/"oz". It is genuinely ambiguous between
+ * fluid and weight ounces (a ~28x difference on a pesticide mix), which is why
+ * migration 20260918030000 left the existing "Ounce" row untagged rather than
+ * guessing. Anything not recognised here is created untagged and the user is
+ * told so.
+ */
+const VOLUME_UNIT_ALIASES: Record<string, string> = {
+  gallon: "Gallons",
+  gal: "Gallons",
+  gals: "Gallons",
+  "fluid ounce": "Ounces - Liquid",
+  "fluid ounces": "Ounces - Liquid",
+  "fl oz": "Ounces - Liquid",
+  "liquid ounce": "Ounces - Liquid",
+  "liquid ounces": "Ounces - Liquid",
+  quart: "Quarts",
+  qt: "Quarts",
+  pint: "Pints",
+  pt: "Pints",
+  cup: "Cups",
+  liter: "Liters",
+  litre: "Liters",
+  litres: "Liters",
+  milliliter: "Milliliters",
+  millilitre: "Milliliters",
+  millilitres: "Milliliters",
+  ml: "Milliliters",
+  tablespoon: "Tablespoons",
+  tbsp: "Tablespoons",
+  teaspoon: "Teaspoons",
+  tsp: "Teaspoons",
+  gram: "Grams",
+  g: "Grams",
+  kilogram: "Kilograms",
+  kg: "Kilograms",
+  pound: "Pounds",
+  lb: "Pounds",
+  lbs: "Pounds",
+  "weight ounce": "Ounces - Weight",
+  "weight ounces": "Ounces - Weight",
+};
+
+/** Conversion metadata for a unit name the user typed, or undefined when the
+ *  name isn't one we can safely pin to a known scale. */
+function knownVolumeUnit(name: string): { unitClass: ChemicalUnitClass; baseFactor: number } | undefined {
+  const normalized = name.trim().toLowerCase();
+  const canonical =
+    DEFAULT_VOLUME_UNITS.find((u) => u.name.toLowerCase() === normalized)?.name ??
+    VOLUME_UNIT_ALIASES[normalized];
+  if (!canonical) return undefined;
+  const match = DEFAULT_VOLUME_UNITS.find((u) => u.name === canonical);
+  return match ? { unitClass: match.unitClass, baseFactor: match.baseFactor } : undefined;
+}
+
 const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
-  volume_unit: [
-    "Cups", "Gallons", "Grams", "Kilograms", "Liters", "Milliliters",
-    "Ounces - Liquid", "Ounces - Weight", "Pints", "Pounds", "Quarts",
-    "Tablespoons", "Teaspoons",
-  ],
+  volume_unit: DEFAULT_VOLUME_UNITS.map((u) => u.name),
   // Square Foot and 1,000 Sq Ft kept adjacent (a lawn-chemical rate is almost
   // always expressed as one or the other) with Acre last, rather than
   // alphabetical order which splits them apart.
@@ -202,25 +270,78 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
   const update = useUpdateChemicalLookupItem();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
-  const seededRef = useRef(false);
+  const seedInFlightRef = useRef(false);
+  const seedAttemptsRef = useRef(0);
+  const resumeSeedRef = useRef(false);
 
   useEffect(() => {
     const defaults = DEFAULT_LOOKUP_ITEMS[listType];
-    if (!defaults || isLoading || seededRef.current || items.length > 0) return;
-    seededRef.current = true;
+    if (!defaults || isLoading || seedInFlightRef.current) return;
+    // Seeding writes 13 volume + 3 area rows into the org's catalog, so it is
+    // a create and has to respect the same permission as the Add button —
+    // chem_create_uom is app-layer only (RLS lets any member insert), so
+    // without this check a crew or viewer just opening the tab populated the
+    // list for the whole org.
+    if (!canCreate) return;
+
+    const missing = defaults.filter(
+      (name) => !items.some((i) => i.name.trim().toLowerCase() === name.trim().toLowerCase())
+    );
+    if (missing.length === 0) return;
+    // Only ever seed a list nobody has touched — except when an earlier
+    // attempt in this session died part-way, in which case we finish the job
+    // rather than leaving a half-populated list that can never be topped up.
+    if (items.length > 0 && !resumeSeedRef.current) return;
+    if (seedAttemptsRef.current >= 2) return;
+
+    seedInFlightRef.current = true;
+    seedAttemptsRef.current += 1;
     (async () => {
-      for (let i = 0; i < defaults.length; i++) {
-        const created = await create.mutateAsync({ listType, name: defaults[i] });
-        await update.mutateAsync({ id: created.id, sortOrder: i });
+      try {
+        for (const name of missing) {
+          const volumeUnitMeta =
+            listType === "volume_unit" ? DEFAULT_VOLUME_UNITS.find((u) => u.name === name) : undefined;
+          const created = await create.mutateAsync({
+            listType,
+            name,
+            ...(volumeUnitMeta && { unitClass: volumeUnitMeta.unitClass, baseFactor: volumeUnitMeta.baseFactor }),
+          });
+          await update.mutateAsync({ id: created.id, sortOrder: defaults.indexOf(name) });
+        }
+        resumeSeedRef.current = false;
+      } catch {
+        // The rows already written stay; flag the list so the next pass fills
+        // in the remainder instead of treating a partial list as finished.
+        resumeSeedRef.current = true;
+        toast.error("Couldn't finish adding the standard units — reopen this section to complete the list.");
+      } finally {
+        seedInFlightRef.current = false;
       }
     })();
-  }, [listType, isLoading, items.length, create, update]);
+  }, [listType, isLoading, items, canCreate, create, update]);
 
   function commitAdd() {
-    if (!newName.trim()) return;
+    const name = newName.trim();
+    if (!name) return;
+    // A volume/area unit created with no unitClass/baseFactor is invisible to
+    // the mix calc — every rate using it silently loses its mix volume. Pin
+    // the standard names to their known scale so a hand-added "Gallons"
+    // behaves exactly like the seeded one.
+    const meta = listType === "volume_unit" ? knownVolumeUnit(name) : undefined;
     create.mutate(
-      { listType, name: newName.trim() },
-      { onSuccess: () => { setNewName(""); setAdding(false); } }
+      { listType, name, ...(meta && { unitClass: meta.unitClass, baseFactor: meta.baseFactor }) },
+      {
+        onSuccess: () => {
+          setNewName("");
+          setAdding(false);
+          if (listType === "volume_unit" && !meta) {
+            toast.warning(
+              `"${name}" was added, but it has no known conversion, so mix volumes can't be calculated for rates that use it. Use one of the standard units (e.g. Gallons, Ounces - Liquid) if you need the mix calculation.`
+            );
+          }
+        },
+        onError: (err) => toast.error(`Failed to add: ${(err as Error).message}`),
+      }
     );
   }
 
@@ -282,242 +403,19 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
 
 // ── Client Notice Email templates ────────────────────────────────────────────
 
-type NoticeFormState = {
-  id?: string;
-  name: string;
-  subject: string;
-  bodyHtml: string;
-  isDefault: boolean;
-};
-
-const EMPTY_NOTICE_FORM: NoticeFormState = { name: "", subject: "", bodyHtml: "", isDefault: false };
-
 function NoticeEmailTemplatesEditor() {
-  const [confirm, confirmDialog] = useConfirm();
-  const { data: templates = [], isLoading } = useEmailTemplates("chemical_application");
-  const upsert = useUpsertEmailTemplate();
-  const deleteMutation = useDeleteEmailTemplate();
-
-  const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState<NoticeFormState>(EMPTY_NOTICE_FORM);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-
-  function openNew() {
-    setForm(EMPTY_NOTICE_FORM);
-    setFormOpen(true);
-  }
-
-  function openEdit(t: CRMEmailTemplate) {
-    setForm({ id: t.id, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml, isDefault: t.isDefault });
-    setFormOpen(true);
-  }
-
-  function cancel() {
-    setForm(EMPTY_NOTICE_FORM);
-    setFormOpen(false);
-  }
-
-  async function save() {
-    if (!form.name.trim()) { toast.error("Name is required."); return; }
-    if (!form.subject.trim()) { toast.error("Subject is required."); return; }
-    try {
-      await upsert.mutateAsync({
-        id: form.id,
-        name: form.name,
-        subject: form.subject,
-        bodyHtml: form.bodyHtml,
-        isDefault: form.isDefault,
-        templateType: "chemical_application",
-      });
-      toast.success(form.id ? "Template updated." : "Template created.");
-      cancel();
-    } catch {
-      toast.error("Failed to save template.");
-    }
-  }
-
-  async function handleDelete(t: CRMEmailTemplate) {
-    if (!(await confirm({
-      title: `Delete "${t.name}"?`,
-      description: "This cannot be undone.",
-      confirmLabel: "Delete Template",
-      destructive: true,
-    }))) return;
-    try {
-      await deleteMutation.mutateAsync(t.id);
-      toast.success("Template deleted.");
-      if (form.id === t.id) cancel();
-    } catch {
-      toast.error("Failed to delete template.");
-    }
-  }
-
-  async function markDefault(t: CRMEmailTemplate) {
-    try {
-      await upsert.mutateAsync({
-        id: t.id, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml,
-        isDefault: true, templateType: "chemical_application",
-      });
-      toast.success(`"${t.name}" set as default.`);
-    } catch {
-      toast.error("Failed to update default.");
-    }
-  }
-
-  function insertMergeTag(tag: string) {
-    const ta = bodyRef.current;
-    if (!ta) { setForm((f) => ({ ...f, bodyHtml: f.bodyHtml + tag })); return; }
-    const start = ta.selectionStart ?? ta.value.length;
-    const end = ta.selectionEnd ?? ta.value.length;
-    const next = ta.value.slice(0, start) + tag + ta.value.slice(end);
-    setForm((f) => ({ ...f, bodyHtml: next }));
-    requestAnimationFrame(() => {
-      ta.selectionStart = start + tag.length;
-      ta.selectionEnd = start + tag.length;
-      ta.focus();
-    });
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
-          Sent to the client after a chemical application is logged (mirrors the paper notice
-          left on-site).
-        </p>
-        {!formOpen && (
-          <Button size="sm" onClick={openNew}>New Template</Button>
-        )}
-      </div>
-
-      {formOpen && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-800">
-            {form.id ? "Edit Template" : "New Template"}
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="ce-name">Name</Label>
-              <Input
-                id="ce-name"
-                placeholder="e.g. Application Notice"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ce-subject">Subject</Label>
-              <Input
-                id="ce-subject"
-                placeholder="e.g. Notice of Treatment from [companyname]"
-                value={form.subject}
-                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="ce-body">Body (HTML supported)</Label>
-            <textarea
-              id="ce-body"
-              ref={bodyRef}
-              rows={10}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              placeholder="<p>Hi [clientfirstname],</p>"
-              value={form.bodyHtml}
-              onChange={(e) => setForm((f) => ({ ...f, bodyHtml: e.target.value }))}
-            />
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              <span className="text-xs text-slate-400 self-center">Insert:</span>
-              {CHEMICAL_EMAIL_MERGE_TAGS.map(({ tag, label }) => (
-                <button
-                  key={tag}
-                  type="button"
-                  title={label}
-                  onClick={() => insertMergeTag(tag)}
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200 transition-colors font-mono"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="ce-default"
-              checked={form.isDefault}
-              onCheckedChange={(v) => setForm((f) => ({ ...f, isDefault: !!v }))}
-            />
-            <Label htmlFor="ce-default" className="cursor-pointer">Set as default template</Label>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" onClick={save} disabled={upsert.isPending}>
-              {upsert.isPending ? "Saving…" : "Save"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={cancel}>Cancel</Button>
-          </div>
-        </div>
-      )}
-
-      {isLoading && <p className="text-sm text-slate-400">Loading templates…</p>}
-
-      {!isLoading && templates.length === 0 && !formOpen && (
-        <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
-          <p className="text-sm text-slate-400">
-            No email templates yet. Create one to use when sending application notices.
-          </p>
-        </div>
-      )}
-
-      {!isLoading && templates.length > 0 && (
-        <div className="rounded-lg border border-slate-200 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium">Name</th>
-                <th className="px-4 py-2 text-left font-medium hidden sm:table-cell">Subject</th>
-                <th className="px-4 py-2 text-left font-medium">Status</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {templates.map((t) => (
-                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-slate-800">{t.name}</td>
-                  <td className="px-4 py-3 text-slate-500 hidden sm:table-cell max-w-xs truncate">{t.subject}</td>
-                  <td className="px-4 py-3">
-                    {t.isDefault ? (
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">Default</Badge>
-                    ) : (
-                      <button
-                        type="button"
-                        title="Set as default"
-                        onClick={() => markDefault(t)}
-                        className="text-slate-300 hover:text-amber-400 transition-colors"
-                      >
-                        <Star className="h-4 w-4" />
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(t)} title="Edit">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="icon" variant="ghost" className="h-7 w-7 text-red-400 hover:text-red-600"
-                        onClick={() => void handleDelete(t)} title="Delete" disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {confirmDialog}
+    <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
+      <p className="text-sm text-slate-600">
+        Build and edit client notice email templates in <span className="font-medium">Documents</span> — create a
+        document with type &quot;Chemical&quot;, and it&apos;ll show up in the template picker when sending an
+        application notice.
+      </p>
+      <Link href="/crm/settings/documents" className="w-fit">
+        <Button size="sm" variant="outline" className="h-8 text-xs">
+          Go to Documents
+        </Button>
+      </Link>
     </div>
   );
 }

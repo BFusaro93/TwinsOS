@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -25,6 +24,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
+import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
 
@@ -63,14 +64,18 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   const [from, setFrom] = useState<string>(c.from ?? "default");
   const [to, setTo] = useState<string[]>(c.to ?? ["client_primary"]);
   const [subject, setSubject] = useState<string>(c.subject ?? "");
-  const [body, setBody] = useState<string>(c.body ?? "");
+  // The body is stored and sent as HTML. Bodies written before this field
+  // became a rich-text editor are plain text, so run them through the same
+  // converter the send path uses — otherwise their line breaks would vanish
+  // the moment the editor touched them.
+  const [body, setBody] = useState<string>(() => plainTextToHtml(c.body ?? ""));
   const [category, setCategory] = useState<string>(c.category ?? "general");
   const [betweenStart, setBetweenStart] = useState<string>(c.between_start ?? "08:00");
   const [betweenEnd, setBetweenEnd] = useState<string>(c.between_end ?? "18:00");
   const [weekdaysOnly, setWeekdaysOnly] = useState<boolean>(c.send_weekdays_only ?? false);
   const [requireApproval, setRequireApproval] = useState<boolean>(c.require_approval ?? false);
   const [saving, setSaving] = useState(false);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<RichTextEditorHandle>(null);
 
   const [docTemplateId, setDocTemplateId] = useState<string>("");
   const { data: docTemplates = [] } = useDocumentTemplates();
@@ -82,23 +87,12 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   useEffect(() => {
     if (!selectedDocTemplate) return;
     if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
-    setBody(renderBlocksToHtml(selectedDocTemplate.blocks, {}));
+    setBody(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
     setDocTemplateId("");
   }, [selectedDocTemplate]);
 
   function insertMergeTag(tag: string) {
-    const ta = bodyRef.current;
-    if (!ta) {
-      setBody((b) => b + tag);
-      return;
-    }
-    const start = ta.selectionStart ?? ta.value.length;
-    const end = ta.selectionEnd ?? ta.value.length;
-    setBody((b) => b.slice(0, start) + tag + b.slice(end));
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + tag.length, start + tag.length);
-    });
+    bodyRef.current?.insertContent(tag);
   }
 
   function toggleTo(value: string) {
@@ -276,12 +270,16 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                 </div>
               )}
               <Label>Email Body</Label>
-              <Textarea
+              {/* Rich text, matching the invoice and estimate send dialogs.
+                  This was a monospace <textarea> holding the raw HTML, so
+                  picking a saved document dumped a wall of markup at the
+                  person writing the email. */}
+              <RichTextEditor
                 ref={bodyRef}
-                placeholder="Write your email content here…"
-                className="min-h-[300px] font-mono text-sm"
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={setBody}
+                placeholder="Write your email content here…"
+                minHeight={300}
               />
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 <span className="text-[11px] text-slate-400">Insert merge tag:</span>

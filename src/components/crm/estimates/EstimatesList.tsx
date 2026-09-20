@@ -19,7 +19,8 @@ import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import { EstimatesPipelineView } from "./EstimatesPipelineView";
 import { DuplicateEstimateDialog } from "./DuplicateEstimateDialog";
 import { DEFAULT_SUBJECT, DEFAULT_TEMPLATE_BODY } from "./SendEstimateDialog";
-import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
+import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -115,7 +116,15 @@ export function EstimatesList({ clientId }: Props) {
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
-  const { data: emailTemplates } = useEmailTemplates("estimate");
+  // Email content templates live in Documents (doc type "estimate") — same
+  // block-based builder SendEstimateDialog uses for a single-estimate send.
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  const emailTemplates = useMemo(
+    () => allDocTemplates.filter((t) => t.docType === "estimate" && t.status === "active"),
+    [allDocTemplates]
+  );
+  const defaultTemplateId = (emailTemplates.find((t) => t.isDefault) ?? emailTemplates[0])?.id ?? "";
+  const { data: defaultDocTemplate } = useDocumentTemplate(defaultTemplateId);
   const [emailingSelected, setEmailingSelected] = useState(false);
   const [dialogOpen,      setDialogOpen]      = useState(false);
   const [stageFilter,     setStageFilter]     = useState<StageFilter>("all");
@@ -229,10 +238,11 @@ export function EstimatesList({ clientId }: Props) {
     const targets = (estimates ?? []).filter((e) => selectedIds.has(e.id));
     if (targets.length === 0) return;
 
-    const template = emailTemplates?.find((t) => t.isDefault) ?? emailTemplates?.[0];
-    const subject = template?.subject ?? DEFAULT_SUBJECT;
-    const bodyHtml = template?.bodyHtml ?? DEFAULT_TEMPLATE_BODY;
-    const includePdf = template?.includePdf ?? true;
+    const subject = defaultDocTemplate?.subject ?? DEFAULT_SUBJECT;
+    const bodyHtml = defaultDocTemplate
+      ? renderBlocksToHtml(defaultDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true })
+      : DEFAULT_TEMPLATE_BODY;
+    const includePdf = defaultDocTemplate?.includePdf ?? true;
 
     setEmailingSelected(true);
     try {
@@ -259,6 +269,18 @@ export function EstimatesList({ clientId }: Props) {
     } finally {
       setEmailingSelected(false);
     }
+  }
+
+  // Opens one combined PDF of every selected estimate's real
+  // server-rendered page and prints it — a single tab instead of one popup
+  // per estimate.
+  function bulkPrintSelected() {
+    const targets = (estimates ?? []).filter((e) => selectedIds.has(e.id));
+    if (targets.length === 0) return;
+    const ids = targets.map((e) => e.id).join(",");
+    const win = window.open(`/api/crm/estimates/bulk-pdf?ids=${ids}`, "_blank");
+    if (win) win.addEventListener("load", () => win.print(), { once: true });
+    toast.info(`Opening ${targets.length} estimate${targets.length !== 1 ? "s" : ""} to print…`);
   }
 
   const visibleColumns = clientId
@@ -394,7 +416,7 @@ export function EstimatesList({ clientId }: Props) {
               )}
               <DropdownMenuItem
                 disabled={!someSelected}
-                onSelect={() => { toast.info("Opening print view…"); window.print(); }}
+                onSelect={bulkPrintSelected}
               >
                 Print Selected
               </DropdownMenuItem>

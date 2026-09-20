@@ -8,7 +8,7 @@ import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { FeatureGuard } from "@/components/shared/FeatureGuard";
-import { useUIStore, useCurrentUserStore } from "@/stores";
+import { useUIStore, useCurrentUserStore, SidebarDrawerProvider } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 
@@ -73,20 +73,24 @@ export default function ReportsLayout({
       <RealtimeSync />
       <SettingsLoader />
 
-      {/* Desktop sidebar */}
-      <div className="hidden h-full md:flex">
+      {/* Docked sidebar — lg+ only. Below that (phones and portrait tablets)
+          the 260px rail leaves too little room for the content beside it, so it
+          becomes the drawer below. */}
+      <div className="hidden h-full lg:flex">
         <ReportsSidebar />
       </div>
 
-      {/* Mobile sidebar drawer */}
+      {/* Drawer sidebar — phones and portrait tablets */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => setSidebarOpen(false)}
           />
           <div className="relative z-10 h-full w-[260px]">
-            <ReportsSidebar />
+            <SidebarDrawerProvider>
+              <ReportsSidebar />
+            </SidebarDrawerProvider>
           </div>
         </div>
       )}

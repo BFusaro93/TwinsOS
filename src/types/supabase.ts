@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       api_key_rate_limits: {
@@ -1498,6 +1473,7 @@ export type Database = {
           deleted_at: string | null
           display_name: string
           do_not_market: boolean
+          email_bounced_at: string | null
           first_name: string | null
           gate_lock_code: string | null
           gross_sqft: number | null
@@ -1573,6 +1549,7 @@ export type Database = {
           deleted_at?: string | null
           display_name: string
           do_not_market?: boolean
+          email_bounced_at?: string | null
           first_name?: string | null
           gate_lock_code?: string | null
           gross_sqft?: number | null
@@ -1648,6 +1625,7 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string
           do_not_market?: boolean
+          email_bounced_at?: string | null
           first_name?: string | null
           gate_lock_code?: string | null
           gross_sqft?: number | null
@@ -2314,6 +2292,7 @@ export type Database = {
           re_entry_interval_snapshot: string | null
           restricted_product_snapshot: boolean | null
           solution_amount: number | null
+          solution_unit_of_measure_id: string | null
           target_ids: string[]
           temperature: number | null
           unit_of_measure_id: string | null
@@ -2346,6 +2325,7 @@ export type Database = {
           re_entry_interval_snapshot?: string | null
           restricted_product_snapshot?: boolean | null
           solution_amount?: number | null
+          solution_unit_of_measure_id?: string | null
           target_ids?: string[]
           temperature?: number | null
           unit_of_measure_id?: string | null
@@ -2378,6 +2358,7 @@ export type Database = {
           re_entry_interval_snapshot?: string | null
           restricted_product_snapshot?: boolean | null
           solution_amount?: number | null
+          solution_unit_of_measure_id?: string | null
           target_ids?: string[]
           temperature?: number | null
           unit_of_measure_id?: string | null
@@ -2452,6 +2433,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_chemical_applications_solution_unit_of_measure_id_fkey"
+            columns: ["solution_unit_of_measure_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_chemical_applications_unit_of_measure_id_fkey"
             columns: ["unit_of_measure_id"]
             isOneToOne: false
@@ -2483,6 +2471,7 @@ export type Database = {
       }
       crm_chemical_lookup_items: {
         Row: {
+          base_factor: number | null
           created_at: string
           deleted_at: string | null
           id: string
@@ -2491,9 +2480,11 @@ export type Database = {
           name: string
           org_id: string
           sort_order: number
+          unit_class: string | null
           updated_at: string
         }
         Insert: {
+          base_factor?: number | null
           created_at?: string
           deleted_at?: string | null
           id?: string
@@ -2502,9 +2493,11 @@ export type Database = {
           name: string
           org_id?: string
           sort_order?: number
+          unit_class?: string | null
           updated_at?: string
         }
         Update: {
+          base_factor?: number | null
           created_at?: string
           deleted_at?: string | null
           id?: string
@@ -2513,6 +2506,7 @@ export type Database = {
           name?: string
           org_id?: string
           sort_order?: number
+          unit_class?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -3201,6 +3195,68 @@ export type Database = {
           },
           {
             foreignKeyName: "crm_crew_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_crew_route_order: {
+        Row: {
+          crew_id: string
+          day_of_week: number
+          id: string
+          job_id: string
+          org_id: string
+          position: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          crew_id: string
+          day_of_week: number
+          id?: string
+          job_id: string
+          org_id?: string
+          position: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          crew_id?: string
+          day_of_week?: number
+          id?: string
+          job_id?: string
+          org_id?: string
+          position?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_crew_route_order_crew_id_fkey"
+            columns: ["crew_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_route_order_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_route_order_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_route_order_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -4155,6 +4211,20 @@ export type Database = {
             referencedRelation: "crm_tickets"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_form_responses_related_ticket_id_fkey"
+            columns: ["related_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_form_responses_related_ticket_id_fkey"
+            columns: ["related_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_upsells"
+            referencedColumns: ["id"]
+          },
         ]
       }
       crm_form_rules: {
@@ -4536,6 +4606,7 @@ export type Database = {
           pending_payment_method: string | null
           po_number: string | null
           preferred_payment_method: string | null
+          project_id: string | null
           qbo_invoice_id: string | null
           qbo_sync_attempted_at: string | null
           qbo_sync_error: string | null
@@ -4579,6 +4650,7 @@ export type Database = {
           pending_payment_method?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
+          project_id?: string | null
           qbo_invoice_id?: string | null
           qbo_sync_attempted_at?: string | null
           qbo_sync_error?: string | null
@@ -4622,6 +4694,7 @@ export type Database = {
           pending_payment_method?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
+          project_id?: string | null
           qbo_invoice_id?: string | null
           qbo_sync_attempted_at?: string | null
           qbo_sync_error?: string | null
@@ -4718,6 +4791,20 @@ export type Database = {
             columns: ["pdf_template_id"]
             isOneToOne: false
             referencedRelation: "crm_invoice_pdf_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_projects_wip"
             referencedColumns: ["id"]
           },
           {
@@ -4841,8 +4928,10 @@ export type Database = {
           invoice_line_item_id: string | null
           invoice_qty: number | null
           job_id: string
+          job_service_id: string | null
           notes: string | null
           org_id: string
+          planned_qty: number | null
           product_id: string | null
           product_name: string
           qty: number
@@ -4860,8 +4949,10 @@ export type Database = {
           invoice_line_item_id?: string | null
           invoice_qty?: number | null
           job_id: string
+          job_service_id?: string | null
           notes?: string | null
           org_id?: string
+          planned_qty?: number | null
           product_id?: string | null
           product_name: string
           qty?: number
@@ -4879,8 +4970,10 @@ export type Database = {
           invoice_line_item_id?: string | null
           invoice_qty?: number | null
           job_id?: string
+          job_service_id?: string | null
           notes?: string | null
           org_id?: string
+          planned_qty?: number | null
           product_id?: string | null
           product_name?: string
           qty?: number
@@ -4917,6 +5010,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["job_service_id"]
           },
           {
             foreignKeyName: "crm_job_products_org_id_fkey"
@@ -5074,6 +5181,7 @@ export type Database = {
           end_time: string | null
           id: string
           invoice_description: string | null
+          is_high_priority: boolean | null
           job_comments: Json
           job_id: string
           job_service_id: string | null
@@ -5081,6 +5189,7 @@ export type Database = {
           men_count: number
           notes_to_client: string | null
           notes_to_crew: string | null
+          notes_to_crew_updated_at: string | null
           order_num: number | null
           org_id: string
           paused_at: string | null
@@ -5118,6 +5227,7 @@ export type Database = {
           end_time?: string | null
           id?: string
           invoice_description?: string | null
+          is_high_priority?: boolean | null
           job_comments?: Json
           job_id: string
           job_service_id?: string | null
@@ -5125,6 +5235,7 @@ export type Database = {
           men_count?: number
           notes_to_client?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           order_num?: number | null
           org_id?: string
           paused_at?: string | null
@@ -5162,6 +5273,7 @@ export type Database = {
           end_time?: string | null
           id?: string
           invoice_description?: string | null
+          is_high_priority?: boolean | null
           job_comments?: Json
           job_id?: string
           job_service_id?: string | null
@@ -5169,6 +5281,7 @@ export type Database = {
           men_count?: number
           notes_to_client?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           order_num?: number | null
           org_id?: string
           paused_at?: string | null
@@ -5299,6 +5412,7 @@ export type Database = {
           invoice_separately: boolean | null
           invoice_type: string | null
           is_complete: boolean | null
+          is_high_priority: boolean
           job_number: number
           job_type: string
           last_service_date: string | null
@@ -5308,6 +5422,7 @@ export type Database = {
           map_code: string | null
           notes: string | null
           notes_to_crew: string | null
+          notes_to_crew_updated_at: string | null
           org_id: string
           package_discount: string | null
           package_id: string | null
@@ -5374,6 +5489,7 @@ export type Database = {
           invoice_separately?: boolean | null
           invoice_type?: string | null
           is_complete?: boolean | null
+          is_high_priority?: boolean
           job_number?: number
           job_type?: string
           last_service_date?: string | null
@@ -5383,6 +5499,7 @@ export type Database = {
           map_code?: string | null
           notes?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           org_id?: string
           package_discount?: string | null
           package_id?: string | null
@@ -5449,6 +5566,7 @@ export type Database = {
           invoice_separately?: boolean | null
           invoice_type?: string | null
           is_complete?: boolean | null
+          is_high_priority?: boolean
           job_number?: number
           job_type?: string
           last_service_date?: string | null
@@ -5458,6 +5576,7 @@ export type Database = {
           map_code?: string | null
           notes?: string | null
           notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
           org_id?: string
           package_discount?: string | null
           package_id?: string | null
@@ -6113,6 +6232,171 @@ export type Database = {
           },
         ]
       }
+      crm_price_adjustment_lines: {
+        Row: {
+          adjustment_id: string
+          client_id: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          job_id: string | null
+          label: string
+          new_rate_cents: number
+          old_rate_cents: number
+          org_id: string
+          revert_skipped: boolean
+        }
+        Insert: {
+          adjustment_id: string
+          client_id?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          job_id?: string | null
+          label: string
+          new_rate_cents: number
+          old_rate_cents: number
+          org_id?: string
+          revert_skipped?: boolean
+        }
+        Update: {
+          adjustment_id?: string
+          client_id?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          job_id?: string | null
+          label?: string
+          new_rate_cents?: number
+          old_rate_cents?: number
+          org_id?: string
+          revert_skipped?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_price_adjustment_lines_adjustment_id_fkey"
+            columns: ["adjustment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_price_adjustments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_price_adjustment_lines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_price_adjustment_lines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_price_adjustment_lines_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_price_adjustment_lines_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_price_adjustment_lines_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_price_adjustments: {
+        Row: {
+          amount: number
+          applied_at: string
+          applied_by: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          delta_cents: number
+          id: string
+          line_count: number
+          method: string
+          name: string
+          notes: string | null
+          org_id: string
+          reverted_at: string | null
+          reverted_by: string | null
+          rounding: string
+          scope: Json
+          status: string
+          targets: string[]
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          applied_at?: string
+          applied_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          delta_cents?: number
+          id?: string
+          line_count?: number
+          method: string
+          name: string
+          notes?: string | null
+          org_id?: string
+          reverted_at?: string | null
+          reverted_by?: string | null
+          rounding: string
+          scope?: Json
+          status?: string
+          targets: string[]
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          applied_at?: string
+          applied_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          delta_cents?: number
+          id?: string
+          line_count?: number
+          method?: string
+          name?: string
+          notes?: string | null
+          org_id?: string
+          reverted_at?: string | null
+          reverted_by?: string | null
+          rounding?: string
+          scope?: Json
+          status?: string
+          targets?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_price_adjustments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_property_custom_field_values: {
         Row: {
           field_def_id: string
@@ -6126,7 +6410,7 @@ export type Database = {
         Insert: {
           field_def_id: string
           id?: string
-          org_id: string
+          org_id?: string
           property_id: string
           updated_at?: string
           value_number?: number | null
@@ -6393,6 +6677,20 @@ export type Database = {
             referencedRelation: "crm_tickets"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_sales_meetings_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_upsells"
+            referencedColumns: ["id"]
+          },
         ]
       }
       crm_saved_graphics: {
@@ -6634,6 +6932,20 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "crm_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_upsells"
             referencedColumns: ["id"]
           },
         ]
@@ -7147,7 +7459,7 @@ export type Database = {
           from_val?: number
           id?: string
           is_tail_row?: boolean
-          org_id: string
+          org_id?: string
           rate_cents?: number
           service_id: string
           sort_order?: number
@@ -7227,6 +7539,7 @@ export type Database = {
           rate_matrix_calc: string | null
           rate_matrix_field: string | null
           service_mode: string
+          show_in_field_upsells: boolean
           show_in_snow_dispatch: boolean
           target_rate_cents: number
           target_rate_cents_per_hr: number
@@ -7236,6 +7549,7 @@ export type Database = {
           track_chemicals: boolean
           unit: string | null
           updated_at: string
+          upsell_pitch: string | null
         }
         Insert: {
           budget_method?: string
@@ -7267,6 +7581,7 @@ export type Database = {
           rate_matrix_calc?: string | null
           rate_matrix_field?: string | null
           service_mode?: string
+          show_in_field_upsells?: boolean
           show_in_snow_dispatch?: boolean
           target_rate_cents?: number
           target_rate_cents_per_hr?: number
@@ -7276,6 +7591,7 @@ export type Database = {
           track_chemicals?: boolean
           unit?: string | null
           updated_at?: string
+          upsell_pitch?: string | null
         }
         Update: {
           budget_method?: string
@@ -7307,6 +7623,7 @@ export type Database = {
           rate_matrix_calc?: string | null
           rate_matrix_field?: string | null
           service_mode?: string
+          show_in_field_upsells?: boolean
           show_in_snow_dispatch?: boolean
           target_rate_cents?: number
           target_rate_cents_per_hr?: number
@@ -7316,6 +7633,7 @@ export type Database = {
           track_chemicals?: boolean
           unit?: string | null
           updated_at?: string
+          upsell_pitch?: string | null
         }
         Relationships: [
           {
@@ -7615,6 +7933,20 @@ export type Database = {
             referencedRelation: "crm_tickets"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_ticket_links_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ticket_links_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_upsells"
+            referencedColumns: ["id"]
+          },
         ]
       }
       crm_tickets: {
@@ -7638,6 +7970,8 @@ export type Database = {
           ticket_number: number
           type: string
           updated_at: string
+          upsell_service_id: string | null
+          visible_to_client: boolean
         }
         Insert: {
           assigned_to?: string | null
@@ -7659,6 +7993,8 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
+          upsell_service_id?: string | null
+          visible_to_client?: boolean
         }
         Update: {
           assigned_to?: string | null
@@ -7680,6 +8016,8 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
+          upsell_service_id?: string | null
+          visible_to_client?: boolean
         }
         Relationships: [
           {
@@ -7722,6 +8060,20 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_upsell_service_id_fkey"
+            columns: ["upsell_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_upsell_service_id_fkey"
+            columns: ["upsell_service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
             referencedColumns: ["id"]
           },
         ]
@@ -8328,6 +8680,7 @@ export type Database = {
           budget_method: string
           budgeted_hours: number
           calc_type: number
+          complexity_bps: number
           cost_cents: number
           created_at: string
           deleted_at: string | null
@@ -8366,6 +8719,7 @@ export type Database = {
           budget_method?: string
           budgeted_hours?: number
           calc_type?: number
+          complexity_bps?: number
           cost_cents?: number
           created_at?: string
           deleted_at?: string | null
@@ -8404,6 +8758,7 @@ export type Database = {
           budget_method?: string
           budgeted_hours?: number
           calc_type?: number
+          complexity_bps?: number
           cost_cents?: number
           created_at?: string
           deleted_at?: string | null
@@ -8487,15 +8842,17 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
-          estimate_id: string
+          estimate_id: string | null
           id: string
           invoice_id: string | null
           milestone_type: string
           milestone_value: number
           name: string
           org_id: string
+          project_id: string | null
           sort_order: number
           status: string
+          target_date: string | null
           updated_at: string
         }
         Insert: {
@@ -8503,15 +8860,17 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
-          estimate_id: string
+          estimate_id?: string | null
           id?: string
           invoice_id?: string | null
           milestone_type?: string
           milestone_value?: number
           name: string
           org_id?: string
+          project_id?: string | null
           sort_order?: number
           status?: string
+          target_date?: string | null
           updated_at?: string
         }
         Update: {
@@ -8519,15 +8878,17 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
-          estimate_id?: string
+          estimate_id?: string | null
           id?: string
           invoice_id?: string | null
           milestone_type?: string
           milestone_value?: number
           name?: string
           org_id?: string
+          project_id?: string | null
           sort_order?: number
           status?: string
+          target_date?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -8571,6 +8932,20 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_milestones_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_milestones_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_projects_wip"
             referencedColumns: ["id"]
           },
         ]
@@ -8941,8 +9316,16 @@ export type Database = {
           deleted_at: string | null
           deposit_collected_at: string | null
           deposit_collected_cents: number
+          deposit_failed_at: string | null
+          deposit_failed_cents: number | null
+          deposit_failed_method: string | null
+          deposit_failed_reason: string | null
           deposit_method: string | null
           deposit_notes: string | null
+          deposit_pending_at: string | null
+          deposit_pending_cents: number | null
+          deposit_pending_intent_id: string | null
+          deposit_pending_method: string | null
           deposit_reference: string | null
           deposit_required_cents: number
           description: string
@@ -8953,6 +9336,7 @@ export type Database = {
           est_document: string
           estimate_date: string
           estimate_number: number
+          expiry_notified_at: string | null
           gross_profit_cents: number
           id: string
           installment_day_of_month: number | null
@@ -8970,6 +9354,7 @@ export type Database = {
           portal_signature_name: string | null
           portal_user_id: string | null
           probability_bps: number
+          property_id: string | null
           reason: string | null
           revenue_cents: number
           sales_rep_id: string | null
@@ -8986,6 +9371,7 @@ export type Database = {
           total_budgeted_hours: number
           total_cents: number
           updated_at: string
+          upsell_ticket_id: string | null
           valid_until_date: string | null
           work_order_number: string | null
         }
@@ -8998,8 +9384,16 @@ export type Database = {
           deleted_at?: string | null
           deposit_collected_at?: string | null
           deposit_collected_cents?: number
+          deposit_failed_at?: string | null
+          deposit_failed_cents?: number | null
+          deposit_failed_method?: string | null
+          deposit_failed_reason?: string | null
           deposit_method?: string | null
           deposit_notes?: string | null
+          deposit_pending_at?: string | null
+          deposit_pending_cents?: number | null
+          deposit_pending_intent_id?: string | null
+          deposit_pending_method?: string | null
           deposit_reference?: string | null
           deposit_required_cents?: number
           description?: string
@@ -9010,6 +9404,7 @@ export type Database = {
           est_document?: string
           estimate_date: string
           estimate_number?: number
+          expiry_notified_at?: string | null
           gross_profit_cents?: number
           id?: string
           installment_day_of_month?: number | null
@@ -9027,6 +9422,7 @@ export type Database = {
           portal_signature_name?: string | null
           portal_user_id?: string | null
           probability_bps?: number
+          property_id?: string | null
           reason?: string | null
           revenue_cents?: number
           sales_rep_id?: string | null
@@ -9043,6 +9439,7 @@ export type Database = {
           total_budgeted_hours?: number
           total_cents?: number
           updated_at?: string
+          upsell_ticket_id?: string | null
           valid_until_date?: string | null
           work_order_number?: string | null
         }
@@ -9055,8 +9452,16 @@ export type Database = {
           deleted_at?: string | null
           deposit_collected_at?: string | null
           deposit_collected_cents?: number
+          deposit_failed_at?: string | null
+          deposit_failed_cents?: number | null
+          deposit_failed_method?: string | null
+          deposit_failed_reason?: string | null
           deposit_method?: string | null
           deposit_notes?: string | null
+          deposit_pending_at?: string | null
+          deposit_pending_cents?: number | null
+          deposit_pending_intent_id?: string | null
+          deposit_pending_method?: string | null
           deposit_reference?: string | null
           deposit_required_cents?: number
           description?: string
@@ -9067,6 +9472,7 @@ export type Database = {
           est_document?: string
           estimate_date?: string
           estimate_number?: number
+          expiry_notified_at?: string | null
           gross_profit_cents?: number
           id?: string
           installment_day_of_month?: number | null
@@ -9084,6 +9490,7 @@ export type Database = {
           portal_signature_name?: string | null
           portal_user_id?: string | null
           probability_bps?: number
+          property_id?: string | null
           reason?: string | null
           revenue_cents?: number
           sales_rep_id?: string | null
@@ -9100,6 +9507,7 @@ export type Database = {
           total_budgeted_hours?: number
           total_cents?: number
           updated_at?: string
+          upsell_ticket_id?: string | null
           valid_until_date?: string | null
           work_order_number?: string | null
         }
@@ -9133,6 +9541,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "estimates_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "client_properties"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "estimates_sales_rep_id_fkey"
             columns: ["sales_rep_id"]
             isOneToOne: false
@@ -9158,6 +9573,27 @@ export type Database = {
             columns: ["stage_id"]
             isOneToOne: false
             referencedRelation: "crm_estimate_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_upsell_ticket_id_fkey"
+            columns: ["upsell_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "crm_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_upsell_ticket_id_fkey"
+            columns: ["upsell_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_upsell_ticket_id_fkey"
+            columns: ["upsell_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_upsells"
             referencedColumns: ["id"]
           },
         ]
@@ -9253,6 +9689,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      financial_periods_bak_20260915: {
+        Row: {
+          created_at: string | null
+          data: Json | null
+          id: string | null
+          org_id: string | null
+          period_month: string | null
+          record_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data?: Json | null
+          id?: string | null
+          org_id?: string | null
+          period_month?: string | null
+          record_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json | null
+          id?: string | null
+          org_id?: string | null
+          period_month?: string | null
+          record_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       goods_receipt_lines: {
         Row: {
@@ -11502,6 +11968,7 @@ export type Database = {
           photo_module_access: boolean
           role: string
           status: string
+          ui_prefs: Json
           updated_at: string
         }
         Insert: {
@@ -11515,6 +11982,7 @@ export type Database = {
           photo_module_access?: boolean
           role?: string
           status?: string
+          ui_prefs?: Json
           updated_at?: string
         }
         Update: {
@@ -11528,6 +11996,7 @@ export type Database = {
           photo_module_access?: boolean
           role?: string
           status?: string
+          ui_prefs?: Json
           updated_at?: string
         }
         Relationships: [
@@ -11536,6 +12005,108 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_change_orders: {
+        Row: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by: string | null
+          billing_allocation: Json | null
+          billing_treatment: string
+          client_reference: string | null
+          co_number: number | null
+          cost_impact_cents: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          org_id: string
+          project_id: string
+          requested_date: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          billing_allocation?: Json | null
+          billing_treatment?: string
+          client_reference?: string | null
+          co_number?: number | null
+          cost_impact_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          org_id?: string
+          project_id: string
+          requested_date?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          billing_allocation?: Json | null
+          billing_treatment?: string
+          client_reference?: string | null
+          co_number?: number | null
+          cost_impact_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          org_id?: string
+          project_id?: string
+          requested_date?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_change_orders_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_change_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_change_orders_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_change_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_change_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_projects_wip"
             referencedColumns: ["id"]
           },
         ]
@@ -11736,6 +12307,7 @@ export type Database = {
           name: string
           notes: string | null
           org_id: string
+          original_contract_price: number
           progress_pct: number
           start_date: string | null
           state: string
@@ -11764,6 +12336,7 @@ export type Database = {
           name: string
           notes?: string | null
           org_id?: string
+          original_contract_price?: number
           progress_pct?: number
           start_date?: string | null
           state?: string
@@ -11792,6 +12365,7 @@ export type Database = {
           name?: string
           notes?: string | null
           org_id?: string
+          original_contract_price?: number
           progress_pct?: number
           start_date?: string | null
           state?: string
@@ -12440,6 +13014,20 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "crm_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_contributors_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_contributors_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_upsells"
             referencedColumns: ["id"]
           },
         ]
@@ -13135,6 +13723,7 @@ export type Database = {
           service_state: string | null
           service_zip: string | null
           solution_amount: number | null
+          solution_unit_of_measure: string | null
           targets: string | null
           temperature: number | null
           unit_of_measure: string | null
@@ -13646,7 +14235,9 @@ export type Database = {
       }
       rpt_projects_wip: {
         Row: {
+          approved_changes_cents: number | null
           billed_cents: number | null
+          change_order_count: number | null
           client_name: string | null
           contract_cents: number | null
           cost_to_date_cents: number | null
@@ -13658,6 +14249,7 @@ export type Database = {
           estimated_gp_pct: number | null
           id: string | null
           name: string | null
+          original_contract_cents: number | null
           over_under_billed_cents: number | null
           pct_complete: number | null
           remaining_to_bill_cents: number | null
@@ -13726,6 +14318,23 @@ export type Database = {
         }
         Relationships: []
       }
+      rpt_tickets: {
+        Row: {
+          assigned_to: string | null
+          category: string | null
+          client_name: string | null
+          closed_at: string | null
+          created_at: string | null
+          due_date: string | null
+          id: string | null
+          priority: string | null
+          status: string | null
+          subject: string | null
+          ticket_number: number | null
+          type: string | null
+        }
+        Relationships: []
+      }
       rpt_timesheets: {
         Row: {
           break_minutes: number | null
@@ -13741,6 +14350,25 @@ export type Database = {
           member_name: string | null
           visit_status: string | null
           work_date: string | null
+        }
+        Relationships: []
+      }
+      rpt_upsells: {
+        Row: {
+          client_name: string | null
+          crew_name: string | null
+          crew_note: string | null
+          estimate_number: number | null
+          estimate_stage: string | null
+          estimate_total_cents: number | null
+          id: string | null
+          outcome: string | null
+          service_suggested: string | null
+          submitted_at: string | null
+          submitted_by: string | null
+          ticket_number: number | null
+          ticket_status: string | null
+          won_revenue_cents: number | null
         }
         Relationships: []
       }
@@ -13845,6 +14473,13 @@ export type Database = {
           was_newly_paid: boolean
         }[]
       }
+      approve_change_order: {
+        Args: { p_change_order_id: string; p_treatment?: string }
+        Returns: {
+          change_order_id: string
+          new_contract_cents: number
+        }[]
+      }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
       auth_rate_limit_hit: {
         Args: { p_key: string; p_limit: number; p_window_start: string }
@@ -13863,6 +14498,47 @@ export type Database = {
       }
       create_secret_for_org_twilio_key: {
         Args: { p_secret: string }
+        Returns: string
+      }
+      crm_adjust_price_cents: {
+        Args: {
+          p_amount: number
+          p_cents: number
+          p_method: string
+          p_rounding: string
+        }
+        Returns: number
+      }
+      crm_append_visit_job_comment: {
+        Args: {
+          p_author_id: string
+          p_author_name: string
+          p_comment_id: string
+          p_created_at: string
+          p_text: string
+          p_visit_id: string
+        }
+        Returns: Json
+      }
+      crm_apply_credit_to_invoice: {
+        Args: {
+          p_amount_cents: number
+          p_invoice_id: string
+          p_payment_id: string
+        }
+        Returns: number
+      }
+      crm_apply_price_adjustment: {
+        Args: {
+          p_amount: number
+          p_method: string
+          p_name: string
+          p_notes?: string
+          p_rounding: string
+          p_scope: Json
+          p_selected?: Json
+          p_targets: string[]
+        }
         Returns: string
       }
       crm_kpi_scorecard_ensure: {
@@ -13884,6 +14560,24 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      crm_price_adjustment_candidates: {
+        Args: {
+          p_amount: number
+          p_method: string
+          p_rounding: string
+          p_scope: Json
+          p_targets: string[]
+        }
+        Returns: {
+          client_id: string
+          entity_id: string
+          entity_type: string
+          job_id: string
+          label: string
+          new_rate_cents: number
+          old_rate_cents: number
+        }[]
+      }
       crm_recompute_job_actual_hours: {
         Args: { p_job_id: string }
         Returns: undefined
@@ -13895,6 +14589,13 @@ export type Database = {
       crm_recompute_job_rate_cents: {
         Args: { p_job_id: string }
         Returns: undefined
+      }
+      crm_revert_price_adjustment: {
+        Args: { p_id: string }
+        Returns: {
+          reverted: number
+          skipped: number
+        }[]
       }
       crm_run_report: {
         Args: {
@@ -13909,6 +14610,7 @@ export type Database = {
         }
         Returns: Json
       }
+      crm_save_route_order: { Args: { p_visit_ids: string[] }; Returns: number }
       decrement_cost_layers: {
         Args: { p_layers: Json; p_qty: number }
         Returns: Json
@@ -13917,8 +14619,24 @@ export type Database = {
         Args: { p_job_product_id: string }
         Returns: undefined
       }
+      fn_recalc_project_contract_price: {
+        Args: { p_project_id: string }
+        Returns: undefined
+      }
+      get_auth_user_id_by_email: { Args: { p_email: string }; Returns: string }
       get_org_twilio_api_secret: { Args: { p_org_id: string }; Returns: string }
       get_org_twilio_auth_token: { Args: { p_org_id: string }; Returns: string }
+      get_portal_invite_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          accepted_at: string
+          client_id: string
+          email: string
+          expires_at: string
+          id: string
+          org_id: string
+        }[]
+      }
       has_crm_access: { Args: never; Returns: boolean }
       has_settings_permission: { Args: { p_key: string }; Returns: boolean }
       increment_api_key_rate_limit: {
@@ -13946,6 +14664,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      is_client_portal_user: { Args: never; Returns: boolean }
       is_staff: { Args: { uid: string }; Returns: boolean }
       list_organizations_for_staff: {
         Args: never
@@ -13954,6 +14673,7 @@ export type Database = {
           name: string
         }[]
       }
+      my_crew_ids: { Args: never; Returns: string[] }
       my_org_id: { Args: never; Returns: string }
       my_role: { Args: never; Returns: string }
       next_damage_case_number: { Args: never; Returns: string }
@@ -14012,10 +14732,30 @@ export type Database = {
         Args: { p_route_id: string; p_stops: Json }
         Returns: undefined
       }
+      reverse_change_order: {
+        Args: { p_change_order_id: string; p_delete?: boolean }
+        Returns: {
+          change_order_id: string
+          new_contract_cents: number
+        }[]
+      }
+      server_insert_audit: {
+        Args: {
+          p_action: string
+          p_created_by?: string
+          p_description: string
+          p_org_id: string
+          p_record_id: string
+          p_record_type: string
+          p_user_name?: string
+        }
+        Returns: undefined
+      }
       set_job_product_status: {
         Args: { p_job_product_id: string; p_new_status: string }
         Returns: undefined
       }
+      set_ui_pref: { Args: { p_key: string; p_value: Json }; Returns: Json }
       settings_permission_for_list_name: {
         Args: { p_list_name: string }
         Returns: string
@@ -14165,10 +14905,8 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
 } as const
+

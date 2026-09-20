@@ -208,7 +208,7 @@ export function useUpdateGoodsReceipt() {
           : { data: [] as { id: string; quantity: number }[] };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: otherLines } = poLineItemIds.length > 0
-          ? await (supabase as any)
+          ? await supabase
               .from("goods_receipt_lines")
               .select("po_line_item_id, quantity_received")
               .in("po_line_item_id", poLineItemIds)
@@ -361,7 +361,8 @@ export function useUpdateGoodsReceipt() {
           headerPatch.notes = input.notes;
         }
 
-        await supabase.from("goods_receipts").update(headerPatch).eq("id", input.id);
+        // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+        await supabase.from("goods_receipts").update(headerPatch as never).eq("id", input.id);
       }
 
       // Write audit entries for quantity changes via SECURITY DEFINER RPC

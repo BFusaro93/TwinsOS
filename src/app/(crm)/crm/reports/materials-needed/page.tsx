@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, ShoppingCart, FileText } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, ShoppingCart, FileText } from "lucide-react";
 import { NewRequisitionDialog } from "@/components/po/NewRequisitionDialog";
 import type { PrefillItem } from "@/components/po/NewRequisitionDialog";
 import { NewPODialog } from "@/components/po/NewPODialog";
@@ -20,6 +20,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function fmtQty(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
+/** A quantity is only meaningful next to its unit — chemical rows carry one,
+ *  non-chemical rows are already in the product's own stock unit. */
+function fmtQtyWithUnit(n: number, unitName: string | null) {
+  return unitName ? `${fmtQty(n)} ${unitName}` : fmtQty(n);
 }
 
 function fmtDate(d: string | null) {
@@ -46,7 +52,9 @@ export default function MaterialsNeededReportPage() {
   });
 
   const allRows = data?.rows ?? [];
-  const rows = onlyShortfalls ? allRows.filter((r) => r.shortfall < 0) : allRows;
+  // A row whose shortfall couldn't be computed is not "fine" — it's unknown,
+  // so it stays visible under the shortfalls-only filter.
+  const rows = onlyShortfalls ? allRows.filter((r) => r.shortfall == null || r.shortfall < 0) : allRows;
 
   function toggleRow(productId: string) {
     setSelected((prev) => {
@@ -66,10 +74,17 @@ export default function MaterialsNeededReportPage() {
     });
   }
 
-  const selectedRows = rows.filter((r) => selected.has(r.productId));
+  /** Only rows with a computed shortfall can be ordered from here — see
+   *  MaterialsNeededRow.shortfall for why an unknown one must not become a
+   *  purchase-order quantity. */
+  function isOrderable(r: MaterialsNeededRow): boolean {
+    return r.shortfall != null && r.shortfall < 0;
+  }
+
+  const selectedRows = rows.filter((r) => selected.has(r.productId) && isOrderable(r));
 
   function buildQuantity(r: MaterialsNeededRow) {
-    return Math.max(1, Math.ceil(-r.shortfall));
+    return Math.max(1, Math.ceil(-(r.shortfall ?? 0)));
   }
 
   function openRequisition() {
@@ -146,7 +161,8 @@ export default function MaterialsNeededReportPage() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const isShort = r.shortfall < 0;
+                  const isShort = r.shortfall != null && r.shortfall < 0;
+                  const orderable = isOrderable(r);
                   const isOpen = expanded.has(r.productId);
                   return (
                     <Fragment key={r.productId}>
@@ -155,7 +171,7 @@ export default function MaterialsNeededReportPage() {
                           <Checkbox
                             checked={selected.has(r.productId)}
                             onCheckedChange={() => toggleRow(r.productId)}
-                            disabled={!isShort}
+                            disabled={!orderable}
                           />
                         </td>
                         <td className="px-3 py-2 text-center">
@@ -165,12 +181,34 @@ export default function MaterialsNeededReportPage() {
                         </td>
                         <td className="px-3 py-2 font-medium text-slate-800">{r.productName}</td>
                         <td className="px-3 py-2 text-slate-500">{CATEGORY_LABELS[r.category] ?? r.category}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{fmtQty(r.neededQty)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                          {fmtQtyWithUnit(r.neededQty, r.neededUnitName)}
+                          {r.unestimatedJobs > 0 && (
+                            <span
+                              className="block text-[10px] font-normal text-amber-700"
+                              title="These jobs have no usable application rate or no measured area, so their demand isn't included."
+                            >
+                              +{r.unestimatedJobs} job{r.unestimatedJobs !== 1 ? "s" : ""} not estimated
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtQty(r.onHand)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtQty(r.onOrder)}</td>
-                        <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", isShort ? "text-red-600" : "text-green-600")}>
-                          {fmtQty(r.shortfall)}
-                        </td>
+                        {r.shortfall != null ? (
+                          <td className={cn("px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap", isShort ? "text-red-600" : "text-green-600")}>
+                            {fmtQtyWithUnit(r.shortfall, r.neededUnitName)}
+                          </td>
+                        ) : (
+                          <td className="px-3 py-2 text-right">
+                            <span
+                              className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+                              title="This product's demand is stated in a unit that can't be converted to the unit it's stocked in, so it can't be differenced against stock. Fix the units on its application rate."
+                            >
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              Unit mismatch
+                            </span>
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(r.nextNeededBy)}</td>
                       </tr>
                       {isOpen && (
@@ -186,7 +224,7 @@ export default function MaterialsNeededReportPage() {
                                 <div key={j.jobId} className="flex items-center justify-between text-xs text-slate-600">
                                   <span>{j.jobName}</span>
                                   <span className="tabular-nums">
-                                    {fmtQty(j.qty)} · {fmtDate(j.neededBy)}
+                                    {fmtQtyWithUnit(j.qty, r.neededUnitName)} · {fmtDate(j.neededBy)}
                                   </span>
                                 </div>
                               ))}

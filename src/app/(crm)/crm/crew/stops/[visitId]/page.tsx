@@ -6,11 +6,13 @@ import { format, parseISO, differenceInMinutes } from "date-fns";
 import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
-  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee,
+  Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles, FlaskConical,
+  ClipboardList,
 } from "lucide-react";
 import {
   useStopDetail,
   useVisitPhotos,
+  useVisitChemicals,
   useStopClockIn,
   useStopClockOut,
   useStopPause,
@@ -19,7 +21,13 @@ import {
   useAcknowledgeNotes,
   useAddCrewNote,
   useUploadVisitPhoto,
+  useFieldUpsellServices,
+  useSubmitFieldUpsell,
+  useJobProducts,
+  useUseJobProductMaterials,
+  type JobProductMaterial,
 } from "@/lib/hooks/use-crew-app";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -30,9 +38,98 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
-import { visitServices } from "@/lib/utils/visit-stops";
+import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
+import { toast } from "sonner";
+
+/**
+ * One row of the "Materials called for" card — mirrors crew-app's
+ * PendingMaterialRow/ResolvedMaterialRow (visit/[id].tsx). Pending rows let
+ * the crew confirm or correct the actual quantity used against what the
+ * office planned; resolved rows are read-only.
+ */
+function PlannedMaterialRow({
+  material,
+  onMarkUsed,
+  onMarkNotUsed,
+  onMarkUsedNoInvoice,
+  isSaving,
+}: {
+  material: JobProductMaterial;
+  onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
+  onMarkNotUsed: (material: JobProductMaterial) => void;
+  onMarkUsedNoInvoice: (material: JobProductMaterial, usedQty: number) => void;
+  isSaving: boolean;
+}) {
+  const [qtyText, setQtyText] = useState(String(material.plannedQty));
+  const parsedQty = Number(qtyText);
+  // Strictly positive: zero isn't "used none", it's Not Used, and the route
+  // rejects it — don't let the button offer an action that can only fail.
+  const isValid = qtyText.trim() !== "" && Number.isFinite(parsedQty) && parsedQty > 0;
+
+  if (material.status !== "pending") {
+    const resolved = material.status === "not_used"
+      ? { label: "Not used", className: "bg-amber-100 text-amber-700" }
+      : material.status === "used_no_invoice"
+        ? { label: `Used: ${material.qty} (not billed)`, className: "bg-slate-100 text-slate-600" }
+        : { label: `Used: ${material.qty}`, className: "bg-green-100 text-green-700" };
+    return (
+      <div className="px-4 py-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm text-slate-700 truncate">{material.productName}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Called for: {material.plannedQty}</p>
+        </div>
+        <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${resolved.className}`}>
+          {resolved.label}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-slate-700">{material.productName}</p>
+        <p className="text-xs text-slate-400">Called for: {material.plannedQty}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          value={qtyText}
+          onChange={(e) => setQtyText(e.target.value)}
+          className="w-20 h-8 text-sm"
+        />
+        {/* Mark Used keeps the material billable — the office called for it,
+            the client pays for it. The two links beside it are the
+            deliberate exceptions, and are styled as secondary for that
+            reason. */}
+        <Button
+          size="sm"
+          className="bg-green-600 hover:bg-green-700"
+          disabled={!isValid || isSaving}
+          onClick={() => onMarkUsed(material, parsedQty)}
+        >
+          Mark Used
+        </Button>
+        <button
+          className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          disabled={!isValid || isSaving}
+          onClick={() => onMarkUsedNoInvoice(material, parsedQty)}
+        >
+          Used — don&apos;t bill
+        </button>
+        <button
+          className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          disabled={isSaving}
+          onClick={() => onMarkNotUsed(material)}
+        >
+          Not Used
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ElapsedTimer({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
@@ -52,6 +149,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const router = useRouter();
   const { data: stop, isLoading } = useStopDetail(anchorVisitId);
   const { data: photos = [] } = useVisitPhotos(anchorVisitId);
+  const stopVisitIds = stop?.visits.map((v) => v.id) ?? [];
+  const { data: chemicals = [] } = useVisitChemicals(stopVisitIds);
+  const usedChemicals = chemicals.filter((c) => c.used);
   const { data: orgSettings } = useOrgSettings();
   const hidePricing = orgSettings?.crewHidePricing ?? false;
 
@@ -63,8 +163,16 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const acknowledge   = useAcknowledgeNotes();
   const addNote       = useAddCrewNote();
   const uploadPhoto   = useUploadVisitPhoto();
+  const { data: upsellServices = [] } = useFieldUpsellServices();
+  const submitUpsell  = useSubmitFieldUpsell();
+  const { data: jobProducts = [] } = useJobProducts(anchorVisitId);
+  const useMaterials  = useUseJobProductMaterials();
 
   const [noteText, setNoteText]       = useState("");
+  const [upsellOpen, setUpsellOpen]       = useState(false);
+  const [upsellServiceId, setUpsellServiceId] = useState("");
+  const [upsellNote, setUpsellNote]       = useState("");
+  const [upsellPhoto, setUpsellPhoto]     = useState<File | null>(null);
   const [skipReason, setSkipReason]   = useState("");
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [clockOutNotes, setClockOutNotes] = useState("");
@@ -73,7 +181,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
   const anchor = stop?.visits.find(v => v.id === anchorVisitId) ?? stop?.visits[0];
   const hasNotes = !!stop?.notesToCrew;
-  const acknowledged = !!anchor?.acknowledgedNotesAt;
+  // Re-arms when the office edits the notes after the crew acknowledged them:
+  // an acknowledgment older than the notes' own updated stamp no longer
+  // counts, so "Acknowledged 7:02 AM" can't sit over a 9:40 AM "DOG IS
+  // LOOSE". The clock-in route enforces the same rule server-side — this is
+  // only the affordance.
+  const acknowledged = isNotesAcknowledgmentCurrent(
+    anchor?.acknowledgedNotesAt,
+    stop?.notesToCrewUpdatedAt
+  );
   const isActive = stop?.derivedStatus === "in_progress";
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped";
   const isPaused = isActive && !!stop?.pausedAt;
@@ -116,6 +232,61 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     if (!noteText.trim()) return;
     await addNote.mutateAsync({ visitId: anchorVisitId, note: noteText });
     setNoteText("");
+  }
+
+  async function handleSubmitUpsell() {
+    if (!upsellServiceId) return;
+    try {
+      const res = await submitUpsell.mutateAsync({
+        visitId: anchorVisitId,
+        serviceId: upsellServiceId,
+        note: upsellNote,
+        file: upsellPhoto,
+      });
+      // The photo is best-effort server-side — say so rather than implying it
+      // went through, since a crew can't tell from here.
+      toast.success(
+        res.photoAttached || !upsellPhoto
+          ? `Sent to the office — ticket #${res.ticketNumber}.`
+          : `Sent to the office — ticket #${res.ticketNumber}, but the photo didn't upload.`
+      );
+      setUpsellOpen(false);
+      setUpsellServiceId("");
+      setUpsellNote("");
+      setUpsellPhoto(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send the suggestion");
+    }
+  }
+
+  async function handleMarkUsed(material: JobProductMaterial, usedQty: number) {
+    try {
+      await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { usedQty } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+    }
+  }
+
+  async function handleMarkUsedNoInvoice(material: JobProductMaterial, usedQty: number) {
+    if (!window.confirm(`${material.productName} will come out of inventory but won't be added to the client's invoice. Continue?`)) return;
+    try {
+      await useMaterials.mutateAsync({
+        visitId: anchorVisitId,
+        jobProductId: material.id,
+        usage: { usedQty, noInvoice: true },
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+    }
+  }
+
+  async function handleMarkNotUsed(material: JobProductMaterial) {
+    if (!window.confirm(`${material.productName} won't be counted as used on this job. Continue?`)) return;
+    try {
+      await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { notUsed: true } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+    }
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -263,6 +434,56 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         </div>
 
+        {/* Chemical mix — what to use and how much finished-mix solution to
+            prepare, computed from the product's application rate + dilution
+            ratio when the office has it configured. Only shown when this
+            stop actually has chemicals logged. */}
+        {usedChemicals.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" />
+                Chemical Mix
+              </h2>
+            </div>
+            <div className="p-3 space-y-2">
+              {usedChemicals.map((a) => {
+                const visit = stop.visits.find((v) => v.id === a.visitId);
+                const serviceName =
+                  stop.visits.length > 1 && visit ? visitServices(visit)[0]?.serviceName : undefined;
+                return (
+                  <div key={a.id} className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2">
+                    {serviceName && <p className="text-xs font-medium text-emerald-700 mb-0.5">{serviceName}</p>}
+                    <p className="text-sm font-medium text-emerald-900">{a.productName ?? "Chemical"}</p>
+                    {a.solutionAmount != null ? (
+                      <p className="text-sm text-emerald-800 mt-0.5">
+                        Use{" "}
+                        <span className="font-semibold">
+                          {a.solutionAmount} {a.solutionUnitName ?? ""}
+                        </span>{" "}
+                        of finished mix
+                        {a.chemicalAmount != null && (
+                          <span className="text-emerald-600">
+                            {" "}
+                            ({a.chemicalAmount} {a.unitName ?? ""} active)
+                          </span>
+                        )}
+                      </p>
+                    ) : a.chemicalAmount != null ? (
+                      <p className="text-sm text-emerald-800 mt-0.5">
+                        {a.chemicalAmount} {a.unitName ?? ""}
+                      </p>
+                    ) : null}
+                    {a.applicationRateLabel && (
+                      <p className="text-xs text-emerald-600 mt-0.5">{a.applicationRateLabel}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Notes acknowledgment gate */}
         {hasNotes && (
           <div className={`rounded-xl border overflow-hidden ${acknowledged ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
@@ -292,6 +513,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   }
                   I&apos;ve read the notes
                 </Button>
+              </div>
+            )}
+            {!acknowledged && anchor.acknowledgedNotesAt && (
+              <div className="px-4 pb-3">
+                <p className="text-xs text-amber-700">
+                  The office changed these notes after you read them — read them again.
+                </p>
               </div>
             )}
             {acknowledged && anchor.acknowledgedNotesAt && (
@@ -416,6 +644,49 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           )}
         </div>
 
+        {/* Materials called for — office-planned materials (crm_job_products),
+            distinct from an ad-hoc new request. Mirrors crew-app's
+            PlannedMaterialsSection. */}
+        {jobProducts.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <ClipboardList className="h-4 w-4" />
+                Materials called for
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {jobProducts.map((m) => (
+                <PlannedMaterialRow
+                  key={m.id}
+                  material={m}
+                  onMarkUsed={handleMarkUsed}
+                  onMarkNotUsed={handleMarkNotUsed}
+                  onMarkUsedNoInvoice={handleMarkUsedNoInvoice}
+                  isSaving={useMaterials.isPending}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Suggest work — hidden unless the office has opened up services for
+            crews to suggest, which is how the feature is switched on. */}
+        {upsellServices.length > 0 && (
+          <button
+            onClick={() => setUpsellOpen(true)}
+            className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left active:bg-emerald-100"
+          >
+            <span className="flex items-center gap-2 font-semibold text-emerald-800">
+              <Sparkles className="h-4 w-4" />
+              Suggest work
+            </span>
+            <span className="mt-0.5 block text-xs text-emerald-700">
+              Spotted something this property needs? Send it to the office.
+            </span>
+          </button>
+        )}
+
         {/* Notes / Comments */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100">
@@ -452,6 +723,90 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         </div>
       </main>
+
+      {/* Suggest work — crews never see or set a price here; the office prices
+          it from the photo and note. */}
+      <Dialog open={upsellOpen} onOpenChange={setUpsellOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Suggest work</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-slate-700">What does it need?</p>
+              <div className="flex flex-col gap-1.5">
+                {upsellServices.map((svc) => {
+                  const picked = upsellServiceId === svc.id;
+                  return (
+                    <button
+                      key={svc.id}
+                      onClick={() => setUpsellServiceId(svc.id)}
+                      className={`rounded-lg border px-3 py-2.5 text-left ${
+                        picked
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 active:bg-slate-50"
+                      }`}
+                    >
+                      <span className={`block text-sm font-medium ${picked ? "text-emerald-800" : "text-slate-800"}`}>
+                        {svc.name}
+                      </span>
+                      {svc.upsell_pitch && (
+                        <span className="mt-0.5 block text-xs text-slate-500">{svc.upsell_pitch}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-slate-700">
+                Anything the office should know?
+              </p>
+              <Textarea
+                placeholder="e.g. front beds are thin, client mentioned it too"
+                value={upsellNote}
+                onChange={(e) => setUpsellNote(e.target.value)}
+                className="min-h-[80px] resize-none text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 active:bg-slate-50">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(e) => setUpsellPhoto(e.target.files?.[0] ?? null)}
+                />
+                <Camera className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-600">
+                  {upsellPhoto ? "Photo attached — tap to replace" : "Add a photo"}
+                </span>
+              </label>
+              <p className="mt-1 text-xs text-slate-400">
+                A photo usually saves the office a trip out to quote it.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpsellOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitUpsell}
+              disabled={!upsellServiceId || submitUpsell.isPending}
+            >
+              {submitUpsell.isPending ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Sending…</>
+              ) : (
+                "Send to office"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Skip dialog — targets one service row at a time */}
       <Dialog open={!!skipTargetId} onOpenChange={(open) => !open && setSkipTargetId(null)}>

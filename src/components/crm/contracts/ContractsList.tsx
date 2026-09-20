@@ -1065,7 +1065,7 @@ export function ContractDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-bold">

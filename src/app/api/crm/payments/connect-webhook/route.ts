@@ -4,10 +4,17 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { statusForAccount } from "@/lib/stripe/connect";
 import { recordStripeCharge, accountOwnedByOrg } from "@/lib/stripe/record-charge";
+import {
+  recordEstimateDepositCharge,
+  markEstimateDepositPending,
+  clearEstimateDepositPending,
+  recordEstimateDepositFailure,
+} from "@/lib/stripe/record-estimate-deposit";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { notifyStaffOfFailedDeposit } from "@/lib/estimate-deposit-notify";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect webhook");
@@ -108,10 +115,26 @@ export async function POST(request: Request) {
   });
   if (dedupeErr) {
     if (dedupeErr.code === "23505") {
-      return NextResponse.json({ received: true, duplicate: true });
+      // Seen before — but only a real duplicate if that delivery FINISHED.
+      // The dedupe row commits before the handler runs, so a row with no
+      // processed_at means a previous attempt died part-way and Stripe is
+      // retrying. Short-circuiting those was silently dropping the retry, and
+      // for payment_intent.succeeded on ACH this route is the only thing that
+      // records the payment — the customer was charged and nothing was
+      // written. Fall through and reprocess; the handlers are idempotent.
+      const { data: prior } = await db
+        .from("stripe_webhook_events")
+        .select("processed_at")
+        .eq("event_id", event.id)
+        .maybeSingle();
+      if (prior?.processed_at) {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      log.info("reprocessing a webhook whose previous delivery did not finish", { eventId: event.id, eventType: event.type });
+    } else {
+      log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
+      return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
     }
-    log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
-    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
   switch (event.type) {
@@ -141,6 +164,38 @@ export async function POST(request: Request) {
     case "payment_intent.payment_failed": {
       const failedIntent = event.data.object as Stripe.PaymentIntent;
       const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
+
+      // An ACH deposit returned by the bank (NSF, closed account), or a
+      // declined card. Nothing to reverse — no crm_payments row is ever
+      // written for an unsettled debit — but the failure has to be RECORDED,
+      // not just cleared. Simply dropping the pending marker (the old
+      // behaviour) put the estimate back to looking like one where the client
+      // skipped the deposit: no trace, no notification, and no way to retry.
+      //
+      // recordEstimateDepositFailure replaces the pending marker with a
+      // failure marker in one write, and returns null for anything it
+      // shouldn't act on — including a stale event for a deposit that has
+      // since been collected, which must never un-collect it.
+      if (failedIntent.metadata?.source === "crm_estimate_deposit") {
+        const failure =
+          failedOrgId &&
+          event.account &&
+          (await eventAccountOwnedByOrg(db, failedOrgId, event.account))
+            ? await recordEstimateDepositFailure(db, failedIntent)
+            : null;
+        if (failure) {
+          await notifyStaffOfFailedDeposit(db, failure);
+        } else {
+          // Not a failure worth recording — an unattributable account, a
+          // deposit already collected, a newer attempt in flight, or a card
+          // declined while the client is still on the deposit step. Clearing
+          // the marker is all that's left to do, and it matches on the intent
+          // id so it can never clobber a newer one.
+          await clearEstimateDepositPending(db, failedIntent.id);
+        }
+        break;
+      }
+
       if (
         (failedIntent.metadata?.source === "crm_invoice" || failedIntent.metadata?.source === "crm_invoice_multi") &&
         failedOrgId &&
@@ -160,6 +215,26 @@ export async function POST(request: Request) {
       break;
     }
 
+    // The other way an in-flight intent dies. Staff cancelling from the Stripe
+    // dashboard, or a requires_action card intent that expires unconfirmed,
+    // fire ONLY this event — never payment_failed — so without a case here the
+    // in-flight marker was never cleared. InvoicesList drops a marked invoice
+    // out of "chargeable now", disables its Charge button and skips it in
+    // Charge All, so the invoice could never be collected from the queue
+    // again. Unlike payment_failed there's no automation to fire; releasing
+    // the invoice is the whole job, and clearPendingCharge matches on the
+    // intent id so it cannot clobber a newer marker.
+    case "payment_intent.canceled": {
+      const canceledIntent = event.data.object as Stripe.PaymentIntent;
+      const canceledSource = canceledIntent.metadata?.source;
+      if (canceledSource === "crm_invoice" || canceledSource === "crm_invoice_multi") {
+        await clearPendingCharge(db, canceledIntent.id);
+      } else if (canceledSource === "crm_estimate_deposit") {
+        await clearEstimateDepositPending(db, canceledIntent.id);
+      }
+      break;
+    }
+
     // A customer paying by bank account on the portal confirms the intent in
     // their own browser, so the server never sees a status for it — only this
     // event does. The autopay routes mark their own in-flight charges
@@ -168,6 +243,21 @@ export async function POST(request: Request) {
       const pendingIntent = event.data.object as Stripe.PaymentIntent;
       const pendingSource = pendingIntent.metadata?.source;
       const pendingOrgId = pendingIntent.metadata?.org_id;
+
+      // A proposal deposit paid by ACH lands here and stays here for days.
+      // The acceptance has already gone through — a signed proposal shouldn't
+      // wait on a bank debit — so mark the estimate as having a deposit in
+      // flight, or it looks exactly like one where the client skipped it.
+      if (
+        pendingSource === "crm_estimate_deposit" &&
+        pendingOrgId &&
+        event.account &&
+        (await eventAccountOwnedByOrg(db, pendingOrgId, event.account))
+      ) {
+        await markEstimateDepositPending(db, pendingIntent);
+        break;
+      }
+
       if (
         !event.account ||
         !pendingOrgId ||
@@ -200,9 +290,14 @@ export async function POST(request: Request) {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const source = paymentIntent.metadata?.source;
       const result =
-        source === "crm_invoice_multi"
-          ? await applyCrmInvoiceMultiPayment(db, supabase, event)
-          : await applyCrmInvoicePayment(db, supabase, event);
+        source === "crm_estimate_deposit"
+          // A proposal deposit is taken before any invoice exists, so it is
+          // recorded as unapplied account credit rather than against a
+          // balance. This webhook is its only writer.
+          ? await recordEstimateDepositCharge({ db, paymentIntent, connectedAccountId: event.account })
+          : source === "crm_invoice_multi"
+            ? await applyCrmInvoiceMultiPayment(db, supabase, event)
+            : await applyCrmInvoicePayment(db, supabase, event);
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
       }
@@ -259,13 +354,37 @@ export async function POST(request: Request) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: payment } = await (db as any)
         .from("crm_payments")
-        .select("id, org_id, client_id, invoice_id, refunded_amount_cents")
+        .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, processing_fee_cents")
         .eq("stripe_payment_intent_id", paymentIntentId)
         .maybeSingle();
       if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, event.account))) break;
 
       const alreadyRecordedCents = payment.refunded_amount_cents ?? 0;
-      const deltaCents = charge.amount_refunded - alreadyRecordedCents;
+      // Stripe refunds the GROSS it charged; crm_payments.amount_cents is the
+      // net the client was credited, with any card processing fee held
+      // separately in processing_fee_cents. A full refund of a fee-bearing
+      // charge therefore reports more than the payment is worth — $2,058
+      // against a $2,000 payment — and refund_payment() raises
+      // "Refund amount exceeds remaining refundable balance". That threw out
+      // of the try below into a 500, which meant processed_at was never
+      // stamped, so Stripe retried the same event forever while the client sat
+      // on a credit they'd already been refunded.
+      //
+      // Clamp to what the ledger can actually reverse. The fee portion has no
+      // customer-money counterpart to reverse — it was never credited — so
+      // dropping it is correct, not a rounding fudge.
+      const refundableCents = Math.max(0, (payment.amount_cents ?? 0) - alreadyRecordedCents);
+      const rawDeltaCents = charge.amount_refunded - alreadyRecordedCents;
+      const deltaCents = Math.min(rawDeltaCents, refundableCents);
+      if (rawDeltaCents > refundableCents) {
+        log.info("clamped a gross Stripe refund to the payment's refundable amount", {
+          paymentIntentId,
+          chargeRefundedCents: charge.amount_refunded,
+          paymentAmountCents: payment.amount_cents,
+          processingFeeCents: payment.processing_fee_cents,
+          appliedCents: deltaCents,
+        });
+      }
       if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
 
       try {
@@ -276,26 +395,19 @@ export async function POST(request: Request) {
         });
         if (refundErr) throw refundErr;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: allocations } = await (db as any)
-          .from("crm_payment_allocations")
-          .select("invoice_id, amount_cents")
-          .eq("payment_id", payment.id);
-
-        if (allocations && allocations.length > 0) {
-          const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
-          let remaining = deltaCents;
-          for (let i = 0; i < allocations.length; i++) {
-            const a = allocations[i];
-            const share = i === allocations.length - 1 ? remaining : Math.round((deltaCents * a.amount_cents) / totalAllocated);
-            remaining -= share;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if (share > 0) await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: a.invoice_id, p_delta_cents: -share });
-          }
-        } else if (payment.invoice_id) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: payment.invoice_id, p_delta_cents: -deltaCents });
-        }
+        // refund_payment() reverses the invoice side itself — it walks the
+        // allocation rows, reduces or deletes each one, and calls
+        // apply_payment_to_invoice(-share) per invoice, falling back to
+        // crm_payments.invoice_id when the payment has no allocations
+        // (20260908160000). This route used to repeat that reversal here,
+        // which double-counted every bank-returned ACH and every refund
+        // issued from the Stripe dashboard: on a full refund the RPC deletes
+        // the allocations, so the re-read below found none and the
+        // invoice_id fallback re-applied the WHOLE delta a second time. On an
+        // invoice paid by two cards, refunding one left the invoice showing
+        // the full balance again — the other payment's money vanished and the
+        // invoice went back into the autopay/"To Charge" queue, debiting the
+        // customer for money they had already paid. Do not reintroduce it.
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
@@ -326,6 +438,14 @@ export async function POST(request: Request) {
     default:
       break;
   }
+
+  // Reached only when the handler above didn't bail with a 500. Stamping the
+  // row here is what makes a later delivery of the same event a genuine
+  // duplicate; leaving it unstamped keeps the event replayable.
+  await db
+    .from("stripe_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("event_id", event.id);
 
   return NextResponse.json({ received: true });
 }

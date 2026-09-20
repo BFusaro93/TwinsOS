@@ -28,7 +28,7 @@ export default function InternalLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !isStaff) router.replace("/dashboard");
+    if (!isLoading && !isStaff) router.replace("/equipt/home");
   }, [isLoading, isStaff, router]);
 
   if (isLoading || !isStaff) {

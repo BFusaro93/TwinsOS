@@ -1,7 +1,9 @@
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
+import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { computeWaitFireAt } from "./sequence-enrollment";
+import type { CardExpiryContext } from "./card-expiry-context";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -35,11 +37,13 @@ export async function resolveEmailStepContent(
     bodyTemplate: string;
     toSelection?: string[];
     fromSelection?: string;
+    /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
+    cardExpiryContext?: CardExpiryContext | null;
   }
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
-    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id, do_not_market")
+    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id, do_not_market, email_bounced_at")
     .eq("id", params.clientId)
     .single();
 
@@ -48,6 +52,12 @@ export async function resolveEmailStepContent(
   // used the unsubscribe link should stop getting automation emails too,
   // not just campaign blasts.
   if (client.do_not_market) return { error: "client has opted out of marketing emails (do_not_market)" };
+  // Separate from the opt-out: the address itself hard-bounced. The Resend
+  // webhook used to record that as do_not_market, so the check above caught it
+  // implicitly; it now lands in its own column and has to be checked here too,
+  // or automations would resume mailing dead addresses.
+  // See 20260919010000_client_email_bounce_suppression.sql.
+  if (client.email_bounced_at) return { error: "client's email address has hard-bounced (email_bounced_at)" };
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
   const toEmails = new Set<string>();
@@ -153,6 +163,10 @@ export async function resolveEmailStepContent(
     "[meetingtitle]": meetingTitle,
     "[salesrepname]": salesRepName,
   };
+  if (params.cardExpiryContext) {
+    mergeTags["[creditcardending]"] = params.cardExpiryContext.last4;
+    mergeTags["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
+  }
   const resolve = (template: string) =>
     template.replace(/\[(\w+)\]/gi, (match) => {
       const key = match.toLowerCase();
@@ -172,21 +186,6 @@ export async function resolveEmailStepContent(
     subject: resolve(params.subjectTemplate || "(no subject)"),
     bodyHtml: plainTextToHtml(resolve(params.bodyTemplate || "")),
   };
-}
-
-/** The automation email step's body field is a plain `<textarea>` (no rich
- *  text), unlike every other send path in the app (invoices, estimates,
- *  form notifications) which already convert blank-line-separated text into
- *  paragraphs before sending as HTML. Without this, a hand-typed multi-
- *  paragraph email arrived as one run-on paragraph — blank lines and single
- *  line breaks both collapse in HTML unless converted. Left alone if the
- *  text already contains markup (defensive, in case a legacy body was HTML). */
-function plainTextToHtml(text: string): string {
-  if (/<[a-z][\s\S]*>/i.test(text)) return text;
-  return text
-    .split(/\n{2,}/)
-    .map((para) => `<p style="margin:0 0 12px 0">${para.replace(/\n/g, "<br>")}</p>`)
-    .join("");
 }
 
 /**

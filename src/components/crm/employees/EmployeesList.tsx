@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import {
   Dialog,
   DialogContent,
@@ -769,7 +770,7 @@ function EmployeeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl p-0 gap-0 h-[92vh] flex flex-col">
+      <DialogContent className="max-w-5xl p-0 gap-0 h-[92vh] flex flex-col sm:p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="text-lg font-bold">
             {isNew ? "New Employee" : `Edit Employee`}
@@ -785,6 +786,7 @@ function EmployeeDialog({
               ...(form.is_sales_rep ? [{ value: "sales_goals", label: "Sales Goals" }] : []),
               ...(can("emp_view_user_settings") ? [{ value: "user_settings", label: "User Settings" }] : []),
               ...(can("emp_view_resource_notes") ? [{ value: "notes", label: "Notes" }] : []),
+              ...(employee?.id ? [{ value: "audit", label: "Audit Trail" }] : []),
             ].map((tab) => (
               <TabsTrigger
                 key={tab.value}
@@ -825,6 +827,11 @@ function EmployeeDialog({
                   onChange={(e) => onChange("notes", e.target.value)}
                   placeholder="Add notes about this employee…"
                 />
+              </TabsContent>
+            )}
+            {employee?.id && (
+              <TabsContent value="audit" className="mt-0">
+                <AuditTrailTab recordType="employee" recordId={employee.id} />
               </TabsContent>
             )}
           </div>

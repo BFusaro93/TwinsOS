@@ -1,8 +1,10 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { isoNy } from "@/lib/reports/ny-date";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { alreadyBilledReason, billedInPeriod, planContractBilling } from "@/lib/contract-billing";
 import type {
   CRMContract,
   CRMContractNote,
@@ -181,11 +183,14 @@ const CONTRACT_FINANCIAL_FIELDS = [
   // the cron start billing that new client under the original client's
   // signature/consent with no new signature required.
   "client_id",
-  // Both directly control when/which month the invoicing cron bills —
+  // All three directly control when/how often the invoicing cron bills —
   // same class of "changes what was actually agreed to" as the amount/date
-  // fields above.
+  // fields above. billing_frequency joined this list once it actually drove
+  // the cadence (src/lib/contract-billing.ts): flipping a signed annual
+  // contract to monthly multiplies what the client pays by twelve.
   "billing_day_of_month",
   "bill_month_in_advance",
+  "billing_frequency",
 ] as const;
 
 export function useUpdateContract() {
@@ -267,7 +272,7 @@ export function isValidContractStatusTransition(from: ContractStatus, to: Contra
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function cancelFutureContractVisits(supabase: any, contractId: string) {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = isoNy(new Date());
   const { data: visits, error } = await supabase
     .from("crm_job_visits")
     .select("id, job_comments, status, crm_jobs!inner(contract_id)")
@@ -366,8 +371,6 @@ export function useUpdateContractStatus() {
   });
 }
 
-const MONTH_KEYS: (keyof MonthlyAmounts)[] = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-
 export interface GenerateInvoicesResult {
   contractId: string;
   status: "created" | "skipped";
@@ -375,14 +378,22 @@ export interface GenerateInvoicesResult {
 }
 
 /**
- * Manually generates this month's invoice for the given contracts — the
- * "Create Invoices" action. Unlike the daily cron (/api/cron/contract-invoices)
- * this ignores billing_day_of_month/is_active/auto_generate, since a manual
- * click is an explicit request to bill now. It still enforces the same
- * idempotency check (skip if this contract already has an invoice dated
- * within the current calendar month) so it can't double-bill, and the same
- * status/start_date/end_date guard as the cron so an unsigned, cancelled,
- * expired, not-yet-started, or already-ended contract can't be billed either.
+ * Manually generates the current period's invoice for the given contracts —
+ * the "Create Invoices" action. Unlike the daily cron
+ * (/api/cron/contract-invoices) this ignores
+ * billing_day_of_month/is_active/auto_generate, since a manual click is an
+ * explicit request to bill now. It still enforces the same idempotency check
+ * and the same status/start_date/end_date guard as the cron, so an unsigned,
+ * cancelled, expired, not-yet-started, or already-ended contract can't be
+ * billed either.
+ *
+ * The idempotency window is the contract's own billing PERIOD, from the
+ * shared schedule math in src/lib/contract-billing.ts — the calendar month
+ * for a `monthly` contract (unchanged), the quarter/year for
+ * quarterly/annual, the 7/14-day window for weekly/biweekly, and "ever" for
+ * one_time. Without that, clicking "Create Invoices" every month on an
+ * annual contract billed it twelve times a year, exactly the bug the cron
+ * had.
  */
 export function useGenerateContractInvoices() {
   const qc = useQueryClient();
@@ -400,8 +411,9 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, status, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance")
+          .select("id, org_id, client_id, title, status, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at)")
           .eq("id", contractId)
+          .is("clients.deleted_at", null)
           .is("deleted_at", null)
           .single();
         if (fetchErr || !contract) {
@@ -426,40 +438,43 @@ export function useGenerateContractInvoices() {
           continue;
         }
 
-        // "Bill month in advance" labels/dates this invoice for next
-        // calendar month instead of the current one — same shift as the
-        // daily cron (src/app/api/cron/contract-invoices/route.ts) applies,
-        // so a manual "Create Invoices" click behaves consistently with it.
-        const billingMonthDate = contract.bill_month_in_advance
-          ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
-          : new Date(now.getFullYear(), now.getMonth(), 1);
-        const billingMonthLastDay = new Date(billingMonthDate.getFullYear(), billingMonthDate.getMonth() + 1, 0).getDate();
-        const billingDay = Math.min(todayDay, billingMonthLastDay);
-        const billingMonthKey = MONTH_KEYS[billingMonthDate.getMonth()];
-        const invoiceDateStr = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingDay).padStart(2, "0")}`;
-        const monthStart = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
-        const monthEnd = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingMonthLastDay).padStart(2, "0")}`;
+        // billNow: true — a manual click bills on the day it's clicked, not
+        // on billing_day_of_month (the cron owns that). Everything else —
+        // the "bill month in advance" shift, the month key that indexes
+        // monthly_amounts, and the period window — comes from the same
+        // shared schedule math the daily cron uses, so the two can't drift.
+        const plan = planContractBilling(contract, now, { billNow: true });
+
+        if (billedInPeriod(plan, contract.last_billed_date)) {
+          results.push({ contractId, status: "skipped", reason: alreadyBilledReason(plan) });
+          continue;
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existing } = await (supabase as any)
+        let existingQuery = (supabase as any)
           .from("crm_invoices")
           .select("id")
           .eq("client_id", contract.client_id)
           .eq("contract_id", contract.id)
-          .gte("invoice_date", monthStart)
-          .lte("invoice_date", monthEnd)
           .is("deleted_at", null)
-          .limit(1)
-          .maybeSingle();
+          .limit(1);
+        // one_time's window is unbounded (both null): any live invoice on
+        // the contract at all means it's been billed.
+        if (plan.periodStart) existingQuery = existingQuery.gte("invoice_date", plan.periodStart);
+        if (plan.periodEnd) existingQuery = existingQuery.lte("invoice_date", plan.periodEnd);
+        const { data: existing } = await existingQuery.maybeSingle();
         if (existing) {
-          results.push({ contractId, status: "skipped", reason: "already billed for this month" });
+          results.push({ contractId, status: "skipped", reason: alreadyBilledReason(plan) });
           continue;
         }
 
+        // monthly_amount_cents is the PER-INVOICE amount at every frequency
+        // (an annual contract stores its full yearly price and is billed it
+        // once a year) — see src/lib/contract-billing.ts.
         const monthlyAmounts = (contract.monthly_amounts ?? {}) as Record<string, number>;
         const monthAmount: number =
-          monthlyAmounts[billingMonthKey] != null
-            ? monthlyAmounts[billingMonthKey]
+          monthlyAmounts[plan.monthKey] != null
+            ? monthlyAmounts[plan.monthKey]
             : contract.monthly_amount_cents;
         if (monthAmount <= 0) {
           results.push({ contractId, status: "skipped", reason: "zero amount for month" });
@@ -477,7 +492,7 @@ export function useGenerateContractInvoices() {
             contract_id: contract.id,
             sales_rep_id: contract.sales_rep_id ?? null,
             description,
-            invoice_date: invoiceDateStr,
+            invoice_date: plan.invoiceDate,
             status: "draft",
             subtotal_cents: monthAmount,
             total_cents: monthAmount,
@@ -516,7 +531,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
           .from("crm_contracts")
-          .update({ last_billed_date: invoiceDateStr })
+          .update({ last_billed_date: plan.invoiceDate })
           .eq("id", contractId);
 
         const problems = [
@@ -708,8 +723,8 @@ export function useUpsertContractService() {
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = id
-        ? await (supabase as any).from("crm_contract_services").update(row).eq("id", id)
-        : await (supabase as any).from("crm_contract_services").insert(row);
+        ? await supabase.from("crm_contract_services").update(row).eq("id", id)
+        : await supabase.from("crm_contract_services").insert(row);
       if (error) throw error;
     },
     onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["crm-contracts", vars.contractId, "services"] }),

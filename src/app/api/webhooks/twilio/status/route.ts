@@ -62,7 +62,8 @@ export async function POST(request: Request) {
 
   const { error } = await supabase
     .from("client_activity")
-    .update(patch)
+    // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+    .update(patch as never)
     .eq("ref_table", "twilio_messages")
     .eq("ref_id", messageSid);
   if (error) console.error("[twilio status webhook] failed to update client_activity:", error);
