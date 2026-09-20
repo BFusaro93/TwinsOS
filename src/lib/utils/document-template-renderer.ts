@@ -1,5 +1,6 @@
 import type { BlockType } from "@/types/crm-documents";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { stripHtml } from "@/lib/utils/strip-html";
 
 // ── Merge tag resolution ─────────────────────────────────────────────────────
 // Matches the pattern used by the estimate/invoice send routes so preview and
@@ -131,7 +132,7 @@ export const KNOWN_MERGE_TAG_KEYS = new Set(Object.keys(SAMPLE_MERGE_VALUES));
 
 // ── Block → HTML rendering (shared by preview + send-test-email) ────────────
 
-interface RenderableBlock {
+export interface RenderableBlock {
   blockType: BlockType;
   content: string | null;
 }
@@ -164,6 +165,18 @@ export function renderBlocksToHtml(
 ): string {
   const rows = blocks.map((block) => renderBlock(block, mergeVars, options)).join("\n");
   return `<div style="max-width:600px;margin:0 auto;font-family:Verdana,Arial,sans-serif;color:#1e293b;">${rows}</div>`;
+}
+
+// Plain-text rendering for SMS (`text_message` doc type) — the builder
+// restricts these templates to paragraph-only blocks, so this just strips
+// each block's rich-text HTML and joins them. Merge tags are left literal;
+// they're resolved later at send time by resolveSmsStepContent.
+export function renderBlocksToPlainText(blocks: RenderableBlock[]): string {
+  return blocks
+    .filter((b) => b.blockType === "paragraph")
+    .map((b) => stripHtml(b.content ?? ""))
+    .filter((text) => text.trim().length > 0)
+    .join("\n\n");
 }
 
 function renderBlock(
