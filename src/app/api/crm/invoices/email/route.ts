@@ -11,9 +11,10 @@ import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-temp
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
+import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/send";
-import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { logger } from "@/lib/logger";
 
 const log = logger.child("email-invoice");
 
@@ -109,8 +110,12 @@ export async function POST(req: NextRequest) {
   // damages sending-domain reputation, so it is blocked for transactional mail
   // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
   // override is how staff send to a corrected address, so it is not blocked.
-  if (!(body.to && body.to.length > 0) && inv.clients?.email_bounced_at) {
-    return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
+  const usingStoredInvoiceEmail = !(body.to && body.to.length > 0);
+  if (usingStoredInvoiceEmail && inv.clients?.email_bounced_at) {
+    return NextResponse.json(
+      { error: "Client's email address has hard-bounced. Update it, or send to a different address." },
+      { status: 422 }
+    );
   }
 
   // Load org + brand color
@@ -374,12 +379,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const replyTo = replyToFromCustomizations(org?.customizations);
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
   const { data: sendData, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(org?.name),
     to: toEmails,
     subject: resolvedSubject,
     html,
+    ...(replyTo ? { replyTo } : {}),
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });

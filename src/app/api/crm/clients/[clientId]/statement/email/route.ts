@@ -7,6 +7,7 @@ import { AccountStatementDocument } from "@/components/crm/invoices/pdf/AccountS
 import type { AccountStatementPDFData } from "@/components/crm/invoices/pdf/AccountStatementDocument";
 import type { OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import { buildAccountStatementData } from "@/lib/invoices/account-statement-data";
+import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars, resolveMergeTags } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
@@ -207,12 +208,14 @@ export async function POST(
     console.error("[email-statement] PDF render error:", err);
   }
 
+  const replyTo = replyToFromCustomizations(org?.customizations);
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
   const { data: sendData, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(orgName),
     to: toEmails,
     subject: resolvedSubject,
     html,
+    ...(replyTo ? { replyTo } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
 

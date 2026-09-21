@@ -41,6 +41,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
@@ -74,8 +75,16 @@ import {
   ChevronDown,
   FolderKanban,
   Flame,
+  MoreHorizontal,
+  Mail,
+  MessageSquare,
+  History,
+  FileText,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
+import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
+import { SendClientSmsDialog } from "@/components/crm/SendClientSmsDialog";
+import { useClient } from "@/lib/hooks/use-clients";
 import { useProject } from "@/lib/hooks/use-projects";
 import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
@@ -164,6 +173,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
   const { data: linkedProject } = useProject(job?.projectId ?? "");
   const [projectSheetOpen, setProjectSheetOpen] = useState(false);
+  // Powers the More menu's Send Email / Send Text — the job row carries only
+  // the client's name and phone, not their email address or SMS consent.
+  const { data: jobClient } = useClient(job?.clientId ?? "");
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [sendSmsOpen, setSendSmsOpen] = useState(false);
   const { data: crews = [] } = useCRMCrews();
   const updateJob = useUpdateJob();
   const createVisit = useCreateVisit();
@@ -317,6 +331,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           jobProductId: p.id,
         };
       });
+  }
+
+  /** Leaves the job for another record — a slide-over has to close itself
+   *  first, or the destination page loads underneath it. */
+  function goTo(href: string) {
+    onClose?.();
+    router.push(href);
   }
 
   async function handleStatus(status: string) {
@@ -707,6 +728,52 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               Edit Job
             </Button>
           )}
+
+          {/* More — the actions that don't earn a permanent button: reaching
+              the client (email/text), and jumping to the records this job
+              hangs off. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 px-2 text-xs" aria-label="More job actions">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {can("email_activity_send") && (
+                <DropdownMenuItem
+                  disabled={!jobClient?.primaryEmail}
+                  onSelect={() => setSendEmailOpen(true)}
+                >
+                  <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  {jobClient?.primaryEmail ? "Send Email" : "Send Email (no address)"}
+                </DropdownMenuItem>
+              )}
+              {can("sms_send") && (
+                <DropdownMenuItem
+                  disabled={!jobClient?.primaryPhone}
+                  onSelect={() => setSendSmsOpen(true)}
+                >
+                  <MessageSquare className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  {jobClient?.primaryPhone ? "Send Text" : "Send Text (no number)"}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => setTab("audit")}>
+                <History className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                View Audit Trail
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => goTo(`/crm/clients/${job.clientId}`)}>
+                <User className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                View Client
+              </DropdownMenuItem>
+              {job.estimateId && (
+                <DropdownMenuItem onSelect={() => goTo(`/crm/estimates/${job.estimateId}`)}>
+                  <FileText className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  View Estimate
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -1791,6 +1858,25 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         open={projectSheetOpen}
         onOpenChange={setProjectSheetOpen}
       />
+      {jobClient?.primaryEmail && (
+        <SendClientEmailDialog
+          open={sendEmailOpen}
+          onClose={() => setSendEmailOpen(false)}
+          clientId={jobClient.id}
+          clientName={jobClient.displayName}
+          clientEmail={jobClient.primaryEmail}
+        />
+      )}
+      {jobClient?.primaryPhone && (
+        <SendClientSmsDialog
+          open={sendSmsOpen}
+          onClose={() => setSendSmsOpen(false)}
+          clientId={jobClient.id}
+          clientName={jobClient.displayName}
+          clientPhone={jobClient.primaryPhone}
+          smsOptIn={jobClient.smsOptIn ?? false}
+        />
+      )}
       {confirmDialog}
     </div>
   );

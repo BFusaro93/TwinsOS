@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import type { PortalInviteRow, PortalUserRow } from "@/lib/portal/portal-db";
+import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom } from "@/lib/email/send";
 
 export async function POST(
@@ -91,10 +92,12 @@ export async function POST(
   const clientFirstName = client.display_name.split(" ")[0] ?? client.display_name;
 
   // Send invite email via Resend
+  const replyTo = await getOrgReplyTo(supabase, profile.org_id);
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(org?.name),
     to: email,
+    ...(replyTo ? { replyTo } : {}),
     subject: `You're invited to the ${orgName} Client Portal`,
     html: buildInviteEmail({ orgName, clientFirstName, portalUrl }),
   });

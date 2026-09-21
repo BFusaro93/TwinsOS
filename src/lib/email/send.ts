@@ -261,16 +261,20 @@ interface SendClientEmailOpts {
   to: string;
   subject: string;
   html: string;
+  from?: string;
+  /** See resolveReplyTo — where a customer's reply should land. */
+  replyTo?: string | null;
 }
 
 /** Thin, single call site for outbound client emails — keeps `from` and error handling consistent. */
 export async function sendClientEmail(opts: SendClientEmailOpts): Promise<{ resendId: string | null }> {
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data, error } = await resend.emails.send({
-    from: EMAIL_FROM,
+    from: opts.from ?? EMAIL_FROM,
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
+    ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
   });
   if (error) {
     throw new Error(error.message ?? "Failed to send email");

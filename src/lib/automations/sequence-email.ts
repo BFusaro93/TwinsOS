@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { orgEmailFrom } from "@/lib/email/send";
+import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { computeWaitFireAt } from "./sequence-enrollment";
 import type { CardExpiryContext } from "./card-expiry-context";
@@ -21,6 +22,8 @@ interface ResolvedEmailContent {
   toEmails: string[];
   toName: string;
   fromAddress: string;
+  /** Where the client's reply lands — the sales rep for a rep-sent step, else the org's address. */
+  replyTo: string | null;
   subject: string;
   bodyHtml: string;
 }
@@ -92,6 +95,8 @@ export async function resolveEmailStepContent(
   // Default sender is the tenant's own name on the shared verified domain —
   // never a hard-coded tenant.
   let fromAddress = orgEmailFrom(orgRow?.name as string | null | undefined);
+  // Everything else replies to the org's configured address.
+  let replyTo = await getOrgReplyTo(supabase, params.orgId);
   if (params.fromSelection === "sales_rep" && client.sales_rep_id) {
     // clients.sales_rep_id references crm_employees, not profiles — an
     // employee's email/name live there directly regardless of whether they
@@ -101,9 +106,16 @@ export async function resolveEmailStepContent(
       .select("first_name, last_name, email")
       .eq("id", client.sales_rep_id)
       .single();
-    if (rep?.email) {
+    if (isUsableReplyTo(rep?.email)) {
       const repName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim();
-      fromAddress = repName ? `${repName} <${rep.email}>` : (rep.email as string);
+      // The rep's NAME goes in the From display name; their address goes in
+      // Reply-To. It cannot go in From: Resend only sends from domains
+      // verified on the account, and a rep's @theirbusiness.com is not one —
+      // building `Rep <rep@theirbusiness.com>` made every "from sales rep"
+      // step fail the send outright. This keeps the customer-visible intent
+      // (it's from their rep, replies reach their rep) and actually sends.
+      fromAddress = orgEmailFrom(repName || (orgRow?.name as string | null | undefined));
+      replyTo = rep.email.trim();
     }
   }
 
@@ -135,7 +147,9 @@ export async function resolveEmailStepContent(
       // scheduled_at is a timestamptz, and the Node runtime's default zone is
       // UTC on Vercel — without an explicit timeZone a 2pm meeting goes out to
       // the customer as "6pm" (7pm outside DST), and an evening meeting shows
-      // tomorrow's date. Same rule as api/cron/sales-meeting-reminders.
+      // tomorrow's date. The meeting was booked on its org's clock, so that is
+      // the clock it has to be read back on. Same rule as the reminder cron in
+      // api/cron/sales-meeting-reminders.
       const meetingTz = await getOrgTimeZone(supabase, params.orgId);
       meetingDate = when.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: meetingTz });
       meetingTime = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: meetingTz });
@@ -189,6 +203,7 @@ export async function resolveEmailStepContent(
     toEmails: [...toEmails],
     toName: clientDisplayName,
     fromAddress,
+    replyTo,
     subject: resolve(params.subjectTemplate || "(no subject)"),
     bodyHtml: plainTextToHtml(resolve(params.bodyTemplate || "")),
   };
@@ -208,6 +223,7 @@ export async function sendResolvedSequenceEmail(
     toEmails: string[];
     toName: string | null;
     fromAddress?: string;
+    replyTo?: string | null;
     subject: string;
     bodyHtml: string;
   }
@@ -224,6 +240,10 @@ export async function sendResolvedSequenceEmail(
       .single();
     fromAddress = orgEmailFrom(orgRow?.name as string | null | undefined);
   }
+  // Callers that resolved content through resolveEmailStepContent pass the
+  // reply address they worked out (rep or org); the rest fall back to the org's.
+  const replyTo =
+    params.replyTo !== undefined ? params.replyTo : await getOrgReplyTo(supabase, params.orgId);
 
   const resend = new Resend(resendKey);
   const { data: sent, error: sendErr } = await resend.emails.send({
@@ -231,6 +251,7 @@ export async function sendResolvedSequenceEmail(
     to: params.toEmails,
     subject: params.subject,
     html: params.bodyHtml,
+    ...(replyTo ? { replyTo } : {}),
   });
   if (sendErr) return { ok: false, reason: `email send failed: ${String(sendErr)}` };
 

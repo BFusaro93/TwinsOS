@@ -15,7 +15,7 @@ import {
   useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob, useInvoiceForVisit } from "@/lib/hooks/use-invoices";
-import { useOrgTags } from "@/lib/hooks/use-clients";
+import { useOrgTags, useClient } from "@/lib/hooks/use-clients";
 // Property-scoped defs, NOT the client-level ones: the property values these
 // columns render come from crm_property_custom_field_values, which keys off
 // crm_rate_matrix_field_defs. Reading the client-level def table here is what
@@ -79,10 +79,13 @@ import {
   Flame,
   Tag,
   Mail,
+  MoreHorizontal,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
+import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
+import { SendClientSmsDialog } from "@/components/crm/SendClientSmsDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -465,6 +468,12 @@ function JobDetailSheet({
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
   const { data: existingInvoice } = useInvoiceForVisit(visit.id);
   const { currentUser } = useCurrentUserStore();
+  const { can } = usePermissions();
+  // The visit row carries the client's name only — the email address and SMS
+  // consent that the More menu needs live on the client record.
+  const { data: visitClient } = useClient(visit.clientId ?? "");
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [sendSmsOpen, setSendSmsOpen] = useState(false);
 
   const job  = visit.job;
   const services = job?.services ?? [];
@@ -811,6 +820,7 @@ function JobDetailSheet({
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
@@ -837,6 +847,41 @@ function JobDetailSheet({
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {/* Reaching the client from the stop itself — the dispatcher's
+                  "we're running late" / "crew is on the way" case. Same
+                  dialogs (and same consent + permission rules) as the job
+                  screen's More menu. */}
+              {visit.clientId && (can("email_activity_send") || can("sms_send")) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" aria-label="More visit actions">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {can("email_activity_send") && (
+                      <DropdownMenuItem
+                        className="text-xs"
+                        disabled={!visitClient?.primaryEmail}
+                        onSelect={() => setSendEmailOpen(true)}
+                      >
+                        <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                        {visitClient?.primaryEmail ? "Send Email" : "Send Email (no address)"}
+                      </DropdownMenuItem>
+                    )}
+                    {can("sms_send") && (
+                      <DropdownMenuItem
+                        className="text-xs"
+                        disabled={!visitClient?.primaryPhone}
+                        onSelect={() => setSendSmsOpen(true)}
+                      >
+                        <MessageSquareText className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                        {visitClient?.primaryPhone ? "Send Text" : "Send Text (no number)"}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               {job?.id && (
                 <Button
                   size="sm"
@@ -1387,6 +1432,26 @@ function JobDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
+    {visitClient?.primaryEmail && (
+      <SendClientEmailDialog
+        open={sendEmailOpen}
+        onClose={() => setSendEmailOpen(false)}
+        clientId={visitClient.id}
+        clientName={visitClient.displayName}
+        clientEmail={visitClient.primaryEmail}
+      />
+    )}
+    {visitClient?.primaryPhone && (
+      <SendClientSmsDialog
+        open={sendSmsOpen}
+        onClose={() => setSendSmsOpen(false)}
+        clientId={visitClient.id}
+        clientName={visitClient.displayName}
+        clientPhone={visitClient.primaryPhone}
+        smsOptIn={visitClient.smsOptIn ?? false}
+      />
+    )}
+    </>
   );
 }
 

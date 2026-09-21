@@ -167,10 +167,15 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         },
       },
       email_activity: {
-        label: "Email Activity",
+        label: "Email & Text Activity",
         permissions: {
           email_activity_view: "View Email Activity",
           email_activity_send: "Send Emails",
+          // Separate from email on purpose: a text is governed by TCPA
+          // consent and costs the org per message, so "may email a client"
+          // does not imply "may text one". Enforced server-side in
+          // /api/crm/clients/[clientId]/send-sms, not only in the UI.
+          sms_send: "Send Texts",
         },
       },
       document_template_access: {
