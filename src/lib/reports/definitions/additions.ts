@@ -208,7 +208,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     name: "Custom Package Renewal Report",
     description: "A list of packages with a renewal setting, ready to renew.",
     filters: [],
-    run: async ({ supabase, timeZone }) => {
+    run: async ({ supabase }) => {
       const { data, error } = await supabase
         .from("crm_jobs")
         .select(

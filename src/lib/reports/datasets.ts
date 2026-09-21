@@ -19,6 +19,40 @@ const VISIT_STATUS_OPTIONS = [
 
 export const REPORT_DATASETS: ReportDataset[] = [
   {
+    // The Address Verification report shipped with its view and its RPC
+    // whitelist entry but no catalog entry, so validateAnalysisConfig rejected
+    // it with "Unknown dataset" before the query was ever sent.
+    key: "rpt_address_verification",
+    label: "Address Verification",
+    description:
+      "Client, property and crew-yard addresses with the verdict Google returned when the address was last checked.",
+    defaultDateField: "address_verified_at",
+    fields: [
+      { key: "record_kind", label: "Record Type", type: "text", options: [
+        { value: "Client", label: "Client" },
+        { value: "Property", label: "Property" },
+        { value: "Crew Yard", label: "Crew Yard" },
+      ] },
+      { key: "client_name", label: "Client", type: "text" },
+      { key: "label", label: "Label", type: "text" },
+      { key: "client_status", label: "Client Status", type: "text" },
+      { key: "address", label: "Address", type: "text" },
+      { key: "city", label: "City", type: "text" },
+      { key: "state", label: "State", type: "text" },
+      { key: "zip", label: "Zip", type: "text" },
+      // "never_checked" is the view's stand-in for a NULL verdict.
+      { key: "address_verdict", label: "Verdict", type: "text", options: [
+        { value: "never_checked", label: "Never Checked" },
+        { value: "confirmed", label: "Confirmed" },
+        { value: "unconfirmed_but_plausible", label: "Unconfirmed but Plausible" },
+        { value: "unconfirmed_and_suspicious", label: "Unconfirmed and Suspicious" },
+        { value: "partial_match", label: "Partial Match" },
+        { value: "not_found", label: "Not Found" },
+      ] },
+      { key: "address_verified_at", label: "Last Checked", type: "datetime" },
+    ],
+  },
+  {
     key: "rpt_upsells",
     label: "Field Upsells",
     description:

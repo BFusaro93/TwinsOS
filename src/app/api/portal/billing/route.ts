@@ -8,14 +8,22 @@ export async function GET() {
 
   const supabase = await createClient();
 
-  const { data: invoices } = await supabase
+  // crm_invoices has no paid_at column — selecting it made PostgREST 400 and,
+  // because the error was discarded, the portal's billing page silently showed
+  // no invoices at all. Payment state is carried by status/balance_cents, and
+  // nothing downstream consumed paid_at.
+  const { data: invoices, error } = await supabase
     .from("crm_invoices")
-    .select("id, invoice_number, total_cents, balance_cents, due_date, status, created_at, paid_at")
+    .select("id, invoice_number, total_cents, balance_cents, due_date, status, created_at")
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
+
+  if (error) {
+    return NextResponse.json({ error: "Failed to load invoices" }, { status: 500 });
+  }
 
   return NextResponse.json({ invoices: invoices ?? [] });
 }

@@ -202,16 +202,20 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
       let estimatedBudgetedHours = 0;
 
       if (estimateId) {
+        // total_cost_cents lives on estimate_line_items, not estimates —
+        // selecting it here made PostgREST 400, and the discarded error left
+        // estHeader null, so estimated revenue AND budgeted hours both read 0
+        // as well. The estimate's cost is the sum of its lines' extended cost,
+        // accumulated from the line-item query below.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: estHeader } = await (supabase as any)
           .from("estimates")
-          .select("total_cents, total_cost_cents, total_budgeted_hours")
+          .select("total_cents, total_budgeted_hours")
           .eq("id", estimateId)
           .single();
 
         if (estHeader) {
           estimatedTotalCents = estHeader.total_cents ?? 0;
-          estimatedCostCents = estHeader.total_cost_cents ?? 0;
           estimatedBudgetedHours = Number(estHeader.total_budgeted_hours ?? 0);
         }
 
@@ -229,10 +233,31 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
           (li: any): EstimatedLine => ({
             serviceName: li.service_name,
             budgetedHours: Number(li.budgeted_hours ?? 0),
-            costCents: li.cost_cents ?? 0,
+            // total_cost_cents is the EXTENDED cost (qty × cost_cents).
+            // cost_cents is the per-unit cost, so summing it across lines — as
+            // the caller does to get estimated labor cost — produced a number
+            // with no meaning, and it sat next to an extended revenue figure.
+            costCents: li.total_cost_cents ?? 0,
             revenueCents: li.total_cents ?? 0,
           })
         );
+
+        // Estimated cost = labor (the lines above) + direct costs (materials,
+        // equipment, subs). The caller derives its material figure as
+        // total − labor, so both halves have to be included here.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: directCosts } = await (supabase as any)
+          .from("estimate_direct_costs")
+          .select("total_cents")
+          .eq("estimate_id", estimateId);
+
+        const laborCostCents = estimatedLines.reduce((s, l) => s + l.costCents, 0);
+        const directCostCents = (directCosts ?? []).reduce(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (s: number, d: any) => s + (d.total_cents ?? 0),
+          0
+        );
+        estimatedCostCents = laborCostCents + directCostCents;
       }
 
       // crm_jobs.actual_hours is already man-hours (crm_recompute_job_actual_hours
