@@ -23,6 +23,7 @@ import { useOrgTags } from "@/lib/hooks/use-clients";
 import { usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
+import { downloadXLSX } from "@/lib/xlsx-export";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -384,6 +385,19 @@ const EXTRA_COL_DEFS: { key: ColKey; label: string }[] = [
 
 function customColKey(fieldDefId: string) { return `custom:${fieldDefId}`; }
 
+/** The label VisitRow's Service cell shows — the linked service alone when
+ *  the visit covers one step of a package, otherwise every service on the
+ *  job, each by its code when it has one. */
+function visitServiceLabel(visit: CRMJobVisit, serviceCodeById: Map<string, string>): string {
+  const services = visit.job?.services ?? [];
+  const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
+  const codeOrName = (s: { serviceId: string | null; serviceName: string }) =>
+    (s.serviceId && serviceCodeById.get(s.serviceId)) || s.serviceName;
+  return linkedService
+    ? codeOrName(linkedService)
+    : services.length > 0 ? services.map(codeOrName).join(", ") : "";
+}
+
 function formatSqft(n: number | null | undefined): string {
   return n != null ? n.toLocaleString() : "—";
 }
@@ -401,6 +415,74 @@ function extraColCellText(key: ColKey, job: CRMJob | null | undefined): string {
     case "yards_mulch":   return formatSqft(job?.propertyYardsOfMulch);
     case "parking_sqft":  return formatSqft(job?.propertyParkingLotSqft);
     default:              return "—";
+  }
+}
+
+/** One toggleable column's value for the Export, mirroring what VisitRow
+ *  renders in that column so the spreadsheet matches the board the
+ *  dispatcher is looking at. Numeric columns come out as numbers (not
+ *  formatted strings) so Excel can sum and sort them; anything blank comes
+ *  out empty rather than as the board's em dash. */
+function exportCellValue(
+  key: ColKey,
+  visit: CRMJobVisit,
+  ctx: { serviceCodeById: Map<string, string>; crewCodeById: Map<string, string> }
+): string | number | null {
+  const job = visit.job;
+  switch (key) {
+    case "service":  return visitServiceLabel(visit, ctx.serviceCodeById);
+    // Raw ISO dates, not the board's M/D — Excel reads these as real dates.
+    case "date":     return visit.scheduledDate ?? "";
+    case "city":     return job?.serviceCity ?? "";
+    case "zip":      return job?.serviceZip ?? "";
+    case "assigned": {
+      const crewId = effectiveCrewId(visit);
+      return (crewId && ctx.crewCodeById.get(crewId)) || visit.crewName || job?.crewName || "";
+    }
+    case "last_svc": return job?.lastServiceDate ?? "";
+    case "start":    return visit.startTime ? formatTimeShort(visit.startTime) : "";
+    case "end":      return visit.endTime ? formatTimeShort(visit.endTime) : "";
+    case "b_hrs":    return computeBudgetedHours(visit);
+    case "actual":   return computeActualHours(visit);
+    case "variance": {
+      const actual = computeActualHours(visit);
+      const budgeted = computeBudgetedHours(visit);
+      return actual != null && budgeted != null ? Number((actual - budgeted).toFixed(2)) : null;
+    }
+    case "men":      return visit.menCount ?? null;
+    case "qty":      return visit.qty ?? null;
+    // Rate and Amt render the same value on the board (see VisitRow) — kept
+    // as two columns here so the export's shape matches the board's.
+    case "rate":
+    case "amt": {
+      const cents = visitEffectiveRateCents(visit);
+      return cents != null ? cents / 100 : null;
+    }
+    // The icon strip, written out — the note and comment TEXT gets its own
+    // columns at the end of every row, so this is just the flags.
+    case "icons": {
+      const serviceIdsWithProducts = job?.serviceIdsWithProducts ?? [];
+      const hasLinkedProduct = visit.jobServiceId
+        ? serviceIdsWithProducts.includes(visit.jobServiceId)
+        : serviceIdsWithProducts.length > 0;
+      const flags: string[] = [];
+      if (visit.notesToCrew ?? job?.notesToCrew) flags.push("Note");
+      if (hasLinkedProduct) flags.push("Product");
+      if (job?.callAhead && visit.clientPhone) flags.push("Call ahead");
+      if (visit.jobComments.length > 0) {
+        flags.push(`${visit.jobComments.length} comment${visit.jobComments.length !== 1 ? "s" : ""}`);
+      }
+      return flags.join(", ");
+    }
+    case "priority": return job?.clientPriority ?? visit.clientPriority ?? "normal";
+    default: {
+      // Takeoff columns export as numbers so they stay summable; the text
+      // ones (sales rep, notes to crew, gate code) fall through as text.
+      const numeric = extraColNumericValue(key, job);
+      if (numeric != null) return numeric;
+      const text = extraColCellText(key, job);
+      return text === "—" ? "" : text;
+    }
   }
 }
 
@@ -2448,16 +2530,14 @@ function VisitRow({
   const serviceName = linkedService
     ? codeOrName(linkedService)
     : services.length > 0 ? services.map(codeOrName).join(", ") : "—";
-  const serviceTotal = linkedService
-    ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
-    : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
   // job.rateCents is one shared value for the whole job — fine as a fallback
   // for a visit covering the whole job, but wrong once a visit is linked to
   // ONE specific service (a multi-service job split across visits), where it
   // would show the same job-level amount on every one of that job's visits
-  // instead of each service's own rate.
-  // Σ services before job.rateCents — same reasoning as the sheet (C-03).
-  const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null)));
+  // instead of each service's own rate. Σ services before job.rateCents —
+  // same reasoning as the sheet (C-03). Shared with the Totals row and the
+  // Export so all three price a visit identically.
+  const effectiveRate = visitEffectiveRateCents(visit);
   const visitCrewId = effectiveCrewId(visit);
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
   const effectiveCrew = (visitCrewId && crewCodeById.get(visitCrewId)) || effectiveCrewName;
@@ -3064,6 +3144,13 @@ function VisitRow({
 // silently contribute $0, understating the total by whatever fraction of
 // visits price this way (the common case).
 function visitAmountCents(visit: CRMJobVisit): number {
+  return visitEffectiveRateCents(visit) ?? 0;
+}
+
+/** The exact value VisitRow's Rate/Amt cells render — null (an em dash on the
+ *  board, blank in an export) when the visit has no price at all, which is
+ *  what separates it from visitAmountCents' 0 for aggregates. */
+function visitEffectiveRateCents(visit: CRMJobVisit): number | null {
   const job = visit.job;
   const services = job?.services ?? [];
   const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
@@ -3071,7 +3158,7 @@ function visitAmountCents(visit: CRMJobVisit): number {
     ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
     : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
   // Σ services before job.rateCents (a creation-time snapshot) — see C-03.
-  return visit.rateCents ?? (linkedService ? serviceTotal : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? 0)));
+  return visit.rateCents ?? (linkedService ? (serviceTotal || null) : (serviceTotal > 0 ? serviceTotal : (job?.rateCents ?? null)));
 }
 
 // Skipped and cancelled visits stay on the board (so the dispatcher can see
@@ -3946,44 +4033,51 @@ export function DispatchBoard() {
     );
   }
 
-  function handleExportCSV() {
-    const headers = ["#","Client","Service","Date","Address","City","Zip","Crew","Start","End","B Hrs","Actual","Men","Rate","Amount"];
-    const rows = displayVisits.map((v, i) => {
+  /** Export the board as it's currently configured: the four fixed columns,
+   *  then whichever toggleable columns are switched on (in board order,
+   *  including the takeoff and org custom-field ones), then the job's notes
+   *  and comments — the two things that only ever showed as an icon or a
+   *  banner row on screen and so never made it into the old fixed-column
+   *  CSV. Rows follow the board's current sort/route order. */
+  function handleExportXLSX() {
+    const cellCtx = { serviceCodeById, crewCodeById };
+    const visibleCols = COL_DEFS.filter((c) => isVisible(c.key));
+    const visibleExtraCols = EXTRA_COL_DEFS.filter((c) => isVisible(c.key));
+    const visibleCustomDefs = customFieldDefs.filter((d) => isVisible(customColKey(d.id)));
+
+    const headers = [
+      "#", "Status", "Client", "Address",
+      ...visibleCols.map((c) => c.label),
+      ...visibleExtraCols.map((c) => c.label),
+      ...visibleCustomDefs.map((d) => d.name),
+      "Job Notes", "Comments",
+    ];
+
+    const rows: unknown[][] = displayVisits.map((v, i) => {
       const job = v.job;
-      const svc = (job?.services ?? []).map((s) => s.serviceName).join("; ");
-      // Must use the same linked-service fallback every other aggregate on
-      // this board uses (see the comment above visitAmountCents) — a plain
-      // rateCents/job.rateCents read exports $0 for any recurring/multi-
-      // service job priced via its crm_job_services row instead.
-      const rateCents = visitAmountCents(v);
+      const jobNotes = v.notesToCrew ?? job?.notesToCrew ?? "";
+      const comments = v.jobComments
+        .map((c) => `${c.text} — ${c.authorName}, ${new Date(c.createdAt).toLocaleDateString()}`)
+        .join("\n");
       return [
         i + 1,
+        STATUS_OPTIONS.find((o) => o.value === v.status)?.label ?? v.status,
         v.clientName ?? "",
-        svc,
-        v.scheduledDate ?? "",
         job?.serviceAddress ?? "",
-        job?.serviceCity ?? "",
-        job?.serviceZip ?? "",
-        v.crewName ?? "",
-        v.startTime ?? "",
-        v.endTime ?? "",
-        computeBudgetedHours(v)?.toFixed(2) ?? "",
-        computeActualHours(v)?.toFixed(2) ?? "",
-        v.menCount ?? "",
-        (rateCents / 100).toFixed(2),
-        (rateCents / 100).toFixed(2),
+        ...visibleCols.map((c) => exportCellValue(c.key, v, cellCtx)),
+        ...visibleExtraCols.map((c) => exportCellValue(c.key, v, cellCtx)),
+        ...visibleCustomDefs.map((d) => {
+          const val = job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === d.id);
+          return val ? val.valueNumber ?? val.valueText ?? "" : "";
+        }),
+        jobNotes,
+        comments,
       ];
     });
-    const csv = [headers, ...rows]
-      .map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `dispatch-${selectedDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    downloadXLSX(`dispatch-${selectedDate}.xlsx`, [
+      { name: `Dispatch ${selectedDate}`, headers, rows },
+    ]);
     toast.success(`Exported ${displayVisits.length} visit${displayVisits.length !== 1 ? "s" : ""}`);
   }
 
@@ -4303,7 +4397,7 @@ export function DispatchBoard() {
             <MapPin className="h-3.5 w-3.5" />
             Group Stops
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleExportCSV} title="Export to CSV">
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleExportXLSX} title="Export to Excel">
             <Download className="h-3.5 w-3.5" />
             Export
           </Button>

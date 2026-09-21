@@ -24,12 +24,12 @@ function ClientViewDefaultsPanel() {
   return (
     <div className="space-y-2">
       <p className="text-xs text-slate-400">
-        Default display settings for brand-new estimates that don&apos;t use a template. A template&apos;s own
-        Client View settings always take priority over these when one is selected.
+        Default display settings for brand-new estimates that don&apos;t use a service bundle. A bundle&apos;s
+        own Client View settings always take priority over these when one is selected.
       </p>
       <EstimateDisplaySettingsPanel
         title="Company-wide client view defaults"
-        description="Applied to every new estimate created without a template."
+        description="Applied to every new estimate created without a service bundle."
         settings={settings}
         onChange={(next) => {
           updateOrgSettings({ customizations: { defaultDisplaySettings: next } }).catch(() =>
@@ -49,20 +49,20 @@ export default function EstimateSettingsPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-slate-900">Estimate Settings</h1>
         <p className="text-sm text-slate-500">
-          Manage estimate templates and default configurations
+          Manage service bundles and default configurations
         </p>
       </div>
 
-      <Tabs defaultValue="document-templates">
+      <Tabs defaultValue="service-bundles">
         <TabsList className="mb-4">
-          <TabsTrigger value="document-templates">Document Templates</TabsTrigger>
+          <TabsTrigger value="service-bundles">Service Bundles</TabsTrigger>
           <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
           <TabsTrigger value="client-view">Client View</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="document-templates">
+        <TabsContent value="service-bundles">
           <div className="mb-2">
-            <h2 className="text-sm font-semibold text-slate-700">Templates</h2>
+            <h2 className="text-sm font-semibold text-slate-700">Service Bundles</h2>
             <p className="text-xs text-slate-400">
               Pre-built line item sets you can apply when creating estimates
             </p>

@@ -90,7 +90,6 @@ function mapEstimate(row: any): Estimate {
     description: row.description,
     salesRepId: row.sales_rep_id,
     source: row.source,
-    estDocument: row.est_document,
     stage: row.stage,
     approvalStatus: (row.approval_status as Estimate['approvalStatus']) ?? 'not_required',
     sentAt: row.sent_at ?? null,

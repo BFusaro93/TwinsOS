@@ -18,6 +18,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -27,7 +28,19 @@ import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimat
 import type { BudgetMethod } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 
-// ── template item row (inside edit dialog) ────────────────────────────────────
+/** Which creation flow a bundle is offered in. Read by the estimate pickers
+ *  (NewEstimateDialog, EstimateDetail) and the job one (NewJobDialog). */
+const SHOW_WHEN_OPTIONS: { value: string; label: string }[] = [
+  { value: "estimates", label: "Estimates" },
+  { value: "jobs",      label: "Jobs" },
+  { value: "both",      label: "Both" },
+];
+
+function showWhenLabel(showWhen: string): string {
+  return SHOW_WHEN_OPTIONS.find((o) => o.value === showWhen)?.label ?? showWhen;
+}
+
+// ── bundle item row (inside edit dialog) ───────────────────────────────────
 
 function TemplateItemRow({
   item,
@@ -260,24 +273,41 @@ function EditTemplateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Edit Template — {template.name}</DialogTitle>
+          <DialogTitle>Edit Bundle — {template.name}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-3 py-2">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex flex-col gap-1">
-              <Label className="text-slate-500">Show when creating</Label>
-              <span className="capitalize text-slate-800">{template.showWhen}</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-slate-500">Est. Document</Label>
-              <span className="text-slate-800">{template.estDocument}</span>
-            </div>
+          <div className="flex flex-col gap-1.5 text-sm">
+            <Label className="text-slate-500">Show when creating</Label>
+            <Select
+              value={template.showWhen}
+              onValueChange={(v) => {
+                updateTemplate({ id: template.id, patch: { show_when: v } }).catch(() =>
+                  toast.error("Failed to save")
+                );
+              }}
+            >
+              <SelectTrigger className="h-8 w-48 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SHOW_WHEN_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {template.showWhen !== "estimates" && (
+              <p className="text-[11px] text-slate-400">
+                On a job, a line item&apos;s visit count and discount aren&apos;t carried over
+                — job services have no such fields, and how often the work runs comes
+                from the job&apos;s own schedule.
+              </p>
+            )}
           </div>
 
           <EstimateDisplaySettingsPanel
             title="Client view defaults"
-            description="Applied to an estimate's display settings when this template is selected."
+            description="Applied to an estimate's display settings when this bundle is selected."
             settings={template.displaySettings}
             onChange={(next) => {
               updateTemplate({ id: template.id, patch: { display_settings: next } }).catch(() =>
@@ -392,7 +422,7 @@ function EditTemplateDialog({
   );
 }
 
-// ── main templates list ───────────────────────────────────────────────────────
+// ── main service bundles list ──────────────────────────────────────────────────
 
 export function EstimateTemplatesList() {
   const [confirm, confirmDialog] = useConfirm();
@@ -410,9 +440,9 @@ export function EstimateTemplatesList() {
       await createTemplate({ name: newName.trim() });
       setNewName("");
       setShowNew(false);
-      toast.success("Template created");
+      toast.success("Bundle created");
     } catch {
-      toast.error("Failed to create template");
+      toast.error("Failed to create bundle");
     }
   }
 
@@ -422,22 +452,22 @@ export function EstimateTemplatesList() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-slate-500">
-            {isLoading ? "…" : `${(templates ?? []).length} template${(templates ?? []).length !== 1 ? "s" : ""}`}
+            {isLoading ? "…" : `${(templates ?? []).length} bundle${(templates ?? []).length !== 1 ? "s" : ""}`}
           </p>
         </div>
         <Button size="sm" className="h-8 text-xs" onClick={() => setShowNew(true)}>
           <Plus className="mr-1 h-3.5 w-3.5" />
-          Add Template
+          Add Bundle
         </Button>
       </div>
 
-      {/* New template inline */}
+      {/* New bundle inline */}
       {showNew && (
         <div className="flex items-center gap-2 rounded-lg border bg-white p-3 shadow-sm">
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Template name…"
+            placeholder="Bundle name…"
             className="h-8 max-w-xs text-sm"
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             autoFocus
@@ -457,8 +487,8 @@ export function EstimateTemplatesList() {
           <thead className="sticky top-0 bg-slate-50">
             <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
               <th className="w-10 px-4 py-3" />
-              <th className="px-4 py-3">Description</th>
-              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Shows In</th>
               <th className="px-4 py-3">Date Created</th>
               <th className="px-4 py-3" />
             </tr>
@@ -477,7 +507,7 @@ export function EstimateTemplatesList() {
             ) : (templates ?? []).length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-16 text-center text-sm text-slate-400">
-                  No templates yet — create one to pre-populate estimates
+                  No service bundles yet — create one to pre-populate estimates
                 </td>
               </tr>
             ) : (
@@ -500,7 +530,7 @@ export function EstimateTemplatesList() {
                     </button>
                   </td>
                   <td className="px-4 py-3 text-slate-500 capitalize">
-                    {t.showWhen === "both" ? "Both" : t.showWhen === "estimates" ? "EstimateTemplate" : "JobTemplate"}
+                    {showWhenLabel(t.showWhen)}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-400">
                     {new Date(t.createdAt).toLocaleDateString("en-US", {
@@ -510,10 +540,10 @@ export function EstimateTemplatesList() {
                   <td className="px-4 py-3">
                     <button
                       onClick={async () => {
-                        if (await confirm({ title: `Delete "${t.name}"?`, confirmLabel: "Delete Template", destructive: true })) {
+                        if (await confirm({ title: `Delete "${t.name}"?`, confirmLabel: "Delete Bundle", destructive: true })) {
                           try {
                             await deleteTemplate(t.id);
-                            toast.success("Template deleted");
+                            toast.success("Bundle deleted");
                           } catch {
                             toast.error("Failed to delete");
                           }

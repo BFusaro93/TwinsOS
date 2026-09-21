@@ -28,6 +28,7 @@ import { useContracts } from "@/lib/hooks/use-contracts";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
+import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { computePackageVisitSchedule } from "@/lib/package-schedule";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import { formatCurrency, roundHours } from "@/lib/utils";
@@ -175,6 +176,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [packageId, setPackageId] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const [services, setServices] = useState<ServiceRow[]>([blankServiceRow(todayStr())]);
+  // Service bundles offered on job creation — the other side of the same
+  // show_when setting the estimate pickers read (see EstimateTemplatesList).
+  const { data: allBundles } = useEstimateTemplates();
+  const bundles = (allBundles ?? []).filter((b) => b.showWhen === "jobs" || b.showWhen === "both");
   const [productRows, setProductRows] = useState<ProductRow[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -215,6 +220,84 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
   function toggleSnowDay(d: string) {
     setSnowDaysAuthorized((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  }
+
+  /**
+   * Append a service bundle's line items to the Services grid.
+   *
+   * Bundles are authored against ESTIMATES, and two things they can carry have
+   * nowhere to land on a job: `visits` (a job's occurrence count comes from its
+   * schedule/recurrence, not from a crm_job_services row — there is no visits
+   * column) and per-item discounts (no discount columns either). Both are
+   * dropped rather than folded into qty or rate, which would silently corrupt
+   * the per-visit price; the toast says so when it actually happens.
+   *
+   * Appends rather than replaces (unlike pickPackage, where the package IS the
+   * job) so a bundle can top up services already entered. Blank starter rows
+   * are cleared out first so the common "open dialog → apply bundle" path
+   * doesn't leave an empty row behind.
+   */
+  function pickBundle(id: string) {
+    const bundle = bundles.find((b) => b.id === id);
+    if (!bundle) return;
+    const items = [...(bundle.items ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    if (items.length === 0) {
+      toast.info(`"${bundle.name}" has no line items`);
+      return;
+    }
+
+    const newRows: ServiceRow[] = items.map((item) => {
+      // Same id-then-name fallback pickPackage uses, so a bundle item that
+      // only carries a service NAME still inherits the service's defaults.
+      const matchingService = (crmServices ?? []).find((sv) => sv.id === item.serviceId)
+        ?? (crmServices ?? []).find((sv) => sv.name.trim().toLowerCase() === item.serviceName.trim().toLowerCase());
+      const qty = item.qty || 1;
+      const resolvedServiceId = item.serviceId ?? matchingService?.id ?? "";
+      // Hours and budget method follow JOB semantics, not the bundle's, the
+      // same way pickPackage does: on a job the grid recomputes B. Hrs from
+      // the SERVICE's production rate (rowIsAutoHrs/updateQty), so carrying
+      // the bundle's authored number onto an auto row would just show a
+      // figure that jumps the moment anyone touches Qty, and storing the
+      // item's budget_method would contradict how the row actually behaves.
+      // teamSize is 1 on a fresh row, so the bundle's man-hours and this
+      // column's per-person hours are the same number (see autoHoursPerPerson).
+      const budgetedHours = matchingService && rowIsAutoHrs(resolvedServiceId)
+        ? autoHoursPerPerson(matchingService, qty, 1)
+        : item.budgetedHours;
+      return {
+        serviceId: resolvedServiceId,
+        serviceName: item.serviceName,
+        startDate,
+        completeByDate: "",
+        qty,
+        rateCents: item.rateCents,
+        budgetedHours,
+        budgetMethod: matchingService?.budgetMethod ?? item.budgetMethod ?? "manual",
+        teamSize: 1,
+        minDays: null,
+        startDateEdited: false,
+      };
+    });
+
+    setServices((prev) => {
+      const kept = prev.filter((r) => r.serviceName);
+      return [...kept, ...newRows];
+    });
+
+    const droppedVisits = items.filter((i) => (i.visits ?? 1) > 1).length;
+    const droppedDiscounts = items.filter((i) => (i.discountCents ?? 0) > 0).length;
+    const caveats = [
+      droppedVisits > 0 ? `${droppedVisits} visit count${droppedVisits === 1 ? "" : "s"}` : null,
+      droppedDiscounts > 0 ? `${droppedDiscounts} discount${droppedDiscounts === 1 ? "" : "s"}` : null,
+    ].filter(Boolean);
+    if (caveats.length > 0) {
+      toast.warning(
+        `Added ${newRows.length} service${newRows.length === 1 ? "" : "s"} from "${bundle.name}" — ` +
+        `${caveats.join(" and ")} not carried over (set the schedule on the job instead)`
+      );
+    } else {
+      toast.success(`Added ${newRows.length} service${newRows.length === 1 ? "" : "s"} from "${bundle.name}"`);
+    }
   }
 
   function pickPackage(id: string) {
@@ -850,9 +933,23 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <Label>Services</Label>
-                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={addService}>
-                  <Plus className="mr-1 h-3 w-3" /> Add Service
-                </Button>
+                <div className="flex items-center gap-1">
+                  {bundles.length > 0 && (
+                    <Select value="" onValueChange={pickBundle}>
+                      <SelectTrigger className="h-6 w-40 text-xs">
+                        <SelectValue placeholder="Apply bundle…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bundles.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={addService}>
+                    <Plus className="mr-1 h-3 w-3" /> Add Service
+                  </Button>
+                </div>
               </div>
               <div className="rounded border overflow-hidden">
                 <div className="overflow-x-auto">

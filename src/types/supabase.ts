@@ -9201,7 +9201,6 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           display_settings: Json
-          est_document: string
           id: string
           name: string
           org_id: string
@@ -9214,7 +9213,6 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           display_settings?: Json
-          est_document?: string
           id?: string
           name: string
           org_id?: string
@@ -9227,7 +9225,6 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           display_settings?: Json
-          est_document?: string
           id?: string
           name?: string
           org_id?: string
@@ -9334,7 +9331,6 @@ export type Database = {
           discount_type: string | null
           discount_value: number | null
           display_settings: Json
-          est_document: string
           estimate_date: string
           estimate_number: number
           expiry_notified_at: string | null
@@ -9402,7 +9398,6 @@ export type Database = {
           discount_type?: string | null
           discount_value?: number | null
           display_settings?: Json
-          est_document?: string
           estimate_date?: string
           estimate_number?: number
           expiry_notified_at?: string | null
@@ -9470,7 +9465,6 @@ export type Database = {
           discount_type?: string | null
           discount_value?: number | null
           display_settings?: Json
-          est_document?: string
           estimate_date?: string
           estimate_number?: number
           expiry_notified_at?: string | null

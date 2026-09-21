@@ -117,7 +117,6 @@ export interface Estimate {
   description: string;
   salesRepId: string | null;
   source: string | null;
-  estDocument: string;
   stage: EstimateStage;
   /** Approval gate for sending — independent of `stage`. 'not_required' when no flow applies. */
   approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected';
@@ -219,7 +218,6 @@ export interface EstimateTemplate {
   id: string;
   orgId: string;
   name: string;
-  estDocument: string;
   showDiscounts: boolean;
   showWhen: 'estimates' | 'jobs' | 'both';
   displaySettings: DisplaySettings;

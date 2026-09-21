@@ -355,7 +355,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // Jobs already converted from this estimate — drives the header's
   // "Convert to Job" vs "View Job" action for accepted estimates.
   const { data: estimateJobs = [] } = useEstimateJobs(estimateId);
-  const { data: templates } = useEstimateTemplates();
+  const { data: allTemplates } = useEstimateTemplates();
+  // Same show_when filter the New Estimate dialog applies.
+  const templates = (allTemplates ?? []).filter((t) => t.showWhen !== "jobs");
   const { data: clients }   = useClients();
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
@@ -1418,7 +1420,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                     if (!estimate || !templateId) return;
                     const tpl = (templates ?? []).find((t) => t.id === templateId);
                     if (!tpl) return;
-                    if (!tpl.items?.length && !tpl.displaySettings) { toast.info("Template has no items"); return; }
+                    if (!tpl.items?.length && !tpl.displaySettings) { toast.info("Bundle has no items"); return; }
                     setSaving(true);
                     try {
                       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
@@ -1477,7 +1479,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           ? [updateEstimate({ id: estimate.id, patch: { display_settings: tpl.displaySettings } })]
                           : []),
                       ]);
-                      toast.success(`Applied template "${tpl.name}"`);
+                      toast.success(`Applied bundle "${tpl.name}"`);
                     } catch {
                       toast.error("Failed to apply template");
                     } finally {
@@ -1486,7 +1488,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   }}
                 >
                   <SelectTrigger className="h-8 w-48 text-xs">
-                    <SelectValue placeholder="Apply template…" />
+                    <SelectValue placeholder="Apply bundle…" />
                   </SelectTrigger>
                   <SelectContent>
                     {(templates ?? []).map((t) => (

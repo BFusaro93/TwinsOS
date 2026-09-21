@@ -81,6 +81,7 @@ import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
 import { SmsOnboardingSettings } from "@/components/crm/settings/SmsOnboardingSettings";
 import { InvoiceTemplatesEditor } from "@/components/crm/settings/InvoiceTemplatesEditor";
+import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
@@ -661,6 +662,7 @@ function CRMTab() {
   const { data: clientSources = [] } = useOrgList("client_sources");
   const { data: clientTags = [] } = useOrgList("client_tags");
   const { data: ticketCategoryItems = [] } = useOrgList("ticket_categories");
+  const { data: customFieldDefs = [] } = useCustomFieldDefs();
 
   return (
     <div className="rounded-lg border bg-white shadow-sm">
@@ -673,7 +675,6 @@ function CRMTab() {
       </AccordionSection>
       <AccordionSection
         title="Crew App"
-        count={0}
         description="Settings for the crew tablet clock-in app"
       >
         <CrewAppSection />
@@ -696,7 +697,7 @@ function CRMTab() {
       <AccordionSection title="Tags" count={clientTags.length}>
         <OrgListEditor listName="client_tags" addPlaceholder="e.g. VIP" />
       </AccordionSection>
-      <AccordionSection title="Custom Client Fields" count={0} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
+      <AccordionSection title="Custom Client Fields" count={customFieldDefs.length} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
         <CustomFieldDefsEditor />
       </AccordionSection>
       <AccordionSection title="Email Templates" defaultOpen={false} description="Templates used when emailing clients now live in Documents, alongside every other template type.">
@@ -967,6 +968,7 @@ function EstimatesTab() {
   const { data: estimateLostReasonItems = [] } = useOrgList("estimate_lost_reasons");
   const { data: estimateStages = [] } = useEstimateStages();
   const { data: approvalFlows = [] } = useApprovalFlows();
+  const { data: estimateTemplates = [] } = useEstimateTemplates();
   const estimateApprovalSteps = approvalFlows.find((f) => f.entityType === "crm_estimate")?.steps.length ?? 0;
 
   return (
@@ -995,19 +997,19 @@ function EstimatesTab() {
       >
         <OrgListEditor listName="estimate_lost_reasons" addPlaceholder="e.g. Went with competitor" />
       </AccordionSection>
-      <AccordionSection title="Labor Rates" count={0}>
+      <AccordionSection title="Labor Rates">
         <LaborRatesEditor />
       </AccordionSection>
-      <AccordionSection title="Overhead Recovery" count={0}>
+      <AccordionSection title="Overhead Recovery">
         <OverheadSettingsEditor />
       </AccordionSection>
-      <AccordionSection title="Templates" count={0}>
+      <AccordionSection title="Service Bundles" count={estimateTemplates.length}>
         <p className="text-sm text-slate-500">
           <Link
             href="/crm/settings/estimates"
             className="font-medium text-brand-600 hover:text-brand-700 hover:underline"
           >
-            Manage estimate templates →
+            Manage service bundles →
           </Link>
         </p>
       </AccordionSection>
@@ -1579,7 +1581,7 @@ function AccountingTab() {
 
   return (
     <div className="rounded-lg border bg-white shadow-sm">
-      <AccordionSection title="Sales Tax" count={0} defaultOpen description="Org-wide default tax rate applied to new invoices. Can be overridden per client.">
+      <AccordionSection title="Sales Tax" defaultOpen description="Org-wide default tax rate applied to new invoices. Can be overridden per client.">
         <div className="space-y-4 p-4">
           <div className="flex items-end gap-3">
             <div className="flex flex-col gap-1.5 w-48">
@@ -1609,7 +1611,6 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection
         title="Card Payments (Stripe)"
-        count={0}
         defaultOpen
         description="Connect your own Stripe account to accept client card payments and receive payouts directly."
       >
@@ -1633,7 +1634,6 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection
         title="QuickBooks"
-        count={0}
         description="Push invoices and payments to QuickBooks Online automatically — one-way sync, nothing is pulled back."
       >
         <QuickBooksConnectSection />
