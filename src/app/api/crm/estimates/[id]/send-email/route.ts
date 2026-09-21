@@ -13,6 +13,7 @@ import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-temp
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
 
 const log = logger.child("send-estimate");
@@ -135,7 +136,7 @@ export async function POST(
     .from("estimates")
     .select(`
       *,
-      clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
+      clients(display_name, primary_email, email_bounced_at, billing_address, billing_city, billing_state, billing_zip),
       sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name),
       estimate_line_items(*),
       estimate_milestones(name, amount_cents, sort_order, deleted_at)
@@ -152,6 +153,13 @@ export async function POST(
     : (est.clients?.primary_email ? [est.clients.primary_email as string] : []);
   if (toEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
+  }
+  // A hard bounce means the stored address doesn't accept mail; re-sending
+  // damages sending-domain reputation, so it is blocked for transactional mail
+  // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
+  // override is how staff send to a corrected address, so it is not blocked.
+  if (!(body.to && body.to.length > 0) && est.clients?.email_bounced_at) {
+    return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
   }
   const toEmailsJoined = toEmails.join(", ");
 
@@ -225,8 +233,12 @@ export async function POST(
   const salesRepName = salesRep ? `${salesRep.first_name ?? ""} ${salesRep.last_name ?? ""}`.trim() || orgName : orgName;
   const total = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
     .format((est.total_cents ?? 0) / 100);
+  // created_at is a timestamptz and the Node runtime is UTC on Vercel, so
+  // without an explicit zone an estimate created in the evening is quoted with
+  // tomorrow's date.
   const quoteDate = new Date(est.created_at).toLocaleDateString("en-US", {
     month: "long", day: "numeric", year: "numeric",
+    timeZone: await getOrgTimeZone(supabase, est.org_id as string),
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
