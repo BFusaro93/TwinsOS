@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { orgEmailFrom } from "@/lib/email/send";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { computeWaitFireAt } from "./sequence-enrollment";
 import type { CardExpiryContext } from "./card-expiry-context";
 
@@ -131,8 +132,13 @@ export async function resolveEmailStepContent(
       .single();
     if (meeting) {
       const when = new Date(meeting.scheduled_at as string);
-      meetingDate = when.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-      meetingTime = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      // scheduled_at is a timestamptz, and the Node runtime's default zone is
+      // UTC on Vercel — without an explicit timeZone a 2pm meeting goes out to
+      // the customer as "6pm" (7pm outside DST), and an evening meeting shows
+      // tomorrow's date. Same rule as api/cron/sales-meeting-reminders.
+      const meetingTz = await getOrgTimeZone(supabase, params.orgId);
+      meetingDate = when.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: meetingTz });
+      meetingTime = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: meetingTz });
       meetingLocation = (meeting.location as string | null) ?? "";
       meetingTitle = (meeting.title as string) ?? "";
       const rep = meeting.crm_employees as { first_name: string; last_name: string } | null;

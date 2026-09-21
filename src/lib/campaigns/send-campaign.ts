@@ -4,6 +4,7 @@ import {
   resolveMergeTags,
   sendClientEmail,
 } from "@/lib/email/send";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 
 const SEND_CONCURRENCY = 5;
 // A campaign claimed into "sending" sets updated_at to the claim time (see
@@ -178,6 +179,8 @@ export async function sendCampaignEmails(
 
   const orgName = org?.name ?? "Your Service Provider";
   const orgAddress = org?.address ?? null;
+  // Hoisted out of the per-recipient loop: one campaign is one org.
+  const orgTimeZone = await getOrgTimeZone(db, orgId);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
 
   let delivered = 0;
@@ -246,6 +249,7 @@ export async function sendCampaignEmails(
     };
     const org = {
       name: orgName,
+      timeZone: orgTimeZone,
       addressPhone: orgAddress?.phone ?? null,
       addressStreet: orgAddress?.street ?? null,
       addressCity: orgAddress?.city ?? null,

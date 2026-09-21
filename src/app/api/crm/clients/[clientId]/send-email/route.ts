@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import {
   buildCanSpamFooter,
   buildClientMergeVars,
@@ -94,7 +95,7 @@ export async function POST(
   // A hard bounce blocks BOTH purposes: it isn't a preference, it's an address
   // that doesn't accept mail, and re-sending damages sending-domain
   // reputation. This is what makes the "service" override safe to offer.
-  if (isBulk && client.email_bounced_at) {
+  if (client.email_bounced_at) {
     return NextResponse.json(
       { error: "Client's email address has hard-bounced" },
       { status: 422 }
@@ -152,6 +153,7 @@ export async function POST(
     addressCity: org?.address?.city ?? null,
     addressState: org?.address?.state ?? null,
     addressZip: org?.address?.zip ?? null,
+    timeZone: await getOrgTimeZone(supabase, profile.org_id),
   };
 
   // Two separate maps: the subject is plain text delivered verbatim to an
