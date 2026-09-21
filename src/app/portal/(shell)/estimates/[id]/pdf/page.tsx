@@ -92,6 +92,18 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
     .is("deleted_at", null)
     .order("sort_order", { ascending: true }) as { data: LineItem[] | null };
 
+  // Materials/equipment/subcontract rows are priced into the estimate total,
+  // so a document that lists only estimate_line_items shows a total the
+  // client cannot reconcile against what is on the page.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: directCosts } = await (supabase as any)
+    .from("estimate_direct_costs")
+    .select("id, description, qty, rate_cents, total_cents, sort_order")
+    .eq("estimate_id", id)
+    .order("sort_order", { ascending: true }) as {
+      data: { id: string; description: string | null; qty: number; rate_cents: number; total_cents: number }[] | null;
+    };
+
   const settings = toDisplaySettings(estimate.display_settings);
   const sections = groupIntoSections(
     (lineItems ?? []).map((li) => ({
@@ -236,6 +248,29 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
                 )}
               </tbody>
             ))}
+            {(directCosts ?? []).length > 0 && (
+              <tbody>
+                <tr>
+                  <td colSpan={4} className="pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Materials &amp; Other Costs
+                  </td>
+                </tr>
+                {(directCosts ?? []).map((d) => (
+                  <tr key={d.id} className="border-b border-slate-100">
+                    <td className="py-2.5 text-slate-700">{d.description || "Materials"}</td>
+                    {settings.showQuantities && (
+                      <td className="py-2.5 text-right text-slate-600">{d.qty}</td>
+                    )}
+                    {settings.showLinePrices && (
+                      <td className="py-2.5 text-right text-slate-600">{fmt(d.rate_cents)}</td>
+                    )}
+                    {settings.showLineTotals && (
+                      <td className="py-2.5 text-right font-medium text-slate-900">{fmt(d.total_cents)}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            )}
             <tfoot>
               <tr className="border-t-2 border-slate-300">
                 <td colSpan={3} className="pt-3 text-right text-sm font-bold text-slate-900">Total</td>
