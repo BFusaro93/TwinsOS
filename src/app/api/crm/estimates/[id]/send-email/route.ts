@@ -98,6 +98,18 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Granular per-role permission — admins always pass, otherwise gated by
+  // crm_roles.permissions.estimate_send, the same key EstimateDetail and
+  // EstimatesList gate their Send controls on. Enforced here so a direct POST
+  // can't send (and version/share) an estimate under a role that forbids it.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "estimate_send",
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json() as {
     templateId?: string;
     subject: string;
