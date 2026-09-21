@@ -51,7 +51,8 @@ export async function GET(
     .select(`
       *,
       clients(display_name),
-      estimate_line_items(*)
+      estimate_line_items(*),
+      estimate_direct_costs(id, description, qty, rate_cents, total_cents, sort_order)
     `)
     .eq("id", shareToken.estimate_id)
     .single();
@@ -128,6 +129,22 @@ export async function GET(
     // Stored totals are authoritative — the page displays these as-is and only
     // re-derives (with the same discount rule as recalcEstimateTotals) when
     // the client deselects items or picks a tier.
+    // Materials/equipment/subcontract lines. They are priced into
+    // subtotal_cents and total_cents, so a proposal that renders only
+    // estimate_line_items shows a total the client cannot reconcile — and,
+    // worse, deselecting any optional item re-derived the price from line
+    // items alone and silently dropped these from what the client accepted.
+    directCosts: ((est.estimate_direct_costs ?? []) as Record<string, unknown>[])
+      .slice()
+      .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0))
+      .map((d) => ({
+        id: d.id as string,
+        description: (d.description as string | null) ?? "",
+        qty: Number(d.qty ?? 0),
+        rateCents: (d.rate_cents as number) ?? 0,
+        totalCents: (d.total_cents as number) ?? 0,
+      })),
+
     subtotalCents: est.subtotal_cents ?? 0,
     taxRateBps: est.tax_rate_bps ?? 0,
     taxCents: est.tax_cents ?? 0,
