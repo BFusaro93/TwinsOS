@@ -12,7 +12,7 @@ import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
 import { groupIntoSections, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { unitLabel } from "@/lib/estimates/units";
-import { looksLikeHtml, sanitizeHtml } from "@/lib/utils/sanitize-html";
+import { LineDescription } from "@/components/shared/LineDescription";
 
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
@@ -157,18 +157,6 @@ function lineMeta(li: ProposalLineItem, settings: DisplaySettings): string | nul
 // flattened plain text with line breaks. Render HTML through the allowlist
 // sanitizer with list/paragraph styling; render plain text preserving its
 // line breaks — never collapse blocks together ("Mulchx yards").
-function LineDescription({ html }: { html: string }) {
-  if (looksLikeHtml(html)) {
-    return (
-      <div
-        className="mt-0.5 text-sm text-slate-500 [&_p]:my-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:underline"
-        dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
-      />
-    );
-  }
-  return <p className="mt-0.5 whitespace-pre-line text-sm text-slate-500">{html}</p>;
-}
-
 // Client-side mirror of recalcEstimateTotals' discount/tax rule, used ONLY
 // when the client changes the selection (unchecks items / picks a tier) and
 // the stored totals no longer describe what they're accepting. A percent
