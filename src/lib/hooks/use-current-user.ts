@@ -1,10 +1,26 @@
 import { useEffect } from "react";
+import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { mapOrgUser } from "@/lib/supabase/mappers";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("use-current-user");
+
+/**
+ * Client-portal accounts are tagged with `user_metadata.portal` by
+ * /api/portal/register and deliberately have NO `profiles` row — they are
+ * clients, not org members. They still reach a staff route two ways: a
+ * bookmarked/typed URL, and a portal sign-in in one tab, whose session
+ * onAuthStateChange broadcasts to every other tab of the same browser —
+ * including one left open on a staff page. There is nothing to sync for
+ * them, and treating the absent profile as a failure is what sent a bogus
+ * "failed to load profile for current user" to Sentry from
+ * /crm/clients/:clientId the moment a portal account registered.
+ */
+function isPortalSession(user: User | null | undefined): boolean {
+  return user?.user_metadata?.portal === true;
+}
 
 /**
  * Syncs the Zustand currentUser store with the authenticated Supabase session.
@@ -30,17 +46,30 @@ export function useSyncCurrentUser() {
     let cancelled = false;
 
     async function syncFromUserId(userId: string) {
+      // maybeSingle(), not single(): zero rows is a state to report on its
+      // own terms, not a PostgREST error indistinguishable from a real
+      // query failure.
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
+
+      // Unmounted (or signed out) mid-request: the pending fetch aborting is
+      // expected, so bail before logging anything.
+      if (cancelled) return;
 
       if (error) {
         log.error("failed to load profile for current user", { error, userId });
         return;
       }
-      if (!data || cancelled) return;
+      if (!data) {
+        // A staff session with no profile row — the sidebar will sit on the
+        // "viewer" placeholder, so this is a real defect worth reporting.
+        // Portal accounts never get here; they are filtered out below.
+        log.error("no profile row for current user", { userId });
+        return;
+      }
 
       let profile = data;
       // If the profile is still marked "invited", the user has now signed in —
@@ -64,9 +93,9 @@ export function useSyncCurrentUser() {
         log.error("failed to read session", { error });
         return;
       }
-      const userId = session?.user?.id;
-      if (!userId) return;
-      void syncFromUserId(userId);
+      const user = session?.user;
+      if (!user || isPortalSession(user)) return;
+      void syncFromUserId(user.id);
     });
 
     // Re-sync on sign-in / token refresh so a session that wasn't hydrated yet
@@ -75,8 +104,9 @@ export function useSyncCurrentUser() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      const userId = session?.user?.id;
-      if (userId) void syncFromUserId(userId);
+      const user = session?.user;
+      if (!user || isPortalSession(user)) return;
+      void syncFromUserId(user.id);
     });
 
     return () => {

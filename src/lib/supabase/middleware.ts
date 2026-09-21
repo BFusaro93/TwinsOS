@@ -66,6 +66,21 @@ export async function updateSession(request: NextRequest) {
     pathname === "/robots.txt" ||
     pathname === "/llms.txt";
 
+  // A client-portal account (tagged with user_metadata.portal by
+  // /api/portal/register) has no `profiles` row and no org membership, so a
+  // staff route can only render an empty shell for them — and because a
+  // portal sign-in in one tab broadcasts its session to every other tab,
+  // that shell is what an open staff page turned into the moment a client
+  // registered. Send them to their own portal instead. /portal/login and
+  // /portal/register are already public; the startsWith keeps the signed-in
+  // portal pages (and the multi-org picker) reachable.
+  if (user?.user_metadata?.portal === true && !isPublicRoute && !pathname.startsWith("/portal")) {
+    const portalUrl = request.nextUrl.clone();
+    portalUrl.pathname = "/portal";
+    portalUrl.search = "";
+    return NextResponse.redirect(portalUrl);
+  }
+
   if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
     // Preserve the query string (e.g. `?open=<ticketId>` on an emailed link)
