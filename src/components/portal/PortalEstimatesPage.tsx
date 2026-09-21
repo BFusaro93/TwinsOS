@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { FileText, Clock, CheckCircle2, XCircle, Loader2, Download, MessageSquarePlus } from "lucide-react";
 import { groupIntoSections, DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { looksLikeHtml } from "@/lib/utils/sanitize-html";
+import { stripHtml } from "@/lib/utils/strip-html";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -143,7 +145,12 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
                         className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer accent-brand-500"
                       />
                       <span className="text-slate-700 flex-1 min-w-0">
-                        {li.description}
+                        {/* estimate_desc is rich text, so it usually arrives as
+                            an HTML fragment. This line is inline (a quantity
+                            suffix sits beside it), so flatten to text rather
+                            than rendering a block — otherwise the customer
+                            reads the raw "<p>" tags. */}
+                        {looksLikeHtml(li.description) ? stripHtml(li.description) : li.description}
                         {settings.showQuantities && li.quantity > 1 && <span className="text-slate-400 text-xs ml-1">×{li.quantity}</span>}
                       </span>
                       {settings.showLineTotals && !(settings.hideZeroPrices && li.unit_price_cents === 0) && (

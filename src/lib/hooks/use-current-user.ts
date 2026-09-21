@@ -10,13 +10,19 @@ const log = logger.child("use-current-user");
 /**
  * Client-portal accounts are tagged with `user_metadata.portal` by
  * /api/portal/register and deliberately have NO `profiles` row — they are
- * clients, not org members. They still reach a staff route two ways: a
- * bookmarked/typed URL, and a portal sign-in in one tab, whose session
- * onAuthStateChange broadcasts to every other tab of the same browser —
- * including one left open on a staff page. There is nothing to sync for
- * them, and treating the absent profile as a failure is what sent a bogus
+ * clients, not org members. The middleware now bounces a profile-less
+ * session out of every staff area, but it cannot help a page that is
+ * ALREADY rendered: a portal sign-in in one tab broadcasts its session
+ * through onAuthStateChange to every other tab of the same browser,
+ * including one left open on a staff page. That is what sent a bogus
  * "failed to load profile for current user" to Sentry from
- * /crm/clients/:clientId the moment a portal account registered.
+ * /crm/clients/:clientId the moment a client registered — so skip the
+ * lookup here too.
+ *
+ * Only a hint, never a gate: /api/portal/register links an invite to an
+ * EXISTING auth user when the email is already registered, and that user's
+ * metadata may carry no `portal` flag at all. Those sessions fall through
+ * to the zero-row branch below, which is why it no longer reports an error.
  */
 function isPortalSession(user: User | null | undefined): boolean {
   return user?.user_metadata?.portal === true;
@@ -64,10 +70,12 @@ export function useSyncCurrentUser() {
         return;
       }
       if (!data) {
-        // A staff session with no profile row — the sidebar will sit on the
-        // "viewer" placeholder, so this is a real defect worth reporting.
-        // Portal accounts never get here; they are filtered out below.
-        log.error("no profile row for current user", { userId });
+        // Either a portal account whose metadata lacks the flag, or a staff
+        // account whose profile row never got created. warn, not error: the
+        // first is routine, and the second is already loud without Sentry —
+        // the middleware redirects a profile-less session off every staff
+        // route, so that user cannot reach a screen this hook feeds.
+        log.warn("no profile row for current user", { userId });
         return;
       }
 
