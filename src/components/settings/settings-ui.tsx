@@ -75,13 +75,18 @@ export function SettingRow({
 }) {
   return (
     <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-slate-900">{label}</p>
         {description && (
           <p className="mt-0.5 text-xs text-slate-500">{description}</p>
         )}
       </div>
-      <div className="w-full md:w-48 md:shrink-0">{children}</div>
+      {/* Sizes to its content instead of a fixed 12rem, so wider controls
+          (a time-zone picker, a rate input with adornments and a Save button)
+          stay inside the card rather than spilling past its right edge. */}
+      <div className="w-full md:flex md:w-auto md:min-w-48 md:shrink-0 md:justify-end">
+        {children}
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { complexityFactor } from "@/lib/estimate-calc";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -353,7 +354,7 @@ export async function POST(
     estimateNumber: est.estimate_number as number,
     description: est.description as string | null,
     createdAt: est.created_at as string,
-    validUntil: est.valid_until as string | null,
+    validUntil: est.valid_until_date as string | null,
     notes: est.notes as string | null,
     clientName: est.clients?.display_name ?? null,
     clientAddress: est.clients?.billing_address ?? null,
@@ -411,12 +412,14 @@ export async function POST(
 
   // Send via Resend — from the tenant's own display name on the shared
   // verified sending domain (never a hard-coded tenant).
+  const replyTo = replyToFromCustomizations(org?.customizations);
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data: sent, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(orgName),
     to: toEmails,
     subject: resolvedSubject,
     html: resolvedBody,
+    ...(replyTo ? { replyTo } : {}),
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
@@ -459,7 +462,7 @@ export async function POST(
       discountCents: est.discount_cents,
       totalCents: est.total_cents,
       notes: est.notes,
-      validUntil: est.valid_until,
+      validUntil: est.valid_until_date,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       lineItems: lineItems.map((li: any) => ({
         id: li.id,
