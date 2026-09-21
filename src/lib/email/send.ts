@@ -33,7 +33,10 @@ export { escapeHtml };
 export function resolveMergeTags(template: string, vars: Record<string, string>): string {
   return template.replace(/\[(\w+)\]/g, (match) => {
     const key = match.toLowerCase();
-    if (key in vars) return vars[key];
+    // `?? ""` guards the case where a builder supplied the key with an
+    // undefined value: `key in vars` is true, so without it the recipient
+    // would read the literal word "undefined" in a real email.
+    if (key in vars) return vars[key] ?? "";
     // A recognized merge-tag name (from the same catalog the Documents tag
     // picker offers) this call didn't resolve a value for — blank it out
     // rather than shipping literal "[tag]" text to a real recipient.
@@ -123,6 +126,13 @@ interface OrgForMergeVars {
   addressCity?: string | null;
   addressState?: string | null;
   addressZip?: string | null;
+  /**
+   * The org's operating timezone, for [today]. Required rather than defaulted:
+   * the Node runtime is UTC on Vercel, so a missing zone silently dates an
+   * evening email tomorrow, and an implicit Eastern fallback silently gives a
+   * Pacific org the wrong day. Callers resolve it with getOrgTimeZone().
+   */
+  timeZone: string;
 }
 
 const INVOICE_DELIVERY_LABELS: Record<string, string> = {
@@ -176,7 +186,12 @@ export function buildClientMergeVars(
 
   const phoneOfType = (type: string) => esc(client.phones?.find((p) => p.type === type)?.phone ?? "");
   const referringClient = esc(client.referringClientName ?? "");
-  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const today = new Date().toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: org.timeZone,
+  });
 
   return {
     "[clientfirstname]": firstName,
@@ -246,16 +261,20 @@ interface SendClientEmailOpts {
   to: string;
   subject: string;
   html: string;
+  from?: string;
+  /** See resolveReplyTo — where a customer's reply should land. */
+  replyTo?: string | null;
 }
 
 /** Thin, single call site for outbound client emails — keeps `from` and error handling consistent. */
 export async function sendClientEmail(opts: SendClientEmailOpts): Promise<{ resendId: string | null }> {
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data, error } = await resend.emails.send({
-    from: EMAIL_FROM,
+    from: opts.from ?? EMAIL_FROM,
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
+    ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
   });
   if (error) {
     throw new Error(error.message ?? "Failed to send email");

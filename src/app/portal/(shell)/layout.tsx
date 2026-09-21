@@ -33,7 +33,7 @@ export default async function PortalShellLayout({ children }: { children: React.
 
     supabase
       .from("organizations")
-      .select("name, brand_color")
+      .select("name, brand_color, customizations")
       .eq("id", ctx.orgId)
       .single(),
   ]);
@@ -43,7 +43,15 @@ export default async function PortalShellLayout({ children }: { children: React.
 
   const branding = {
     companyName: settings?.company_name ?? org?.name ?? "Your Service Provider",
-    logoUrl: settings?.logo_url ?? null,
+    // Fall back to the org's own logo (Settings > Branding, stored in
+    // organizations.customizations.logoDataUrl) when no portal-specific logo
+    // is set. Without this an org that has uploaded a logo still shows the
+    // first-letter placeholder in the portal, because client_portal_settings
+    // .logo_url is a separate, usually-empty field.
+    logoUrl:
+      settings?.logo_url ??
+      ((org?.customizations as Record<string, unknown> | null)?.logoDataUrl as string | undefined) ??
+      null,
     accentColor: settings?.accent_color ?? org?.brand_color ?? "#60ab45",
     supportEmail: settings?.support_email ?? null,
     supportPhone: settings?.support_phone ?? null,

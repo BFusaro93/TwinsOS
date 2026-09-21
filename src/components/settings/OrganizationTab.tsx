@@ -35,6 +35,7 @@ export function OrganizationTab() {
   const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
   const [burdenedDraft, setBurdenedDraft] = useState((burdenedLaborRateCents / 100).toFixed(2));
   const [orgNameDraft, setOrgNameDraft] = useState(orgName);
+  const [replyToDraft, setReplyToDraft] = useState("");
   // Seeded from the platform default until the org row loads, then synced in
   // the effect below alongside the other remote-backed drafts.
   const [tzDraft, setTzDraft] = useState<string>(DEFAULT_TIME_ZONE);
@@ -54,11 +55,16 @@ export function OrganizationTab() {
   const persistedBurdenedCents =
     typeof remoteCustomizations.burdenedLaborRateCents === "number" ? remoteCustomizations.burdenedLaborRateCents : -1;
 
+  // Mirrors isUsableReplyTo on the server — the save is rejected there too,
+  // this is only so the error shows before a round trip.
+  const replyToValid = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(replyToDraft.trim());
+
   const seeded = useRef(false);
   useEffect(() => {
     if (!remoteSettings || seeded.current) return;
     seeded.current = true;
     setOrgNameDraft(remoteSettings.name);
+    setReplyToDraft(remoteSettings.replyToEmail ?? "");
     setTaxDraft(remoteSettings.taxRatePercent);
     setTzDraft(remoteSettings.timezone);
     const savedRate = (remoteSettings.customizations as Record<string, unknown>)?.breakevenLaborRateCents;
@@ -100,6 +106,45 @@ export function OrganizationTab() {
               >
                 Save
               </Button>
+            </div>
+          </div>
+          <Separator />
+          {/* Reply-To — see lib/email/reply-to.ts for why this is Reply-To
+              and not From. */}
+          <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-900">Reply-To Email</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Where a client&rsquo;s reply goes when they answer an invoice, estimate or
+                automated email. Emails still send from your company name on our sending
+                domain; only the reply address changes. Leave blank and replies go nowhere.
+              </p>
+            </div>
+            <div className="flex w-full flex-col gap-1 md:w-80 md:shrink-0">
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="office@yourcompany.com"
+                  value={replyToDraft}
+                  onChange={(e) => setReplyToDraft(e.target.value)}
+                  className="h-8 text-sm"
+                />
+                <Button
+                  size="sm"
+                  className="h-8 shrink-0"
+                  disabled={
+                    savingSettings ||
+                    replyToDraft.trim() === (remoteSettings?.replyToEmail ?? "") ||
+                    (!!replyToDraft.trim() && !replyToValid)
+                  }
+                  onClick={() => updateOrgSettings({ replyToEmail: replyToDraft.trim() || null })}
+                >
+                  Save
+                </Button>
+              </div>
+              {!!replyToDraft.trim() && !replyToValid && (
+                <p className="text-[11px] text-red-600">Enter a valid email address.</p>
+              )}
             </div>
           </div>
           <Separator />
@@ -182,11 +227,11 @@ export function OrganizationTab() {
             label="Operating Time Zone"
             description="The clock your business runs on. Decides which day a visit, invoice or report belongs to — for everyone, including staff logged in from another time zone."
           >
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <select
                 value={tzDraft}
                 onChange={(e) => setTzDraft(e.target.value)}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="min-w-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 {SELECTABLE_TIME_ZONES.map((tz) => (
                   <option key={tz.value} value={tz.value}>{tz.label}</option>
@@ -198,7 +243,7 @@ export function OrganizationTab() {
                   <option value={tzDraft}>{tzDraft}</option>
                 )}
               </select>
-              <span className="text-xs text-slate-500">
+              <span className="whitespace-nowrap text-xs text-slate-500">
                 Now {new Date().toLocaleTimeString("en-US", {
                   timeZone: tzDraft,
                   hour: "numeric",

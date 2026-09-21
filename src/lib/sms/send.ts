@@ -11,7 +11,18 @@ type AnyClient = any;
  */
 export async function sendClientSms(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string | null; toPhone: string; body: string }
+  params: {
+    orgId: string;
+    clientId: string | null;
+    toPhone: string;
+    body: string;
+    /**
+     * auth user id to stamp on the activity row. Automations send as the
+     * system and leave this unset; a person typing a 1:1 text has to be
+     * answerable for it on the timeline.
+     */
+    createdBy?: string | null;
+  }
 ): Promise<{ ok: true; sid: string | null } | { ok: false; reason: string }> {
   // TCPA consent gate, enforced here (the actual Twilio call) rather than
   // only in the automation-content resolver, so no future call site — a
@@ -95,6 +106,7 @@ export async function sendClientSms(
       ref_id: payload?.sid ?? null,
       ref_table: "twilio_messages",
       occurred_at: new Date().toISOString(),
+      created_by: params.createdBy ?? null,
     });
   }
 

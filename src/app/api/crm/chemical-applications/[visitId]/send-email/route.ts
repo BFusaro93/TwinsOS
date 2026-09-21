@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
+import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { resolveMergeTags } from "@/lib/utils/document-template-renderer";
 
@@ -46,7 +47,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitErr } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, client_id, scheduled_date, clients(display_name, primary_email)")
+    .select("id, client_id, scheduled_date, clients(display_name, primary_email, email_bounced_at)")
     .eq("id", visitId)
     .single();
 
@@ -57,6 +58,13 @@ export async function POST(
   const clientEmail = visit.clients?.primary_email as string | null;
   if (!clientEmail) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
+  }
+  // A hard bounce means the address doesn't accept mail; re-sending damages
+  // sending-domain reputation (see the Resend webhook that sets
+  // email_bounced_at). This route always uses the client's stored address, so
+  // there is no corrected-address path to exempt.
+  if (visit.clients?.email_bounced_at) {
+    return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
   }
 
   // Fetch org
@@ -146,12 +154,14 @@ export async function POST(
   const resolvedBody    = resolveMergeTags(body.bodyHtml, mergeVars);
 
   // Send via Resend
+  const replyTo = profile?.org_id ? await getOrgReplyTo(supabase, profile.org_id) : null;
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data: sent, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(org?.name),
     to: clientEmail,
     subject: resolvedSubject,
     html: resolvedBody,
+    ...(replyTo ? { replyTo } : {}),
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
   });
 

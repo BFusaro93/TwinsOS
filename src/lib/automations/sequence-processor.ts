@@ -200,6 +200,9 @@ export async function processDueEnrollment(
       // Carry the resolved sender ("from sales rep" or the org-branded
       // default) through; the approvals path already does this.
       fromAddress: built.fromAddress,
+      // …and the matching reply address, so a rep-sent step's replies reach
+      // the rep rather than the org's general mailbox.
+      replyTo: built.replyTo,
     });
     if (!sendResult.ok) {
       await logSequenceExecution(adminClient, {

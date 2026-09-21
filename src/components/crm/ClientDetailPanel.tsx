@@ -81,6 +81,7 @@ import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
 import { ContractsList, ContractDialog } from "./contracts/ContractsList";
 import { ClientFilesTab } from "./ClientFilesTab";
 import { SendClientEmailDialog } from "./SendClientEmailDialog";
+import { SendClientSmsDialog } from "./SendClientSmsDialog";
 import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
@@ -134,6 +135,7 @@ import {
   ExternalLink,
   Search,
   CreditCard,
+  MessageSquareText,
 } from "lucide-react";
 import type { Client, ClientContact, ClientProperty, ContactPhone, PhoneType } from "@/types/crm";
 import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
@@ -3198,6 +3200,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [activeTab, setActiveTab] = useState("home");
   const [editOpen, setEditOpen] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [sendSmsOpen, setSendSmsOpen] = useState(false);
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [allContactsOpen, setAllContactsOpen] = useState(false);
@@ -3421,11 +3424,25 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     }}>
                       <Mail className="mr-2 h-3.5 w-3.5" /> Email
                     </DropdownMenuItem>
+                    {/* Two different senders, deliberately both offered.
+                        "Text Message" goes out on the org's Twilio number:
+                        consent-gated, billed to the org's SMS allowance and
+                        logged to this timeline. "Text from My Phone" is the
+                        old sms: hand-off to the user's own device — nothing
+                        the platform sends, records or can answer for. */}
+                    {can("sms_send") && (
+                      <DropdownMenuItem onClick={() => {
+                        if (client.primaryPhone) setSendSmsOpen(true);
+                        else toast.error("No phone on file");
+                      }}>
+                        <MessageSquareText className="mr-2 h-3.5 w-3.5" /> Text Message
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => {
                       if (client.primaryPhone) window.location.href = `sms:${client.primaryPhone}`;
                       else toast.error("No phone on file");
                     }}>
-                      <Phone className="mr-2 h-3.5 w-3.5" /> Text Message
+                      <Phone className="mr-2 h-3.5 w-3.5" /> Text from My Phone
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -3946,6 +3963,16 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           clientId={clientId}
           clientName={client.displayName}
           clientEmail={client.primaryEmail}
+        />
+      )}
+      {client?.primaryPhone && (
+        <SendClientSmsDialog
+          open={sendSmsOpen}
+          onClose={() => setSendSmsOpen(false)}
+          clientId={clientId}
+          clientName={client.displayName}
+          clientPhone={client.primaryPhone}
+          smsOptIn={client.smsOptIn ?? false}
         />
       )}
       <CancelClientDialog

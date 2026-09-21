@@ -16,6 +16,8 @@ export interface OrgSettingsData {
   portalEnabled: boolean;
   customizations: Record<string, unknown>;
   googleMapsApiKey: string | null;
+  /** Where client replies land — see lib/email/reply-to.ts. Null until set. */
+  replyToEmail: string | null;
   accountNumberPrefix: string;
   accountNumberNext: number;
   accountNumberSuffix: string;
@@ -41,6 +43,7 @@ export interface UpdateOrgSettingsInput {
   portalEnabled?: boolean;
   customizations?: Record<string, unknown>;
   googleMapsApiKey?: string | null;
+  replyToEmail?: string | null;
   accountNumberPrefix?: string;
   accountNumberNext?: number;
   accountNumberSuffix?: string;
@@ -74,6 +77,7 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     portalEnabled: typeof row.portal_enabled === "boolean" ? row.portal_enabled : true,
     customizations: (row.customizations as Record<string, unknown>) ?? {},
     googleMapsApiKey: ((row.customizations as Record<string, unknown>)?.google_maps_api_key as string) ?? null,
+    replyToEmail: ((row.customizations as Record<string, unknown>)?.reply_to_email as string) ?? null,
     accountNumberPrefix: (row.account_number_prefix as string) ?? "",
     accountNumberNext: typeof row.account_number_next === "number" ? row.account_number_next : 1000,
     accountNumberSuffix: (row.account_number_suffix as string) ?? "",
@@ -153,6 +157,18 @@ export function useUpdateOrgSettings() {
           customizations: {
             ...(input.customizations ?? {}),
             google_maps_api_key: input.googleMapsApiKey ?? null,
+          },
+        };
+      }
+
+      // Same reasoning as the Maps key above: lives in customizations, so no
+      // migration and no schema churn for a single optional address.
+      if (input.replyToEmail !== undefined) {
+        input = {
+          ...input,
+          customizations: {
+            ...(input.customizations ?? {}),
+            reply_to_email: input.replyToEmail?.trim() || null,
           },
         };
       }

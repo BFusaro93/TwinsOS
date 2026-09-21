@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import {
   buildCanSpamFooter,
   buildClientMergeVars,
+  orgEmailFrom,
   resolveMergeTags,
   sendClientEmail,
 } from "@/lib/email/send";
+import { resolveReplyTo, type ReplyToMode } from "@/lib/email/reply-to";
 
 export async function POST(
   req: Request,
@@ -60,6 +63,7 @@ export async function POST(
     bodyHtml?: string;
     bulk?: boolean;
     purpose?: "marketing" | "service";
+    replyTo?: ReplyToMode;
   };
   if (!body.subject?.trim() || !body.bodyHtml?.trim()) {
     return NextResponse.json({ error: "subject and bodyHtml are required" }, { status: 400 });
@@ -67,6 +71,11 @@ export async function POST(
   const isBulk = body.bulk === true;
   const purpose = body.purpose === "service" ? "service" : "marketing";
   const isMarketing = isBulk && purpose === "marketing";
+  // A MODE, never an address — the caller picks "me" or "the company" and the
+  // actual mailbox is resolved from the session / org row. A bulk blast is
+  // always the company: 200 clients replying into one rep's personal inbox is
+  // not what anyone means by "send as me".
+  const replyToMode: ReplyToMode = !isBulk && body.replyTo === "user" ? "user" : "company";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: client } = await (supabase as any)
@@ -91,10 +100,12 @@ export async function POST(
   if (!client.primary_email) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
-  // A hard bounce blocks BOTH purposes: it isn't a preference, it's an address
-  // that doesn't accept mail, and re-sending damages sending-domain
-  // reputation. This is what makes the "service" override safe to offer.
-  if (isBulk && client.email_bounced_at) {
+  // A hard bounce blocks EVERY send — bulk or 1:1, marketing or service. It
+  // isn't a preference, it's an address that doesn't accept mail, and
+  // re-sending damages sending-domain reputation. This is what makes the
+  // "service" override safe to offer. Gating this on isBulk would have let the
+  // 1:1 dialog (which sends no `bulk` flag) keep mailing dead addresses.
+  if (client.email_bounced_at) {
     return NextResponse.json(
       { error: "Client's email address has hard-bounced" },
       { status: 422 }
@@ -152,6 +163,7 @@ export async function POST(
     addressCity: org?.address?.city ?? null,
     addressState: org?.address?.state ?? null,
     addressZip: org?.address?.zip ?? null,
+    timeZone: await getOrgTimeZone(supabase, profile.org_id),
   };
 
   // Two separate maps: the subject is plain text delivered verbatim to an
@@ -175,12 +187,22 @@ export async function POST(
     );
   }
 
+  const replyTo = await resolveReplyTo(supabase, {
+    orgId: profile.org_id,
+    mode: replyToMode,
+    userEmail: user.email,
+  });
+
   let resendId: string | null = null;
   try {
     const sent = await sendClientEmail({
       to: client.primary_email,
       subject: resolvedSubject,
       html: resolvedBody,
+      // Every other client-facing send already goes out under the org's own
+      // name on the shared domain; this one was still arriving as "Landscapt".
+      from: orgEmailFrom(org?.name),
+      replyTo,
     });
     resendId = sent.resendId;
   } catch (err) {
