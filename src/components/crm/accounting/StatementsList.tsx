@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { Send, Eye } from "lucide-react";
 
@@ -26,6 +27,7 @@ type SendStatus = "sent" | "skipped" | "failed";
  *  an "all customers" option; this is that, scoped to clients with a
  *  balance since that's who a statement run is actually for). */
 export function StatementsList() {
+  const { can } = usePermissions();
   const { data: clients = [], isLoading } = useClients();
 
   const [statementDate, setStatementDate] = useState(todayISO());
@@ -174,10 +176,12 @@ export function StatementsList() {
           <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
           Select all ({clientsWithBalance.length} with a balance)
         </label>
-        <Button size="sm" className="h-7 text-xs" disabled={selectedIds.size === 0 || sending} onClick={() => void sendSelected()}>
-          <Send className="mr-1.5 h-3.5 w-3.5" />
-          {sending ? "Sending…" : `Email Selected (${selectedIds.size})`}
-        </Button>
+        {can("acct_send_statements") && (
+          <Button size="sm" className="h-7 text-xs" disabled={selectedIds.size === 0 || sending} onClick={() => void sendSelected()}>
+            <Send className="mr-1.5 h-3.5 w-3.5" />
+            {sending ? "Sending…" : `Email Selected (${selectedIds.size})`}
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto">

@@ -61,6 +61,7 @@ import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/component
 import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
 import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { InvoiceEmailDialog } from "@/components/crm/invoices/InvoiceEmailDialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Textarea } from "@/components/ui/textarea";
 import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
 
@@ -623,6 +624,7 @@ export function InvoiceDetail({
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [chargeCardOpen, setChargeCardOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const { can } = usePermissions();
   const [selectedPayment, setSelectedPayment] = useState<CRMPayment | null>(null);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -960,11 +962,13 @@ export function InvoiceDetail({
             onClick={handlePrint}>
             <Printer className="mr-1 h-3.5 w-3.5 text-slate-500" /> Print
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => setEmailDialogOpen(true)}
-            disabled={invoice.status === "void"}>
-            <Mail className="mr-1 h-3.5 w-3.5 text-blue-500" /> Email
-          </Button>
+          {can("acct_send_invoices") && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              onClick={() => setEmailDialogOpen(true)}
+              disabled={invoice.status === "void"}>
+              <Mail className="mr-1 h-3.5 w-3.5 text-blue-500" /> Email
+            </Button>
+          )}
           <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving || invoice.locked}>
             <Save className="mr-1 h-3.5 w-3.5" />{saving ? "Saving…" : "Save Invoice"}
           </Button>

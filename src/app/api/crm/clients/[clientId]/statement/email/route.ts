@@ -49,6 +49,17 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Granular per-role permission — admins always pass, otherwise gated by
+  // crm_roles.permissions.acct_send_statements. An account statement discloses a client's
+  // full billing history, so sending one is gated separately from viewing it.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_send_statements",
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json() as {
     to?: string[];
     subject?: string;

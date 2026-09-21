@@ -21,6 +21,17 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Granular per-role permission — admins always pass, otherwise gated by
+  // crm_roles.permissions.chem_send_application_notice. A chemical application notice is a
+  // regulatory-facing record of what was applied at a property.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "chem_send_application_notice",
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json() as {
     subject: string;
     bodyHtml: string;

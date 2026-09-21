@@ -288,6 +288,7 @@ function ApplicationRow({
 export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) {
   const { can } = usePermissions();
   const canEdit = can("chem_add_edit_usage");
+  const canSendNotice = can("chem_send_application_notice");
   const { data: applications = [] } = useChemicalApplicationsForVisit(visitId);
   const { data: allProducts = [] } = useProducts();
   const { data: methods = [] } = useChemicalLookupItems("application_method");
@@ -407,7 +408,7 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
 
   return (
     <div className="flex flex-col gap-3">
-      {applications.length > 0 && (
+      {applications.length > 0 && canSendNotice && (
         <div className="flex justify-end">
           <Button
             size="sm"

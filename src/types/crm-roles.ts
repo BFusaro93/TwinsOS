@@ -342,6 +342,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         label: "Chemical Tracking",
         permissions: {
           chem_add_edit_usage: "Add | Edit Usage",
+          chem_send_application_notice: "Email Application Notice",
           chem_create_uom: "Create UoM",
           chem_create_application_method: "Create Application Method",
           chem_create_target: "Create Target",
@@ -411,6 +412,8 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         permissions: {
           acct_view_invoice_list: "View Invoice List",
           acct_add_modify_invoices: "Add/Modify Invoices",
+          acct_send_invoices: "Email Invoices",
+          acct_send_statements: "Email Account Statements",
           acct_view_payment_list: "View Payment List",
           acct_add_modify_payments: "Add/Modify Payments",
           acct_delete_card_payments: "Delete Card Payments",

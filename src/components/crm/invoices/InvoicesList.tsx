@@ -735,12 +735,14 @@ export function InvoicesList({ clientId }: Props) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={bulkEmailSelected}
-              >
-                Email Selected
-              </DropdownMenuItem>
+              {can("acct_send_invoices") && (
+                <DropdownMenuItem
+                  disabled={!someSelected}
+                  onSelect={bulkEmailSelected}
+                >
+                  Email Selected
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 disabled={!someSelected}
                 onSelect={bulkPrintSelected}

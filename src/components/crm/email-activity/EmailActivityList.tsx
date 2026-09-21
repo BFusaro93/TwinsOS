@@ -345,7 +345,7 @@ export function EmailActivityList() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              {can("email_activity_send") && (
+              {can("email_activity_send") && can("acct_send_invoices") && (
                 <DropdownMenuItem
                   disabled={!someSelected}
                   onSelect={resendSelected}
