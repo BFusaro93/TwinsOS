@@ -124,7 +124,10 @@ async function findMissingRequiredFields(
   const { data: formRules } = await db
     .from("crm_form_rules")
     .select("source_field_id, operator, operand, action, action_value")
-    .eq("form_id", formId);
+    .eq("form_id", formId)
+    // crm_form_rules is soft-deleted; without this a rule the user deleted
+    // keeps hiding/altering fields on every new submission.
+    .is("deleted_at", null);
 
   const fieldById = new Map(formFields.map((f) => [f.id, f]));
   const hidden = new Set<string>();

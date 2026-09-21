@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone, shiftYmd } from "@/lib/time/zone";
 
 /**
  * GET  /api/crm/estimates/automation-date-triggers — called by Vercel Cron
@@ -36,10 +38,6 @@ async function handleRun(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Triggers are evaluated per org below; UTC is at or ahead of every US zone,
-  // so this bound over-selects rather than missing a row.
-  const utcToday = new Date().toISOString().slice(0, 10);
-
   const { data: triggers } = await supabase
     .from("crm_sequence_triggers")
     .select("id, sequence_id, trigger_type, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
@@ -62,8 +60,14 @@ async function handleRun(request: Request) {
     let matches: any[] = [];
 
     if (trigger.trigger_type === "estimate_expiring") {
-      const windowEnd = new Date();
-      windowEnd.setDate(windowEnd.getDate() + days);
+      // valid_until_date is a calendar date, so the window has to be measured
+      // on the org's calendar. A UTC "today" is a LOWER bound here, and UTC is
+      // at or ahead of every US zone — so it silently drops the estimates
+      // expiring on the org's own today and shifts the whole window a day late
+      // for any org whose date hasn't rolled over yet (Hawaii at this cron's
+      // hour). The query is already per-org, so resolve the day directly
+      // rather than over-fetching and re-filtering.
+      const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
       const { data } = await supabase
         .from("estimates")
         .select("id, client_id")
@@ -71,8 +75,8 @@ async function handleRun(request: Request) {
         .in("stage", ["sent", "quote"])
         .is("deleted_at", null)
         .not("valid_until_date", "is", null)
-        .gte("valid_until_date", utcToday)
-        .lte("valid_until_date", windowEnd.toISOString().split("T")[0]);
+        .gte("valid_until_date", orgToday)
+        .lte("valid_until_date", shiftYmd(orgToday, days));
       matches = data ?? [];
     } else {
       // estimate_no_response

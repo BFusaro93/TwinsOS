@@ -49,7 +49,8 @@ export interface VisitCompletionSideEffectsArgs {
   visitId: string;
   /** Actor recorded as created_by on the activity row. */
   userId: string;
-  /** Overrides the "today" used for last_service_date / invoice_date (YYYY-MM-DD, UTC). */
+  /** Overrides the "today" used for last_service_date / invoice_date (YYYY-MM-DD).
+   * Defaults to the org's calendar day, not UTC — see the resolution below. */
   today?: string;
   /** Skip the "Visit completed" row if an identical one already exists. */
   dedupeActivity?: boolean;

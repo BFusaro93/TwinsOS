@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { EMAIL_FROM } from "@/lib/email/send";
 
@@ -41,8 +43,12 @@ export async function GET(request: Request) {
   const today = new Date();
   const windowEnd = new Date(today);
   windowEnd.setDate(windowEnd.getDate() + 3);
-  const todayStr = today.toISOString().split("T")[0];
-  const windowEndStr = windowEnd.toISOString().split("T")[0];
+  // end_date is a calendar date, so the real window is each org's own 3-day
+  // window. This cron spans every org, so widen the SQL bounds by a day either
+  // side and re-filter per row on that org's clock below — a bare UTC lower
+  // bound drops contracts ending on an org's own today.
+  const todayStr = shiftYmd(isoInZone(today, "UTC"), -1);
+  const windowEndStr = shiftYmd(isoInZone(windowEnd, "UTC"), 1);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: expiring } = await (supabase as any)
@@ -61,6 +67,13 @@ export async function GET(request: Request) {
   let notified = 0;
 
   for (const contract of expiring as Record<string, unknown>[]) {
+    // Re-filter on the org's calendar — the SQL bounds above are deliberately
+    // a day wider than the real window.
+    const orgToday = todayInZone(await getOrgTimeZone(supabase, contract.org_id as string));
+    const endDate = contract.end_date as string | null;
+    if (!endDate) continue;
+    if (endDate < orgToday || endDate > shiftYmd(orgToday, 3)) continue;
+
     const contractClientId = contract.client_id as string | null;
     if (contractClientId) {
       await fireSimpleTrigger(supabase, {
@@ -99,8 +112,11 @@ export async function GET(request: Request) {
     const repName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim();
 
     const clientName = (contract.clients as Record<string, unknown> | null)?.display_name as string ?? "the client";
-    const endDate = contract.end_date as string;
-    const daysLeft = Math.ceil((new Date(endDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    // Whole calendar days on the org's clock — a UTC-midnight parse minus the
+    // current instant floored to 0 for a contract ending today.
+    const daysLeft = Math.round(
+      (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${orgToday}T00:00:00Z`)) / 86_400_000
+    );
     const contractUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/accounting/contracts`;
 
     if (rep.user_id && prefs.inAppContractExpiring !== false) {
@@ -123,7 +139,7 @@ export async function GET(request: Request) {
       await resend.emails.send({
         from: EMAIL_FROM,
         to: rep.email,
-        subject: `Contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — ${contract.title}`,
+        subject: `Contract ${expiryPhrase(daysLeft)} — ${contract.title}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Contract Expiring Soon</h2>
           <p style="margin:0 0 4px;color:#475569">Hi ${repName || "there"},</p>
@@ -138,4 +154,12 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ notified });
+}
+
+/** "expires today" / "expires tomorrow" / "expires in N days" — daysLeft is a
+ *  whole-day count on the org's calendar, so 0 means today, not "0 days". */
+function expiryPhrase(daysLeft: number): string {
+  if (daysLeft <= 0) return "expires today";
+  if (daysLeft === 1) return "expires tomorrow";
+  return `expires in ${daysLeft} days`;
 }

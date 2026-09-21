@@ -60,9 +60,9 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("clients")
-      .select("display_name, billing_address_line1, billing_address_city, billing_address_state, billing_address_zip")
+      .select("display_name, billing_address, billing_city, billing_state, billing_zip")
       .eq("id", ctx.clientId)
-      .single() as Promise<{ data: { display_name: string | null; billing_address_line1: string | null; billing_address_city: string | null; billing_address_state: string | null; billing_address_zip: string | null } | null }>,
+      .single() as Promise<{ data: { display_name: string | null; billing_address: string | null; billing_city: string | null; billing_state: string | null; billing_zip: string | null } | null }>,
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
@@ -84,6 +84,11 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
     .from("estimate_line_items")
     .select("id, estimate_desc, service_name, quantity:qty, unit_price_cents:rate_cents, discount_cents, sort_order, row_type, section_name")
     .eq("estimate_id", id)
+    // Without this a removed line still renders on the customer's PDF and is
+    // added into the section subtotal, while the grand total comes from the
+    // estimate header (which excludes it) — so the document doesn't add up.
+    // The internal PDF already filters these out.
+    .is("deleted_at", null)
     .order("sort_order", { ascending: true }) as { data: LineItem[] | null };
 
   const settings = toDisplaySettings(estimate.display_settings);
@@ -160,10 +165,10 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
         <div className="mb-8">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Prepared For</p>
           <p className="text-sm font-semibold text-slate-900">{client?.display_name ?? ""}</p>
-          {client?.billing_address_line1 && <p className="text-sm text-slate-600">{client.billing_address_line1}</p>}
-          {client?.billing_address_city && (
+          {client?.billing_address && <p className="text-sm text-slate-600">{client.billing_address}</p>}
+          {client?.billing_city && (
             <p className="text-sm text-slate-600">
-              {client.billing_address_city}{client.billing_address_state ? `, ${client.billing_address_state}` : ""}{client.billing_address_zip ? ` ${client.billing_address_zip}` : ""}
+              {client.billing_city}{client.billing_state ? `, ${client.billing_state}` : ""}{client.billing_zip ? ` ${client.billing_zip}` : ""}
             </p>
           )}
         </div>

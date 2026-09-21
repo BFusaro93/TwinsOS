@@ -111,7 +111,7 @@ export async function GET(
     estimateNumber: est.estimate_number,
     description: est.description ?? null,
     createdAt: est.created_at,
-    validUntil: est.valid_until ?? null,
+    validUntil: est.valid_until_date ?? null,
     notes: est.notes ?? null,
     stage: est.stage,
     alreadyAccepted: !!shareToken.accepted_at,

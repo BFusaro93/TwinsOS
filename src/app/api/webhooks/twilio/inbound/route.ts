@@ -89,7 +89,10 @@ export async function POST(request: Request) {
   let clientQuery = supabase
     .from("clients")
     .select("id, org_id, primary_phone, display_name")
-    .not("primary_phone", "is", null);
+    .not("primary_phone", "is", null)
+    // A soft-deleted client must not claim an inbound text — the message would
+    // be filed against a record no screen shows.
+    .is("deleted_at", null);
   if (ownerOrgId) clientQuery = clientQuery.eq("org_id", ownerOrgId);
   const { data: clients } = await clientQuery;
 

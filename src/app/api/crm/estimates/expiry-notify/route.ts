@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { orgEmailFrom } from "@/lib/email/send";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
 
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
@@ -25,20 +27,26 @@ export async function GET(req: NextRequest) {
   const windowEnd = new Date(today);
   windowEnd.setDate(windowEnd.getDate() + 3);
 
-  const todayStr = today.toISOString().split("T")[0];
-  const windowEndStr = windowEnd.toISOString().split("T")[0];
+  // valid_until_date is a calendar date, so the real window is each org's own
+  // 3-day window. This cron spans every org, so it can't resolve one day up
+  // front: widen the SQL bounds by a day either side — no US zone is more than
+  // a calendar day from UTC — and re-filter each row on its own org's clock
+  // below. Widening is the safe direction; a UTC lower bound on its own would
+  // silently drop estimates expiring on an org's own today.
+  const todayStr = shiftYmd(isoInZone(today, "UTC"), -1);
+  const windowEndStr = shiftYmd(isoInZone(windowEnd, "UTC"), 1);
 
   // Estimates expiring in the next 3 days that are still open (sent or quote_ready stage)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: expiring } = await (supabase as any)
     .from("estimates")
     .select(`
-      id, estimate_number, description, valid_until, total_cents, org_id, created_by,
+      id, estimate_number, description, valid_until_date, total_cents, org_id, created_by,
       clients(display_name),
       organizations(name, brand_color)
     `)
-    .gte("valid_until", todayStr)
-    .lte("valid_until", windowEndStr)
+    .gte("valid_until_date", todayStr)
+    .lte("valid_until_date", windowEndStr)
     .in("stage", ["sent", "quote"])
     .is("deleted_at", null)
     .is("expiry_notified_at", null);
@@ -53,6 +61,13 @@ export async function GET(req: NextRequest) {
   for (const est of expiring as Record<string, unknown>[]) {
     const createdBy = est.created_by as string | null;
     if (!createdBy) continue;
+
+    // Re-filter against the org's calendar — the SQL bounds above are
+    // deliberately a day wider than the real window.
+    const orgToday = todayInZone(await getOrgTimeZone(supabase, est.org_id as string));
+    const estValidUntil = est.valid_until_date as string | null;
+    if (!estValidUntil) continue;
+    if (estValidUntil < orgToday || estValidUntil > shiftYmd(orgToday, 3)) continue;
 
     // Look up the rep's email from auth.users via profiles
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,9 +87,12 @@ export async function GET(req: NextRequest) {
     const brandColor = (org?.brand_color as string) ?? "#60ab45";
     const estimateNum = String(est.estimate_number as number).padStart(5, "0");
     const clientName = (client?.display_name as string) ?? "Unknown Client";
-    const validUntil = est.valid_until as string;
-    const daysLeft = Math.ceil(
-      (new Date(validUntil).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    const validUntil = est.valid_until_date as string;
+    // Whole calendar days on the org's clock. Subtracting a UTC-midnight parse
+    // from the current instant gave a fractional value that floored to 0 for
+    // an estimate expiring today, so the subject read "expires in 0 days".
+    const daysLeft = Math.round(
+      (Date.parse(`${validUntil}T00:00:00Z`) - Date.parse(`${orgToday}T00:00:00Z`)) / 86_400_000
     );
     const totalFormatted = new Intl.NumberFormat("en-US", {
       style: "currency", currency: "USD",
@@ -90,7 +108,7 @@ export async function GET(req: NextRequest) {
       await resend.emails.send({
         from: orgEmailFrom(orgName),
         to: profile.email,
-        subject: `Estimate #${estimateNum} expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — ${clientName}`,
+        subject: `Estimate #${estimateNum} ${expiryPhrase(daysLeft)} — ${clientName}`,
         html,
       });
       notified++;
@@ -106,6 +124,14 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ notified });
 }
 
+/** "expires today" / "expires tomorrow" / "expires in N days" — daysLeft is a
+ *  whole-day count on the org's calendar, so 0 means today, not "0 days". */
+function expiryPhrase(daysLeft: number): string {
+  if (daysLeft <= 0) return "expires today";
+  if (daysLeft === 1) return "expires tomorrow";
+  return `expires in ${daysLeft} days`;
+}
+
 function buildExpiryEmail({
   orgName, brandColor, repName, clientName, estimateNum, validUntil,
   daysLeft, total, estimateId,
@@ -116,7 +142,7 @@ function buildExpiryEmail({
 }) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.twinsos.com";
   const estimateUrl = `${appUrl}/crm/estimates/${estimateId}`;
-  const urgency = daysLeft <= 1 ? "⚠️ Expires today!" : `Expires in ${daysLeft} days`;
+  const urgency = daysLeft <= 0 ? "⚠️ Expires today!" : daysLeft === 1 ? "⚠️ Expires tomorrow" : `Expires in ${daysLeft} days`;
 
   return `<!DOCTYPE html>
 <html>
