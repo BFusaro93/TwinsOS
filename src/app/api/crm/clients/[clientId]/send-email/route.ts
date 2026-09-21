@@ -22,6 +22,19 @@ export async function POST(
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Granular per-role permission — admins always pass, otherwise gated by
+  // crm_roles.permissions.email_activity_send. The UI already hides every send
+  // control behind this key (dispatch board, waiting list, email activity), but
+  // that only hides the button: without this check any authenticated CRM user
+  // could POST here directly and send org email under a role that forbids it.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "email_activity_send",
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { clientId } = await params;
   // `bulk` marks a one-to-many blast (the dispatch board / waiting list's
   // "Email Selected Clients") rather than a 1:1 reply.
