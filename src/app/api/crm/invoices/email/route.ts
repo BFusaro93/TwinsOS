@@ -43,6 +43,18 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Granular per-role permission — admins always pass, otherwise gated by
+  // crm_roles.permissions.acct_send_invoices. Without this, any authenticated CRM
+  // user could POST here directly and email an org invoice (and push it to
+  // QuickBooks) under a role with no accounting access at all.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_send_invoices",
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json() as {
     invoiceId: string;
     to?: string[];

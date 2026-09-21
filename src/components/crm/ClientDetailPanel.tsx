@@ -3476,9 +3476,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => setActiveTab("audit")}>
                       <History className="mr-2 h-3.5 w-3.5" /> View Audit Trail
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setAccountStatementOpen(true)}>
-                      <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
-                    </DropdownMenuItem>
+                    {can("acct_send_statements") && (
+                      <DropdownMenuItem onClick={() => setAccountStatementOpen(true)}>
+                        <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     {client.status === "cancelled" ? (
                       <DropdownMenuItem onClick={async () => { try { await activate(clientId); toast.success("Client reactivated"); } catch { toast.error("Failed to activate"); } }}>
