@@ -3,6 +3,7 @@ import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PrintButton from "@/components/portal/PrintButton";
 import { groupIntoSections, toDisplaySettings } from "@/lib/estimate-display-settings";
+import { LineDescription } from "@/components/shared/LineDescription";
 
 interface LineItem {
   id: string;
@@ -203,7 +204,13 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
                 )}
                 {section.items.map((li) => (
                   <tr key={li.id}>
-                    <td className="py-2.5 text-slate-700">{li.estimate_desc ?? li.service_name}</td>
+                    <td className="py-2.5 text-slate-700">
+                      {li.estimate_desc ? (
+                        <LineDescription html={li.estimate_desc} className="text-slate-700" />
+                      ) : (
+                        li.service_name
+                      )}
+                    </td>
                     {settings.showQuantities && <td className="py-2.5 text-center text-slate-600">{li.quantity}</td>}
                     {settings.showLinePrices && (
                       <td className="py-2.5 text-right text-slate-600">
