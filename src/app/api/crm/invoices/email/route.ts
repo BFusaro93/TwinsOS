@@ -11,7 +11,9 @@ import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-temp
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
+import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/send";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("email-invoice");
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
     .select(`
       *,
       clients(
-        display_name, first_name, last_name, primary_email, phones, account_number,
+        display_name, first_name, last_name, primary_email, email_bounced_at, phones, account_number,
         invoice_delivery, balance_outstanding_cents, referred_by, referred_by_client_id,
         billing_address, billing_city, billing_state, billing_zip,
         service_address, service_city, service_state, service_zip,
@@ -91,6 +93,17 @@ export async function POST(req: NextRequest) {
     : (inv.clients?.primary_email ? [inv.clients.primary_email as string] : []);
   if (toEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
+  }
+  // A hard bounce means the stored address doesn't accept mail; re-sending
+  // damages sending-domain reputation, so it is blocked for transactional mail
+  // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
+  // override is how staff send to a corrected address, so it is not blocked.
+  const usingStoredInvoiceEmail = !(body.to && body.to.length > 0);
+  if (usingStoredInvoiceEmail && inv.clients?.email_bounced_at) {
+    return NextResponse.json(
+      { error: "Client's email address has hard-bounced. Update it, or send to a different address." },
+      { status: 422 }
+    );
   }
 
   // Load org + brand color
@@ -214,6 +227,7 @@ export async function POST(req: NextRequest) {
       },
       {
         name: orgName,
+        timeZone: await getOrgTimeZone(supabase, inv.org_id as string),
         addressPhone: orgPhone,
         addressStreet: orgAddr.street ?? null,
         addressCity: orgAddr.city ?? null,
@@ -353,12 +367,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const replyTo = replyToFromCustomizations(org?.customizations);
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
   const { data: sendData, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(org?.name),
     to: toEmails,
     subject: resolvedSubject,
     html,
+    ...(replyTo ? { replyTo } : {}),
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });

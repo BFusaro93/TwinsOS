@@ -7,6 +7,7 @@ import { AccountStatementDocument } from "@/components/crm/invoices/pdf/AccountS
 import type { AccountStatementPDFData } from "@/components/crm/invoices/pdf/AccountStatementDocument";
 import type { OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import { buildAccountStatementData } from "@/lib/invoices/account-statement-data";
+import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars, resolveMergeTags } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
@@ -68,7 +69,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: client, error: clientErr } = await (supabase as any)
     .from("clients")
-    .select("org_id, display_name, primary_email, billing_address, billing_city, billing_state, billing_zip")
+    .select("org_id, display_name, primary_email, email_bounced_at, billing_address, billing_city, billing_state, billing_zip")
     .eq("id", clientId)
     .is("deleted_at", null)
     .single();
@@ -82,6 +83,14 @@ export async function POST(
     : (client.primary_email ? [client.primary_email as string] : []);
   if (toEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
+  }
+
+  // A hard bounce means the stored address doesn't accept mail; re-sending
+  // damages sending-domain reputation, so it is blocked for transactional mail
+  // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
+  // override is how staff send to a corrected address, so it is not blocked.
+  if (!(body.to && body.to.length > 0) && client.email_bounced_at) {
+    return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
   }
 
   const today = await todayISO(supabase);
@@ -117,7 +126,7 @@ export async function POST(
   const mergeVars = {
     ...buildClientMergeVars(
       { displayName: client.display_name as string, balanceOutstandingCents: activity.endingBalanceCents },
-      { name: orgName, addressPhone: orgPhone }
+      { name: orgName, addressPhone: orgPhone, timeZone: await getMyTimeZone(supabase) }
     ),
     "[statementbalance]": formatCents(activity.endingBalanceCents),
   };
@@ -188,12 +197,14 @@ export async function POST(
     console.error("[email-statement] PDF render error:", err);
   }
 
+  const replyTo = replyToFromCustomizations(org?.customizations);
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
   const { data: sendData, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(orgName),
     to: toEmails,
     subject: resolvedSubject,
     html,
+    ...(replyTo ? { replyTo } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
 
