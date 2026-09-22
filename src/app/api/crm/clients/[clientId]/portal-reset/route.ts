@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("portal-reset");
 
 export async function DELETE(
   _req: Request,
@@ -80,7 +83,29 @@ export async function DELETE(
       .is("deleted_at", null)
       .limit(1);
     if (!otherActiveLinks?.length) {
-      await adminClient.auth.admin.deleteUser(portalUser.user_id);
+      // Checked, not fire-and-forget: this delete silently failed for months
+      // because the soft-deleted client_portal_users row still referenced the
+      // auth user and the FK had no ON DELETE action (fixed in
+      // 20260921165127). The route still reported success, so the next invite
+      // always died at /portal/register with "already been registered" and the
+      // client could never get portal access again. If it fails now, say so —
+      // a reset that didn't free the email is not a successful reset.
+      const { error: deleteErr } = await adminClient.auth.admin.deleteUser(portalUser.user_id);
+      if (deleteErr) {
+        log.error("portal reset could not delete the auth user", {
+          clientId,
+          userId: portalUser.user_id,
+          message: deleteErr.message,
+        });
+        return NextResponse.json(
+          {
+            error:
+              "Portal access was removed, but the sign-in account could not be released, " +
+              "so this email cannot be re-registered yet. Please try again or contact support.",
+          },
+          { status: 500 }
+        );
+      }
     }
   }
 
