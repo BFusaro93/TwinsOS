@@ -37,7 +37,6 @@ function mapTemplate(row: any): EstimateTemplate {
     id: row.id,
     orgId: row.org_id,
     name: row.name,
-    estDocument: row.est_document,
     showDiscounts: row.show_discounts,
     showWhen: row.show_when,
     displaySettings: toDisplaySettings(row.display_settings),
@@ -71,7 +70,6 @@ export function useCreateEstimateTemplate() {
   return useMutation({
     mutationFn: async (values: {
       name: string;
-      estDocument?: string;
       showDiscounts?: boolean;
       showWhen?: string;
       displaySettings?: DisplaySettings;
@@ -82,7 +80,6 @@ export function useCreateEstimateTemplate() {
         .from("estimate_templates")
         .insert({
           name: values.name,
-          est_document: values.estDocument ?? "Estimate - General",
           show_discounts: values.showDiscounts ?? false,
           show_when: values.showWhen ?? "estimates",
           ...(values.displaySettings ? { display_settings: values.displaySettings } : {}),

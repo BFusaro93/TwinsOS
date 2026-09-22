@@ -66,6 +66,43 @@ export async function updateSession(request: NextRequest) {
     pathname === "/robots.txt" ||
     pathname === "/llms.txt";
 
+  // A client-portal login is an ordinary Supabase user, so the signed-in check
+  // below passes for them and nothing else stopped a customer from opening the
+  // staff app. RLS still holds — they only ever saw their OWN client's rows —
+  // but the shell rendered and populated, and because the identity in the
+  // client-side store is whatever was cached, it could show a staff name and
+  // "Admin" beside a customer's data. Signing into the portal in a browser
+  // already signed into the CRM is exactly how that happens.
+  //
+  // Portal users have no profiles row (that is what every CRM RLS policy keys
+  // on), so one indexed primary-key lookup separates them from staff. Only
+  // done for staff areas, so the portal and public pages pay nothing.
+  // Every URL the staff app serves — the (crm), (dashboard), (home),
+  // (photos), (reports), (settings) and (tools) route groups, plus /internal.
+  // The customer's own surface is /portal, which is deliberately absent.
+  const STAFF_PREFIXES = [
+    "/crm", "/settings", "/dashboards", "/home", "/photos", "/tools",
+    "/equipt", "/cmms", "/po", "/vendors", "/operations", "/docs",
+    "/support", "/internal",
+  ];
+  const isStaffArea = STAFF_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+
+  if (user && isStaffArea) {
+    const { data: staffProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!staffProfile) {
+      const portalUrl = request.nextUrl.clone();
+      portalUrl.pathname = "/portal";
+      portalUrl.search = "";
+      return NextResponse.redirect(portalUrl);
+    }
+  }
+
   if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
     // Preserve the query string (e.g. `?open=<ticketId>` on an emailed link)

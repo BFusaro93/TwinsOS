@@ -110,7 +110,7 @@ export default function PortalShell({ branding, clientName, children }: PortalSh
           <div className="flex items-center gap-2">
             {/* Support contacts */}
             {branding.supportPhone && (
-              <a href={`tel:${branding.supportPhone}`} className="hidden sm:flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
+              <a href={`tel:${branding.supportPhone}`} className="hidden sm:flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-slate-500 hover:text-slate-700">
                 <Phone className="h-3.5 w-3.5" />
                 {branding.supportPhone}
               </a>
@@ -184,14 +184,14 @@ export default function PortalShell({ branding, clientName, children }: PortalSh
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between text-xs text-slate-400">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
           <span>© {new Date().getFullYear()} {branding.companyName}</span>
           <div className="flex items-center gap-3">
             {branding.supportEmail && (
               <a href={`mailto:${branding.supportEmail}`} className="hover:text-slate-600">{branding.supportEmail}</a>
             )}
             {branding.supportPhone && (
-              <a href={`tel:${branding.supportPhone}`} className="hover:text-slate-600">{branding.supportPhone}</a>
+              <a href={`tel:${branding.supportPhone}`} className="whitespace-nowrap hover:text-slate-600">{branding.supportPhone}</a>
             )}
           </div>
         </div>
