@@ -74,7 +74,10 @@ function thirtyDaysOut() {
 export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   const router = useRouter();
   const { data: clients }   = useClients();
-  const { data: templates } = useEstimateTemplates();
+  const { data: allTemplates } = useEstimateTemplates();
+  // Only bundles marked for estimates (or both) belong in this picker —
+  // show_when is what that setting is for.
+  const templates = (allTemplates ?? []).filter((t) => t.showWhen !== "jobs");
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: createEstimate, isPending } = useCreateEstimate();
@@ -352,7 +355,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label>Template</Label>
+              <Label>Service Bundle</Label>
               <Select
                 value={watch("templateId")}
                 onValueChange={(v) => setValue("templateId", v)}
