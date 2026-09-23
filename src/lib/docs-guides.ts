@@ -360,6 +360,10 @@ export function guideBasePath(pathname: string | null | undefined): string {
   if (!pathname) return "/settings/support";
   if (pathname === "/crm" || pathname.startsWith("/crm/")) return "/crm/docs";
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "/settings/support";
+  // Public marketing mount. This one matters beyond staying in-shell: the
+  // other three bases are all auth-gated, so a cross-link that resolved to
+  // one of them would bounce a logged-out reader (or Googlebot) to /login.
+  if (pathname === "/help" || pathname.startsWith("/help/")) return "/help";
   return "/docs";
 }
 

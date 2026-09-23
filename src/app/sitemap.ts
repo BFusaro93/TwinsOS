@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
 import { COMPETITORS } from "@/lib/comparisons";
+import { DOC_GUIDES } from "@/lib/docs-guides";
 
 const FEATURE_SUBPAGES = [
   "equipt/api-integrations",
@@ -64,5 +65,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/legal/dpa`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
   ];
 
-  return [...topLevel, ...comparePages, ...featurePages, ...legalPages];
+  // The product guides, now mounted publicly at /help/<slug>. These are the
+  // deepest content on the site, so they carry a higher priority than the
+  // thin top-level pages they sit under.
+  const guidePages: MetadataRoute.Sitemap = DOC_GUIDES.map((guide) => ({
+    url: `${SITE_URL}/help/${guide.slug}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+
+  return [...topLevel, ...comparePages, ...featurePages, ...guidePages, ...legalPages];
 }

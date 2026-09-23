@@ -144,7 +144,7 @@ export function HelpBrowser() {
                           {group.guides.map((guide) => (
                             <a
                               key={guide.slug}
-                              href={`/settings/support/${guide.slug}`}
+                              href={`/help/${guide.slug}`}
                               className="group flex items-start gap-3 rounded-md border border-[#e6e6e0] bg-white p-4 transition-shadow hover:shadow-md"
                             >
                               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef4e2]">
