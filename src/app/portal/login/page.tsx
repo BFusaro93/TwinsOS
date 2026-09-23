@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { BrandMark } from "@/components/shared/BrandMark";
 
 export default function PortalLoginPage() {
   const router = useRouter();
@@ -45,13 +46,12 @@ export default function PortalLoginPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
-        {/* Logo placeholder — branding is loaded after auth */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="h-12 w-12 rounded-xl bg-brand-500 flex items-center justify-center mb-3">
-            <span className="text-white font-bold text-xl">T</span>
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">Client Portal</h1>
-          <p className="text-sm text-slate-500 mt-1">Sign in to manage your account</p>
+        {/* Org branding is only known after auth, so show the platform mark
+            (matching the staff /login page) until then. */}
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">Client Portal</h1>
+          <p className="text-sm text-slate-500">Sign in to manage your account</p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">

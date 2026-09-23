@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PortalDashboard from "@/components/portal/PortalDashboard";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { todayInZone } from "@/lib/time/zone";
+import { hourInZone, todayInZone } from "@/lib/time/zone";
 
 interface EstimateRow {
   id: string;
@@ -21,9 +21,10 @@ export default async function PortalHomePage() {
   const supabase = await createClient();
   // The customer's portal shows the SERVICE PROVIDER's day — a customer in
   // another timezone must see the same schedule the crew works to.
-  const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
+  const timeZone = await getOrgTimeZone(supabase, ctx.orgId);
+  const today = todayInZone(timeZone);
 
-  const [clientRes, invoicesRes, visitsRes, estimatesRes] = await Promise.all([
+  const [clientRes, invoicesRes, visitsRes, recentRes, estimatesRes, settingsRes] = await Promise.all([
     supabase
       .from("clients")
       .select("display_name, first_name, balance_outstanding_cents, balance_credits_cents")
@@ -36,6 +37,9 @@ export default async function PortalHomePage() {
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .in("status", ["printed", "sent", "partial", "overdue"])
+      // A fully-paid (or $0) invoice can still sit in "printed"/"sent";
+      // it isn't outstanding and mustn't flag the account as past due.
+      .gt("balance_cents", 0)
       .is("deleted_at", null)
       .order("due_date", { ascending: true })
       .limit(5),
@@ -52,6 +56,16 @@ export default async function PortalHomePage() {
       .order("scheduled_date", { ascending: true })
       .limit(5),
 
+    supabase
+      .from("crm_job_visits")
+      .select("id, scheduled_date, status, job_id, crm_jobs(invoice_description, job_type)")
+      .eq("client_id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
+      .is("deleted_at", null)
+      .eq("status", "completed")
+      .order("scheduled_date", { ascending: false })
+      .limit(3),
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("estimates")
@@ -62,20 +76,32 @@ export default async function PortalHomePage() {
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(3) as Promise<{ data: EstimateRow[] | null }>,
+
+    // Same service-client read the (shell) layout does for branding —
+    // portal users have no RLS path to client_portal_settings.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (createServiceClient() as any)
+      .from("client_portal_settings")
+      .select("allow_tickets, allow_estimates")
+      .eq("org_id", ctx.orgId)
+      .maybeSingle() as Promise<{ data: { allow_tickets: boolean | null; allow_estimates: boolean | null } | null }>,
   ]);
 
   const client = clientRes.data;
   const firstName = client?.first_name ?? client?.display_name?.split(" ")[0] ?? "there";
-  const hour = new Date().getHours();
+  // Server clock is UTC — greet on the service provider's wall clock.
+  const hour = hourInZone(new Date(), timeZone);
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   // Map visits to shape PortalDashboard expects
-  const upcomingVisits = (visitsRes.data ?? []).map((v) => ({
+  const mapVisit = (v: { id: string; scheduled_date: string; status: string; crm_jobs: unknown }) => ({
     id: v.id,
     scheduled_date: v.scheduled_date,
     status: v.status,
     jobTitle: (v.crm_jobs as { invoice_description: string | null; job_type: string } | null)?.invoice_description ?? "Service Visit",
-  }));
+  });
+  const upcomingVisits = (visitsRes.data ?? []).map(mapVisit);
+  const recentVisits = (recentRes.data ?? []).map(mapVisit);
 
   return (
     <PortalDashboard
@@ -91,6 +117,10 @@ export default async function PortalHomePage() {
         status: inv.status,
       }))}
       upcomingVisits={upcomingVisits}
+      recentVisits={recentVisits}
+      today={today}
+      allowTickets={settingsRes.data?.allow_tickets !== false}
+      allowEstimates={settingsRes.data?.allow_estimates !== false}
       estimates={estimatesRes.data ?? []}
       clientId={ctx.clientId}
       orgId={ctx.orgId}

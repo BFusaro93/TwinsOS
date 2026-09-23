@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { BrandMark } from "@/components/shared/BrandMark";
 
 type Step = "loading" | "invalid" | "setup" | "submitting" | "done" | "linked";
 
@@ -139,12 +140,10 @@ export default function PortalRegisterPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-8">
-          <div className="h-12 w-12 rounded-xl bg-brand-500 flex items-center justify-center mb-3">
-            <span className="text-white font-bold text-xl">T</span>
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">Set Up Your Account</h1>
-          <p className="text-sm text-slate-500 mt-1">{email}</p>
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">Set Up Your Account</h1>
+          <p className="text-sm text-slate-500">{email}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
