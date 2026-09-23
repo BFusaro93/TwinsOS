@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import type { PurchaseOrder } from "@/types";
 import {
   Dialog,
@@ -247,9 +247,22 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     setPendingLineItemId(null);
   }
 
+  const lineItemsScrollRef = useRef<HTMLDivElement>(null);
+  const scrollToNewLineRef = useRef(false);
+
   function handleAddLineItem() {
     setLineItems((prev) => [...prev, emptyLineItem()]);
+    scrollToNewLineRef.current = true;
   }
+
+  // After "Add Line Item", bring the new row into view — both the capped
+  // line-items box and the dialog body scroll, so let the browser pick.
+  useEffect(() => {
+    if (!scrollToNewLineRef.current) return;
+    scrollToNewLineRef.current = false;
+    const rows = lineItemsScrollRef.current?.querySelectorAll("tbody > tr");
+    rows?.[rows.length - 1]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [lineItems.length]);
 
   function handleRemoveLineItem(id: string) {
     setLineItems((prev) => prev.filter((li) => li.id !== id));
@@ -551,7 +564,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                       Line Items
                     </p>
 
-                    <div className="max-h-[35dvh] overflow-y-auto rounded border">
+                    <div ref={lineItemsScrollRef} className="max-h-[35dvh] overflow-y-auto rounded border">
                     <div className="w-full overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="sticky top-0 z-10 bg-white">
