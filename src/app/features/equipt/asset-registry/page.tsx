@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { buildMetadata } from "@/lib/seo";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { Truck, Gauge, History, Boxes } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -10,12 +10,6 @@ import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { AssetDetailMockup } from "@/components/marketing/mockups/AssetDetailMockup";
 import { RealScreenshotStack } from "@/components/marketing/RealScreenshotStack";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Asset & Vehicle Registry | Equipt",

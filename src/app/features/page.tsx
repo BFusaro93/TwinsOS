@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import {
   MapPinned,
   FileCheck2,
@@ -37,12 +37,6 @@ import { SidebarMockup } from "@/components/marketing/mockups/SidebarMockup";
 import { MobileCrewMockup } from "@/components/marketing/mockups/MobileCrewMockup";
 import { ClientPortalMockup } from "@/components/marketing/mockups/ClientPortalMockup";
 import { DashboardBuilderMockup } from "@/components/marketing/mockups/DashboardBuilderMockup";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Features | Landscapt & Equipt",
