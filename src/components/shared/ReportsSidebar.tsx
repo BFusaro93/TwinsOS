@@ -14,6 +14,7 @@ import {
   CalendarCheck,
   BarChart2,
   Gauge,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
@@ -47,6 +48,7 @@ export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck },
   { label: "Company Report",      href: "/dashboards/crm",             icon: FileText,    requiresModule: "landscapt", hideFromCrew: true },
   { label: "Twins CRM Report",     href: "/dashboards/twins-crm-report", icon: FileText,   hideFromCrew: true, internalOnly: true },
+  { label: "Social Media",        href: "/dashboards/social-media",    icon: Share2,      hideFromCrew: true },
 ];
 
 function NavLink({
