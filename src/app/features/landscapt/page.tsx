@@ -25,6 +25,7 @@ import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { Reveal } from "@/components/marketing/Reveal";
 import { LandscaptShowcase } from "@/components/marketing/LandscaptShowcase";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
+import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -181,6 +182,8 @@ export default function LandscaptFeaturesPage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
+
+      <RealScreenshot src="/screenshots/my-day.png" alt="Real My Day dashboard in Landscapt" tab="My Day" accent="#60ab45" />
 
       <div className="bg-[#eef4e2] px-6 py-20 text-center sm:px-12">
         <Reveal>
