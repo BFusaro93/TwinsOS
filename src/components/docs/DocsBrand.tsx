@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -10,11 +10,8 @@ import { cn } from "@/lib/utils";
 // heading face used on the public marketing site (src/app/help/page.tsx,
 // src/components/marketing/*), so in-app docs read as the same product.
 
-export const docsHeading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
+/** Re-exported for the docs surfaces that already import this name. */
+export const docsHeading = heading;
 
 /** Wrap any docs page in this to load the heading font as `var(--font-heading)`. */
 export function DocsFontScope({ children, className }: { children: ReactNode; className?: string }) {

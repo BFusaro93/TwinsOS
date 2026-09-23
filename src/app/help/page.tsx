@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { buildMetadata } from "@/lib/seo";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -8,12 +8,6 @@ import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { Reveal } from "@/components/marketing/Reveal";
 import { HelpBrowser } from "@/components/marketing/HelpBrowser";
 import { SUPPORT_EMAIL } from "@/components/marketing/config";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Support | Landscapt & Equipt",

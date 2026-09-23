@@ -1,19 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { ChevronRight } from "lucide-react";
 import { buildMetadata } from "@/lib/seo";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { GUIDE_COMPONENTS } from "@/components/docs/guides/registry";
 import { DOC_GUIDES } from "@/lib/docs-guides";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 /**
  * Public, indexable mount of the product guides.

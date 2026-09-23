@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { buildMetadata } from "@/lib/seo";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { ListChecks, Clock, Camera, ClipboardList, WifiOff, KeyRound } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -9,12 +9,6 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { MobileCrewMockup } from "@/components/marketing/mockups/MobileCrewMockup";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Crew App | Landscapt",
