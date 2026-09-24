@@ -20,15 +20,17 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn, todayLocalISODate, localISODateFromToday } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
-import { useParts } from "@/lib/hooks/use-parts";
-import { useWorkOrders } from "@/lib/hooks/use-work-orders";
-import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
-import { useRequisitions } from "@/lib/hooks/use-requisitions";
-import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
-import { useEstimates } from "@/lib/hooks/use-estimates";
-import { useRequests } from "@/lib/hooks/use-requests";
+import {
+  usePendingRequisitionAlerts,
+  usePendingPOAlerts,
+  usePendingEstimateAlerts,
+  useWorkOrderAlerts,
+  useLowStockPartAlerts,
+  usePMDueAlerts,
+  useOpenMaintenanceRequestAlerts,
+} from "@/lib/hooks/use-notification-alerts";
 import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
 import { useNotificationPrefs } from "@/lib/hooks/use-notification-prefs";
 import { createClient } from "@/lib/supabase/client";
@@ -123,14 +125,73 @@ export function NotificationsBell() {
   const { setSelectedWorkOrderId, setSelectedPMScheduleId } = useCMMSStore();
 
   const { currentUser } = useCurrentUserStore();
-  const { data: parts = [] } = useParts();
-  const { data: workOrders = [] } = useWorkOrders();
-  const { data: pmSchedules = [] } = usePMSchedules();
-  const { data: requisitions = [] } = useRequisitions();
-  const { data: purchaseOrders = [] } = usePurchaseOrders();
-  const { data: estimates = [] } = useEstimates();
-  const { data: maintenanceRequests = [] } = useRequests();
-  const { data: notifPrefs } = useNotificationPrefs();
+  const { data: notifPrefs, status: notifPrefsStatus } = useNotificationPrefs();
+
+  // Each alert fetches only its own rows (see use-notification-alerts.ts), and
+  // only once prefs have settled so a category the user turned off is never
+  // requested. A failed prefs load falls back to everything on, as before.
+  const prefsReady = notifPrefsStatus !== "pending";
+  const todayIso = todayInZone(orgTimeZone);
+  const weekFromNowIso = shiftYmd(todayIso, 7);
+  const on = {
+    requisitions: prefsReady && notifPrefs?.inAppApprovalRequired !== false,
+    purchaseOrders: prefsReady && notifPrefs?.inAppPoApprovalRequired !== false,
+    estimates: prefsReady && notifPrefs?.inAppEstimateApprovalRequired !== false,
+    woOverdue: prefsReady && notifPrefs?.inAppWorkOrderOverdue !== false,
+    woAssigned: prefsReady && notifPrefs?.inAppWorkOrderAssigned !== false && !!currentUser.id,
+    parts: prefsReady && notifPrefs?.inAppLowStockAlert !== false,
+    pmSchedules: prefsReady && notifPrefs?.inAppPmScheduleDue !== false,
+    // Open maintenance requests are an admin/manager alert only.
+    maintenanceRequests:
+      prefsReady &&
+      notifPrefs?.inAppNewMaintenanceRequest !== false &&
+      (currentUser.role === "admin" || currentUser.role === "manager"),
+  };
+  const requisitionsQ = usePendingRequisitionAlerts(on.requisitions);
+  const purchaseOrdersQ = usePendingPOAlerts(on.purchaseOrders);
+  const estimatesQ = usePendingEstimateAlerts(on.estimates);
+  const workOrdersQ = useWorkOrderAlerts({
+    userId: currentUser.id,
+    todayIso,
+    overdue: on.woOverdue,
+    assigned: on.woAssigned,
+  });
+  const partsQ = useLowStockPartAlerts(on.parts);
+  const pmSchedulesQ = usePMDueAlerts(weekFromNowIso, on.pmSchedules);
+  const maintenanceRequestsQ = useOpenMaintenanceRequestAlerts(on.maintenanceRequests);
+
+  // A disabled query's data stays undefined, so these are [] for any category
+  // that's switched off — no per-section pref checks needed below.
+  const requisitions = useMemo(() => (on.requisitions ? requisitionsQ.data ?? [] : []), [on.requisitions, requisitionsQ.data]);
+  const purchaseOrders = useMemo(() => (on.purchaseOrders ? purchaseOrdersQ.data ?? [] : []), [on.purchaseOrders, purchaseOrdersQ.data]);
+  const estimates = useMemo(() => (on.estimates ? estimatesQ.data ?? [] : []), [on.estimates, estimatesQ.data]);
+  const workOrders = useMemo(() => workOrdersQ.data ?? [], [workOrdersQ.data]);
+  const parts = useMemo(() => (on.parts ? partsQ.data ?? [] : []), [on.parts, partsQ.data]);
+  const pmSchedules = useMemo(() => (on.pmSchedules ? pmSchedulesQ.data ?? [] : []), [on.pmSchedules, pmSchedulesQ.data]);
+  const maintenanceRequests = useMemo(() => (on.maintenanceRequests ? maintenanceRequestsQ.data ?? [] : []), [on.maintenanceRequests, maintenanceRequestsQ.data]);
+
+  // Split the one work-order query back into its two alerts.
+  const overdueWorkOrders = useMemo(
+    () => (on.woOverdue ? workOrders.filter((wo) => wo.dueDate !== null && wo.dueDate < todayIso) : []),
+    [on.woOverdue, workOrders, todayIso]
+  );
+  const assignedWorkOrders = useMemo(
+    () => (on.woAssigned ? workOrders.filter((wo) => wo.assignedToIds.includes(currentUser.id)) : []),
+    [on.woAssigned, workOrders, currentUser.id]
+  );
+
+  // Every enabled alert query has returned at least once. Until then the reads
+  // hook gets no IDs, so its monthly prune can't run against a half-loaded
+  // list and discard read marks for categories that haven't arrived yet.
+  const alertsLoaded =
+    prefsReady &&
+    (!on.requisitions || requisitionsQ.isFetched) &&
+    (!on.purchaseOrders || purchaseOrdersQ.isFetched) &&
+    (!on.estimates || estimatesQ.isFetched) &&
+    (!(on.woOverdue || on.woAssigned) || workOrdersQ.isFetched) &&
+    (!on.parts || partsQ.isFetched) &&
+    (!on.pmSchedules || pmSchedulesQ.isFetched) &&
+    (!on.maintenanceRequests || maintenanceRequestsQ.isFetched);
 
   // Fetch persisted notifications (wo_comment type) from the DB
   const [dbNotifications, setDbNotifications] = useState<Array<{
@@ -159,169 +220,137 @@ export function NotificationsBell() {
   const { readIds, markRead, markAllRead: markAllReadIds } = useNotificationReads(
     useMemo(() => {
       // We only need the IDs list for pruning — compute cheaply without full objects
-      const todayIso = todayInZone(orgTimeZone);
-      const weekFromNowIso = shiftYmd(todayIso, 7);
+      if (!alertsLoaded) return [];
       return [
-        ...(notifPrefs?.inAppApprovalRequired !== false ? requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`) : []),
-        ...(notifPrefs?.inAppPoApprovalRequired !== false ? purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`) : []),
-        ...(notifPrefs?.inAppEstimateApprovalRequired !== false ? estimates.filter((e) => e.approvalStatus === "pending").map((e) => `estimate-approval-${e.id}`) : []),
-        ...(notifPrefs?.inAppWorkOrderOverdue !== false ? workOrders.filter((wo) => wo.status !== "done" && wo.dueDate !== null && wo.dueDate.slice(0, 10) < todayIso).map((wo) => `wo-overdue-${wo.id}`) : []),
-        ...(notifPrefs?.inAppWorkOrderAssigned !== false ? workOrders.filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id)).map((wo) => `wo-assigned-${wo.id}`) : []),
-        ...(notifPrefs?.inAppLowStockAlert !== false ? parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`) : []),
-        ...(notifPrefs?.inAppPmScheduleDue !== false ? pmSchedules.filter((pm) => pm.isActive && pm.nextDueDate.slice(0, 10) <= weekFromNowIso).map((pm) => `pm-due-${pm.id}`) : []),
-        ...(notifPrefs?.inAppNewMaintenanceRequest !== false ? maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`) : []),
+        ...requisitions.map((r) => `req-approval-${r.id}`),
+        ...purchaseOrders.map((po) => `po-approval-${po.id}`),
+        ...estimates.map((e) => `estimate-approval-${e.id}`),
+        ...overdueWorkOrders.map((wo) => `wo-overdue-${wo.id}`),
+        ...assignedWorkOrders.map((wo) => `wo-assigned-${wo.id}`),
+        ...parts.map((p) => `low-stock-${p.id}`),
+        ...pmSchedules.map((pm) => `pm-due-${pm.id}`),
+        ...maintenanceRequests.map((mr) => `maint-req-${mr.id}`),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
-    }, [requisitions, purchaseOrders, estimates, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id, notifPrefs, orgTimeZone])
+    }, [alertsLoaded, requisitions, purchaseOrders, estimates, overdueWorkOrders, assignedWorkOrders, parts, pmSchedules, maintenanceRequests, dbNotifications])
   );
 
   // Derive notifications from live data
   const notifications = useMemo<AppNotification[]>(() => {
-    const todayIso = todayInZone(orgTimeZone);
-    const weekFromNowIso = shiftYmd(todayIso, 7);
-
     const items: AppNotification[] = [];
 
     // Pending-approval requisitions
-    if (notifPrefs?.inAppApprovalRequired !== false) requisitions
-      .filter((r) => r.status === "pending_approval")
-      .forEach((r) => {
-        const id = `req-approval-${r.id}`;
-        items.push({
-          id,
-          type: "approval_required",
-          title: "Approval Required",
-          body: `${r.requisitionNumber} needs your approval — ${r.title}.`,
-          href: "/po/requisitions",
-          entityId: r.id,
-          entityType: "requisition",
-          createdAt: r.updatedAt,
-          readAt: readIds.has(id) ? new Date().toISOString() : null,
-        });
+    requisitions.forEach((r) => {
+      const id = `req-approval-${r.id}`;
+      items.push({
+        id,
+        type: "approval_required",
+        title: "Approval Required",
+        body: `${r.requisitionNumber} needs your approval — ${r.title}.`,
+        href: "/po/requisitions",
+        entityId: r.id,
+        entityType: "requisition",
+        createdAt: r.updatedAt,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
       });
+    });
 
     // Pending-approval purchase orders
-    if (notifPrefs?.inAppPoApprovalRequired !== false) purchaseOrders
-      .filter((po) => po.status === "pending")
-      .forEach((po) => {
-        const id = `po-approval-${po.id}`;
-        items.push({
-          id,
-          type: "approval_required",
-          title: "PO Approval Required",
-          body: `${po.poNumber} needs your approval${po.vendorName ? ` — ${po.vendorName}` : ""}.`,
-          href: "/po/orders",
-          entityId: po.id,
-          entityType: "purchase_order",
-          createdAt: po.updatedAt,
-          readAt: readIds.has(id) ? new Date().toISOString() : null,
-        });
+    purchaseOrders.forEach((po) => {
+      const id = `po-approval-${po.id}`;
+      items.push({
+        id,
+        type: "approval_required",
+        title: "PO Approval Required",
+        body: `${po.poNumber} needs your approval${po.vendorName ? ` — ${po.vendorName}` : ""}.`,
+        href: "/po/orders",
+        entityId: po.id,
+        entityType: "purchase_order",
+        createdAt: po.updatedAt,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
       });
+    });
 
     // Pending-approval estimates
-    if (notifPrefs?.inAppEstimateApprovalRequired !== false) estimates
-      .filter((e) => e.approvalStatus === "pending")
-      .forEach((e) => {
-        const id = `estimate-approval-${e.id}`;
-        items.push({
-          id,
-          type: "approval_required",
-          title: "Estimate Approval Required",
-          body: `Estimate #${e.estimateNumber} needs your approval${e.description ? ` — ${e.description}` : ""}.`,
-          href: `/crm/estimates/${e.id}`,
-          entityId: e.id,
-          entityType: "estimate",
-          createdAt: e.updatedAt,
-          readAt: readIds.has(id) ? new Date().toISOString() : null,
-        });
+    estimates.forEach((e) => {
+      const id = `estimate-approval-${e.id}`;
+      items.push({
+        id,
+        type: "approval_required",
+        title: "Estimate Approval Required",
+        body: `Estimate #${e.estimateNumber} needs your approval${e.description ? ` — ${e.description}` : ""}.`,
+        href: `/crm/estimates/${e.id}`,
+        entityId: e.id,
+        entityType: "estimate",
+        createdAt: e.updatedAt,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
       });
+    });
 
     // Work orders assigned to the current user
-    if (notifPrefs?.inAppWorkOrderAssigned !== false) workOrders
-      .filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id))
-      .forEach((wo) => {
-        const id = `wo-assigned-${wo.id}`;
-        items.push({
-          id,
-          type: "wo_assigned",
-          title: "Work Order Assigned",
-          body: `${wo.workOrderNumber} — ${wo.title}${wo.assetName ? ` (${wo.assetName})` : ""}.`,
-          href: "/cmms/work-orders",
-          entityId: wo.id,
-          entityType: "work_order",
-          createdAt: wo.updatedAt,
-          readAt: readIds.has(id) ? new Date().toISOString() : null,
-        });
+    assignedWorkOrders.forEach((wo) => {
+      const id = `wo-assigned-${wo.id}`;
+      items.push({
+        id,
+        type: "wo_assigned",
+        title: "Work Order Assigned",
+        body: `${wo.workOrderNumber} — ${wo.title}${wo.assetName ? ` (${wo.assetName})` : ""}.`,
+        href: "/cmms/work-orders",
+        entityId: wo.id,
+        entityType: "work_order",
+        createdAt: wo.updatedAt,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
       });
+    });
 
     // Overdue work orders
-    if (notifPrefs?.inAppWorkOrderOverdue !== false) workOrders
-      .filter(
-        (wo) =>
-          wo.status !== "done" &&
-          wo.dueDate !== null &&
-          wo.dueDate.slice(0, 10) < todayIso
-      )
-      .forEach((wo) => {
-        const id = `wo-overdue-${wo.id}`;
-        items.push({
-          id,
-          type: "wo_overdue",
-          title: "Work Order Overdue",
-          body: `${wo.workOrderNumber} is overdue — ${wo.title}.`,
-          href: "/cmms/work-orders",
-          entityId: wo.id,
-          entityType: "work_order",
-          createdAt: wo.dueDate!,
-          readAt: readIds.has(id) ? new Date().toISOString() : null,
-        });
+    overdueWorkOrders.forEach((wo) => {
+      const id = `wo-overdue-${wo.id}`;
+      items.push({
+        id,
+        type: "wo_overdue",
+        title: "Work Order Overdue",
+        body: `${wo.workOrderNumber} is overdue — ${wo.title}.`,
+        href: "/cmms/work-orders",
+        entityId: wo.id,
+        entityType: "work_order",
+        createdAt: wo.dueDate!,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
       });
+    });
 
-    // Low stock parts — skip if user has disabled in-app low stock alerts
-    if (notifPrefs?.inAppLowStockAlert !== false) parts
-      .filter(
-        (p) =>
-          p.deletedAt === null &&
-          p.minimumStock !== null &&
-          p.quantityOnHand <= p.minimumStock
-      )
-      .forEach((p) => {
-        const id = `low-stock-${p.id}`;
-        items.push({
-          id,
-          type: "low_stock",
-          title: "Low Stock Alert",
-          body: `${p.name} (${p.partNumber}) is below reorder point — ${p.quantityOnHand} unit${p.quantityOnHand !== 1 ? "s" : ""} remaining.`,
-          href: "/cmms/parts",
-          entityId: p.id,
-          entityType: "part",
-          createdAt: p.updatedAt,
-          readAt: readIds.has(id) ? new Date().toISOString() : null,
-        });
+    // Low stock parts
+    parts.forEach((p) => {
+      const id = `low-stock-${p.id}`;
+      items.push({
+        id,
+        type: "low_stock",
+        title: "Low Stock Alert",
+        body: `${p.name} (${p.partNumber}) is below reorder point — ${p.quantityOnHand} unit${p.quantityOnHand !== 1 ? "s" : ""} remaining.`,
+        href: "/cmms/parts",
+        entityId: p.id,
+        entityType: "part",
+        createdAt: p.updatedAt,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
       });
+    });
 
     // PM schedules due within 7 days
-    if (notifPrefs?.inAppPmScheduleDue !== false) pmSchedules
-      .filter(
-        (pm) =>
-          pm.isActive &&
-          pm.nextDueDate.slice(0, 10) <= weekFromNowIso
-      )
-      .forEach((pm) => {
-        const id = `pm-due-${pm.id}`;
-        const overdue = pm.nextDueDate.slice(0, 10) < todayIso;
-        items.push({
-          id,
-          type: "pm_due",
-          title: overdue ? "PM Schedule Overdue" : "PM Schedule Due Soon",
-          body: `${pm.title} — ${pm.assetName}${overdue ? " (overdue)" : " is due within 7 days"}.`,
-          href: "/cmms/pm-schedules",
-          entityId: pm.id,
-          entityType: "pm_schedule",
-          createdAt: pm.nextDueDate,
-          readAt: readIds.has(id) ? new Date().toISOString() : null,
-        });
+    pmSchedules.forEach((pm) => {
+      const id = `pm-due-${pm.id}`;
+      const overdue = pm.nextDueDate < todayIso;
+      items.push({
+        id,
+        type: "pm_due",
+        title: overdue ? "PM Schedule Overdue" : "PM Schedule Due Soon",
+        body: `${pm.title} — ${pm.assetName}${overdue ? " (overdue)" : " is due within 7 days"}.`,
+        href: "/cmms/pm-schedules",
+        entityId: pm.id,
+        entityType: "pm_schedule",
+        createdAt: pm.nextDueDate,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
       });
+    });
 
     // Persisted DB notifications — each of these is inserted directly into the
     // `notifications` table by server-side code (estimate-client-notify.ts,
@@ -386,24 +415,20 @@ export function NotificationsBell() {
     });
 
     // Open maintenance requests (admins and managers only)
-    if ((currentUser.role === "admin" || currentUser.role === "manager") && notifPrefs?.inAppNewMaintenanceRequest !== false) {
-      maintenanceRequests
-        .filter((mr) => mr.status === "open")
-        .forEach((mr) => {
-          const id = `maint-req-${mr.id}`;
-          items.push({
-            id,
-            type: "wo_assigned" as AppNotification["type"], // reuse icon; no dedicated mr type
-            title: "New Maintenance Request",
-            body: `${mr.requestNumber} — ${mr.title}${mr.assetName ? ` (${mr.assetName})` : ""}.`,
-            href: "/cmms/work-orders",
-            entityId: mr.id,
-            entityType: null,
-            createdAt: mr.createdAt,
-            readAt: readIds.has(id) ? new Date().toISOString() : null,
-          });
-        });
-    }
+    maintenanceRequests.forEach((mr) => {
+      const id = `maint-req-${mr.id}`;
+      items.push({
+        id,
+        type: "wo_assigned" as AppNotification["type"], // reuse icon; no dedicated mr type
+        title: "New Maintenance Request",
+        body: `${mr.requestNumber} — ${mr.title}${mr.assetName ? ` (${mr.assetName})` : ""}.`,
+        href: "/cmms/work-orders",
+        entityId: mr.id,
+        entityType: null,
+        createdAt: mr.createdAt,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
+      });
+    });
 
     // Sort unread first, then by most recent
     return items.sort((a, b) => {
@@ -412,7 +437,7 @@ export function NotificationsBell() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, estimates, maintenanceRequests, dbNotifications, currentUser, readIds, notifPrefs, orgTimeZone]);
+  }, [parts, overdueWorkOrders, assignedWorkOrders, pmSchedules, requisitions, purchaseOrders, estimates, maintenanceRequests, dbNotifications, readIds, notifPrefs, todayIso]);
 
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 
