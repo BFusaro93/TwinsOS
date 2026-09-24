@@ -51,6 +51,8 @@ export default async function EstimatesPage() {
     )
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
+    // Drafts are unfinished staff work — never shown to the customer.
+    .neq("stage", "draft")
     .is("deleted_at", null)
     .is("estimate_line_items.deleted_at", null)
     .order("created_at", { ascending: false })

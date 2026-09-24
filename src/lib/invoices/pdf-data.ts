@@ -15,7 +15,7 @@ async function buildInvoicePDFData(
   supabase: any,
   invoiceId: string,
   orgId: string,
-  userId: string
+  userId: string | null
 ): Promise<{ invoice: InvoicePDFData; org: OrgPDFData; layoutKey: InvoicePDFLayoutKey } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: inv, error: invErr } = await (supabase as any)
@@ -140,7 +140,7 @@ export async function renderInvoicePDF(
   supabase: any,
   invoiceId: string,
   orgId: string,
-  userId: string
+  userId: string | null
 ): Promise<{ buffer: Buffer; invoiceNumber: number } | null> {
   const built = await buildInvoicePDFData(supabase, invoiceId, orgId, userId);
   if (!built) return null;
@@ -158,7 +158,7 @@ export async function renderInvoicesPDF(
   supabase: any,
   invoiceIds: string[],
   orgId: string,
-  userId: string
+  userId: string | null
 ): Promise<Buffer | null> {
   const items = (
     await Promise.all(invoiceIds.map((id) => buildInvoicePDFData(supabase, id, orgId, userId)))

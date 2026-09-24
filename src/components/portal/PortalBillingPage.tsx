@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CreditCard, Download, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { CreditCard, Download, CheckCircle2, Clock, AlertCircle, FileText } from "lucide-react";
 import { PayInvoiceDialog } from "@/components/portal/PayInvoiceDialog";
 
 function fmt(cents: number) {
@@ -185,9 +185,16 @@ function InvoiceRow({ invoice: inv, onPay }: { invoice: Invoice; onPay?: () => v
         )}
 
         <a
-          href={`/portal/billing/${inv.id}/pdf`}
+          href={`/api/portal/billing/${inv.id}/pdf`}
           target="_blank"
           rel="noopener noreferrer"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
+          title="View PDF"
+        >
+          <FileText className="h-4 w-4" />
+        </a>
+        <a
+          href={`/api/portal/billing/${inv.id}/pdf?download=1`}
           className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
           title="Download PDF"
         >

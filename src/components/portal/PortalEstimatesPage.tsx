@@ -443,15 +443,24 @@ export default function PortalEstimatesPage({ estimates: initial }: { estimates:
                   {displayStatus.icon}
                   {displayStatus.label}
                 </span>
-                <a
-                  href={`/portal/estimates/${est.id}/pdf`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
-                >
-                  <Download className="h-3 w-3" />
-                  PDF
-                </a>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={`/api/portal/estimates/${est.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    <FileText className="h-3 w-3" />
+                    View PDF
+                  </a>
+                  <a
+                    href={`/api/portal/estimates/${est.id}/pdf?download=1`}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </a>
+                </div>
               </div>
             </li>
           );

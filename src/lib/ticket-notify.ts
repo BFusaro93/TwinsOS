@@ -139,9 +139,15 @@ function emailShell(heading: string, name: string | null, bodyHtml: string, tick
 export async function notifyStaffOfNewTicket(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  params: NotifyBase & { assignedToId?: string | null; assignedToName: string | null; createdByUserId: string | null }
+  params: NotifyBase & {
+    assignedToId?: string | null;
+    assignedToName: string | null;
+    createdByUserId: string | null;
+    /** Where the ticket came from, e.g. "the client portal" — shown in the email. */
+    source?: string;
+  }
 ) {
-  const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, createdByUserId } = params;
+  const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, createdByUserId, source } = params;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let recipients: any[] = await resolveBroadcastRecipients(supabase, orgId, "newTicketRecipientIds");
@@ -158,17 +164,30 @@ export async function notifyStaffOfNewTicket(
   recipients = recipients.filter((p) => p.id !== createdByUserId);
   if (!recipients.length) return;
 
+  // Name the client the ticket is for, read off the ticket itself so every
+  // caller (portal, forms, SMS, automations, staff) gets it without passing it.
+  const { data: ticketRow } = await supabase
+    .from("crm_tickets")
+    .select("clients(display_name)")
+    .eq("id", ticketId)
+    .maybeSingle();
+  const clientName = (ticketRow?.clients as { display_name: string | null } | null)?.display_name ?? null;
+
   const label = ticketLabel(subject, ticketNumber);
+  const forClient = clientName ? ` for ${clientName}` : "";
+  const via = source ? ` via ${source}` : "";
   await sendToRecipients(supabase, recipients, {
     orgId, ticketId,
     notifType: "ticket_created",
     inAppPrefKey: "inAppNewTicket", emailPrefKey: "emailNewTicket",
-    title: `New Ticket — ${label}`,
-    message: `A new ticket was created: ${label}.`,
+    title: `New Ticket — ${label}${forClient}`,
+    message: `A new ticket was created${forClient}${via}: ${label}.`,
     emailHtml: (name) => emailShell(
       "New Ticket",
       name,
-      `<p style="margin:0 0 24px;color:#475569">A new ticket was created: <strong>${escapeHtml(label)}</strong>.</p>`,
+      `<p style="margin:0 0 24px;color:#475569">A new ticket was created${
+        clientName ? ` for <strong>${escapeHtml(clientName)}</strong>` : ""
+      }${via ? escapeHtml(via) : ""}: <strong>${escapeHtml(label)}</strong>.</p>`,
       ticketId
     ),
   });

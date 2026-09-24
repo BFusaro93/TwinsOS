@@ -35,6 +35,8 @@ export async function POST(request: Request) {
     .eq("id", invoiceId)
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
+    // A draft isn't visible in the portal, so it can't be paid from it either.
+    .neq("status", "draft")
     .is("deleted_at", null)
     .single();
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });

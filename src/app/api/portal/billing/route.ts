@@ -17,6 +17,8 @@ export async function GET() {
     .select("id, invoice_number, total_cents, balance_cents, due_date, status, created_at")
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
+    // Drafts are unfinished staff work — never shown to the customer.
+    .neq("status", "draft")
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(50);

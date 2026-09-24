@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
 import { notifyStaffOfNewTicket, ticketLink } from "@/lib/ticket-notify";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
@@ -89,7 +89,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
 
-  const { data: ticket, error } = await supabase
+  // Insert as the portal user, not the service role. The "portal user
+  // creates own tickets" RLS policy allows it, and it lets fn_audit_log see
+  // a real portal session (auth.uid()) and attribute "Ticket created" to the
+  // client — through the service role it had no user and logged "system".
+  const userClient = await createClient();
+  const { data: ticket, error } = await userClient
     .from("crm_tickets")
     .insert({
       org_id: ctx.orgId,
@@ -132,6 +137,7 @@ export async function POST(req: Request) {
     subject: subject.trim(),
     assignedToName: null,
     createdByUserId: null,
+    source: "the client portal",
   });
 
   // ── Send notification email ─────────────────────────────────────────────────
