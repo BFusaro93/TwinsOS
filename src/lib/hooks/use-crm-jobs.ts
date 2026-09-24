@@ -1985,9 +1985,10 @@ export function useCreateJobsFromEstimate() {
         created_by: user?.id ?? null,
       });
 
+      let insertedServiceIds: string[] = [];
       if (services.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: svcError } = await (supabase as any)
+        const { data: insertedServices, error: svcError } = await (supabase as any)
           .from("crm_job_services")
           .insert(
             services.map((s, i) => ({
@@ -2016,8 +2017,10 @@ export function useCreateJobsFromEstimate() {
               days_count: 1,
               is_taxable: s.isTaxable ?? estimateIsTaxed,
             }))
-          );
+          )
+          .select("id");
         if (svcError) throw svcError;
+        insertedServiceIds = ((insertedServices ?? []) as { id: string }[]).map((r) => r.id);
       }
 
       // A dated job gets its first visit here (with the crew size), so it
@@ -2033,7 +2036,25 @@ export function useCreateJobsFromEstimate() {
           crew_id: crewId,
           men_count: jobManCount,
           notes_to_crew: notesToCrew,
+          // Link it to the service when there's exactly one, like the visits
+          // generate-visits creates — an unlinked first visit sat apart from
+          // the rest of a recurring season.
+          job_service_id: insertedServiceIds.length === 1 ? insertedServiceIds[0] : null,
         });
+      }
+
+      // Recurring jobs: generate the season's visits now, the same as a
+      // recurring job created from Add Job (useCreateJob) does. Without this a
+      // converted 28-visit weekly mow landed on the board as a single visit
+      // and the rest of the season silently never appeared. generate-visits
+      // starts from scheduled_date and skips the date of the visit inserted
+      // above. Best-effort — the "Generate Visits" button still works.
+      if (jobType === "recurring" && schedule) {
+        await fetch("/api/crm/jobs/generate-visits", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId, lookaheadDays: 365 }),
+        }).catch(() => {});
       }
 
       if (materials && materials.length > 0) {
@@ -2145,6 +2166,7 @@ export function useCreateJobsFromEstimate() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
       qc.invalidateQueries({ queryKey: ["clients", data.clientId, "activity"] });
       qc.invalidateQueries({ queryKey: ["estimate-milestones", data.estimateId] });

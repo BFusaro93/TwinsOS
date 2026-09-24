@@ -488,6 +488,22 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   async function saveHeader(explicitPatch?: Record<string, string | boolean | number | null>) {
     const patch = explicitPatch ?? headerEdits;
     if (!estimate || Object.keys(patch).length === 0) return;
+    // A date input happily yields "232026-09-01" when a year is mistyped, and
+    // Postgres stores it — the estimate then never expires (or always has).
+    const nextEstimateDate = (patch.estimate_date as string | undefined) ?? estimate.estimateDate;
+    const nextValidUntil = "valid_until_date" in patch
+      ? (patch.valid_until_date as string | null)
+      : estimate.validUntilDate;
+    for (const d of [patch.estimate_date, patch.valid_until_date]) {
+      if (typeof d === "string" && d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        toast.error("Enter a valid date (4-digit year)");
+        return;
+      }
+    }
+    if (nextValidUntil && nextEstimateDate && nextValidUntil < nextEstimateDate) {
+      toast.error("Valid Until can't be before the estimate date");
+      return;
+    }
     setSaving(true);
     try {
       await updateEstimate({ id: estimate.id, patch });

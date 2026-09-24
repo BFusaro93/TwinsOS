@@ -10,13 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Printer, Send } from "lucide-react";
 import { toast } from "sonner";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function startOfYearISO(): string {
-  return `${new Date().getFullYear()}-01-01`;
+// The statement is dated on the org's calendar — toISOString() is the UTC
+// date, which rolls over to tomorrow at 8pm ET.
+function startOfYearISO(todayYmd: string): string {
+  return `${todayYmd.slice(0, 4)}-01-01`;
 }
 
 interface Props {
@@ -32,9 +32,10 @@ interface Props {
  *  Service Autopilot statement report screen: a date range, a few
  *  show/hide toggles, an optional message, and a live preview. */
 export function AccountStatementDialog({ clientId, clientName, clientEmail, open, onClose }: Props) {
-  const [statementDate, setStatementDate] = useState(todayISO());
-  const [periodFrom, setPeriodFrom] = useState(startOfYearISO());
-  const [periodTo, setPeriodTo] = useState(todayISO());
+  const orgTimeZone = useOrgTimeZone();
+  const [statementDate, setStatementDate] = useState(() => todayInZone(orgTimeZone));
+  const [periodFrom, setPeriodFrom] = useState(() => startOfYearISO(todayInZone(orgTimeZone)));
+  const [periodTo, setPeriodTo] = useState(() => todayInZone(orgTimeZone));
   const [showLineItemDetails, setShowLineItemDetails] = useState(true);
   const [minBalance, setMinBalance] = useState("");
   const [message, setMessage] = useState("");

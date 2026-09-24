@@ -84,7 +84,12 @@ function InlineNum({
       type="number"
       value={value || (zeroAsEmpty ? "" : 0)}
       step={step ?? "any"}
-      onChange={(e) => onChange(Number(e.target.value) || 0)}
+      min={0}
+      // Every numeric cell in this grid (visits, qty, hours, rate, cost, adj
+      // rate) is non-negative. A negative rate used to save a negative line
+      // total that the estimate rollup then floored to 0 (estimate-calc.ts),
+      // so the line and the estimate total silently disagreed.
+      onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
       onFocus={onFocus}
       onBlur={onBlur}
       className={cn(
@@ -601,7 +606,21 @@ function LineItemRow({
                 {subitems.length}
               </span>
             )}
-            {row.serviceName}
+            {row.serviceId ? (
+              row.serviceName
+            ) : (
+              // Catalog lines keep the catalog name; a blank/custom line has
+              // no other place to be named, so it would reach the client's
+              // proposal as "Custom Item".
+              <input
+                value={row.serviceName ?? ""}
+                onChange={(e) => update("serviceName", e.target.value)}
+                onBlur={save}
+                placeholder="Line item name"
+                aria-label="Line item name"
+                className="w-full min-w-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs font-semibold focus:border-brand-400 focus:outline-none"
+              />
+            )}
           </div>
         </td>
 

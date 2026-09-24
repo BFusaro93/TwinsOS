@@ -598,6 +598,8 @@ function JobDetailSheet({
 
   // Form state — reset when visit changes
   const [status,      setStatus]      = useState<VisitStatus>(visit.status);
+  const [scheduledDate, setScheduledDate] = useState(visit.scheduledDate ?? "");
+  useEffect(() => { setScheduledDate(visit.scheduledDate ?? ""); }, [visit.id, visit.scheduledDate]);
   // Skip/cancel reason (crm_job_visits.skip_reason) — editable whenever the
   // sheet's status is Skipped/Cancelled; prefilled from the stored value.
   const [skipReason,  setSkipReason]  = useState(visit.skipReason ?? "");
@@ -802,10 +804,28 @@ function JobDetailSheet({
     if (status === "skipped" || status === "cancelled") {
       updates.skip_reason = skipReason.trim() || null;
     }
+    const dateChanged = !!scheduledDate && scheduledDate !== visit.scheduledDate;
+    if (dateChanged && !/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+      toast.error("Enter a valid schedule date");
+      return;
+    }
     setSaving(true);
     try {
+      // Reschedule through the same endpoint as Actions → Move to Day, so the
+      // package min-days rule (409) and its other side effects apply here too.
+      if (dateChanged) {
+        const r = await fetch("/api/crm/visits/bulk-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: [visit.id], updates: { scheduled_date: scheduledDate } }),
+        });
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error((body as { error?: string }).error ?? `Failed to reschedule (HTTP ${r.status})`);
+        }
+      }
       await updateVisit({ id: visit.id, updates, jobId: visit.jobId, jobType: visit.job?.jobType });
-      toast.success("Saved");
+      toast.success(dateChanged ? `Saved — moved to ${scheduledDate}` : "Saved");
       onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to save");
@@ -1004,7 +1024,12 @@ function JobDetailSheet({
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
                     Schedule Date
                   </label>
-                  <span className="text-sm text-slate-700">{visit.scheduledDate}</span>
+                  <Input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    className="h-7 text-xs"
+                  />
                 </div>
 
                 {/* Status */}
@@ -5057,7 +5082,19 @@ export function DispatchBoard() {
                 className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
                 disabled={!moveDayDate}
                 onClick={async () => {
-                  const ids = [...selectedIds];
+                  // Only visits that aren't already on the target day — moving
+                  // a visit onto its own date used to report "Moved 1 visit"
+                  // while changing nothing.
+                  const dateById = new Map(displayVisits.map((v) => [v.id, v.scheduledDate]));
+                  const ids = [...selectedIds].filter((id) => dateById.get(id) !== moveDayDate);
+                  if (ids.length === 0) {
+                    toast.info(
+                      selectedIds.size === 1
+                        ? `That visit is already on ${moveDayDate}`
+                        : `Those visits are already on ${moveDayDate}`
+                    );
+                    return;
+                  }
                   try {
                     const r = await fetch("/api/crm/visits/bulk-update", {
                       method: "POST",

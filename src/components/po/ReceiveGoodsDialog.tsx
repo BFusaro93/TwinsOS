@@ -96,6 +96,12 @@ export function ReceiveGoodsDialog({
   const [receivedById, setReceivedById] = useState("");
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  // Whether THIS receipt completed the PO, captured at submit time. Once the
+  // receipt is recorded the receipts query refetches and alreadyReceivedMap
+  // already includes it, so re-deriving allFullyReceived afterwards counted
+  // the receipt twice (10 of 12 read as 10 + 10 >= 12) and closed out a
+  // partially received PO as Completed.
+  const [submittedFully, setSubmittedFully] = useState(false);
 
   // Resolves a PO line to its catalog product with the same strict
   // priority used at submit time below: UUID first, then a non-empty part
@@ -350,12 +356,13 @@ export function ReceiveGoodsDialog({
       return;
     }
     setApplyingInventory(false);
+    setSubmittedFully(allFullyReceived);
     setSubmitted(true);
   }
 
   function handleClose() {
     if (submitted) {
-      onReceiptSubmit?.(allFullyReceived);
+      onReceiptSubmit?.(submittedFully);
     }
     onOpenChange(false);
     setSubmitted(false);
@@ -372,7 +379,7 @@ export function ReceiveGoodsDialog({
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Receipt Recorded</h3>
               <p className="mt-1 text-sm text-slate-500">
-                {allFullyReceived
+                {submittedFully
                   ? "All items have been received. The PO will be marked as completed."
                   : "Partial receipt recorded. The PO will be marked as partially fulfilled."}
               </p>
