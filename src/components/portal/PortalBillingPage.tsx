@@ -10,8 +10,18 @@ function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
+// due_date is a date-only YYYY-MM-DD; parsing it bare treats it as UTC
+// midnight, which renders as the previous day in US timezones.
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+const OPEN_STATUSES = ["printed", "sent", "viewed", "partial", "overdue"];
+
+/** Outstanding = an open status AND money actually owed. A $0 (or fully
+ *  credited) invoice can sit in "sent"/"overdue" but there's nothing to pay. */
+function isOutstanding(inv: Invoice) {
+  return OPEN_STATUSES.includes(inv.status) && inv.balance_cents > 0;
 }
 
 interface Invoice {
@@ -20,7 +30,7 @@ interface Invoice {
   total_cents: number;
   balance_cents: number;
   amount_paid_cents: number;
-  due_date: string;
+  due_date: string | null;
   status: string;
   created_at: string;
 }
@@ -32,14 +42,15 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   partial: { label: "Partial",  color: "bg-yellow-50 text-yellow-700 border-yellow-200",    icon: <AlertCircle className="h-3.5 w-3.5" /> },
   overdue: { label: "Overdue",  color: "bg-red-50 text-red-600 border-red-200",             icon: <AlertCircle className="h-3.5 w-3.5" /> },
   paid:    { label: "Paid",     color: "bg-green-50 text-green-700 border-green-200",       icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  settled: { label: "No balance", color: "bg-slate-50 text-slate-500 border-slate-200",     icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
   void:    { label: "Void",     color: "bg-slate-100 text-slate-400 border-slate-200",      icon: <Clock className="h-3.5 w-3.5" /> },
 };
 
-export default function PortalBillingPage({ invoices }: { invoices: Invoice[] }) {
+export default function PortalBillingPage({ invoices, today }: { invoices: Invoice[]; today: string }) {
   const router = useRouter();
   const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
-  const open = invoices.filter((i) => ["printed", "sent", "partial", "overdue"].includes(i.status));
-  const closed = invoices.filter((i) => !["printed", "sent", "partial", "overdue"].includes(i.status));
+  const open = invoices.filter(isOutstanding);
+  const closed = invoices.filter((i) => !isOutstanding(i));
   const totalBalance = open.reduce((sum, i) => sum + i.balance_cents, 0);
   const payingInvoice = invoices.find((i) => i.id === payingInvoiceId) ?? null;
 
@@ -105,7 +116,7 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Outstanding</h2>
           <ul className="flex flex-col gap-2">
             {open.map((inv) => (
-              <InvoiceRow key={inv.id} invoice={inv} onPay={() => setPayingInvoiceId(inv.id)} />
+              <InvoiceRow key={inv.id} invoice={inv} today={today} onPay={() => setPayingInvoiceId(inv.id)} />
             ))}
           </ul>
         </section>
@@ -117,7 +128,7 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">History</h2>
           <ul className="flex flex-col gap-2">
             {closed.map((inv) => (
-              <InvoiceRow key={inv.id} invoice={inv} />
+              <InvoiceRow key={inv.id} invoice={inv} today={today} />
             ))}
           </ul>
         </section>
@@ -142,22 +153,36 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
   );
 }
 
-function InvoiceRow({ invoice: inv, onPay }: { invoice: Invoice; onPay?: () => void }) {
-  const cfg = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.sent;
-  const pastDue = ["printed", "sent", "partial"].includes(inv.status) && new Date(inv.due_date) < new Date();
-  const displayCfg = pastDue ? STATUS_CONFIG.overdue : cfg;
-  const isPaid = inv.status === "paid";
+function InvoiceRow({ invoice: inv, today, onPay }: { invoice: Invoice; today: string; onPay?: () => void }) {
+  const outstanding = isOutstanding(inv);
+  // No due date means it can't be past due — `new Date(null)` is the 1970
+  // epoch, which used to flag every undated invoice "Past due Dec 31, 1969".
+  const pastDue = outstanding && (inv.status === "overdue" || (!!inv.due_date && inv.due_date < today));
+  const isPaid = inv.status === "paid" || (OPEN_STATUSES.includes(inv.status) && inv.balance_cents <= 0 && inv.total_cents > 0);
+  const displayCfg = pastDue
+    ? STATUS_CONFIG.overdue
+    : isPaid
+    ? STATUS_CONFIG.paid
+    : OPEN_STATUSES.includes(inv.status) && !outstanding
+    ? STATUS_CONFIG.settled
+    : (STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.sent);
+  const subtitle =
+    inv.status === "void"
+      ? "Voided"
+      : isPaid
+      ? "Paid"
+      : !outstanding
+      ? "Nothing due"
+      : !inv.due_date
+      ? "No due date"
+      : `${pastDue ? "Past due" : "Due"} ${fmtDate(inv.due_date)}`;
 
   return (
     <li className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-800">Invoice #{inv.invoice_number}</p>
         <p className={`text-xs mt-0.5 ${pastDue ? "text-red-500" : "text-slate-500"}`}>
-          {isPaid
-            ? "Paid"
-            : pastDue
-            ? `Past due ${fmtDate(inv.due_date)}`
-            : `Due ${fmtDate(inv.due_date)}`}
+          {subtitle}
         </p>
       </div>
 

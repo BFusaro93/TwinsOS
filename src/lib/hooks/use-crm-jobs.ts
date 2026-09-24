@@ -478,7 +478,12 @@ export function useUpdateJobStatus() {
       return { scheduledDate, resolvedClientId, status };
     },
     onSuccess: (data, vars) => {
-      qc.invalidateQueries({ queryKey: ["crm-jobs", "date", vars.scheduledDate] });
+      // Every job list, not just the dispatch board's day — invalidating only
+      // ["crm-jobs", "date", ...] left the client's Jobs card (keyed
+      // ["crm-jobs", "client", id]) showing a cancelled job until a reload.
+      // Visits too: "hold" soft-deletes the job's future visits.
+      qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       if (data.status === "cancelled" && data.resolvedClientId) {
         fireAutomationTrigger({ triggerType: "job_cancelled", clientId: data.resolvedClientId });

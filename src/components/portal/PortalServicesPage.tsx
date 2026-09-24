@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Loader2, Wrench, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { formatVisitWindow } from "@/lib/portal/visit-window";
 
 function fmtDate(iso: string) {
   return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
@@ -21,6 +22,8 @@ interface Visit {
   jobTitle: string;
   jobDetail?: string | null;
   jobType: string;
+  windowStart?: string | null;
+  windowEnd?: string | null;
 }
 
 interface Props {
@@ -121,7 +124,9 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800">{v.jobTitle}</p>
                     <p className="text-xs text-slate-500">
-                      {fmtDate(v.scheduled_date)}
+                      {v.windowStart && v.windowEnd
+                        ? `Anytime ${formatVisitWindow(v.windowStart, v.windowEnd)}`
+                        : fmtDate(v.scheduled_date)}
                       {v.jobDetail && ` · ${v.jobDetail}`}
                     </p>
                   </div>

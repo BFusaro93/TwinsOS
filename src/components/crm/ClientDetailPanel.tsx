@@ -76,6 +76,7 @@ import { JobDetailSheet } from "./jobs/JobDetailSheet";
 import type { Tab } from "./jobs/JobDetail";
 import { NewJobDialog } from "./jobs/NewJobDialog";
 import { InvoiceDetailSheet } from "./invoices/InvoiceDetailSheet";
+import { getDisplayInvoiceStatus, INVOICE_STATUS_COLOR } from "@/lib/invoice-status";
 import { NewInvoiceSheet } from "./invoices/NewInvoiceSheet";
 import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
 import { ContractsList, ContractDialog } from "./contracts/ContractsList";
@@ -102,7 +103,7 @@ import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
-import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
+import type { CRMPayment, CRMInvoice, CRMContract, InvoiceStatus } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
@@ -1993,7 +1994,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   // Merge invoices + payments sorted by date desc
   type AccountingRow =
-    | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number }
+    | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number; status: InvoiceStatus }
     | { kind: "payment"; id: string; date: string; amountCents: number; via?: string | null };
 
   const accountingRows: AccountingRow[] = [
@@ -2004,6 +2005,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       date: inv.invoiceDate,
       totalCents: inv.totalCents,
       balanceCents: inv.balanceCents,
+      status: getDisplayInvoiceStatus(inv),
     })),
     ...(payments ?? []).map((pmt) => ({
       kind: "payment" as const,
@@ -2298,7 +2300,14 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                   <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-4 py-3 hover:bg-slate-50 cursor-pointer"
                     onClick={() => setSelectedInvoiceId(row.id)}>
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-800">Invoice #{row.invoiceNumber}</p>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="whitespace-nowrap text-xs font-semibold text-slate-800">
+                          {row.invoiceNumber != null ? `Invoice #${row.invoiceNumber}` : "Invoice"}
+                        </p>
+                        <span className={`rounded-full px-1.5 py-px text-[10px] font-medium capitalize ${INVOICE_STATUS_COLOR[row.status] ?? INVOICE_STATUS_COLOR.draft}`}>
+                          {row.status}
+                        </span>
+                      </div>
                       <p className="shrink-0 text-[10px] text-slate-400">{new Date(row.date + "T12:00:00").toLocaleDateString()}</p>
                     </div>
                     <div className="mt-0.5 flex gap-3 text-xs text-slate-500">
@@ -2828,7 +2837,7 @@ function AllAccountingModal({
   const [search, setSearch] = useState("");
 
   type Row =
-    | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number; status: string }
+    | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number; status: InvoiceStatus }
     | { kind: "payment"; id: string; date: string; amountCents: number; method: string; reference: string | null; via?: string | null };
 
   const rows: Row[] = [
@@ -2839,7 +2848,7 @@ function AllAccountingModal({
       date: inv.invoiceDate,
       totalCents: inv.totalCents,
       balanceCents: inv.balanceCents,
-      status: inv.status,
+      status: getDisplayInvoiceStatus(inv),
     })),
     ...payments.map((pmt) => ({
       kind: "payment" as const,
@@ -2877,8 +2886,8 @@ function AllAccountingModal({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search invoice #, method, reference…"
-              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+              placeholder="Search invoice #, status, method, reference…"
+              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-40 sm:w-72 focus:outline-none focus:ring-1 focus:ring-neutral-400"
             />
             <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
               <X className="h-4 w-4" />
@@ -2910,7 +2919,14 @@ function AllAccountingModal({
                     >
                       <td className="px-4 py-2.5 text-neutral-700">{new Date(row.date + "T12:00:00").toLocaleDateString()}</td>
                       <td className="px-4 py-2.5 text-neutral-500">Invoice</td>
-                      <td className="px-4 py-2.5 font-medium text-neutral-800">#{row.invoiceNumber}</td>
+                      <td className="px-4 py-2.5 font-medium text-neutral-800">
+                        <span className="inline-flex items-center gap-1.5">
+                          {row.invoiceNumber != null ? `#${row.invoiceNumber}` : "Unnumbered"}
+                          <span className={`rounded-full px-1.5 py-px text-[10px] font-medium capitalize ${INVOICE_STATUS_COLOR[row.status] ?? INVOICE_STATUS_COLOR.draft}`}>
+                            {row.status}
+                          </span>
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5 text-right text-neutral-800">{formatCurrency(row.totalCents)}</td>
                       <td className={`px-4 py-2.5 text-right font-medium ${row.balanceCents > 0 ? "text-red-500" : "text-neutral-400"}`}>
                         {formatCurrency(row.balanceCents)}

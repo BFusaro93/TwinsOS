@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PortalBillingPage from "@/components/portal/PortalBillingPage";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 interface InvoiceRow {
   id: string;
@@ -9,7 +11,7 @@ interface InvoiceRow {
   total_cents: number;
   balance_cents: number;
   amount_paid_cents: number;
-  due_date: string;
+  due_date: string | null;
   status: string;
   created_at: string;
 }
@@ -33,5 +35,9 @@ export default async function BillingPage() {
 
   if (error) console.error("[portal/billing]", error);
 
-  return <PortalBillingPage invoices={invoices ?? []} />;
+  // Past-due is judged on the service provider's calendar, like the rest of
+  // the portal, not the server's UTC day or the viewer's.
+  const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
+
+  return <PortalBillingPage invoices={invoices ?? []} today={today} />;
 }

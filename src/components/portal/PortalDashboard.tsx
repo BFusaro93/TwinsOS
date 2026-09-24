@@ -15,6 +15,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { describeVisitWindow } from "@/lib/portal/visit-window";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -55,6 +56,16 @@ interface Visit {
   status: string;
   jobTitle: string;
   jobDetail?: string | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+}
+
+/** When a visit happens — a service window for package / waiting-list
+ *  visits (their date is only the window's start), else a relative day. */
+function whenLabel(v: Visit, today: string) {
+  if (v.status === "in_progress") return "In progress";
+  if (v.windowStart && v.windowEnd) return describeVisitWindow(v.windowStart, v.windowEnd, today);
+  return relativeDay(today, v.scheduled_date);
 }
 
 interface Estimate {
@@ -190,7 +201,7 @@ export default function PortalDashboard({
                   {nextVisit.status === "in_progress" ? "Happening now" : "Next visit"}
                 </p>
                 <div className="mt-2 flex items-center gap-3">
-                  <DateTile iso={nextVisit.scheduled_date} tone="hero" />
+                  <DateTile visit={nextVisit} today={today} tone="hero" />
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{nextVisit.jobTitle}</p>
                     {nextVisit.jobDetail && (
@@ -199,7 +210,7 @@ export default function PortalDashboard({
                     <p className="text-sm text-white/80">
                       {nextVisit.status === "in_progress"
                         ? "Your crew is on-site"
-                        : relativeDay(today, nextVisit.scheduled_date)}
+                        : whenLabel(nextVisit, today)}
                     </p>
                   </div>
                 </div>
@@ -269,11 +280,11 @@ export default function PortalDashboard({
             <ul className="flex flex-col gap-2.5">
               {upcomingVisits.slice(0, 3).map((v) => (
                 <li key={v.id} className="flex items-center gap-3">
-                  <DateTile iso={v.scheduled_date} />
+                  <DateTile visit={v} today={today} />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{v.jobTitle}</p>
                     <p className="truncate text-xs text-slate-500">
-                      {v.status === "in_progress" ? "In progress" : relativeDay(today, v.scheduled_date)}
+                      {whenLabel(v, today)}
                       {v.jobDetail && ` · ${v.jobDetail}`}
                     </p>
                   </div>
@@ -429,15 +440,23 @@ function CardLink({ href, children }: { href: string; children: React.ReactNode 
   );
 }
 
-function DateTile({ iso, tone = "default" }: { iso: string; tone?: "default" | "hero" }) {
+function DateTile({ visit, today, tone = "default" }: { visit: Visit; today: string; tone?: "default" | "hero" }) {
+  // A windowed visit whose window has opened shows its deadline, not a
+  // start date that's already behind us.
+  const open = !!visit.windowStart && !!visit.windowEnd && visit.windowStart <= today;
+  const iso = open ? visit.windowEnd! : visit.windowStart ?? visit.scheduled_date;
   return (
     <div
       className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg leading-none ${
         tone === "hero" ? "bg-white text-brand-800" : "bg-slate-100 text-slate-700"
       }`}
     >
-      <span className="text-[10px] font-semibold uppercase">{fmtDate(iso, { month: "short" })}</span>
-      <span className="mt-0.5 text-base font-bold">{fmtDate(iso, { day: "numeric" })}</span>
+      <span className="text-[10px] font-semibold uppercase">
+        {open ? "By" : fmtDate(iso, { month: "short" })}
+      </span>
+      <span className="mt-0.5 text-base font-bold">
+        {open ? fmtDate(iso, { month: "numeric", day: "numeric" }) : fmtDate(iso, { day: "numeric" })}
+      </span>
     </div>
   );
 }

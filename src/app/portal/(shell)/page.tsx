@@ -4,7 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PortalDashboard from "@/components/portal/PortalDashboard";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { hourInZone, todayInZone } from "@/lib/time/zone";
-import { labelPortalVisits } from "@/lib/portal/visit-labels";
+import { labelPortalVisits, loadUpcomingPortalVisits } from "@/lib/portal/visit-labels";
 
 interface EstimateRow {
   id: string;
@@ -45,17 +45,7 @@ export default async function PortalHomePage() {
       .order("due_date", { ascending: true })
       .limit(5),
 
-    supabase
-      .from("crm_job_visits")
-      .select("id, scheduled_date, status, job_id, job_service_id, invoice_description")
-      .eq("client_id", ctx.clientId)
-      .eq("org_id", ctx.orgId)
-      .is("deleted_at", null)
-      .gte("scheduled_date", today)
-      .neq("status", "cancelled")
-      .neq("status", "completed")
-      .order("scheduled_date", { ascending: true })
-      .limit(5),
+    loadUpcomingPortalVisits(supabase, { clientId: ctx.clientId, orgId: ctx.orgId, today, limit: 5 }),
 
     supabase
       .from("crm_job_visits")
@@ -95,15 +85,18 @@ export default async function PortalHomePage() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   // Map visits to shape PortalDashboard expects
-  const upcomingRows = visitsRes.data ?? [];
+  const upcomingRows = visitsRes.visits;
   const recentRows = recentRes.data ?? [];
-  const labels = await labelPortalVisits(ctx.orgId, [...upcomingRows, ...recentRows]);
+  const recentLabels = await labelPortalVisits(ctx.orgId, recentRows);
+  const labels = new Map([...visitsRes.labels, ...recentLabels]);
   const mapVisit = (v: { id: string; scheduled_date: string; status: string }) => ({
     id: v.id,
     scheduled_date: v.scheduled_date,
     status: v.status,
     jobTitle: labels.get(v.id)?.title ?? "Service Visit",
     jobDetail: labels.get(v.id)?.detail ?? null,
+    windowStart: labels.get(v.id)?.windowStart ?? null,
+    windowEnd: labels.get(v.id)?.windowEnd ?? null,
   });
   const upcomingVisits = upcomingRows.map(mapVisit);
   const recentVisits = recentRows.map(mapVisit);

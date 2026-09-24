@@ -29,3 +29,16 @@ export function getDisplayInvoiceStatus(
   }
   return isInvoiceOverdue(invoice) ? "overdue" : invoice.status;
 }
+
+/** Pill colors for a (display) invoice status — same palette as the
+ *  Invoices list and detail sheet. */
+export const INVOICE_STATUS_COLOR: Record<InvoiceStatus, string> = {
+  draft:   "bg-slate-100 text-slate-600",
+  printed: "bg-indigo-100 text-indigo-700",
+  sent:    "bg-blue-100 text-blue-700",
+  viewed:  "bg-purple-100 text-purple-700",
+  partial: "bg-yellow-100 text-yellow-700",
+  paid:    "bg-green-100 text-green-700",
+  overdue: "bg-red-100 text-red-600",
+  void:    "bg-slate-200 text-slate-500",
+};

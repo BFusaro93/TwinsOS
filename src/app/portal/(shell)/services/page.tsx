@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import PortalServicesPage from "@/components/portal/PortalServicesPage";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
-import { labelPortalVisits } from "@/lib/portal/visit-labels";
+import { labelPortalVisits, loadUpcomingPortalVisits } from "@/lib/portal/visit-labels";
 
 export default async function ServicesPage() {
   const ctx = await getPortalContext();
@@ -15,18 +15,8 @@ export default async function ServicesPage() {
   // another timezone must see the same schedule the crew works to.
   const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
 
-  const [upcomingRes, completedRes] = await Promise.all([
-    supabase
-      .from("crm_job_visits")
-      .select("id, scheduled_date, status, job_id, job_service_id, invoice_description")
-      .eq("client_id", ctx.clientId)
-      .eq("org_id", ctx.orgId)
-      .is("deleted_at", null)
-      .gte("scheduled_date", today)
-      .neq("status", "cancelled")
-      .neq("status", "completed")
-      .order("scheduled_date", { ascending: true })
-      .limit(25),
+  const [upcoming, completedRes] = await Promise.all([
+    loadUpcomingPortalVisits(supabase, { clientId: ctx.clientId, orgId: ctx.orgId, today, limit: 25 }),
 
     supabase
       .from("crm_job_visits")
@@ -39,9 +29,10 @@ export default async function ServicesPage() {
       .limit(25),
   ]);
 
-  const upcomingRows = upcomingRes.data ?? [];
+  const upcomingRows = upcoming.visits;
   const completedRows = completedRes.data ?? [];
-  const labels = await labelPortalVisits(ctx.orgId, [...upcomingRows, ...completedRows]);
+  const completedLabels = await labelPortalVisits(ctx.orgId, completedRows);
+  const labels = new Map([...upcoming.labels, ...completedLabels]);
 
   const mapVisit = (v: { id: string; scheduled_date: string; status: string; completed_at?: string | null }) => {
     const label = labels.get(v.id);
@@ -53,6 +44,8 @@ export default async function ServicesPage() {
       jobTitle: label?.title ?? "Service Visit",
       jobDetail: label?.detail ?? null,
       jobType: label?.jobType ?? "one_time",
+      windowStart: label?.windowStart ?? null,
+      windowEnd: label?.windowEnd ?? null,
     };
   };
 
