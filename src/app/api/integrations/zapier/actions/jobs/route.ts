@@ -3,6 +3,7 @@ import { z } from "zod";
 import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { jobActivityLabel } from "@/lib/utils/job-activity-label";
 
 const createJobSchema = z.object({
   clientId: z.string().uuid(),
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     org_id: auth.orgId,
     client_id: body.clientId,
     activity_type: "job",
-    subject: `Job created: ${(body.jobType ?? "one_time").replace(/_/g, " ")}`,
+    subject: `Job created: ${jobActivityLabel({ jobType: body.jobType ?? "one_time" })}`,
     ref_id: data.id,
     ref_table: "crm_jobs",
   });

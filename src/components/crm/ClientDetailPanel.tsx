@@ -2300,21 +2300,23 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                   <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-4 py-3 hover:bg-slate-50 cursor-pointer"
                     onClick={() => setSelectedInvoiceId(row.id)}>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-1.5">
+                      <div className="min-w-0">
                         <p className="whitespace-nowrap text-xs font-semibold text-slate-800">
                           {row.invoiceNumber != null ? `Invoice #${row.invoiceNumber}` : "Invoice"}
                         </p>
+                        <div className="mt-0.5 flex gap-3 text-xs text-slate-500">
+                          <span>Amt: {formatCurrency(row.totalCents)}</span>
+                          <span className={row.balanceCents > 0 ? "font-medium text-red-500" : "text-slate-400"}>
+                            Bal: {formatCurrency(row.balanceCents)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <p className="text-[10px] text-slate-400">{new Date(row.date + "T12:00:00").toLocaleDateString()}</p>
                         <span className={`rounded-full px-1.5 py-px text-[10px] font-medium capitalize ${INVOICE_STATUS_COLOR[row.status] ?? INVOICE_STATUS_COLOR.draft}`}>
                           {row.status}
                         </span>
                       </div>
-                      <p className="shrink-0 text-[10px] text-slate-400">{new Date(row.date + "T12:00:00").toLocaleDateString()}</p>
-                    </div>
-                    <div className="mt-0.5 flex gap-3 text-xs text-slate-500">
-                      <span>Amt: {formatCurrency(row.totalCents)}</span>
-                      <span className={row.balanceCents > 0 ? "font-medium text-red-500" : "text-slate-400"}>
-                        Bal: {formatCurrency(row.balanceCents)}
-                      </span>
                     </div>
                   </div>
                 ) : (

@@ -13,6 +13,7 @@ import { logger } from "@/lib/logger";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
+import { jobActivityLabel } from "@/lib/utils/job-activity-label";
 
 const log = logger.child("use-crm-jobs");
 
@@ -456,19 +457,30 @@ export function useUpdateJobStatus() {
           .is("deleted_at", null);
       }
 
-      // Log to client activity timeline
-      const resolvedClientId = clientId ?? await (async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any).from("crm_jobs").select("client_id").eq("id", id).single();
-        return data?.client_id as string | null;
-      })();
+      // Log to client activity timeline — naming the job ("Job cancelled:
+      // Package · 5-Step Fert Package"), not just the new status, so a client
+      // with several jobs shows which one changed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: jobInfo } = await (supabase as any)
+        .from("crm_jobs")
+        .select("client_id, job_type, package_name, crm_job_services(service_name)")
+        .eq("id", id)
+        .single();
+      const resolvedClientId = clientId ?? (jobInfo?.client_id as string | null) ?? null;
       if (resolvedClientId) {
         const label = status.replace(/_/g, " ");
+        const what = jobInfo
+          ? jobActivityLabel({
+              jobType: jobInfo.job_type,
+              packageName: jobInfo.package_name,
+              serviceNames: ((jobInfo.crm_job_services ?? []) as { service_name: string | null }[]).map((sv) => sv.service_name),
+            })
+          : null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: activityError } = await (supabase as any).from("client_activity").insert({
           client_id: resolvedClientId,
           activity_type: "job",
-          subject: `Job ${label}`,
+          subject: what ? `Job ${label}: ${what}` : `Job ${label}`,
           ref_id: id,
           ref_table: "crm_jobs",
         });
@@ -1544,7 +1556,11 @@ export function useCreateClientJob() {
       await (supabase as any).from('client_activity').insert({
         client_id: values.clientId,
         activity_type: 'job',
-        subject: `Job created: ${values.jobType.replace(/_/g, ' ')}`,
+        subject: `Job created: ${jobActivityLabel({
+          jobType: values.jobType,
+          packageName: values.packageName,
+          serviceNames: (values.services ?? []).map((sv) => sv.serviceName),
+        })}`,
         ref_id: job.id,
         ref_table: 'crm_jobs',
       });
@@ -1962,7 +1978,7 @@ export function useCreateJobsFromEstimate() {
       await (supabase as any).from("client_activity").insert({
         client_id: clientId,
         activity_type: "job",
-        subject: `Job created: ${jobType.replace(/_/g, " ")}`,
+        subject: `Job created: ${jobActivityLabel({ jobType, serviceNames: services.map((sv) => sv.serviceName) })}`,
         ref_id: jobId,
         ref_table: "crm_jobs",
         created_by: user?.id ?? null,

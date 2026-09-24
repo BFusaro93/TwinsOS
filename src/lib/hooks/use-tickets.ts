@@ -32,6 +32,7 @@ function mapTicket(row: any): CRMTicket {
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
     smsConsentPendingPhone: row.sms_consent_pending_phone ?? false,
+    visibleToClient: row.visible_to_client ?? false,
   };
 }
 
@@ -96,6 +97,8 @@ export function useCreateTicket() {
           assigned_to_id: values.assignedToId ?? null,
           due_date: values.dueDate || null,
           priority: values.priority,
+          // Only meaningful with a client — the portal matches on client_id.
+          visible_to_client: !!values.clientId && !!values.visibleToClient,
         })
         .select("*, clients(display_name)")
         .single();
@@ -236,6 +239,7 @@ export function useUpdateTicket() {
       if (updates.assignedToId !== undefined) payload.assigned_to_id = updates.assignedToId ?? null;
       if (updates.dueDate !== undefined) payload.due_date = updates.dueDate || null;
       if (updates.priority !== undefined) payload.priority = updates.priority;
+      if (updates.visibleToClient !== undefined) payload.visible_to_client = updates.visibleToClient;
 
       if (checkReopen) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

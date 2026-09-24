@@ -6,6 +6,7 @@ import { createJobSchema } from "./validation";
 import { roundHours } from "@/lib/utils";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { jobActivityLabel } from "@/lib/utils/job-activity-label";
 
 /** GET /api/v1/jobs — list the org's Landscapt jobs. Requires scope "jobs:read". */
 export async function GET(request: Request) {
@@ -223,7 +224,7 @@ export async function POST(request: Request) {
     org_id: auth.orgId,
     client_id: body.clientId,
     activity_type: "job",
-    subject: `Job created: ${jobType.replace(/_/g, " ")}`,
+    subject: `Job created: ${jobActivityLabel({ jobType, serviceNames: [serviceName] })}`,
     ref_id: job.id,
     ref_table: "crm_jobs",
   });

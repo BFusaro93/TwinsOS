@@ -43,6 +43,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Plus, RotateCcw, Search, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -165,6 +166,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
     assignedToId: null,
     dueDate: "",
     priority: "normal",
+    visibleToClient: false,
   });
 
   function set<K extends keyof NewTicketFormValues>(key: K, value: NewTicketFormValues[K]) {
@@ -199,6 +201,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
       assignedToId: null,
       dueDate: "",
       priority: "normal",
+      visibleToClient: false,
     });
   }
 
@@ -403,6 +406,23 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
                 className="h-9 text-sm"
               />
             </div>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-md border border-slate-200 px-3 py-2.5">
+            <div>
+              <Label htmlFor="new-ticket-portal-visible" className="text-sm font-medium">Show in client portal</Label>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {form.clientId
+                  ? "The client sees the subject, category, status and notes — never comments or files."
+                  : "Pick a client to share this ticket in their portal."}
+              </p>
+            </div>
+            <Switch
+              id="new-ticket-portal-visible"
+              checked={!!form.clientId && !!form.visibleToClient}
+              onCheckedChange={(v) => set("visibleToClient", v)}
+              disabled={!form.clientId}
+            />
           </div>
         </div>
 

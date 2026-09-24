@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   useCloseTicket,
@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,7 +53,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/shared/PermissionGate";
-import { AlertTriangle, Download, FileText, Loader2, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Download, FileText, Globe, Loader2, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
 import { escapeHtml } from "@/lib/utils/escape-html";
@@ -575,6 +576,8 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
         ))}
       </dl>
 
+      <PortalVisibilityToggle ticket={ticket} />
+
       {ticket.body && (
         <>
           <hr />
@@ -589,6 +592,52 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
 
       <hr />
       <LinkedRecordsPicker ticket={ticket} />
+    </div>
+  );
+}
+
+// ── client portal visibility ─────────────────────────────────────────────────
+
+function PortalVisibilityToggle({ ticket }: { ticket: CRMTicket }) {
+  const updateTicket = useUpdateTicket();
+  // Local copy so the switch flips immediately — the sheet's ticket comes
+  // from whichever list opened it, which refetches on its own schedule.
+  const [visible, setVisible] = useState(ticket.visibleToClient);
+  useEffect(() => setVisible(ticket.visibleToClient), [ticket.visibleToClient]);
+  const hasClient = !!ticket.clientId;
+
+  async function handleChange(next: boolean) {
+    setVisible(next);
+    try {
+      await updateTicket.mutateAsync({ id: ticket.id, updates: { visibleToClient: next } });
+      toast.success(next ? "Now visible in the client portal" : "Hidden from the client portal");
+    } catch {
+      setVisible(!next);
+      toast.error("Couldn't update portal visibility");
+    }
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-md border border-slate-200 px-3 py-2.5">
+      <div className="flex items-start gap-2.5">
+        <Globe className={cn("mt-0.5 h-4 w-4 shrink-0", visible && hasClient ? "text-brand-600" : "text-slate-400")} />
+        <div>
+          <Label htmlFor={`portal-visible-${ticket.id}`} className="text-sm font-medium text-slate-800">
+            Show in client portal
+          </Label>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {hasClient
+              ? "The client sees the subject, category, status and notes — never comments, files or who it's assigned to."
+              : "Link a client to this ticket to share it in their portal."}
+          </p>
+        </div>
+      </div>
+      <Switch
+        id={`portal-visible-${ticket.id}`}
+        checked={visible && hasClient}
+        onCheckedChange={handleChange}
+        disabled={!hasClient || updateTicket.isPending}
+      />
     </div>
   );
 }

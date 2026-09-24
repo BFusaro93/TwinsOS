@@ -30,6 +30,10 @@ export interface CRMTicket {
    *  phone number was captured — consent can't be attached to a client's
    *  record until a phone is collected. */
   smsConsentPendingPhone: boolean;
+  /** Shown to the client in their portal (subject, category, status and
+   *  description only — never comments, files or the assignee). Portal-
+   *  submitted tickets start true; everything else starts false. */
+  visibleToClient: boolean;
 }
 
 export interface NewTicketFormValues {
@@ -43,4 +47,5 @@ export interface NewTicketFormValues {
   assignedToId?: string | null;
   dueDate: string;
   priority: TicketPriority;
+  visibleToClient?: boolean;
 }
