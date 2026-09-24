@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getAuthUser } from "@/lib/supabase/client";
 
 /** Per-user UI preferences (e.g. which columns are visible on a given
  *  view), stored as one jsonb blob on the caller's own profile row. */
@@ -13,12 +13,12 @@ export function useUiPrefs() {
     queryKey: ["ui-prefs"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) return {} as Record<string, unknown>;
+      const user = await getAuthUser();
+      if (!user) return {} as Record<string, unknown>;
       const { data, error } = await supabase
         .from("profiles")
         .select("ui_prefs")
-        .eq("id", auth.user.id)
+        .eq("id", user.id)
         .single();
       if (error) throw error;
       return (data?.ui_prefs ?? {}) as Record<string, unknown>;

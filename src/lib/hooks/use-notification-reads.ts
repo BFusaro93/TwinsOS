@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getAuthUser } from "@/lib/supabase/client";
 
 const LS_KEY = "notif_read_ids";
 const LS_PRUNE_KEY = "notif_pruned_at";
@@ -54,8 +54,8 @@ export function useNotificationReads(activeNotifIds: string[]) {
 
     async function fetchFromDb() {
       // Fetch user ID and notification reads in parallel
-      const [{ data: { user } }, { data: reads }] = await Promise.all([
-        supabase.auth.getUser(),
+      const [user, { data: reads }] = await Promise.all([
+        getAuthUser(),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any).from("notification_reads").select("notif_id"),
       ]);

@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getAuthUser } from "@/lib/supabase/client";
 
 export function useIsStaff() {
   return useQuery({
     queryKey: ["is-staff"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthUser();
       if (!user) return false;
       const { data, error } = await supabase.rpc("is_staff", { uid: user.id });
       if (error) throw error;
@@ -31,7 +31,7 @@ export function useActiveImpersonationSession() {
     queryKey: ["active-impersonation-session"],
     queryFn: async (): Promise<ActiveImpersonationSession | null> => {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthUser();
       if (!user) return null;
 
       const { data: session, error } = await supabase
