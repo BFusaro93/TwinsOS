@@ -33,6 +33,15 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           manage_report_center: "Manage Report Center",
         },
       },
+      dashboard_access: {
+        label: "Dashboard Access",
+        permissions: {
+          // Admins and Managers can always edit; this lets a lesser role
+          // (e.g. a social media manager) log weeks and edit goals/platforms.
+          // Enforced in the DB by can_edit_social_media().
+          social_media_edit: "Social Media: Enter & Edit Data",
+        },
+      },
       other_access: {
         label: "Other Access",
         permissions: {
