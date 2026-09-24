@@ -1,17 +1,69 @@
 import type { SocialWeekStat } from "@/lib/hooks/use-social-media-stats";
 
-/** Twins' tracked platforms, in display order. Colors are the chart series. */
-export const SOCIAL_PLATFORMS = [
-  { key: "Facebook", color: "#2563eb" },
-  { key: "Instagram", color: "#db2777" },
-  { key: "TikTok", color: "#0f172a" },
-  { key: "YouTube", color: "#dc2626" },
-  { key: "LinkedIn", color: "#0891b2" },
-] as const;
+/** One entry in an org's platform list (social_media_goals.platforms).
+ *  Array order is display order; hidden platforms keep their data but are
+ *  left off the dashboard. */
+export interface PlatformSetting {
+  name: string;
+  color: string;
+  hidden: boolean;
+}
 
-export const PLATFORM_COLOR: Record<string, string> = Object.fromEntries(
-  SOCIAL_PLATFORMS.map((p) => [p.key, p.color])
-);
+/** The list every org starts with until it saves its own. */
+export const DEFAULT_PLATFORMS: PlatformSetting[] = [
+  { name: "Facebook", color: "#2563eb", hidden: false },
+  { name: "Instagram", color: "#db2777", hidden: false },
+  { name: "TikTok", color: "#0f172a", hidden: false },
+  { name: "YouTube", color: "#dc2626", hidden: false },
+  { name: "LinkedIn", color: "#0891b2", hidden: false },
+];
+
+/** Colors handed out to added platforms, in order, skipping any in use. */
+const EXTRA_PLATFORM_COLORS = [
+  "#16a34a", "#f59e0b", "#7c3aed", "#ea580c", "#0d9488",
+  "#be123c", "#4f46e5", "#65a30d", "#a16207", "#475569",
+];
+
+export const PLATFORM_NAME_MAX = 40;
+
+export function normalizePlatformName(name: string): string {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+export function nextPlatformColor(used: string[]): string {
+  const taken = new Set(used.map((c) => c.toLowerCase()));
+  const pool = [...EXTRA_PLATFORM_COLORS, ...DEFAULT_PLATFORMS.map((p) => p.color)];
+  return pool.find((c) => !taken.has(c)) ?? EXTRA_PLATFORM_COLORS[used.length % EXTRA_PLATFORM_COLORS.length];
+}
+
+/**
+ * The org's full platform list (hidden ones included), in display order.
+ * Starts from the saved list (or the defaults), drops malformed/duplicate
+ * entries, then appends any platform that has logged data but isn't listed
+ * so no data is ever orphaned off-screen.
+ */
+export function resolvePlatforms(saved: PlatformSetting[] | null, stats: SocialWeekStat[]): PlatformSetting[] {
+  const out: PlatformSetting[] = [];
+  const seen = new Set<string>();
+  // Rows are matched to the list by exact name, so a saved entry that only
+  // differs in case from logged data takes the data's spelling.
+  const dataName = new Map(stats.map((s) => [s.platform.toLowerCase(), s.platform]));
+  for (const p of saved ?? DEFAULT_PLATFORMS) {
+    const typed = normalizePlatformName(p.name ?? "");
+    const name = dataName.get(typed.toLowerCase()) ?? typed;
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push({ name, color: p.color || nextPlatformColor(out.map((o) => o.color)), hidden: Boolean(p.hidden) });
+  }
+  const extras = Array.from(new Set(stats.map((s) => s.platform)))
+    .filter((name) => !seen.has(name.toLowerCase()))
+    .sort();
+  for (const name of extras) {
+    seen.add(name.toLowerCase());
+    out.push({ name, color: nextPlatformColor(out.map((o) => o.color)), hidden: false });
+  }
+  return out;
+}
 
 /** Monthly goal ranges, editable per org (social_media_goals). Rates are
  *  fractions; posts are per week, all platforms combined. */
@@ -263,13 +315,6 @@ export function followerSnapshot(
       growthRate: growth != null && base ? growth / base : null,
     };
   });
-}
-
-/** Distinct platforms present in the data, known ones first in display order. */
-export function platformsIn(stats: SocialWeekStat[]): string[] {
-  const known = SOCIAL_PLATFORMS.map((p) => p.key as string);
-  const extra = Array.from(new Set(stats.map((s) => s.platform))).filter((p) => !known.includes(p)).sort();
-  return [...known, ...extra];
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { DEFAULT_SOCIAL_GOALS, type SocialGoals } from "@/lib/utils/social-media-metrics";
+import { DEFAULT_SOCIAL_GOALS, type PlatformSetting, type SocialGoals } from "@/lib/utils/social-media-metrics";
 
 /** One platform's numbers for one week (Twins Social Media dashboard). */
 export interface SocialWeekStat {
@@ -160,12 +160,27 @@ interface GoalsRow {
   leads_max: number | string;
   follower_growth_min: number | string;
   follower_growth_max: number | string;
+  platforms: unknown;
 }
 
+/** The org's social_media_goals row: goals plus its platform list. */
 export interface SocialGoalsRecord {
-  /** null when the org hasn't saved goals yet (defaults in use). */
+  /** null when the org hasn't saved settings yet (defaults in use). */
   id: string | null;
   goals: SocialGoals;
+  /** null = the default platform list. */
+  platforms: PlatformSetting[] | null;
+}
+
+function parsePlatforms(raw: unknown): PlatformSetting[] | null {
+  if (!Array.isArray(raw)) return null;
+  return raw
+    .filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null && typeof (p as { name?: unknown }).name === "string")
+    .map((p) => ({
+      name: String(p.name),
+      color: typeof p.color === "string" ? p.color : "",
+      hidden: p.hidden === true,
+    }));
 }
 
 /** The org's goals, or the defaults if none have been saved. */
@@ -177,12 +192,12 @@ export function useSocialMediaGoals() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("social_media_goals")
-        .select("id, posts_per_week_min, posts_per_week_max, engagement_rate_min, engagement_rate_max, leads_min, leads_max, follower_growth_min, follower_growth_max")
+        .select("id, posts_per_week_min, posts_per_week_max, engagement_rate_min, engagement_rate_max, leads_min, leads_max, follower_growth_min, follower_growth_max, platforms")
         .is("deleted_at", null)
         .maybeSingle();
       if (error) throw error;
       const r = data as GoalsRow | null;
-      if (!r) return { id: null, goals: DEFAULT_SOCIAL_GOALS };
+      if (!r) return { id: null, goals: DEFAULT_SOCIAL_GOALS, platforms: null };
       // numeric columns come back as strings from PostgREST.
       return {
         id: r.id,
@@ -196,6 +211,7 @@ export function useSocialMediaGoals() {
           followerGrowthMin: Number(r.follower_growth_min),
           followerGrowthMax: Number(r.follower_growth_max),
         },
+        platforms: parsePlatforms(r.platforms),
       };
     },
   });
@@ -204,7 +220,7 @@ export function useSocialMediaGoals() {
 export function useSaveSocialMediaGoals() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, goals }: SocialGoalsRecord) => {
+    mutationFn: async ({ id, goals }: { id: string | null; goals: SocialGoals }) => {
       const supabase = createClient();
       const row = {
         posts_per_week_min: goals.postsPerWeekMin,
@@ -224,7 +240,36 @@ export function useSaveSocialMediaGoals() {
     onMutate: async (next) => {
       await queryClient.cancelQueries({ queryKey: GOALS_QK });
       const prev = queryClient.getQueryData<SocialGoalsRecord>(GOALS_QK);
-      queryClient.setQueryData<SocialGoalsRecord>(GOALS_QK, next);
+      queryClient.setQueryData<SocialGoalsRecord>(GOALS_QK, { platforms: null, ...prev, id: next.id, goals: next.goals });
+      return { prev };
+    },
+    onError: (_err, _next, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(GOALS_QK, ctx.prev);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: GOALS_QK }),
+  });
+}
+
+/** Saves the org's platform list (order, colors, hidden flags). Creates the
+ *  settings row with default goals if the org has none yet. */
+export function useSaveSocialMediaPlatforms() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, platforms }: { id: string | null; platforms: PlatformSetting[] }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const table = (supabase as any).from("social_media_goals");
+      const { error } = id ? await table.update({ platforms }).eq("id", id) : await table.insert({ platforms });
+      if (error) throw error;
+    },
+    onMutate: async (next) => {
+      await queryClient.cancelQueries({ queryKey: GOALS_QK });
+      const prev = queryClient.getQueryData<SocialGoalsRecord>(GOALS_QK);
+      queryClient.setQueryData<SocialGoalsRecord>(GOALS_QK, {
+        id: next.id,
+        goals: prev?.goals ?? DEFAULT_SOCIAL_GOALS,
+        platforms: next.platforms,
+      });
       return { prev };
     },
     onError: (_err, _next, ctx) => {

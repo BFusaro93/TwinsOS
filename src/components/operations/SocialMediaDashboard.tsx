@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, Share2, ChevronDown, Target } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, EyeOff, Layers, Pencil, Plus, Trash2, Share2, ChevronDown, Target } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -17,11 +17,12 @@ import {
   useDeleteSocialWeek,
   useSocialMediaGoals,
   useSaveSocialMediaGoals,
+  useSaveSocialMediaPlatforms,
   type SocialWeekStat,
   type SocialWeekStatInput,
 } from "@/lib/hooks/use-social-media-stats";
 import {
-  PLATFORM_COLOR,
+  PLATFORM_NAME_MAX,
   RANGE_OPTIONS,
   DEFAULT_SOCIAL_GOALS,
   addDays,
@@ -40,12 +41,15 @@ import {
   mondayOf,
   mondaysInMonth,
   monthStart,
-  platformsIn,
+  nextPlatformColor,
+  normalizePlatformName,
+  resolvePlatforms,
   rangeBounds,
   resolveNetNew,
   todayIso,
   totalsOf,
   type RangeKey,
+  type PlatformSetting,
   type SocialGoals,
   type SocialTotals,
 } from "@/lib/utils/social-media-metrics";
@@ -78,8 +82,8 @@ function Card({ title, children, action }: { title: string; children: React.Reac
     </div>
   );
 }
-function PlatformDot({ platform }: { platform: string }) {
-  return <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PLATFORM_COLOR[platform] ?? "#94a3b8" }} />;
+function PlatformDot({ color }: { color: string }) {
+  return <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />;
 }
 
 function Delta({ cur, prev, pct }: { cur: number | null; prev: number | null; pct?: boolean }) {
@@ -310,6 +314,170 @@ function GoalsDialog({
   );
 }
 
+// ── Platforms dialog ──────────────────────────────────────────────────────────
+
+function PlatformsDialog({
+  open,
+  onOpenChange,
+  platforms,
+  weeksByPlatform,
+  saving,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  platforms: PlatformSetting[];
+  /** Logged rows per platform — a platform with data can be hidden, not removed. */
+  weeksByPlatform: Map<string, number>;
+  saving: boolean;
+  onSave: (platforms: PlatformSetting[]) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<PlatformSetting[]>(platforms);
+  const [newName, setNewName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setDraft(platforms);
+      setNewName("");
+      setError(null);
+    }
+  }, [open, platforms]);
+
+  function move(i: number, dir: -1 | 1) {
+    setDraft((d) => {
+      const j = i + dir;
+      if (j < 0 || j >= d.length) return d;
+      const next = [...d];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
+  function toggle(i: number) {
+    setDraft((d) => d.map((p, k) => (k === i ? { ...p, hidden: !p.hidden } : p)));
+    setError(null);
+  }
+
+  function remove(i: number) {
+    setDraft((d) => d.filter((_, k) => k !== i));
+    setError(null);
+  }
+
+  function add() {
+    const name = normalizePlatformName(newName);
+    if (!name) return;
+    if (name.length > PLATFORM_NAME_MAX) { setError(`Platform names can be at most ${PLATFORM_NAME_MAX} characters.`); return; }
+    const existing = draft.findIndex((p) => p.name.toLowerCase() === name.toLowerCase());
+    if (existing >= 0) {
+      // Re-adding a hidden platform just shows it again.
+      if (draft[existing].hidden) { toggle(existing); setNewName(""); return; }
+      setError(`${draft[existing].name} is already on the list.`);
+      return;
+    }
+    setDraft((d) => [...d, { name, color: nextPlatformColor(d.map((p) => p.color)), hidden: false }]);
+    setNewName("");
+    setError(null);
+  }
+
+  async function handleSave() {
+    if (!draft.some((p) => !p.hidden)) { setError("Keep at least one platform showing."); return; }
+    try {
+      await onSave(draft);
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save platforms.");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Platforms</DialogTitle>
+          <DialogDescription>
+            Add the platforms you post on, hide the ones you don&apos;t, and set the order they appear in. Hiding a platform keeps its past numbers; show it again any time.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex max-h-[50vh] flex-col divide-y divide-slate-100 overflow-y-auto rounded-md border">
+          {draft.map((p, i) => {
+            const rows = weeksByPlatform.get(p.name) ?? 0;
+            return (
+              <div key={p.name} className={`flex items-center gap-3 px-3 py-2 ${p.hidden ? "bg-slate-50" : ""}`}>
+                <div className="flex flex-col">
+                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-slate-400 hover:text-slate-700 disabled:opacity-25" aria-label={`Move ${p.name} up`}>
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" onClick={() => move(i, 1)} disabled={i === draft.length - 1} className="text-slate-400 hover:text-slate-700 disabled:opacity-25" aria-label={`Move ${p.name} down`}>
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <span className={p.hidden ? "opacity-30" : ""}><PlatformDot color={p.color} /></span>
+                <div className="min-w-0 flex-1">
+                  <p className={`truncate text-sm font-medium ${p.hidden ? "text-slate-400" : "text-slate-800"}`}>{p.name}</p>
+                  <p className="text-xs text-slate-400">
+                    {p.hidden ? "Hidden · " : ""}
+                    {rows ? `${rows} ${rows === 1 ? "week" : "weeks"} logged` : "No data yet"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggle(i)}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
+                  aria-label={p.hidden ? `Show ${p.name}` : `Hide ${p.name}`}
+                >
+                  {p.hidden ? <><Eye className="h-3.5 w-3.5" /> Show</> : <><EyeOff className="h-3.5 w-3.5" /> Hide</>}
+                </button>
+                {rows === 0 ? (
+                  <button type="button" onClick={() => remove(i)} className="text-red-400 hover:text-red-600" aria-label={`Remove ${p.name}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <span className="w-4" aria-hidden />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => { e.preventDefault(); add(); }}
+        >
+          <input
+            value={newName}
+            onChange={(e) => { setNewName(e.target.value); setError(null); }}
+            placeholder="Add a platform, e.g. Google Business, Nextdoor"
+            maxLength={PLATFORM_NAME_MAX + 10}
+            className="min-w-0 flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            aria-label="New platform name"
+          />
+          <button type="submit" disabled={!normalizePlatformName(newName)} className="flex items-center gap-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+            <Plus className="h-4 w-4" /> Add
+          </button>
+        </form>
+        <p className="-mt-2 text-xs text-slate-400">Only platforms with no data can be removed; hide the others instead. Names can&apos;t be changed after data is logged, since past weeks are stored under that name.</p>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <button type="button" onClick={() => onOpenChange(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save platforms"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function SocialMediaDashboard() {
@@ -318,24 +486,41 @@ export function SocialMediaDashboard() {
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
 
   const { data, isLoading } = useSocialMediaStats();
-  const stats = data ?? NO_STATS;
+  const allStats = data ?? NO_STATS;
   const saveWeek = useSaveSocialWeek();
   const deleteWeek = useDeleteSocialWeek();
   const { data: goalsRecord } = useSocialMediaGoals();
   const saveGoals = useSaveSocialMediaGoals();
   const goals = goalsRecord?.goals ?? DEFAULT_SOCIAL_GOALS;
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const savePlatforms = useSaveSocialMediaPlatforms();
+  const [platformsOpen, setPlatformsOpen] = useState(false);
+
+  // The org's platform list (incl. hidden). Hidden platforms are filtered out
+  // of the data right here, so every total, chart and the entry grid skip them.
+  const platformList = useMemo(() => resolvePlatforms(goalsRecord?.platforms ?? null, allStats), [goalsRecord?.platforms, allStats]);
+  const platforms = useMemo(() => platformList.filter((p) => !p.hidden).map((p) => p.name), [platformList]);
+  const stats = useMemo(() => {
+    const visible = new Set(platforms);
+    return allStats.filter((s) => visible.has(s.platform));
+  }, [allStats, platforms]);
+  const colorOf = (name: string) => platformList.find((p) => p.name === name)?.color ?? "#94a3b8";
+  const weeksByPlatform = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of allStats) m.set(s.platform, (m.get(s.platform) ?? 0) + 1);
+    return m;
+  }, [allStats]);
 
   const today = todayIso();
   const [tab, setTab] = useState<Tab>("overview");
   const [range, setRange] = useState<RangeKey>("12w");
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  // Platform filter chips (view-only; separate from the org's hidden setting).
+  const [chipOff, setChipOff] = useState<Set<string>>(new Set());
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
 
-  const platforms = useMemo(() => platformsIn(stats), [stats]);
-  const activePlatforms = platforms.filter((p) => !hidden.has(p));
+  const activePlatforms = platforms.filter((p) => !chipOff.has(p));
   const netNew = useMemo(() => resolveNetNew(stats), [stats]);
-  const filtered = useMemo(() => stats.filter((s) => !hidden.has(s.platform)), [stats, hidden]);
+  const filtered = useMemo(() => stats.filter((s) => !chipOff.has(s.platform)), [stats, chipOff]);
 
   const bounds = rangeBounds(range, today);
   const current = totalsOf(inRange(filtered, bounds.from, bounds.to), netNew);
@@ -475,16 +660,16 @@ export function SocialMediaDashboard() {
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap gap-1.5">
         {platforms.map((p) => {
-          const on = !hidden.has(p);
+          const on = !chipOff.has(p);
           return (
             <button
               key={p}
               type="button"
-              onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(p)) n.delete(p); else n.add(p); return n; })}
+              onClick={() => setChipOff((h) => { const n = new Set(h); if (n.has(p)) n.delete(p); else n.add(p); return n; })}
               className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${on ? "border-slate-300 bg-white text-slate-700" : "border-dashed border-slate-200 bg-slate-50 text-slate-400"}`}
               aria-pressed={on}
             >
-              <span className={on ? "" : "opacity-30"}><PlatformDot platform={p} /></span>
+              <span className={on ? "" : "opacity-30"}><PlatformDot color={colorOf(p)} /></span>
               {p}
             </button>
           );
@@ -589,7 +774,7 @@ export function SocialMediaDashboard() {
                   <tbody className="divide-y divide-slate-100">
                     {snapshot.map((r) => (
                       <tr key={r.platform}>
-                        <Td><span className="flex items-center gap-2"><PlatformDot platform={r.platform} />{r.platform}</span></Td>
+                        <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(r.platform)} />{r.platform}</span></Td>
                         <Td right cls="font-semibold text-slate-900">{fmtNum(r.current)}</Td>
                         <Td right cls="text-slate-500">{fmtNum(r.startOfMonth)}</Td>
                         <Td right cls={r.growth != null && r.growth < 0 ? "text-red-600" : "text-slate-700"}>{fmtSigned(r.growth)}</Td>
@@ -625,7 +810,7 @@ export function SocialMediaDashboard() {
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v: number) => fmtCompact(v)} width={40} />
                   <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {activePlatforms.map((p) => <Bar key={p} dataKey={p} stackId="v" fill={PLATFORM_COLOR[p] ?? "#94a3b8"} />)}
+                  {activePlatforms.map((p) => <Bar key={p} dataKey={p} stackId="v" fill={colorOf(p)} />)}
                 </BarChart>
               </ResponsiveContainer>
             </Card>
@@ -639,7 +824,7 @@ export function SocialMediaDashboard() {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="overall_er" name="All platforms" stroke="#60ab45" strokeWidth={2.5} dot={{ r: 3, fill: "#60ab45" }} connectNulls />
                   {activePlatforms.map((p) => (
-                    <Line key={p} type="monotone" dataKey={`${p}_er`} name={p} stroke={PLATFORM_COLOR[p] ?? "#94a3b8"} strokeWidth={1.5} dot={false} connectNulls strokeDasharray="4 3" />
+                    <Line key={p} type="monotone" dataKey={`${p}_er`} name={p} stroke={colorOf(p)} strokeWidth={1.5} dot={false} connectNulls strokeDasharray="4 3" />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -655,7 +840,7 @@ export function SocialMediaDashboard() {
                       <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       {activePlatforms.map((p) => (
-                        <Line key={p} type="monotone" dataKey={`${p}_followers`} name={p} stroke={PLATFORM_COLOR[p] ?? "#94a3b8"} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                        <Line key={p} type="monotone" dataKey={`${p}_followers`} name={p} stroke={colorOf(p)} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       ))}
                     </LineChart>
                   ) : (
@@ -665,7 +850,7 @@ export function SocialMediaDashboard() {
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={32} />
                       <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {activePlatforms.map((p) => <Bar key={p} dataKey={`${p}_net`} name={p} fill={PLATFORM_COLOR[p] ?? "#94a3b8"} />)}
+                      {activePlatforms.map((p) => <Bar key={p} dataKey={`${p}_net`} name={p} fill={colorOf(p)} />)}
                     </BarChart>
                   )}
                 </ResponsiveContainer>
@@ -694,7 +879,7 @@ export function SocialMediaDashboard() {
                 )}
                 {platformRows.map((r) => (
                   <tr key={r.platform}>
-                    <Td><span className="flex items-center gap-2"><PlatformDot platform={r.platform} />{r.platform}</span></Td>
+                    <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(r.platform)} />{r.platform}</span></Td>
                     <Td right>{fmtNum(r.posts)}</Td>
                     <Td right>{fmtNum(r.views)}</Td>
                     <Td right cls="text-slate-500">{r.viewsPerPost != null ? fmtNum(Math.round(r.viewsPerPost)) : "—"}</Td>
@@ -742,7 +927,7 @@ export function SocialMediaDashboard() {
                     ...byPlatform.map(({ p, t }, i) => (
                       <tr key={`${m}-${p}`}>
                         <Td cls="font-medium text-slate-700">{i === 0 ? fmtMonth(m) : ""}</Td>
-                        <Td><span className="flex items-center gap-2"><PlatformDot platform={p} />{p}</span></Td>
+                        <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(p)} />{p}</span></Td>
                         <Td right>{fmtNum(t.posts)}</Td>
                         <Td right>{fmtNum(t.views)}</Td>
                         <Td right>{fmtNum(t.engagements)}</Td>
@@ -818,12 +1003,12 @@ export function SocialMediaDashboard() {
                               <tr><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Likes</Th><Th right>Comments</Th><Th right>Shares</Th><Th right>Saves</Th><Th right>Eng. Rate</Th><Th right>Followers</Th><Th right>Net New</Th><Th right>Leads</Th><Th>Notes</Th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {platformsIn(rows).filter((p) => rows.some((r) => r.platform === p)).map((p) => {
+                              {platforms.filter((p) => rows.some((r) => r.platform === p)).map((p) => {
                                 const s = rows.find((r) => r.platform === p)!;
                                 const eng = engagementsOf(s);
                                 return (
                                   <tr key={s.id}>
-                                    <Td><span className="flex items-center gap-2"><PlatformDot platform={p} />{p}</span></Td>
+                                    <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(p)} />{p}</span></Td>
                                     <Td right>{fmtNum(s.posts)}</Td>
                                     <Td right>{fmtNum(s.views)}</Td>
                                     <Td right>{fmtNum(s.likes)}</Td>
@@ -873,9 +1058,14 @@ export function SocialMediaDashboard() {
               aria-label="Pick week"
             />
           </div>
-          <span className={`text-xs font-medium ${weekExists ? "text-amber-600" : "text-slate-400"}`}>
-            {weekExists ? "Editing a week that's already logged" : "New week"}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className={`text-xs font-medium ${weekExists ? "text-amber-600" : "text-slate-400"}`}>
+              {weekExists ? "Editing a week that's already logged" : "New week"}
+            </span>
+            <button onClick={() => setPlatformsOpen(true)} className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+              <Plus className="h-3.5 w-3.5" /> Add / hide platforms
+            </button>
+          </div>
         </div>
 
         <div className="rounded-lg border border-brand-200 bg-brand-50/60 p-4 text-sm text-slate-700">
@@ -896,7 +1086,7 @@ export function SocialMediaDashboard() {
                   <Th>Metric</Th>
                   {platforms.map((p) => (
                     <th key={p} className="px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      <span className="flex items-center gap-1.5"><PlatformDot platform={p} />{p}</span>
+                      <span className="flex items-center gap-1.5"><PlatformDot color={colorOf(p)} />{p}</span>
                     </th>
                   ))}
                 </tr>
@@ -988,12 +1178,20 @@ export function SocialMediaDashboard() {
         description={`Weekly posts, reach, engagement, followers and leads by platform${latestWeek ? ` · last logged week of ${fmtShortDate(latestWeek)}` : ""}`}
         action={
           canEdit ? (
+            <>
+            <button
+              onClick={() => setPlatformsOpen(true)}
+              className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Layers className="h-4 w-4" /> Platforms
+            </button>
             <button
               onClick={() => openEntry(mondayOf(today))}
               className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
             >
               <Plus className="h-4 w-4" /> Log This Week
             </button>
+            </>
           ) : undefined
         }
       />
@@ -1028,6 +1226,16 @@ export function SocialMediaDashboard() {
           isDefault={!goalsRecord?.id}
           saving={saveGoals.isPending}
           onSave={(next) => saveGoals.mutateAsync({ id: goalsRecord?.id ?? null, goals: next })}
+        />
+      )}
+      {canEdit && (
+        <PlatformsDialog
+          open={platformsOpen}
+          onOpenChange={setPlatformsOpen}
+          platforms={platformList}
+          weeksByPlatform={weeksByPlatform}
+          saving={savePlatforms.isPending}
+          onSave={(next) => savePlatforms.mutateAsync({ id: goalsRecord?.id ?? null, platforms: next })}
         />
       )}
       {confirmDialog}
