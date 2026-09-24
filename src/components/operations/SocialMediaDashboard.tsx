@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, Share2, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, Share2, ChevronDown, Target } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -9,18 +9,21 @@ import {
 } from "recharts";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCurrentUserStore } from "@/stores";
 import {
   useSocialMediaStats,
   useSaveSocialWeek,
   useDeleteSocialWeek,
+  useSocialMediaGoals,
+  useSaveSocialMediaGoals,
   type SocialWeekStat,
   type SocialWeekStatInput,
 } from "@/lib/hooks/use-social-media-stats";
 import {
   PLATFORM_COLOR,
   RANGE_OPTIONS,
-  SOCIAL_GOALS,
+  DEFAULT_SOCIAL_GOALS,
   addDays,
   addMonths,
   engagementsOf,
@@ -43,6 +46,7 @@ import {
   todayIso,
   totalsOf,
   type RangeKey,
+  type SocialGoals,
   type SocialTotals,
 } from "@/lib/utils/social-media-metrics";
 
@@ -106,7 +110,9 @@ function KpiCard({ label, value, delta, sub }: { label: string; value: string; d
 
 function GoalRow({ label, actual, display, min, max, target }: { label: string; actual: number | null; display: string; min: number; max: number; target: string }) {
   const onTrack = actual != null && actual >= min;
-  const pct = actual == null ? 0 : Math.max(0, Math.min(1, actual / max));
+  // max can be 0 if an org sets every goal to 0 — avoid NaN widths.
+  const pct = actual == null || max <= 0 ? 0 : Math.max(0, Math.min(1, actual / max));
+  const markerPct = max > 0 ? (min / max) * 100 : 0;
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 text-sm">
@@ -115,7 +121,7 @@ function GoalRow({ label, actual, display, min, max, target }: { label: string; 
       </div>
       <div className="relative mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
         <div className={`h-full rounded-full ${onTrack ? "bg-brand-500" : "bg-amber-400"}`} style={{ width: `${pct * 100}%` }} />
-        <div className="absolute inset-y-0 w-px bg-slate-400" style={{ left: `${(min / max) * 100}%` }} />
+        <div className="absolute inset-y-0 w-px bg-slate-400" style={{ left: `${markerPct}%` }} />
       </div>
       <div className="mt-1 flex justify-between text-xs">
         <span className="text-slate-400">Target {target}</span>
@@ -164,6 +170,146 @@ function toInt(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// ── Goals dialog ──────────────────────────────────────────────────────────────
+
+const GOAL_FIELDS: {
+  label: string;
+  unit: string;
+  min: keyof SocialGoals;
+  max: keyof SocialGoals;
+  percent?: boolean;
+}[] = [
+  { label: "Content published", unit: "posts per week, all platforms", min: "postsPerWeekMin", max: "postsPerWeekMax" },
+  { label: "Engagement rate", unit: "% of views", min: "engagementRateMin", max: "engagementRateMax", percent: true },
+  { label: "Leads generated", unit: "leads per month", min: "leadsMin", max: "leadsMax" },
+  { label: "Follower growth", unit: "% per month", min: "followerGrowthMin", max: "followerGrowthMax", percent: true },
+];
+
+/** Stored rates are fractions; the form edits them as percents. */
+function toFormValue(v: number, percent?: boolean): string {
+  return String(percent ? +(v * 100).toFixed(4) : v);
+}
+
+function formFrom(g: SocialGoals): Record<keyof SocialGoals, string> {
+  const out = {} as Record<keyof SocialGoals, string>;
+  for (const f of GOAL_FIELDS) {
+    out[f.min] = toFormValue(g[f.min], f.percent);
+    out[f.max] = toFormValue(g[f.max], f.percent);
+  }
+  return out;
+}
+
+function GoalsDialog({
+  open,
+  onOpenChange,
+  goals,
+  isDefault,
+  saving,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  goals: SocialGoals;
+  isDefault: boolean;
+  saving: boolean;
+  onSave: (goals: SocialGoals) => Promise<void>;
+}) {
+  const [form, setForm] = useState<Record<keyof SocialGoals, string>>(() => formFrom(goals));
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset to the saved values each time the dialog opens.
+  useEffect(() => {
+    if (open) {
+      setForm(formFrom(goals));
+      setError(null);
+    }
+  }, [open, goals]);
+
+  async function handleSave() {
+    const next = {} as SocialGoals;
+    for (const f of GOAL_FIELDS) {
+      const lo = Number(form[f.min].trim());
+      const hi = Number(form[f.max].trim());
+      if (form[f.min].trim() === "" || form[f.max].trim() === "" || !Number.isFinite(lo) || !Number.isFinite(hi)) {
+        setError(`${f.label}: enter a number for both the minimum and the stretch goal.`);
+        return;
+      }
+      if (lo < 0 || hi < 0) { setError(`${f.label}: goals can't be negative.`); return; }
+      if (hi < lo) { setError(`${f.label}: the stretch goal must be at least the minimum.`); return; }
+      next[f.min] = f.percent ? lo / 100 : lo;
+      next[f.max] = f.percent ? hi / 100 : hi;
+    }
+    try {
+      await onSave(next);
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save goals.");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit monthly goals</DialogTitle>
+          <DialogDescription>
+            A goal shows &ldquo;On track&rdquo; once it reaches the minimum; the bar fills up to the stretch goal.
+            {isDefault && " These are the default goals — saving makes them your own."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-[1fr_88px_88px] items-end gap-x-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <span />
+            <span>Minimum</span>
+            <span>Stretch</span>
+          </div>
+          {GOAL_FIELDS.map((f) => (
+            <div key={f.min} className="grid grid-cols-[1fr_88px_88px] items-center gap-x-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-800">{f.label}</p>
+                <p className="text-xs text-slate-400">{f.unit}</p>
+              </div>
+              {[f.min, f.max].map((k) => (
+                <div key={k} className="relative">
+                  <input
+                    inputMode="decimal"
+                    value={form[k]}
+                    onChange={(e) => { setForm((cur) => ({ ...cur, [k]: e.target.value })); setError(null); }}
+                    className={`w-full rounded-md border border-slate-200 py-1.5 text-right text-sm tabular-nums focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 ${f.percent ? "pl-2 pr-6" : "px-2"}`}
+                    aria-label={`${f.label} ${k === f.min ? "minimum" : "stretch goal"}`}
+                  />
+                  {f.percent && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <button
+            type="button"
+            onClick={() => setForm(formFrom(DEFAULT_SOCIAL_GOALS))}
+            className="mr-auto text-sm text-slate-500 hover:text-slate-700"
+          >
+            Reset to defaults
+          </button>
+          <button type="button" onClick={() => onOpenChange(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save goals"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function SocialMediaDashboard() {
@@ -175,6 +321,10 @@ export function SocialMediaDashboard() {
   const stats = data ?? NO_STATS;
   const saveWeek = useSaveSocialWeek();
   const deleteWeek = useDeleteSocialWeek();
+  const { data: goalsRecord } = useSocialMediaGoals();
+  const saveGoals = useSaveSocialMediaGoals();
+  const goals = goalsRecord?.goals ?? DEFAULT_SOCIAL_GOALS;
+  const [goalsOpen, setGoalsOpen] = useState(false);
 
   const today = todayIso();
   const [tab, setTab] = useState<Tab>("overview");
@@ -383,39 +533,48 @@ export function SocialMediaDashboard() {
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <Card title={`This Month vs. Goals — ${fmtMonth(monthStart(today))}`}>
+            <Card
+              title={`This Month vs. Goals — ${fmtMonth(monthStart(today))}`}
+              action={
+                canEdit ? (
+                  <button onClick={() => setGoalsOpen(true)} className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
+                    <Target className="h-3.5 w-3.5" /> Edit goals
+                  </button>
+                ) : undefined
+              }
+            >
               <div className="flex flex-col gap-5">
                 <GoalRow
                   label="Content published"
                   actual={monthTotals.posts}
                   display={fmtNum(monthTotals.posts)}
-                  min={SOCIAL_GOALS.postsPerWeekMin * weeksThisMonth}
-                  max={Math.max(SOCIAL_GOALS.postsPerWeekMax * weeksThisMonth, monthTotals.posts)}
-                  target={`${SOCIAL_GOALS.postsPerWeekMin * weeksThisMonth}–${SOCIAL_GOALS.postsPerWeekMax * weeksThisMonth}`}
+                  min={goals.postsPerWeekMin * weeksThisMonth}
+                  max={Math.max(goals.postsPerWeekMax * weeksThisMonth, monthTotals.posts)}
+                  target={`${fmtNum(goals.postsPerWeekMin * weeksThisMonth)}–${fmtNum(goals.postsPerWeekMax * weeksThisMonth)} (${fmtNum(goals.postsPerWeekMin)}–${fmtNum(goals.postsPerWeekMax)}/wk × ${weeksThisMonth})`}
                 />
                 <GoalRow
                   label="Engagement rate"
                   actual={monthTotals.engagementRate}
                   display={fmtPct(monthTotals.engagementRate, 2)}
-                  min={SOCIAL_GOALS.engagementRateMin}
-                  max={Math.max(SOCIAL_GOALS.engagementRateMax, monthTotals.engagementRate ?? 0)}
-                  target={`${fmtPct(SOCIAL_GOALS.engagementRateMin)}–${fmtPct(SOCIAL_GOALS.engagementRateMax)}`}
+                  min={goals.engagementRateMin}
+                  max={Math.max(goals.engagementRateMax, monthTotals.engagementRate ?? 0)}
+                  target={`${fmtPct(goals.engagementRateMin)}–${fmtPct(goals.engagementRateMax)}`}
                 />
                 <GoalRow
                   label="Leads generated"
                   actual={monthTotals.leads}
                   display={fmtNum(monthTotals.leads)}
-                  min={SOCIAL_GOALS.leadsMin}
-                  max={Math.max(SOCIAL_GOALS.leadsMax, monthTotals.leads)}
-                  target={`${SOCIAL_GOALS.leadsMin}–${SOCIAL_GOALS.leadsMax}`}
+                  min={goals.leadsMin}
+                  max={Math.max(goals.leadsMax, monthTotals.leads)}
+                  target={`${fmtNum(goals.leadsMin)}–${fmtNum(goals.leadsMax)}`}
                 />
                 <GoalRow
                   label="Follower growth"
                   actual={followerGrowthRate}
                   display={fmtPct(followerGrowthRate)}
-                  min={SOCIAL_GOALS.followerGrowthMin}
-                  max={Math.max(SOCIAL_GOALS.followerGrowthMax, followerGrowthRate ?? 0)}
-                  target={`${fmtPct(SOCIAL_GOALS.followerGrowthMin, 0)}–${fmtPct(SOCIAL_GOALS.followerGrowthMax, 0)}`}
+                  min={goals.followerGrowthMin}
+                  max={Math.max(goals.followerGrowthMax, followerGrowthRate ?? 0)}
+                  target={`${fmtPct(goals.followerGrowthMin)}–${fmtPct(goals.followerGrowthMax)}`}
                 />
               </div>
             </Card>
@@ -860,6 +1019,16 @@ export function SocialMediaDashboard() {
           {tab === "log" && WeeklyLog()}
           {tab === "entry" && canEdit && Entry()}
         </>
+      )}
+      {canEdit && (
+        <GoalsDialog
+          open={goalsOpen}
+          onOpenChange={setGoalsOpen}
+          goals={goals}
+          isDefault={!goalsRecord?.id}
+          saving={saveGoals.isPending}
+          onSave={(next) => saveGoals.mutateAsync({ id: goalsRecord?.id ?? null, goals: next })}
+        />
       )}
       {confirmDialog}
     </div>
