@@ -13,9 +13,23 @@ export const PLATFORM_COLOR: Record<string, string> = Object.fromEntries(
   SOCIAL_PLATFORMS.map((p) => [p.key, p.color])
 );
 
-/** Monthly goals, carried over from the spreadsheet's "This Month vs. Goals". */
-export const SOCIAL_GOALS = {
-  postsPerWeekMin: 2, // all platforms combined, per week in the month
+/** Monthly goal ranges, editable per org (social_media_goals). Rates are
+ *  fractions; posts are per week, all platforms combined. */
+export interface SocialGoals {
+  postsPerWeekMin: number;
+  postsPerWeekMax: number;
+  engagementRateMin: number;
+  engagementRateMax: number;
+  leadsMin: number;
+  leadsMax: number;
+  followerGrowthMin: number;
+  followerGrowthMax: number;
+}
+
+/** Used until an org saves its own — the targets from Twins' original
+ *  spreadsheet. Must match the column defaults in social_media_goals. */
+export const DEFAULT_SOCIAL_GOALS: SocialGoals = {
+  postsPerWeekMin: 2,
   postsPerWeekMax: 3,
   engagementRateMin: 0.03,
   engagementRateMax: 0.05,
