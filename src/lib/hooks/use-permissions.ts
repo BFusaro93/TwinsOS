@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
+import { useHydrated } from "@/lib/hooks/use-hydrated";
 import type { Permissions } from "@/types/crm-roles";
 
 interface PermissionsResult {
@@ -57,13 +58,25 @@ async function fetchUserPermissions(queryClient: QueryClient): Promise<{
   };
 }
 
-export function usePermissions(): PermissionsResult {
+/**
+ * Shared ["crm-permissions"] query. Reports "still loading" until hydration
+ * finishes: the server never has permissions, so a late-hydrating Suspense
+ * boundary (e.g. TicketsList) must not render permission-gated UI from a
+ * query that resolved in the meantime — that's a hydration mismatch.
+ */
+function usePermissionsQuery() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const hydrated = useHydrated();
+  const query = useQuery({
     queryKey: ["crm-permissions"],
     queryFn: () => fetchUserPermissions(queryClient),
     staleTime: 5 * 60 * 1000, // cache 5 min — permissions don't change often
   });
+  return hydrated ? query : { data: undefined, isLoading: true };
+}
+
+export function usePermissions(): PermissionsResult {
+  const { data, isLoading } = usePermissionsQuery();
 
   const permissions = data?.permissions ?? {};
   const isAdmin = data?.isAdmin ?? false;
@@ -90,12 +103,7 @@ export function usePermissions(): PermissionsResult {
  * crew logins confined to /crm/crew and out of the PO/CMMS dashboard shell.
  */
 export function useIsCrewOnly(): { isCrewOnly: boolean; isLoading: boolean } {
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["crm-permissions"],
-    queryFn: () => fetchUserPermissions(queryClient),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data, isLoading } = usePermissionsQuery();
   return { isCrewOnly: data?.profileRole === "crew", isLoading: isLoading || !data };
 }
 
@@ -108,12 +116,7 @@ export function useIsCrewOnly(): { isCrewOnly: boolean; isLoading: boolean } {
  * by itself, grant CRM access.
  */
 export function useCrmAccess(pathname: string): { allowed: boolean; isLoading: boolean } {
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["crm-permissions"],
-    queryFn: () => fetchUserPermissions(queryClient),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data, isLoading } = usePermissionsQuery();
 
   if (isLoading || !data) return { allowed: true, isLoading: true }; // avoid a flash of the denied screen while loading
 
