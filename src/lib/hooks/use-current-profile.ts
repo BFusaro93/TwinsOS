@@ -2,7 +2,7 @@
 
 import { type QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getAuthUser } from "@/lib/supabase/client";
 
 export interface CurrentProfile {
   userId: string;
@@ -15,7 +15,7 @@ const CURRENT_PROFILE_STALE_TIME = 5 * 60 * 1000;
 
 async function fetchCurrentProfileRaw(): Promise<CurrentProfile | null> {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return null;
 
   const { data: profile, error } = await supabase
