@@ -5,6 +5,17 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // Next's dev-only Segment Explorer wraps every layout/page in an extra
+    // client component (SegmentViewNode). On a reload that races a fresh dev
+    // compile, the client hydrated those wrappers with one fewer tree fork
+    // than the server rendered, so every useId() below the (crm) layout came
+    // out different — Radix trigger ids in TopBar ("radix-_R_asr5r6lb_" vs
+    // "radix-_R_1bjd5r6lb_") and the "attributes didn't match" hydration
+    // error. It never renders in production builds; turning it off only
+    // drops the devtools Route Info panel.
+    devtoolSegmentExplorer: false,
+  },
   images: {
     remotePatterns: [],
   },
