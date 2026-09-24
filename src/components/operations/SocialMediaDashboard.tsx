@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCurrentUserStore } from "@/stores";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import {
   useSocialMediaStats,
   useSaveSocialWeek,
@@ -483,7 +484,10 @@ function PlatformsDialog({
 export function SocialMediaDashboard() {
   const [confirm, confirmDialog] = useConfirm();
   const { currentUser } = useCurrentUserStore();
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const { can } = usePermissions();
+  // Mirrors can_edit_social_media() in the DB: Admin/Manager, or a CRM role
+  // with social_media_edit (can() already passes admins).
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager" || can("social_media_edit");
 
   const { data, isLoading } = useSocialMediaStats();
   const allStats = data ?? NO_STATS;
