@@ -10,6 +10,7 @@ export interface SocialWeekStat {
   platform: string;
   posts: number | null;
   views: number | null;
+  profileViews: number | null;
   likes: number | null;
   comments: number | null;
   shares: number | null;
@@ -24,7 +25,7 @@ export type SocialWeekStatInput = Omit<SocialWeekStat, "id"> & { id?: string };
 
 const QK = ["social-media-weekly-stats"];
 const COLUMNS =
-  "id, week_start, platform, posts, views, likes, comments, shares, saves, followers, net_new_followers, leads, notes";
+  "id, week_start, platform, posts, views, profile_views, likes, comments, shares, saves, followers, net_new_followers, leads, notes";
 
 interface Row {
   id: string;
@@ -32,6 +33,7 @@ interface Row {
   platform: string;
   posts: number | null;
   views: number | null;
+  profile_views: number | null;
   likes: number | null;
   comments: number | null;
   shares: number | null;
@@ -49,6 +51,7 @@ function mapRow(r: Row): SocialWeekStat {
     platform: r.platform,
     posts: r.posts,
     views: r.views,
+    profileViews: r.profile_views,
     likes: r.likes,
     comments: r.comments,
     shares: r.shares,
@@ -66,6 +69,7 @@ function toRow(s: SocialWeekStatInput) {
     platform: s.platform,
     posts: s.posts,
     views: s.views,
+    profile_views: s.profileViews,
     likes: s.likes,
     comments: s.comments,
     shares: s.shares,

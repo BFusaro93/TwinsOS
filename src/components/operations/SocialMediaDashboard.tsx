@@ -145,6 +145,7 @@ const AXIS_TICK = { fontSize: 11, fill: "#94a3b8" };
 const ENTRY_FIELDS = [
   { key: "posts", label: "Posts published", hint: "How many posts/videos went out this week" },
   { key: "views", label: "Views / reach", hint: "Total views or accounts reached, Mon–Sun" },
+  { key: "profileViews", label: "Profile views", hint: "Visits to your profile/page this week (not post views)" },
   { key: "likes", label: "Likes", hint: "Likes/reactions received this week" },
   { key: "comments", label: "Comments", hint: "Comments received this week" },
   { key: "shares", label: "Shares", hint: "Shares/reposts this week" },
@@ -157,13 +158,13 @@ type EntryField = (typeof ENTRY_FIELDS)[number]["key"];
 type EntryCell = Record<EntryField, string> & { notes: string; id?: string };
 
 function emptyCell(): EntryCell {
-  return { posts: "", views: "", likes: "", comments: "", shares: "", saves: "", followers: "", netNewFollowers: "", leads: "", notes: "" };
+  return { posts: "", views: "", profileViews: "", likes: "", comments: "", shares: "", saves: "", followers: "", netNewFollowers: "", leads: "", notes: "" };
 }
 function cellFrom(s: SocialWeekStat): EntryCell {
   const str = (n: number | null) => (n == null ? "" : String(n));
   return {
     id: s.id,
-    posts: str(s.posts), views: str(s.views), likes: str(s.likes), comments: str(s.comments),
+    posts: str(s.posts), views: str(s.views), profileViews: str(s.profileViews), likes: str(s.likes), comments: str(s.comments),
     shares: str(s.shares), saves: str(s.saves), followers: str(s.followers),
     netNewFollowers: str(s.netNewFollowers), leads: str(s.leads), notes: s.notes ?? "",
   };
@@ -580,7 +581,7 @@ export function SocialMediaDashboard() {
         id: c.id,
         weekStart: entryWeek,
         platform: p,
-        posts: toInt(c.posts), views: toInt(c.views), likes: toInt(c.likes), comments: toInt(c.comments),
+        posts: toInt(c.posts), views: toInt(c.views), profileViews: toInt(c.profileViews), likes: toInt(c.likes), comments: toInt(c.comments),
         shares: toInt(c.shares), saves: toInt(c.saves), followers, netNewFollowers: netNewVal,
         leads: toInt(c.leads), notes: c.notes.trim() || null,
       });
@@ -710,9 +711,10 @@ export function SocialMediaDashboard() {
     return (
       <div className="flex flex-col gap-5">
         {filterBar}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <KpiCard label="Posts" value={fmtNum(current.posts)} delta={previous && <Delta cur={current.posts} prev={previous.posts} />} />
           <KpiCard label="Views / Reach" value={fmtNum(current.views)} delta={previous && <Delta cur={current.views} prev={previous.views} />} />
+          <KpiCard label="Profile Views" value={fmtNum(current.profileViews)} delta={previous && <Delta cur={current.profileViews} prev={previous.profileViews} />} />
           <KpiCard label="Engagements" value={fmtNum(current.engagements)} delta={previous && <Delta cur={current.engagements} prev={previous.engagements} />} />
           <KpiCard label="Engagement Rate" value={fmtPct(current.engagementRate, 2)} delta={previous && <Delta cur={current.engagementRate} prev={previous.engagementRate} pct />} />
           <KpiCard label="Net New Followers" value={fmtSigned(current.netNewFollowers)} delta={previous && <Delta cur={current.netNewFollowers} prev={previous.netNewFollowers} />} />
@@ -875,11 +877,11 @@ export function SocialMediaDashboard() {
           <div className="-mx-5 overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
-                <tr><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Views / Post</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th></tr>
+                <tr><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Views / Post</Th><Th right>Profile Views</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {platformRows.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">No weeks logged in this date range.</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">No weeks logged in this date range.</td></tr>
                 )}
                 {platformRows.map((r) => (
                   <tr key={r.platform}>
@@ -887,6 +889,7 @@ export function SocialMediaDashboard() {
                     <Td right>{fmtNum(r.posts)}</Td>
                     <Td right>{fmtNum(r.views)}</Td>
                     <Td right cls="text-slate-500">{r.viewsPerPost != null ? fmtNum(Math.round(r.viewsPerPost)) : "—"}</Td>
+                    <Td right>{fmtNum(r.profileViews)}</Td>
                     <Td right>{fmtNum(r.engagements)}</Td>
                     <Td right>
                       <span className={r.engagementRate != null && r.engagementRate === bestEr ? "rounded bg-green-100 px-1.5 py-0.5 font-semibold text-green-700" : ""}>
@@ -903,6 +906,7 @@ export function SocialMediaDashboard() {
                     <Td right>{fmtNum(current.posts)}</Td>
                     <Td right>{fmtNum(current.views)}</Td>
                     <Td right>{current.posts ? fmtNum(Math.round(current.views / current.posts)) : "—"}</Td>
+                    <Td right>{fmtNum(current.profileViews)}</Td>
                     <Td right>{fmtNum(current.engagements)}</Td>
                     <Td right>{fmtPct(current.engagementRate, 2)}</Td>
                     <Td right>{fmtSigned(current.netNewFollowers)}</Td>
@@ -918,7 +922,7 @@ export function SocialMediaDashboard() {
           <div className="-mx-5 overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
-                <tr><Th>Month</Th><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th></tr>
+                <tr><Th>Month</Th><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Profile Views</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {months.map((m) => {
@@ -934,6 +938,7 @@ export function SocialMediaDashboard() {
                         <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(p)} />{p}</span></Td>
                         <Td right>{fmtNum(t.posts)}</Td>
                         <Td right>{fmtNum(t.views)}</Td>
+                        <Td right>{fmtNum(t.profileViews)}</Td>
                         <Td right>{fmtNum(t.engagements)}</Td>
                         <Td right>{fmtPct(t.engagementRate, 2)}</Td>
                         <Td right>{fmtSigned(t.netNewFollowers)}</Td>
@@ -945,6 +950,7 @@ export function SocialMediaDashboard() {
                       <Td>All platforms</Td>
                       <Td right>{fmtNum(all.posts)}</Td>
                       <Td right>{fmtNum(all.views)}</Td>
+                      <Td right>{fmtNum(all.profileViews)}</Td>
                       <Td right>{fmtNum(all.engagements)}</Td>
                       <Td right>{fmtPct(all.engagementRate, 2)}</Td>
                       <Td right>{fmtSigned(all.netNewFollowers)}</Td>
@@ -967,7 +973,7 @@ export function SocialMediaDashboard() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50">
-              <tr><Th>Week</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th><Th right>{""}</Th></tr>
+              <tr><Th>Week</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Profile Views</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th><Th right>{""}</Th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {allWeeks.map((w) => {
@@ -985,6 +991,7 @@ export function SocialMediaDashboard() {
                     </Td>
                     <Td right>{fmtNum(t.posts)}</Td>
                     <Td right>{fmtNum(t.views)}</Td>
+                    <Td right>{fmtNum(t.profileViews)}</Td>
                     <Td right>{fmtNum(t.engagements)}</Td>
                     <Td right>{fmtPct(t.engagementRate, 2)}</Td>
                     <Td right>{fmtSigned(t.netNewFollowers)}</Td>
@@ -1000,11 +1007,11 @@ export function SocialMediaDashboard() {
                   </tr>,
                   open && (
                     <tr key={`${w}-detail`} className="bg-slate-50/60">
-                      <td colSpan={8} className="px-4 pb-4 pt-1">
+                      <td colSpan={9} className="px-4 pb-4 pt-1">
                         <div className="overflow-x-auto rounded-md border bg-white">
                           <table className="w-full">
                             <thead className="bg-slate-50">
-                              <tr><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Likes</Th><Th right>Comments</Th><Th right>Shares</Th><Th right>Saves</Th><Th right>Eng. Rate</Th><Th right>Followers</Th><Th right>Net New</Th><Th right>Leads</Th><Th>Notes</Th></tr>
+                              <tr><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Profile Views</Th><Th right>Likes</Th><Th right>Comments</Th><Th right>Shares</Th><Th right>Saves</Th><Th right>Eng. Rate</Th><Th right>Followers</Th><Th right>Net New</Th><Th right>Leads</Th><Th>Notes</Th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                               {platforms.filter((p) => rows.some((r) => r.platform === p)).map((p) => {
@@ -1015,6 +1022,7 @@ export function SocialMediaDashboard() {
                                     <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(p)} />{p}</span></Td>
                                     <Td right>{fmtNum(s.posts)}</Td>
                                     <Td right>{fmtNum(s.views)}</Td>
+                                    <Td right>{fmtNum(s.profileViews)}</Td>
                                     <Td right>{fmtNum(s.likes)}</Td>
                                     <Td right>{fmtNum(s.comments)}</Td>
                                     <Td right>{fmtNum(s.shares)}</Td>

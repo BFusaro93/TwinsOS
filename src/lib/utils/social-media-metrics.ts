@@ -231,6 +231,7 @@ export function followersBefore(stats: SocialWeekStat[], platform: string, weekS
 export interface SocialTotals {
   posts: number;
   views: number;
+  profileViews: number;
   engagements: number;
   engagementRate: number | null;
   netNewFollowers: number;
@@ -239,7 +240,7 @@ export interface SocialTotals {
 }
 
 export function totalsOf(rows: SocialWeekStat[], netNew: Map<string, number | null>): SocialTotals {
-  let posts = 0, views = 0, engagements = 0, netNewFollowers = 0, leads = 0;
+  let posts = 0, views = 0, profileViews = 0, engagements = 0, netNewFollowers = 0, leads = 0;
   // Engagement rate only counts rows that have both views and engagements, so
   // a week with views but no likes typed yet doesn't drag the rate down.
   let rateViews = 0, rateEng = 0;
@@ -248,6 +249,7 @@ export function totalsOf(rows: SocialWeekStat[], netNew: Map<string, number | nu
     weeks.add(r.weekStart);
     posts += r.posts ?? 0;
     views += r.views ?? 0;
+    profileViews += r.profileViews ?? 0;
     const e = engagementsOf(r);
     engagements += e ?? 0;
     if (e != null && r.views) {
@@ -260,6 +262,7 @@ export function totalsOf(rows: SocialWeekStat[], netNew: Map<string, number | nu
   return {
     posts,
     views,
+    profileViews,
     engagements,
     engagementRate: rateViews > 0 ? rateEng / rateViews : null,
     netNewFollowers,
