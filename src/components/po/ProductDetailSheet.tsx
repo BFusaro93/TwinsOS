@@ -46,7 +46,7 @@ import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";

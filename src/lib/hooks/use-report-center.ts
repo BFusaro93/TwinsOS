@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { getDataset, getDatasetField } from "@/lib/reports/datasets";
 import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";

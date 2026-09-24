@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { BarChart2, Wrench, NotepadText, ExternalLink, Settings, Camera, Sprout, CalendarCheck } from "lucide-react";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { useCurrentUserStore } from "@/stores";

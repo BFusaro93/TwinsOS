@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import Link from "next/link";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { Users, ArrowLeft } from "lucide-react";
