@@ -33,6 +33,7 @@ const CREW_BLOCKED_PATHS = [
   "/dashboards/kpis",
   "/dashboards/twins-kpis",
   "/dashboards/crm",
+  "/dashboards/social-media",
 ];
 
 function CrewBlockedGuard({ children }: { children: React.ReactNode }) {

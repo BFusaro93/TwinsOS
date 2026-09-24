@@ -12,6 +12,7 @@ import {
   FileText,
   Target,
   Gauge,
+  Share2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -137,6 +138,15 @@ export default function DashboardsHomePage() {
               description="Legacy Service Autopilot summary"
             />
           </>
+        )}
+
+        {!isCrew && (
+          <DashboardCard
+            href="/dashboards/social-media"
+            icon={Share2}
+            title="Social Media"
+            description="Weekly reach, engagement, followers & leads by platform"
+          />
         )}
 
         {hasDrivingScoreAccess && (
