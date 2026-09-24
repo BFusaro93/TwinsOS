@@ -7,7 +7,9 @@ Sentry.init({
   // Session Replay isn't wired up — flip these above 0 if you want it.
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 0,
-  enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
+  // Off under `next dev`: local debugging (dev:test, probes, half-finished
+  // work) was raising "regression" alerts on real issues like LANDSCAPT-4.
+  enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN && process.env.NODE_ENV !== "development",
 });
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
