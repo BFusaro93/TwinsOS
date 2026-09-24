@@ -1,25 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import {
-  LayoutDashboard,
-  Wrench,
-  CalendarCheck,
-  BarChart2,
-  DollarSign,
-  TrendingUp,
-  ShieldCheck,
-  FileText,
-  Target,
-  Gauge,
-  Share2,
-} from "lucide-react";
+import { LayoutDashboard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { useCurrentUserStore } from "@/stores";
+import { useVisibleDashboardsNav } from "@/components/shared/ReportsSidebar";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
-import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
-import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 import { useDashboards } from "@/lib/hooks/use-report-center";
 
 const CARD =
@@ -50,15 +36,11 @@ function DashboardCard({
 }
 
 export default function DashboardsHomePage() {
-  const { currentUser } = useCurrentUserStore();
-  // Crew logins only get custom dashboards an admin flagged "Show to crew"
-  // (the /api/crm/dashboards list is already filtered server-side for them);
-  // the built-in Equipt / My Day / Reports dashboards are office tools.
-  const isCrew = currentUser.role === "crew";
-  const { allowed: hasEquipt } = useModuleAccess("equipt");
+  // Same visibility rules as the sidebar (crew, internal-org, admin, module,
+  // Samsara gates). Crew custom dashboards are filtered server-side by
+  // /api/crm/dashboards to the ones flagged "Show to crew".
+  const navItems = useVisibleDashboardsNav().filter((item) => item.href !== "/dashboards");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
-  const { isInternalOrg } = useIsInternalOrg();
-  const { allowed: hasDrivingScoreAccess } = useHasDrivingScoreAccess();
   const { data: customDashboards = [] } = useDashboards();
 
   return (
@@ -66,97 +48,15 @@ export default function DashboardsHomePage() {
       <PageHeader title="Dashboards" description="Every dashboard available to you, in one place." />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {hasEquipt && !isCrew && (
+        {navItems.map((item) => (
           <DashboardCard
-            href="/dashboards/equipt"
-            icon={Wrench}
-            title="Equipt Dashboard"
-            description="Work orders, purchasing & asset management"
+            key={item.href}
+            href={item.href}
+            icon={item.icon}
+            title={item.label}
+            description={item.description ?? ""}
           />
-        )}
-
-        {hasLandscapt && !isCrew && (
-          <DashboardCard
-            href="/dashboards/myday"
-            icon={CalendarCheck}
-            title="Landscapt My Day"
-            description="Your daily schedule and tasks"
-          />
-        )}
-
-        {hasLandscapt && !isCrew && (
-          <DashboardCard
-            href="/dashboards/landscapt-reports"
-            icon={BarChart2}
-            title="Reports Dashboard"
-            description="Landscapt's built-in reporting dashboard"
-          />
-        )}
-
-        {hasLandscapt && !isCrew && (
-          <DashboardCard
-            href="/dashboards/kpis"
-            icon={Gauge}
-            title="KPI Scorecard"
-            description="Customizable KPIs computed live from Landscapt data"
-          />
-        )}
-
-        {hasLandscapt && !isCrew && (
-          <DashboardCard
-            href="/dashboards/crm"
-            icon={FileText}
-            title="Company Report"
-            description="Sales, operations, and A/R computed live from Landscapt data"
-          />
-        )}
-
-        {isInternalOrg && (
-          <>
-            <DashboardCard
-              href="/dashboards/financials"
-              icon={DollarSign}
-              title="Financial"
-              description="Revenue, expenses & margin"
-            />
-            <DashboardCard
-              href="/dashboards/avb"
-              icon={TrendingUp}
-              title="Labor Efficiency"
-              description="Budget vs. actual labor hours"
-            />
-            <DashboardCard
-              href="/dashboards/twins-kpis"
-              icon={Target}
-              title="Twins KPI Scorecard"
-              description="Legacy scorecard (AvB, QBO, Samsara sources)"
-            />
-            <DashboardCard
-              href="/dashboards/twins-crm-report"
-              icon={FileText}
-              title="Twins CRM Report"
-              description="Legacy Service Autopilot summary"
-            />
-          </>
-        )}
-
-        {!isCrew && (
-          <DashboardCard
-            href="/dashboards/social-media"
-            icon={Share2}
-            title="Social Media"
-            description="Weekly reach, engagement, followers & leads by platform"
-          />
-        )}
-
-        {hasDrivingScoreAccess && (
-          <DashboardCard
-            href="/dashboards/safety"
-            icon={ShieldCheck}
-            title="Driver Safety Scores"
-            description="Samsara driver safety scoring"
-          />
-        )}
+        ))}
 
         {hasLandscapt &&
           customDashboards.map((dashboard) => (

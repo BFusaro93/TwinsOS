@@ -33,6 +33,8 @@ const CREW_BLOCKED_PATHS = [
   "/dashboards/kpis",
   "/dashboards/twins-kpis",
   "/dashboards/crm",
+  "/dashboards/twins-crm-report",
+  "/dashboards/financials",
   "/dashboards/social-media",
 ];
 

@@ -31,25 +31,50 @@ interface ReportsNavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Shown on the /dashboards overview card. */
+  description?: string;
   hideFromCrew?: boolean;
   internalOnly?: boolean;
+  adminOnly?: boolean;
+  requiresDrivingScore?: boolean;
   requiresModule?: PlatformModule;
 }
 
 export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Overview",            href: "/dashboards",                 icon: LayoutDashboard },
-  { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt",    hideFromCrew: true },
-  { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt", hideFromCrew: true },
-  { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt", hideFromCrew: true },
-  { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Gauge,       requiresModule: "landscapt", hideFromCrew: true },
-  { label: "Twins KPI Scorecard", href: "/dashboards/twins-kpis",      icon: Target,      hideFromCrew: true, internalOnly: true },
-  { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true },
-  { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true },
-  { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck },
-  { label: "Company Report",      href: "/dashboards/crm",             icon: FileText,    requiresModule: "landscapt", hideFromCrew: true },
-  { label: "Twins CRM Report",     href: "/dashboards/twins-crm-report", icon: FileText,   hideFromCrew: true, internalOnly: true },
-  { label: "Social Media",        href: "/dashboards/social-media",    icon: Share2,      hideFromCrew: true },
+  { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt",    hideFromCrew: true, description: "Work orders, purchasing & asset management" },
+  { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt", hideFromCrew: true, description: "Your daily schedule and tasks" },
+  { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt", hideFromCrew: true, description: "Landscapt's built-in reporting dashboard" },
+  { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Gauge,       requiresModule: "landscapt", hideFromCrew: true, description: "Customizable KPIs computed live from Landscapt data" },
+  { label: "Twins KPI Scorecard", href: "/dashboards/twins-kpis",      icon: Target,      hideFromCrew: true, internalOnly: true, description: "Legacy scorecard (AvB, QBO, Samsara sources)" },
+  { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true, adminOnly: true, description: "Revenue, expenses & margin" },
+  { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true, description: "Budget vs. actual labor hours" },
+  { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck, requiresDrivingScore: true, description: "Samsara driver safety scoring" },
+  { label: "Company Report",      href: "/dashboards/crm",             icon: FileText,    requiresModule: "landscapt", hideFromCrew: true, description: "Sales, operations, and A/R computed live from Landscapt data" },
+  { label: "Twins CRM Report",     href: "/dashboards/twins-crm-report", icon: FileText,   hideFromCrew: true, internalOnly: true, description: "Legacy Service Autopilot summary" },
+  { label: "Social Media",        href: "/dashboards/social-media",    icon: Share2,      hideFromCrew: true, description: "Weekly reach, engagement, followers & leads by platform" },
 ];
+
+/** DASHBOARDS_NAV filtered to what the current user may see. The sidebar and
+ *  the /dashboards overview both render from this so they can't drift apart. */
+export function useVisibleDashboardsNav(): ReportsNavItem[] {
+  const { currentUser } = useCurrentUserStore();
+  const isAdmin = currentUser.role === "admin";
+  const isCrew = currentUser.role === "crew";
+  const { isInternalOrg } = useIsInternalOrg();
+  const { allowed: hasDrivingScoreAccess } = useHasDrivingScoreAccess();
+  const { allowed: hasEquipt } = useModuleAccess("equipt");
+  const { allowed: hasLandscapt } = useModuleAccess("landscapt");
+
+  return DASHBOARDS_NAV.filter(
+    (item) =>
+      (!item.adminOnly || isAdmin) &&
+      (!item.hideFromCrew || !isCrew) &&
+      (!item.internalOnly || isInternalOrg) &&
+      (!item.requiresDrivingScore || hasDrivingScoreAccess) &&
+      (!item.requiresModule || (item.requiresModule === "equipt" ? hasEquipt : hasLandscapt))
+  );
+}
 
 function NavLink({
   href,
@@ -87,16 +112,9 @@ export function ReportsSidebar() {
   const sidebarCollapsed = useSidebarCollapsed();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
-  const isAdmin = currentUser.role === "admin";
-  const isCrew = currentUser.role === "crew";
-  const { isInternalOrg } = useIsInternalOrg();
-  const { allowed: hasDrivingScoreAccess } = useHasDrivingScoreAccess();
-  const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
   const { data: customDashboards = [] } = useDashboards();
-
-  const hasModule = (module?: PlatformModule) =>
-    !module || (module === "equipt" ? hasEquipt : hasLandscapt);
+  const visibleNav = useVisibleDashboardsNav();
 
   const isActivePath = (href: string) =>
     pathname === href || (href !== "/dashboards" && pathname.startsWith(href + "/"));
@@ -143,12 +161,7 @@ export function ReportsSidebar() {
               Dashboards
             </p>
           )}
-          {DASHBOARDS_NAV.filter((item) => item.href !== "/dashboards/financials" || isAdmin)
-            .filter((item) => !item.hideFromCrew || !isCrew)
-            .filter((item) => !item.internalOnly || isInternalOrg)
-            .filter((item) => item.href !== "/dashboards/safety" || hasDrivingScoreAccess)
-            .filter((item) => hasModule(item.requiresModule))
-            .map((item) => (
+          {visibleNav.map((item) => (
               <NavLink
                 key={item.href}
                 href={item.href}
