@@ -12,6 +12,7 @@ import {
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/shared/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import {
-  Search, Building2, Home, Maximize2, Tag, X, ChevronDown,
+  Building2, Home, Maximize2, Tag, X, ChevronDown,
   SlidersHorizontal, Ban, CheckCircle, Pencil,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -466,15 +467,13 @@ export function ClientsTable({ onSelect }: Props) {
     <div className="flex h-full flex-col gap-3">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="h-8 pl-8 text-sm"
-            placeholder="Search clients…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          className="max-w-sm flex-1"
+          inputClassName="h-8 text-sm"
+          placeholder="Search clients…"
+          value={search}
+          onChange={setSearch}
+        />
 
         <Popover open={filterOpen} onOpenChange={setFilterOpen}>
           <PopoverTrigger asChild>

@@ -6,10 +6,10 @@ import { useClients } from "@/lib/hooks/use-clients";
 import { useClientFilterFields } from "@/lib/hooks/use-client-filter-fields";
 import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
 import { matchesAllFilterRows, parseMultiValue, type FilterRow } from "@/lib/client-filters";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/shared/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Building2, Home, Maximize2, X } from "lucide-react";
+import { Building2, Home, Maximize2, X } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Client } from "@/types/crm";
 
@@ -54,15 +54,13 @@ export function ClientList({ selectedId, onSelect }: Props) {
       {/* Search + filter */}
       <div className="border-b p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <Input
-              className="pl-8 text-sm"
-              placeholder="Search clients…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            className="flex-1"
+            inputClassName="text-sm"
+            placeholder="Search clients…"
+            value={search}
+            onChange={setSearch}
+          />
           <ClientFilterPopover fields={FILTER_FIELDS} rows={filterRows} onRowsChange={setFilterRows} />
         </div>
 
