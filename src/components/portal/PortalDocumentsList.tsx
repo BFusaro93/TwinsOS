@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Download, Loader2 } from "lucide-react";
+import { FileText, Download, Eye, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { PortalDocument } from "@/types/portal-document";
 
@@ -14,20 +14,54 @@ function formatSize(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Files a browser can show in a tab, so they get a View button too. */
+function isViewable(doc: PortalDocument) {
+  const type = doc.mimeType ?? "";
+  if (type === "application/pdf" || type.startsWith("image/") || type === "text/plain") return true;
+  return !type && /\.(pdf|png|jpe?g|gif|webp|txt)$/i.test(doc.fileName);
+}
+
 export default function PortalDocumentsList({ documents }: { documents: PortalDocument[] }) {
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  // "<id>:view" / "<id>:download" — which button is fetching its signed URL.
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function signedUrl(doc: PortalDocument, download: boolean) {
+    const supabase = createClient();
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      // `download` makes Storage send Content-Disposition: attachment, so the
+      // browser saves the file (under its original name) instead of showing it.
+      .createSignedUrl(doc.storagePath, 300, download ? { download: doc.fileName || true } : undefined);
+    if (error || !data) throw error ?? new Error("No signed URL");
+    return data.signedUrl;
+  }
+
+  async function handleView(doc: PortalDocument) {
+    // Open the tab synchronously in the click, then point it at the file once
+    // the signed URL arrives — a window.open() after an await is treated as
+    // an unsolicited popup and blocked by most browsers.
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    setBusy(`${doc.id}:view`);
+    try {
+      const url = await signedUrl(doc, false);
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+    } catch {
+      tab?.close();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function handleDownload(doc: PortalDocument) {
-    setDownloadingId(doc.id);
+    setBusy(`${doc.id}:download`);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.storage
-        .from(BUCKET)
-        .createSignedUrl(doc.storagePath, 300);
-      if (error || !data) throw error;
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      const url = await signedUrl(doc, true);
+      // Same-tab navigation to an attachment URL downloads without leaving the page.
+      window.location.href = url;
     } finally {
-      setDownloadingId(null);
+      setBusy(null);
     }
   }
 
@@ -66,18 +100,34 @@ export default function PortalDocumentsList({ documents }: { documents: PortalDo
                     <p className="text-xs text-slate-400">{formatSize(doc.sizeBytes)}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDownload(doc)}
-                  disabled={downloadingId === doc.id}
-                  className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 shrink-0 disabled:opacity-50"
-                >
-                  {downloadingId === doc.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5" />
+                <div className="flex shrink-0 items-center gap-2">
+                  {isViewable(doc) && (
+                    <button
+                      onClick={() => handleView(doc)}
+                      disabled={busy === `${doc.id}:view`}
+                      className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {busy === `${doc.id}:view` ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                      View
+                    </button>
                   )}
-                  Download
-                </button>
+                  <button
+                    onClick={() => handleDownload(doc)}
+                    disabled={busy === `${doc.id}:download`}
+                    className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {busy === `${doc.id}:download` ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
+                    Download
+                  </button>
+                </div>
               </div>
             ))}
           </div>
