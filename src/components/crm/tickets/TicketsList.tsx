@@ -175,6 +175,9 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
   }
 
   function missingRequiredField(): string | null {
+    // A ticket with no subject and no body is an empty "(no subject)" row in
+    // the list that nobody can act on.
+    if (!form.subject.trim() && !form.body.trim()) return "Add a subject or details";
     if (rf.isRequired("client") && !form.clientId) return "Client is required";
     if (rf.isRequired("assigned_to") && !form.assignedTo.trim()) return "Assigned To is required";
     if (rf.isRequired("due_date") && !form.dueDate.trim()) return "Due Date is required";

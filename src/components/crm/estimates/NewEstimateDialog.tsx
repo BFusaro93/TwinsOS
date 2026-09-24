@@ -157,6 +157,16 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       toast.error("Valid Until is required");
       return;
     }
+    for (const d of [values.estimateDate, values.validUntilDate]) {
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        toast.error("Enter a valid date (4-digit year)");
+        return;
+      }
+    }
+    if (values.validUntilDate && values.validUntilDate < values.estimateDate) {
+      toast.error("Valid Until can't be before the estimate date");
+      return;
+    }
     if (rf.isRequired("sales_rep") && values.salesRepId === "none") {
       toast.error("Sales Rep is required");
       return;

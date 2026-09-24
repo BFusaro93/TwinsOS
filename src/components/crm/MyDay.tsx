@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Ticket, ClipboardSignature, Receipt, UserRound, Plus, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +17,7 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { RevenueSnapshot, canViewRevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
-import { todayInZone } from "@/lib/time/zone";
+import { hourInZone, todayInZone } from "@/lib/time/zone";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-slate-100 text-slate-600",
@@ -38,19 +39,20 @@ const INVOICE_STATUS_COLOR: Record<InvoiceStatus, string> = {
   void:    "bg-slate-100 text-slate-400",
 };
 
-function getGreeting(): string {
-  const h = new Date().getHours();
+function getGreeting(timeZone: string): string {
+  const h = hourInZone(new Date(), timeZone);
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
 }
 
-function getTodayLong(): string {
+function getTodayLong(timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone,
   }).format(new Date());
 }
 
@@ -88,6 +90,14 @@ export function MyDay() {
   // must see the same day the crews are working.
   const orgTimeZone = useOrgTimeZone();
   const today = todayInZone(orgTimeZone);
+  // The greeting and date are computed after mount, in the org's timezone.
+  // Rendering them during SSR baked in the server's (UTC) clock, and
+  // suppressHydrationWarning only silences the mismatch — React keeps the
+  // server text — so an evening login in ET read "Good morning … <tomorrow>".
+  const [greetingBar, setGreetingBar] = useState<{ greeting: string; date: string } | null>(null);
+  useEffect(() => {
+    setGreetingBar({ greeting: getGreeting(orgTimeZone), date: getTodayLong(orgTimeZone) });
+  }, [orgTimeZone]);
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
   const overdueCount = (openTickets ?? []).filter(
@@ -123,16 +133,10 @@ export function MyDay() {
       {/* Greeting bar */}
       <div className="flex items-center justify-between rounded-lg border bg-white px-5 py-4 shadow-sm">
         <div>
-          {/* getGreeting()/getTodayLong() read the local clock, which can
-              legitimately differ between the server that rendered this page
-              and the browser hydrating it (different timezone, or a request
-              that straddles the hour/day boundary) — that mismatch is
-              expected, not a bug, so it's suppressed rather than "fixed" by
-              forcing a spurious re-render. */}
-          <h1 className="text-xl font-semibold text-slate-900" suppressHydrationWarning>
-            {getGreeting()}, {firstName}
+          <h1 className="text-xl font-semibold text-slate-900">
+            {greetingBar ? `${greetingBar.greeting}, ${firstName}` : `Hi, ${firstName}`}
           </h1>
-          <p className="text-sm text-slate-400 mt-0.5" suppressHydrationWarning>{getTodayLong()}</p>
+          <p className="text-sm text-slate-400 mt-0.5 min-h-5">{greetingBar?.date ?? ""}</p>
         </div>
         <Link
           href="/crm/tickets"

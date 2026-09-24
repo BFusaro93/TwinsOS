@@ -10,14 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { Send, Eye } from "lucide-react";
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function startOfYearISO(): string {
-  return `${new Date().getFullYear()}-01-01`;
+// The statement is dated on the org's calendar — toISOString() is the UTC
+// date, which rolls over to tomorrow at 8pm ET.
+function startOfYearISO(todayYmd: string): string {
+  return `${todayYmd.slice(0, 4)}-01-01`;
 }
 
 type SendStatus = "sent" | "skipped" | "failed";
@@ -27,12 +27,13 @@ type SendStatus = "sent" | "skipped" | "failed";
  *  an "all customers" option; this is that, scoped to clients with a
  *  balance since that's who a statement run is actually for). */
 export function StatementsList() {
+  const orgTimeZone = useOrgTimeZone();
   const { can } = usePermissions();
   const { data: clients = [], isLoading } = useClients();
 
-  const [statementDate, setStatementDate] = useState(todayISO());
-  const [periodFrom, setPeriodFrom] = useState(startOfYearISO());
-  const [periodTo, setPeriodTo] = useState(todayISO());
+  const [statementDate, setStatementDate] = useState(() => todayInZone(orgTimeZone));
+  const [periodFrom, setPeriodFrom] = useState(() => startOfYearISO(todayInZone(orgTimeZone)));
+  const [periodTo, setPeriodTo] = useState(() => todayInZone(orgTimeZone));
   const [showLineItemDetails, setShowLineItemDetails] = useState(true);
   const [minBalance, setMinBalance] = useState("0.00");
   const [message, setMessage] = useState("");
@@ -43,7 +44,10 @@ export function StatementsList() {
   const clientsWithBalance = useMemo(
     () =>
       clients
-        .filter((c) => c.status === "active" && c.balanceOutstandingCents > 0)
+        // Any real account with money owed — inactive and cancelled clients
+        // with a balance are exactly who a collections statement is for.
+        // Leads have never been billed.
+        .filter((c) => c.status !== "lead" && c.balanceOutstandingCents > 0)
         .sort((a, b) => b.balanceOutstandingCents - a.balanceOutstandingCents),
     [clients]
   );
@@ -187,7 +191,7 @@ export function StatementsList() {
       <div className="flex-1 overflow-auto">
         {isLoading && <p className="p-4 text-xs text-slate-400">Loading clients…</p>}
         {!isLoading && clientsWithBalance.length === 0 && (
-          <p className="p-4 text-xs text-slate-400">No active clients currently have an outstanding balance.</p>
+          <p className="p-4 text-xs text-slate-400">No clients currently have an outstanding balance.</p>
         )}
         <table className="w-full text-xs">
           <tbody className="divide-y">
