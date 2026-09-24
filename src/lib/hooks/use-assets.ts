@@ -6,7 +6,7 @@ import type { Asset, AssetStatus } from "@/types/cmms";
 
 function patchAssetCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Asset>) {
   queryClient.setQueryData<Asset[]>(["assets"], (old) =>
-    old?.map((a) => a.id === id ? { ...a, ...patch } : a) ?? []
+    old?.map((a) => a.id === id ? { ...a, ...patch } : a)
   );
 }
 

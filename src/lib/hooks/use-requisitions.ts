@@ -40,7 +40,7 @@ function serializeError(err: unknown): string {
 
 export function patchReqCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Requisition>) {
   queryClient.setQueryData<Requisition[]>(["requisitions"], (old) =>
-    old?.map((r) => r.id === id ? { ...r, ...patch } : r) ?? []
+    old?.map((r) => r.id === id ? { ...r, ...patch } : r)
   );
 }
 

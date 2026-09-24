@@ -8,7 +8,7 @@ function patchProjectCache(queryClient: ReturnType<typeof useQueryClient>, id: s
   // Patch all project list cache variants (includeArchived: true and false)
   for (const includeArchived of [true, false]) {
     queryClient.setQueryData<Project[]>(["projects", { includeArchived }], (old) =>
-      old?.map((p) => p.id === id ? { ...p, ...patch } : p) ?? []
+      old?.map((p) => p.id === id ? { ...p, ...patch } : p)
     );
   }
   // Also patch the single-project cache
