@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import {
   Calculator,
   CalendarClock,
@@ -27,12 +27,6 @@ import { LandscaptShowcase } from "@/components/marketing/LandscaptShowcase";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Landscapt | CRM & Field Service",

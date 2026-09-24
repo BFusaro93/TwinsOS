@@ -60,6 +60,7 @@ export async function updateSession(request: NextRequest) {
     pathname === "/integrations" ||
     pathname === "/contact" ||
     pathname === "/help" ||
+    pathname.startsWith("/help/") || // public, indexable product guides
     pathname === "/compare" ||
     pathname.startsWith("/compare/") ||
     pathname === "/sitemap.xml" ||

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -9,12 +9,6 @@ import { Reveal } from "@/components/marketing/Reveal";
 import { CompareTable } from "@/components/marketing/CompareTable";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { COMPETITORS, getCompetitor } from "@/lib/comparisons";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 export function generateStaticParams() {
   return COMPETITORS.map((c) => ({ slug: c.slug }));

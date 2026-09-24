@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PricingSection } from "@/components/marketing/PricingSection";
@@ -9,12 +9,6 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { BrowserFrame } from "@/components/marketing/mockups/BrowserFrame";
 import { DispatchBoardMockup } from "@/components/marketing/mockups/DispatchBoardMockup";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 const crmFeatures = [
   {

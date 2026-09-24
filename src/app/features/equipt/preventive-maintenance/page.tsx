@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { buildMetadata } from "@/lib/seo";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { heading } from "@/lib/fonts";
 import { CalendarClock, Gauge, Repeat, Bell } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -10,12 +10,6 @@ import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { PMScheduleMockup } from "@/components/marketing/mockups/PMScheduleMockup";
 import { RealScreenshot } from "@/components/marketing/RealScreenshot";
-
-const heading = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-heading",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Preventive Maintenance | Equipt",

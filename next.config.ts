@@ -16,6 +16,21 @@ const nextConfig: NextConfig = {
   // function (seen on Vercel prod builds) — keep it external so Node
   // resolves it at runtime instead.
   serverExternalPackages: ["@react-pdf/renderer"],
+  // twins-os.vercel.app serves the whole marketing site at 200, so every
+  // landscapt.com page has an indexable twin on the Vercel host. The canonical
+  // tags already point at landscapt.com, but a canonical is a hint — tell
+  // crawlers outright not to index anything served under *.vercel.app. The
+  // host regex also covers per-branch preview URLs. landscapt.com is
+  // unaffected: it never matches this `has` condition.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: ".*\\.vercel\\.app" }],
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+    ];
+  },
   async redirects() {
     return [
       // Equipt's home moved off /dashboard, which read as a sibling of the

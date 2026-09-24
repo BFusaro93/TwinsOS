@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { BrandMark } from "@/components/shared/BrandMark";
 
 /**
  * Password reset for CLIENT PORTAL users.
@@ -49,12 +50,10 @@ export default function PortalForgotPasswordPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-8">
-          <div className="h-12 w-12 rounded-xl bg-brand-500 flex items-center justify-center mb-3">
-            <span className="text-white font-bold text-xl">T</span>
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">Reset your password</h1>
-          <p className="text-sm text-slate-500 mt-1">
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">Reset your password</h1>
+          <p className="text-sm text-slate-500">
             We&apos;ll email you a link to set a new one
           </p>
         </div>

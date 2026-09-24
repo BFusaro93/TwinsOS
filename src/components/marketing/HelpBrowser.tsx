@@ -126,8 +126,8 @@ export function HelpBrowser() {
                   Guide library
                 </div>
                 <p className="mb-6 text-[13.5px] text-slate-500">
-                  Longer, step-by-step deep dives — the same ones built into the product. Sign in (or start a
-                  free trial) to read the full guide.
+                  Longer, step-by-step deep dives — the same ones built into the product, free to read
+                  with no account needed.
                 </p>
                 <div className="flex flex-col gap-8">
                   {filteredGuideGroups.map((group) => {
@@ -144,7 +144,7 @@ export function HelpBrowser() {
                           {group.guides.map((guide) => (
                             <a
                               key={guide.slug}
-                              href={`/settings/support/${guide.slug}`}
+                              href={`/help/${guide.slug}`}
                               className="group flex items-start gap-3 rounded-md border border-[#e6e6e0] bg-white p-4 transition-shadow hover:shadow-md"
                             >
                               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef4e2]">
