@@ -182,7 +182,11 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     ...(rf.isRequired("assigned_to") && assignedToIds.length === 0 ? ["Assigned To"] : []),
     ...(rf.isRequired("due_date") && dueDate === "" ? ["Due Date"] : []),
   ];
-  const isValid = missingFields.length === 0;
+  // A WO with a scheduled date stays hidden until that date, so a due date
+  // before it made the WO go overdue while nobody could see it.
+  const dateOrderError =
+    startDate && dueDate && dueDate < startDate ? "Due Date can't be before the Scheduled Date" : null;
+  const isValid = missingFields.length === 0 && !dateOrderError;
 
   function toastMutationError(action: "create" | "update") {
     return (err: unknown) => {
@@ -631,6 +635,9 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             <p className="mt-2 text-right text-xs text-red-500">
               Missing required field{missingFields.length > 1 ? "s" : ""}: {missingFields.join(", ")}
             </p>
+          )}
+          {dateOrderError && (
+            <p className="mt-2 text-right text-xs text-red-500">{dateOrderError}</p>
           )}
           <DialogFooter className="mt-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose}>

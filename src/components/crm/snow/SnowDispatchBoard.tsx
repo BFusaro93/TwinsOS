@@ -129,6 +129,12 @@ function StormEventDialog({
   const [temperature, setTemperature] = useState("");
 
   async function handleCreate() {
+    // A negative forecast made Add Jobs exclude every client (each trigger
+    // depth is "above" it), so nobody could be dispatched by default.
+    if (forecastDepth && parseFloat(forecastDepth) < 0) {
+      toast.error("Forecast depth can't be negative");
+      return;
+    }
     try {
       const event = await createEvent({
         name,
@@ -162,7 +168,7 @@ function StormEventDialog({
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label>Forecast Depth (in)</Label>
-              <Input type="number" step="0.1" value={forecastDepth} onChange={(e) => setForecastDepth(e.target.value)} className="h-9 text-sm" />
+              <Input type="number" step="0.1" min={0} value={forecastDepth} onChange={(e) => setForecastDepth(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
               <Label>Temperature (°F)</Label>
@@ -717,7 +723,7 @@ function CloseOutDialog({
         updates: {
           status: "completed",
           completed_at: new Date().toISOString(),
-          snow_depth_inches: depth ? parseFloat(depth) : null,
+          snow_depth_inches: depth ? Math.max(0, parseFloat(depth)) : null,
           temperature: temp ? parseFloat(temp) : null,
           asset_type: assetType || null,
           materials_used: materialName
@@ -766,7 +772,7 @@ function CloseOutDialog({
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1"><Ruler className="h-3 w-3" /> Actual Depth (in)</Label>
-              <Input type="number" step="0.1" value={depth} onChange={(e) => setDepth(e.target.value)} className="h-9 text-sm" />
+              <Input type="number" step="0.1" min={0} value={depth} onChange={(e) => setDepth(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1"><ThermometerSnowflake className="h-3 w-3" /> Temp (°F)</Label>
