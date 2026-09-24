@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import PortalServicesPage from "@/components/portal/PortalServicesPage";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { labelPortalVisits } from "@/lib/portal/visit-labels";
 
 export default async function ServicesPage() {
   const ctx = await getPortalContext();
@@ -17,7 +18,7 @@ export default async function ServicesPage() {
   const [upcomingRes, completedRes] = await Promise.all([
     supabase
       .from("crm_job_visits")
-      .select("id, scheduled_date, status, job_id, crm_jobs(invoice_description, job_type)")
+      .select("id, scheduled_date, status, job_id, job_service_id, invoice_description")
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
@@ -29,7 +30,7 @@ export default async function ServicesPage() {
 
     supabase
       .from("crm_job_visits")
-      .select("id, scheduled_date, status, completed_at, job_id, crm_jobs(invoice_description, job_type)")
+      .select("id, scheduled_date, status, completed_at, job_id, job_service_id, invoice_description")
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
@@ -38,21 +39,27 @@ export default async function ServicesPage() {
       .limit(25),
   ]);
 
-  type JobInfo = { invoice_description: string | null; job_type: string } | null;
+  const upcomingRows = upcomingRes.data ?? [];
+  const completedRows = completedRes.data ?? [];
+  const labels = await labelPortalVisits(ctx.orgId, [...upcomingRows, ...completedRows]);
 
-  const mapVisit = (v: { id: string; scheduled_date: string; status: string; completed_at?: string | null; crm_jobs: unknown }) => ({
-    id: v.id,
-    scheduled_date: v.scheduled_date,
-    status: v.status,
-    completed_at: (v as { completed_at?: string | null }).completed_at ?? null,
-    jobTitle: (v.crm_jobs as JobInfo)?.invoice_description ?? "Service Visit",
-    jobType: (v.crm_jobs as JobInfo)?.job_type ?? "one_time",
-  });
+  const mapVisit = (v: { id: string; scheduled_date: string; status: string; completed_at?: string | null }) => {
+    const label = labels.get(v.id);
+    return {
+      id: v.id,
+      scheduled_date: v.scheduled_date,
+      status: v.status,
+      completed_at: v.completed_at ?? null,
+      jobTitle: label?.title ?? "Service Visit",
+      jobDetail: label?.detail ?? null,
+      jobType: label?.jobType ?? "one_time",
+    };
+  };
 
   return (
     <PortalServicesPage
-      upcoming={(upcomingRes.data ?? []).map(mapVisit)}
-      completed={(completedRes.data ?? []).map(mapVisit)}
+      upcoming={upcomingRows.map(mapVisit)}
+      completed={completedRows.map(mapVisit)}
       clientId={ctx.clientId}
       orgId={ctx.orgId}
     />

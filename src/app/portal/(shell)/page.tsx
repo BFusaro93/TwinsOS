@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PortalDashboard from "@/components/portal/PortalDashboard";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { hourInZone, todayInZone } from "@/lib/time/zone";
+import { labelPortalVisits } from "@/lib/portal/visit-labels";
 
 interface EstimateRow {
   id: string;
@@ -46,7 +47,7 @@ export default async function PortalHomePage() {
 
     supabase
       .from("crm_job_visits")
-      .select("id, scheduled_date, status, job_id, crm_jobs(invoice_description, job_type)")
+      .select("id, scheduled_date, status, job_id, job_service_id, invoice_description")
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
@@ -58,7 +59,7 @@ export default async function PortalHomePage() {
 
     supabase
       .from("crm_job_visits")
-      .select("id, scheduled_date, status, job_id, crm_jobs(invoice_description, job_type)")
+      .select("id, scheduled_date, status, job_id, job_service_id, invoice_description")
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
@@ -94,14 +95,18 @@ export default async function PortalHomePage() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   // Map visits to shape PortalDashboard expects
-  const mapVisit = (v: { id: string; scheduled_date: string; status: string; crm_jobs: unknown }) => ({
+  const upcomingRows = visitsRes.data ?? [];
+  const recentRows = recentRes.data ?? [];
+  const labels = await labelPortalVisits(ctx.orgId, [...upcomingRows, ...recentRows]);
+  const mapVisit = (v: { id: string; scheduled_date: string; status: string }) => ({
     id: v.id,
     scheduled_date: v.scheduled_date,
     status: v.status,
-    jobTitle: (v.crm_jobs as { invoice_description: string | null; job_type: string } | null)?.invoice_description ?? "Service Visit",
+    jobTitle: labels.get(v.id)?.title ?? "Service Visit",
+    jobDetail: labels.get(v.id)?.detail ?? null,
   });
-  const upcomingVisits = (visitsRes.data ?? []).map(mapVisit);
-  const recentVisits = (recentRes.data ?? []).map(mapVisit);
+  const upcomingVisits = upcomingRows.map(mapVisit);
+  const recentVisits = recentRows.map(mapVisit);
 
   return (
     <PortalDashboard

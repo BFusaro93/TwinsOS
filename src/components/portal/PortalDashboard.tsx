@@ -54,6 +54,7 @@ interface Visit {
   scheduled_date: string;
   status: string;
   jobTitle: string;
+  jobDetail?: string | null;
 }
 
 interface Estimate {
@@ -192,6 +193,9 @@ export default function PortalDashboard({
                   <DateTile iso={nextVisit.scheduled_date} tone="hero" />
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{nextVisit.jobTitle}</p>
+                    {nextVisit.jobDetail && (
+                      <p className="truncate text-xs text-white/70">{nextVisit.jobDetail}</p>
+                    )}
                     <p className="text-sm text-white/80">
                       {nextVisit.status === "in_progress"
                         ? "Your crew is on-site"
@@ -268,8 +272,9 @@ export default function PortalDashboard({
                   <DateTile iso={v.scheduled_date} />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{v.jobTitle}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="truncate text-xs text-slate-500">
                       {v.status === "in_progress" ? "In progress" : relativeDay(today, v.scheduled_date)}
+                      {v.jobDetail && ` · ${v.jobDetail}`}
                     </p>
                   </div>
                 </li>
@@ -367,7 +372,10 @@ export default function PortalDashboard({
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{v.jobTitle}</p>
-                    <p className="text-xs text-slate-500">Completed {fmtDate(v.scheduled_date)}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      Completed {fmtDate(v.scheduled_date)}
+                      {v.jobDetail && ` · ${v.jobDetail}`}
+                    </p>
                   </div>
                 </li>
               ))}

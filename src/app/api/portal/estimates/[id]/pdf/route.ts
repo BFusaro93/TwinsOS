@@ -17,7 +17,8 @@ export async function GET(
   const supabase = createServiceClient();
 
   // Service client bypasses RLS, so ownership is checked here: the estimate
-  // must belong to this portal client in the active org, and not be a draft.
+  // must belong to this portal client in the active org, and already sent
+  // (not a draft or an unsent quote).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: owned } = await (supabase as any)
     .from("estimates")
@@ -25,7 +26,7 @@ export async function GET(
     .eq("id", id)
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
-    .neq("stage", "draft")
+    .not("stage", "in", "(draft,quote)")
     .is("deleted_at", null)
     .maybeSingle() as { data: { id: string; estimate_number: string | number } | null };
   if (!owned) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });

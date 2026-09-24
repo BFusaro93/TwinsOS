@@ -51,8 +51,9 @@ export default async function EstimatesPage() {
     )
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
-    // Drafts are unfinished staff work — never shown to the customer.
-    .neq("stage", "draft")
+    // Draft and Quote (ready but not yet sent) are internal stages — the
+    // customer only sees an estimate once it has been sent.
+    .not("stage", "in", "(draft,quote)")
     .is("deleted_at", null)
     .is("estimate_line_items.deleted_at", null)
     .order("created_at", { ascending: false })

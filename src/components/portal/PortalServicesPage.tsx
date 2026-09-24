@@ -19,6 +19,7 @@ interface Visit {
   status: string;
   completed_at?: string | null;
   jobTitle: string;
+  jobDetail?: string | null;
   jobType: string;
 }
 
@@ -119,7 +120,10 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800">{v.jobTitle}</p>
-                    <p className="text-xs text-slate-500">{fmtDate(v.scheduled_date)}</p>
+                    <p className="text-xs text-slate-500">
+                      {fmtDate(v.scheduled_date)}
+                      {v.jobDetail && ` · ${v.jobDetail}`}
+                    </p>
                   </div>
                   <span className={`text-xs border rounded-full px-2 py-0.5 capitalize shrink-0 ${pill.color}`}>
                     {isLive && <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 mr-1 align-middle animate-pulse" />}
@@ -148,7 +152,10 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800">{v.jobTitle}</p>
-                  <p className="text-xs text-slate-500">{fmtDate(v.scheduled_date)}</p>
+                  <p className="text-xs text-slate-500">
+                    {fmtDate(v.scheduled_date)}
+                    {v.jobDetail && ` · ${v.jobDetail}`}
+                  </p>
                 </div>
                 <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">
                   Completed
