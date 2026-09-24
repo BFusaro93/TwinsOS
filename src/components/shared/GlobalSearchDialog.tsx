@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wrench,
@@ -71,7 +71,30 @@ function substringFilter(value: string, search: string): number {
   return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
 }
 
+// Mounted on every authenticated page via TopBar. The results component calls
+// 14 full-list hooks, so it isn't mounted until the dialog is first opened —
+// after that it stays mounted so reopening is instant. The Cmd+K listener lives
+// here so the shortcut works before the first open.
 export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogProps) {
+  const [hasOpened, setHasOpened] = useState(open);
+  if (open && !hasOpened) setHasOpened(true);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        onOpenChange(true);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onOpenChange]);
+
+  if (!hasOpened) return null;
+  return <GlobalSearchResults open={open} onOpenChange={onOpenChange} />;
+}
+
+function GlobalSearchResults({ open, onOpenChange }: GlobalSearchDialogProps) {
   const router = useRouter();
   const { setSelectedRequisitionId, setSelectedPOId } = usePOStore();
   const {
@@ -106,18 +129,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   const catalogProducts = allProducts.filter(
     (p) => p.category === "stocked_material" || p.category === "project_material"
   );
-
-  // Cmd+K shortcut
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        onOpenChange(true);
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onOpenChange]);
 
   function go(href: string, select?: () => void) {
     select?.();

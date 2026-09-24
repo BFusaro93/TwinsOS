@@ -49,7 +49,7 @@ function serializeError(err: unknown): string {
 // Helper: immediately update a PO in every cached list
 export function patchPOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<PurchaseOrder>) {
   queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], (old) =>
-    old?.map((po) => po.id === id ? { ...po, ...patch } : po) ?? []
+    old?.map((po) => po.id === id ? { ...po, ...patch } : po)
   );
 }
 
@@ -877,7 +877,7 @@ export function useUpdatePOLineItem() {
                 ),
               }
             : po
-        ) ?? []
+        )
       );
       return { previous };
     },
@@ -1075,7 +1075,7 @@ export function useDeletePOLineItem() {
                 lineItems: po.lineItems.filter((li) => li.id !== lineItemId),
               }
             : po
-        ) ?? []
+        )
       );
       return { previous };
     },

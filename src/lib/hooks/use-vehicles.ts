@@ -6,7 +6,7 @@ import type { Vehicle, AssetStatus } from "@/types/cmms";
 
 function patchVehicleCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Vehicle>) {
   queryClient.setQueryData<Vehicle[]>(["vehicles"], (old) =>
-    old?.map((v) => v.id === id ? { ...v, ...patch } : v) ?? []
+    old?.map((v) => v.id === id ? { ...v, ...patch } : v)
   );
 }
 

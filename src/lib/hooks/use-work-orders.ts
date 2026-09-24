@@ -5,7 +5,7 @@ import type { WorkOrder, WorkOrderStatus } from "@/types/cmms";
 
 function patchWOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<WorkOrder>) {
   queryClient.setQueryData<WorkOrder[]>(["work-orders"], (old) =>
-    old?.map((wo) => wo.id === id ? { ...wo, ...patch } : wo) ?? []
+    old?.map((wo) => wo.id === id ? { ...wo, ...patch } : wo)
   );
 }
 
