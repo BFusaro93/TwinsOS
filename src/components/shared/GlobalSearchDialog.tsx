@@ -72,13 +72,36 @@ function substringFilter(value: string, search: string): number {
 }
 
 export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogProps) {
+  // Cmd+K shortcut
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        onOpenChange(true);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onOpenChange]);
+
+  return (
+    <CommandDialog open={open} onOpenChange={onOpenChange} filter={substringFilter}>
+      {/* Radix only mounts DialogContent's children while the dialog is open
+          (and through its exit animation), so the list queries inside
+          GlobalSearchResults don't fire on page load — only on first open.
+          After that the TanStack cache keeps reopening instant. */}
+      <GlobalSearchResults onOpenChange={onOpenChange} />
+    </CommandDialog>
+  );
+}
+
+function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "onOpenChange">) {
   const router = useRouter();
   const { setSelectedRequisitionId, setSelectedPOId } = usePOStore();
   const {
     setSelectedWorkOrderId,
     setSelectedAssetId,
     setSelectedVehicleId,
-    setSelectedPMScheduleId,
   } = useCMMSStore();
   const { currentUser } = useCurrentUserStore();
 
@@ -107,18 +130,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     (p) => p.category === "stocked_material" || p.category === "project_material"
   );
 
-  // Cmd+K shortcut
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        onOpenChange(true);
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onOpenChange]);
-
   function go(href: string, select?: () => void) {
     select?.();
     onOpenChange(false);
@@ -126,7 +137,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} filter={substringFilter}>
+    <>
       <CommandInput placeholder={isCrew ? "Search job photos and dispatch jobs…" : "Search clients, leads, invoices, work orders, assets…"} />
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
@@ -495,6 +506,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
       </CommandList>
-    </CommandDialog>
+    </>
   );
 }
