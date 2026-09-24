@@ -285,6 +285,24 @@ export function useInvoice(id: string) {
         .eq("invoice_id", id);
       if (allocErr) throw allocErr;
 
+      // A payment matched by the FK can still be split: it was applied here
+      // and part of it later went to another invoice (e.g. unused credit
+      // applied elsewhere). Show this invoice's allocated share, not the full
+      // check amount — otherwise the history over-counts (a $2,000 check
+      // listed in full on an invoice it only paid $1,874.13 of).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allocatedByPaymentId = new Map<string, number>((allocRows ?? [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((row: any) => row.crm_payments)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((row: any) => [row.crm_payments.id as string, row.amount_cents as number]));
+      invoice.payments = (invoice.payments ?? []).map((p) => {
+        const share = allocatedByPaymentId.get(p.id);
+        return share !== undefined && share !== p.amountCents
+          ? { ...p, displayAmountCents: share, isSplitAllocation: true }
+          : p;
+      });
+
       const existingPaymentIds = new Set((invoice.payments ?? []).map((p) => p.id));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const allocatedPayments: CRMPayment[] = (allocRows ?? [])

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { X, GripVertical } from "lucide-react";
 import { useClients } from "@/lib/hooks/use-clients";
@@ -8,6 +9,8 @@ import { useCreateInvoice, useDeleteInvoice } from "@/lib/hooks/use-invoices";
 import { InvoiceDetail } from "./InvoiceDetail";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
+import type { CRMInvoice } from "@/types/crm-invoices";
 
 interface Props {
   open: boolean;
@@ -49,6 +52,9 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
   const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { mutateAsync: createInvoice } = useCreateInvoice();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
+  const qc = useQueryClient();
+  const [confirm, confirmDialog] = useConfirm();
+  const confirmingRef = useRef(false);
 
   // Auto-create a draft (no invoice number assigned yet) when a client is known
   useEffect(() => {
@@ -83,8 +89,25 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
   // abandoned sheets from leaving empty drafts in the Invoices list (D-23).
   // Routed through every close path: backdrop, X, Escape, AND InvoiceDetail's
   // own close button (which previously called the raw onClose and skipped it).
-  function handleClose() {
+  async function handleClose() {
+    if (confirmingRef.current) return;
     if (invoiceId && draftClientId && !savedRef.current) {
+      // Discarding an EMPTY draft silently is the point (D-23), but a stray
+      // backdrop click or Escape also threw away line items already entered.
+      // InvoiceDetail keeps the draft in this query; ask first when it has any.
+      const draft = qc.getQueryData<CRMInvoice>(["crm-invoices", "detail", invoiceId]);
+      if ((draft?.lineItems?.length ?? 0) > 0) {
+        confirmingRef.current = true;
+        const discard = await confirm({
+          title: "Discard this unsaved invoice?",
+          description: "Its line items will be lost. Click Save Invoice to keep it.",
+          confirmLabel: "Discard",
+          cancelLabel: "Keep editing",
+          destructive: true,
+        });
+        confirmingRef.current = false;
+        if (!discard) return;
+      }
       deleteInvoice({ id: invoiceId, clientId: draftClientId }).catch(() => {});
     }
     onClose();
@@ -213,6 +236,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
           )}
         </div>
       </div>
+      {confirmDialog}
     </>,
     document.body
   );

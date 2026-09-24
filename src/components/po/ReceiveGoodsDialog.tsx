@@ -186,15 +186,20 @@ export function ReceiveGoodsDialog({
   const discountShare = po.discountCost > 0 && po.subtotal > 0
     ? Math.round(po.discountCost * (subtotal / po.subtotal))
     : 0;
+  // Shipping is also a single whole-order charge — adding it in full to every
+  // partial receipt billed a two-receipt PO's shipping twice. Prorate it the
+  // same way.
+  const shippingShare = po.shippingCost > 0 && po.subtotal > 0
+    ? Math.round(po.shippingCost * (subtotal / po.subtotal))
+    : 0;
   // The prorated share is what this receipt's tax has to work from when the
   // PO discounts before tax, for the same reason.
-  const salesTax = computeSalesTax({
+  const proratedTax = computeSalesTax({
     taxableSubtotal,
     taxRatePercent: po.taxRatePercent,
     discountCost: discountShare,
     discountReducesTax: po.discountReducesTax,
   });
-  const grandTotal = subtotal - discountShare + salesTax + po.shippingCost;
 
   // Compares the CUMULATIVE received quantity (this receipt + everything
   // already received on prior receipts) against what was ordered — a plain
@@ -208,6 +213,25 @@ export function ReceiveGoodsDialog({
     const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
     return alreadyReceived + l.quantityReceived >= l.quantityOrdered;
   });
+  // Each partial receipt rounds its prorated tax/shipping/discount on its own,
+  // so the receipts could drift a cent or more from the PO (10 + 2 of 12 came
+  // to $298.76 on a $298.75 PO). The receipt that completes the PO takes
+  // whatever remains of the PO's totals instead, so the receipts always sum to
+  // exactly what the vendor is owed.
+  const priorReceipts = allReceipts.filter((r) => r.purchaseOrderId === po.id);
+  const remainingTax = po.salesTax - priorReceipts.reduce((sum, r) => sum + r.salesTax, 0);
+  const remainingShipping = po.shippingCost - priorReceipts.reduce((sum, r) => sum + r.shippingCost, 0);
+  const remainingTotal = po.grandTotal - priorReceipts.reduce((sum, r) => sum + r.grandTotal, 0);
+  const remainingDiscount = subtotal + remainingTax + remainingShipping - remainingTotal;
+  // Older receipts recorded full shipping each time, so a remainder can come
+  // out negative — keep the prorated figures rather than record nonsense.
+  const trueUp =
+    allFullyReceived && priorReceipts.length > 0 &&
+    remainingTax >= 0 && remainingShipping >= 0 && remainingDiscount >= 0;
+  const salesTax = trueUp ? remainingTax : proratedTax;
+  const shippingCost = trueUp ? remainingShipping : shippingShare;
+  const discountShown = trueUp ? remainingDiscount : discountShare;
+  const grandTotal = subtotal - discountShown + salesTax + shippingCost;
   const someReceived = lines.some((l) => l.quantityReceived > 0);
   const isValid = someReceived && receivedById !== "";
 
@@ -243,7 +267,7 @@ export function ReceiveGoodsDialog({
         subtotal,
         taxRatePercent: po.taxRatePercent,
         salesTax,
-        shippingCost: po.shippingCost,
+        shippingCost,
         grandTotal,
         notes: notes || null,
         lines: linesToReceive.map((l) => ({
@@ -496,10 +520,10 @@ export function ReceiveGoodsDialog({
                   <span>Subtotal (received)</span>
                   <span className="tabular-nums">{formatCurrency(subtotal)}</span>
                 </div>
-                {discountShare > 0 && (
+                {discountShown > 0 && (
                   <div className="flex justify-between py-0.5 text-slate-600">
                     <span>Discount (prorated)</span>
-                    <span className="tabular-nums">-{formatCurrency(discountShare)}</span>
+                    <span className="tabular-nums">-{formatCurrency(discountShown)}</span>
                   </div>
                 )}
                 {po.taxRatePercent > 0 && (
@@ -508,10 +532,10 @@ export function ReceiveGoodsDialog({
                     <span className="tabular-nums">{formatCurrency(salesTax)}</span>
                   </div>
                 )}
-                {po.shippingCost > 0 && (
+                {shippingCost > 0 && (
                   <div className="flex justify-between py-0.5 text-slate-600">
                     <span>Shipping / Other</span>
-                    <span className="tabular-nums">{formatCurrency(po.shippingCost)}</span>
+                    <span className="tabular-nums">{formatCurrency(shippingCost)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">

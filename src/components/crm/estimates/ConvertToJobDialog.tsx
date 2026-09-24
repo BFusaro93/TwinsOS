@@ -33,6 +33,7 @@ import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { useConvertLeadToClient } from "@/lib/hooks/use-clients";
 
 const JOB_TYPES = [
   { value: "one_time",    label: "One Time" },
@@ -144,10 +145,23 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   // acceptance (portal or public proposal) are left unchecked, but still selectable.
   // $0 lines (net of their own discount) are also left unchecked: they'd otherwise
   // convert into billable $0 services on the job.
+  //
+  // Tiered (Good/Better/Best) proposals: a tier is chosen by marking the other
+  // tiers' lines lost (portal/public acceptance does this). An estimate marked
+  // Accepted from the office still has every tier open, and pre-selecting all
+  // of them converted a $3,200 "Better" proposal into a $10,700 job. When more
+  // than one tier is still open, tiered lines start unchecked and the user
+  // picks the tier the client chose; untiered lines still default in.
+  const tierOf = (li: EstimateLineItem) => (estimate.tiersEnabled ? li.tier : null);
+  const openTiers = new Set(
+    lineItems.filter((li) => li.status !== "lost").map(tierOf).filter((t): t is NonNullable<typeof t> => !!t)
+  );
+  const tierUndecided = openTiers.size > 1;
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(
       lineItems
         .filter((li) => li.status !== "lost" && Math.max(0, li.totalCents - (li.discountCents ?? 0)) > 0)
+        .filter((li) => !(tierUndecided && tierOf(li)))
         .map((li) => li.id)
     )
   );
@@ -197,6 +211,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const rf = useRequiredFields("job");
   const { data: clientProjects } = useClientProjects(estimate.clientId, estimate.clientName ?? "");
   const createJobs = useCreateJobsFromEstimate();
+  const { mutateAsync: convertLead } = useConvertLeadToClient();
   // All-in estimated cost (revenue - net profit) — seeds a linked project's EAC
   // if it's still unset. See rpt_projects_wip / the WIP report this feeds.
   const eacHintCents = estimate.revenueCents - estimate.netProfitCents;
@@ -238,6 +253,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.error("Select at least one service line");
       return;
     }
+    if (new Set(selectedItems.map(tierOf).filter(Boolean)).size > 1) {
+      toast.error("Select the lines for one tier only — the tier the client chose");
+      return;
+    }
     if (jobType === "recurring" && !schedule) {
       toast.error("Schedule is required for recurring jobs");
       return;
@@ -252,6 +271,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     }
 
     try {
+      // Jobs can't be created for a lead (crm_jobs_reject_lead_client), and an
+      // accepted estimate is the point a lead becomes a client — convert it
+      // here instead of failing after the dialog is filled in. No-op for a
+      // client that isn't a lead.
+      const { converted } = await convertLead(estimate.clientId);
+      if (converted) toast.success(`${estimate.clientName ?? "Lead"} converted to client`);
       const { jobId } = await createJobs.mutateAsync({
         estimateId: estimate.id,
         clientId: estimate.clientId,
@@ -368,6 +393,11 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               Select all
             </label>
           </div>
+          {tierUndecided && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              This is a tiered proposal and no tier has been chosen yet. Check the lines for the tier the client picked.
+            </p>
+          )}
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -391,6 +421,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                   <ServiceRow
                     key={li.id}
                     li={li}
+                    tierLabel={tierOf(li) ? estimate.tierLabels[tierOf(li)!] : null}
                     checked={selected.has(li.id)}
                     onToggle={() => toggleItem(li.id)}
                   />
@@ -618,10 +649,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
 function ServiceRow({
   li,
+  tierLabel,
   checked,
   onToggle,
 }: {
   li: EstimateLineItem;
+  tierLabel: string | null;
   checked: boolean;
   onToggle: () => void;
 }) {
@@ -637,6 +670,9 @@ function ServiceRow({
       </td>
       <td className="px-3 py-2.5 font-medium text-slate-800">
         {li.serviceName ?? "—"}
+        {tierLabel && (
+          <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-normal text-slate-500">{tierLabel}</span>
+        )}
         {li.status && li.status !== "quote" && (
           <span className="ml-2 text-[10px] text-slate-400 font-normal uppercase">{li.status}</span>
         )}
