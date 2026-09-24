@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_SOCIAL_GOALS, type PlatformSetting, type SocialGoals } from "@/lib/utils/social-media-metrics";
 

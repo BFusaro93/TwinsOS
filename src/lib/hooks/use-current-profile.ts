@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { type QueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 
 export interface CurrentProfile {

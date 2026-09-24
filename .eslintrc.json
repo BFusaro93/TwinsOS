@@ -1,4 +1,24 @@
 {
   "root": true,
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@tanstack/react-query",
+            "importNames": ["useQuery"],
+            "message": "Import useQuery from \"@/lib/hooks/use-query\" — it holds cached data back during hydration so late-hydrating Suspense boundaries don't mismatch the server HTML."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/lib/hooks/use-query.ts"],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ]
 }

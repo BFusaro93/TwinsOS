@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { MessageSquare, X, Search, RotateCcw, ArrowUpRight, ArrowDownLeft } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";

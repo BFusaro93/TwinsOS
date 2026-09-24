@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Mail, X, ChevronDown, RotateCcw, Send } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";

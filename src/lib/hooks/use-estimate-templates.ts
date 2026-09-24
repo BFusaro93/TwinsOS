@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimates";
 import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-settings";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wrench,
@@ -71,14 +71,8 @@ function substringFilter(value: string, search: string): number {
   return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
 }
 
-// Mounted on every authenticated page via TopBar. The results component calls
-// 14 full-list hooks, so it isn't mounted until the dialog is first opened —
-// after that it stays mounted so reopening is instant. The Cmd+K listener lives
-// here so the shortcut works before the first open.
 export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogProps) {
-  const [hasOpened, setHasOpened] = useState(open);
-  if (open && !hasOpened) setHasOpened(true);
-
+  // Cmd+K shortcut
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -90,18 +84,24 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onOpenChange]);
 
-  if (!hasOpened) return null;
-  return <GlobalSearchResults open={open} onOpenChange={onOpenChange} />;
+  return (
+    <CommandDialog open={open} onOpenChange={onOpenChange} filter={substringFilter}>
+      {/* Radix only mounts DialogContent's children while the dialog is open
+          (and through its exit animation), so the list queries inside
+          GlobalSearchResults don't fire on page load — only on first open.
+          After that the TanStack cache keeps reopening instant. */}
+      <GlobalSearchResults onOpenChange={onOpenChange} />
+    </CommandDialog>
+  );
 }
 
-function GlobalSearchResults({ open, onOpenChange }: GlobalSearchDialogProps) {
+function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "onOpenChange">) {
   const router = useRouter();
   const { setSelectedRequisitionId, setSelectedPOId } = usePOStore();
   const {
     setSelectedWorkOrderId,
     setSelectedAssetId,
     setSelectedVehicleId,
-    setSelectedPMScheduleId,
   } = useCMMSStore();
   const { currentUser } = useCurrentUserStore();
 
@@ -137,7 +137,7 @@ function GlobalSearchResults({ open, onOpenChange }: GlobalSearchDialogProps) {
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} filter={substringFilter}>
+    <>
       <CommandInput placeholder={isCrew ? "Search job photos and dispatch jobs…" : "Search clients, leads, invoices, work orders, assets…"} />
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
@@ -506,6 +506,6 @@ function GlobalSearchResults({ open, onOpenChange }: GlobalSearchDialogProps) {
           </CommandGroup>
         )}
       </CommandList>
-    </CommandDialog>
+    </>
   );
 }

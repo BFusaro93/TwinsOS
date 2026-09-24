@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import type { CompanyReportData } from "@/types/company-report";
 
 async function readError(res: Response): Promise<string> {

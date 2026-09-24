@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import type { BulkImportResult } from "@/lib/csv";
 import type { CRMEmployee, CRMCrew, CRMCrewMember, CRMCrewLogin } from "@/types/crm-employees";
