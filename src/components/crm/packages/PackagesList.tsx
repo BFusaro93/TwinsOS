@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { usePackages, useDeletePackage } from "@/lib/hooks/use-packages";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMPackage } from "@/types/crm-packages";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 interface Props {
   onAdd: () => void;
@@ -37,11 +37,12 @@ export function PackagesList({ onAdd, onEdit }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 gap-y-2">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input placeholder="Search packages…" value={search}
-            onChange={(e) => setSearch(e.target.value)} className="pl-8" />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search packages…"
+          className="flex-1 max-w-xs"
+        />
         <div className="flex rounded-md border overflow-hidden text-xs">
           {(["active", "inactive", "all"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}

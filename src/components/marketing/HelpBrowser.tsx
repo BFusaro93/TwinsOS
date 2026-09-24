@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, ChevronDown, ArrowRight } from "lucide-react";
+import { Search, ChevronDown, ArrowRight, X } from "lucide-react";
 import { DOC_SECTIONS, FAQ_CATEGORIES } from "@/lib/docs-content";
 import { groupedDocGuides, DOC_GUIDE_GROUP_ICONS } from "@/lib/docs-guides";
 
@@ -55,9 +55,23 @@ export function HelpBrowser() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Escape" && query) { e.preventDefault(); setQuery(""); } }}
           placeholder="Search guides and answers — e.g. &quot;approval chain&quot;, &quot;snow invoicing&quot;, &quot;low stock&quot;"
-          className="w-full rounded-full border border-[#e6e6e0] bg-white py-3 pl-11 pr-4 text-[14.5px] text-[#0a0a0a] shadow-sm outline-none focus:border-[#60ab45] focus:ring-2 focus:ring-[#60ab45]/20"
+          className="w-full rounded-full border border-[#e6e6e0] bg-white py-3 pl-11 pr-11 text-[14.5px] text-[#0a0a0a] shadow-sm outline-none focus:border-[#60ab45] focus:ring-2 focus:ring-[#60ab45]/20"
         />
+        {/* Hand-rolled rather than the shared SearchInput — this public page
+            keeps its own rounded hero styling. */}
+        {query && (
+          <button
+            type="button"
+            aria-label="Clear search"
+            title="Clear search"
+            onClick={() => setQuery("")}
+            className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">

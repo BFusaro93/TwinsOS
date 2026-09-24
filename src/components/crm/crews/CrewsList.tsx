@@ -33,12 +33,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Users, X, Search } from "lucide-react";
+import { Plus, Users, X } from "lucide-react";
 import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -731,15 +732,13 @@ export function CrewsList() {
             {t.label}
           </button>
         ))}
-        <div className="relative ml-2">
-          <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
-            placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search…"
+          className="ml-2 w-44"
+          inputClassName="h-7 text-xs"
+        />
       </div>
 
       {/* Table */}

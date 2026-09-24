@@ -35,13 +35,14 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Plus, Search, Trash2, FileEdit } from "lucide-react";
+import { MoreHorizontal, Plus, Trash2, FileEdit } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { DOC_TYPE_LABELS, PLAIN_TEXT_DOC_TYPES } from "@/types/crm-documents";
 import type { DocStatus, DocType, DocumentTemplate } from "@/types/crm-documents";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -181,15 +182,12 @@ export function DocumentsList() {
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 gap-y-2">
-        <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search documents…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search documents…"
+          className="max-w-xs flex-1"
+        />
 
         {/* Active / Inactive / All tabs */}
         <div className="flex overflow-hidden rounded-md border text-xs">

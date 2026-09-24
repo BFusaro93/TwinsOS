@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
-import { Plus, Trash2, Check, X, ChevronDown, ChevronRight, Search, PackageSearch } from "lucide-react";
+import { Plus, Trash2, Check, X, ChevronDown, ChevronRight, PackageSearch } from "lucide-react";
 import {
   useJobCosting,
   useJobMaterials,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/hooks/use-job-costing";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 interface Props {
   jobId: string;
@@ -130,14 +131,13 @@ function AddMaterialForm({ jobId, onDone }: AddMaterialFormProps) {
         <td colSpan={5} className="px-3 py-2">
           <div className="flex items-center gap-2">
             <PackageSearch className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-              <Input
+            <div className="relative flex-1 max-w-sm">
+              <SearchInput
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setShowCatalog(true); }}
-                onFocus={() => setShowCatalog(true)}
+                onChange={(v) => { setSearch(v); setShowCatalog(true); }}
                 placeholder="Search catalog (stocked & project materials)…"
-                className="h-7 text-xs pl-6"
+                onFocus={() => setShowCatalog(true)}
+                inputClassName="h-7 text-xs"
               />
               {showCatalog && search.trim() !== "" && catalogItems.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-20 mt-0.5 rounded border bg-white shadow-lg">

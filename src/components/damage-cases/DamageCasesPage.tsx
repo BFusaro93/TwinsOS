@@ -4,7 +4,6 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -23,6 +22,7 @@ import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 const DamageCasesChart = dynamic(
   () => import("./DamageCasesChart").then((m) => ({ default: m.DamageCasesChart })),
@@ -77,10 +77,10 @@ export function DamageCasesPage() {
         </TabsList>
 
         <TabsContent value="cases" className="mt-4 space-y-4">
-          <Input
-            placeholder="Search by customer, case #, or description…"
+          <SearchInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
+            placeholder="Search by customer, case #, or description…"
             className="max-w-sm"
           />
 

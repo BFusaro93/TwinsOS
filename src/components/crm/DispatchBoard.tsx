@@ -55,7 +55,6 @@ import {
   Smartphone,
   FileText,
   Users,
-  Search,
   MapPin,
   BarChart3,
   Columns3,
@@ -1543,6 +1542,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Trash2 } from "lucide-react";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
 import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey } from "@/lib/hooks/use-route-order";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 /** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
 function WriteInBlank({ className = "" }: { className?: string }) {
@@ -4817,15 +4817,13 @@ export function DispatchBoard() {
         )}
 
         {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search…"
-            className="h-7 w-44 pl-6 text-xs bg-white border-slate-200 focus-visible:ring-0"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search…"
+          className="w-44"
+          inputClassName="h-7 text-xs"
+        />
 
         {/* Columns selector — far right of dark bar */}
         <div className="ml-auto">

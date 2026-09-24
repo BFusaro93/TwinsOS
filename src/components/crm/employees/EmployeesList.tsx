@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getAvatarColor } from "@/lib/utils";
-import { Plus, Search, MoreHorizontal, UserCog, ChevronDown, Pencil } from "lucide-react";
+import { Plus, MoreHorizontal, UserCog, ChevronDown, Pencil } from "lucide-react";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -48,6 +48,7 @@ import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -1157,15 +1158,12 @@ export function EmployeeListPanel({
     <div className="flex h-full flex-col">
       {/* Search */}
       <div className="border-b p-3">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="h-8 pl-8 text-sm"
-            placeholder="Search employees…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search employees…"
+          inputClassName="h-8 text-sm"
+        />
         <div className="mt-2 flex items-center justify-between">
           <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
             <Checkbox
@@ -1275,15 +1273,13 @@ export function EmployeesTable({
     <div className="flex h-full flex-col gap-3">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="h-8 pl-8 text-sm"
-            placeholder="Search name, resource code, email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search name, resource code, email…"
+          className="max-w-sm flex-1"
+          inputClassName="h-8 text-sm"
+        />
         <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
           <Checkbox checked={showInactive} onCheckedChange={(c) => setShowInactive(!!c)} />
           Show terminated

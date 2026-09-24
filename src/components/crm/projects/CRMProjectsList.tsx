@@ -37,10 +37,11 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency, cn, todayLocalISODate } from "@/lib/utils";
 import { useSettingsStore } from "@/stores/settings-store";
-import { Plus, Search, Pencil, FileText, TrendingUp, BarChart3, ChevronDown, DollarSign, Receipt } from "lucide-react";
+import { Plus, Pencil, FileText, TrendingUp, BarChart3, ChevronDown, DollarSign, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { Project, ProjectStatus } from "@/types/project";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -776,15 +777,13 @@ export function CRMProjectsList() {
 
       {/* Search */}
       <div className="border-b bg-white px-6 py-3">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="h-8 pl-9 text-sm"
-            placeholder="Search projects or clients…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search projects or clients…"
+          className="max-w-sm"
+          inputClassName="h-8 text-sm"
+        />
       </div>
 
       {/* Table */}

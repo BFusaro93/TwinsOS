@@ -23,12 +23,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, FormInput, MoreHorizontal, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ExternalLink, FormInput, MoreHorizontal, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMForm, FormStatus } from "@/types/crm-forms";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -347,15 +348,13 @@ export function FormsList() {
             ))}
           </div>
 
-          <div className="relative ml-2">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search forms…"
-              className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search forms…"
+            className="ml-2 w-44"
+            inputClassName="h-7 text-xs"
+          />
         </div>
       </div>
 

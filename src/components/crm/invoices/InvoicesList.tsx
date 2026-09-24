@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Clock } from "lucide-react";
+import { Plus, FileText, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { isInvoiceOverdue } from "@/lib/invoice-status";
@@ -45,6 +45,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 /**
  * Why an invoice may not be voided, or null when it may.
@@ -831,15 +832,13 @@ export function InvoicesList({ clientId }: Props) {
               );
             })}
           </div>
-          <div className="relative ml-2">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search…"
+            className="ml-2 w-44"
+            inputClassName="h-7 text-xs"
+          />
         </div>
 
         <ColumnChooser

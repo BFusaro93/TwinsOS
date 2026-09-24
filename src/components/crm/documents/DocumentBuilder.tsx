@@ -67,6 +67,7 @@ import type {
   DocumentTemplateWithBlocks,
   MergeTag,
 } from "@/types/crm-documents";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── Block palette ─────────────────────────────────────────────────────────────
 
@@ -730,11 +731,12 @@ export function DocumentBuilder({ template }: Props) {
           {/* Merge tags */}
           <div className="p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Merge Tags</p>
-            <Input
+            <SearchInput
               value={mergeSearch}
-              onChange={(e) => setMergeSearch(e.target.value)}
+              onChange={setMergeSearch}
               placeholder="Search tags…"
-              className="mb-2 h-7 text-xs"
+              className="mb-2"
+              inputClassName="h-7 text-xs"
             />
             <p className="mb-3 text-[10px] text-slate-400">
               {activeKey ? "Click a tag to insert it at your cursor." : "Click a block first, then click a tag to insert it."}

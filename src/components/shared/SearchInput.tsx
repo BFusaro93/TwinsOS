@@ -13,6 +13,8 @@ interface SearchInputProps {
   className?: string;
   /** Merged onto the input — e.g. a different height or text size. */
   inputClassName?: string;
+  onFocus?: React.FocusEventHandler<HTMLInputElement>;
+  autoFocus?: boolean;
 }
 
 export function SearchInput({
@@ -21,6 +23,8 @@ export function SearchInput({
   placeholder = "Search...",
   className,
   inputClassName,
+  onFocus,
+  autoFocus,
 }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -38,6 +42,8 @@ export function SearchInput({
             onChange("");
           }
         }}
+        onFocus={onFocus}
+        autoFocus={autoFocus}
         placeholder={placeholder}
         className={cn("h-9 pl-8 pr-8", inputClassName)}
       />

@@ -16,13 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Search, Calendar, ChevronRight, Plus } from "lucide-react";
+import { Calendar, ChevronRight, Plus } from "lucide-react";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJob } from "@/types/crm-jobs";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // One row per JOB, not per visit. Recurring/package jobs can have dozens of
 // generated visits — showing one row per visit made the same job appear to
@@ -282,15 +283,12 @@ export function JobsList() {
           ))}
         </div>
 
-        <div className="relative min-w-[200px] flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search client, crew or service…"
-            className="pl-8"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search client, crew or service…"
+          className="min-w-[200px] flex-1 max-w-xs"
+        />
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-36 text-sm">
             <SelectValue placeholder="Type" />

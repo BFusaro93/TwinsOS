@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Plus, ListOrdered, ChevronDown, RotateCcw, Search, Send, X, Mail } from "lucide-react";
+import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail } from "lucide-react";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -55,6 +55,7 @@ import { Flame, Tag, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 function toLocalDateString(date: Date): string {
   const y = date.getFullYear();
@@ -733,15 +734,13 @@ export function WaitingList() {
           </button>
 
           {/* Search */}
-          <div className="relative ml-2">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search…"
+            className="ml-2 w-44"
+            inputClassName="h-7 text-xs"
+          />
 
           {/* Crew: multi-select popover, matched by crew id — same placement
               and style as the Dispatch Board's "All Crews" filter (dark bar,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Mail, X, Search, ChevronDown, RotateCcw, Send } from "lucide-react";
+import { Mail, X, ChevronDown, RotateCcw, Send } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -395,15 +396,13 @@ export function EmailActivityList() {
           </div>
 
           {/* Search — after last filter tab */}
-          <div className="relative ml-2">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search…"
+            className="ml-2 w-44"
+            inputClassName="h-7 text-xs"
+          />
         </div>
       </div>
 

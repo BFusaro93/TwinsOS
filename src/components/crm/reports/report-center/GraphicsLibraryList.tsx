@@ -33,7 +33,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -52,6 +51,7 @@ import {
 import { panelFromGraphic } from "@/lib/reports/panel-from-graphic";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { Dashboard } from "@/types/crm-reports";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 /** GraphicLibraryItem.id is prefixed ("system:"/"saved:") to keep the two id
  *  spaces from colliding — strip it to get the underlying crm_saved_graphics
@@ -114,11 +114,12 @@ export function GraphicsLibraryList() {
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Input
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder="Search graphics…"
-          className="h-9 w-64 text-sm"
+          className="w-64"
+          inputClassName="h-9 text-sm"
         />
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="h-9 w-48 text-sm">

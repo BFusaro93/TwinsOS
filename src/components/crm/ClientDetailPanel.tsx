@@ -143,6 +143,7 @@ import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
 import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -2757,12 +2758,12 @@ function AllContactsModal({
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Contacts</h2>
           <div className="flex items-center gap-3">
-            <input
-              type="text"
+            <SearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               placeholder="Search name, email, type…"
-              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+              className="w-72"
+              inputClassName="h-8 text-xs"
             />
             <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddContact}>
               <Plus className="mr-1 h-3 w-3" /> Add Contact
@@ -2884,12 +2885,12 @@ function AllAccountingModal({
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Accounting</h2>
           <div className="flex items-center gap-3">
-            <input
-              type="text"
+            <SearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               placeholder="Search invoice #, status, method, reference…"
-              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-40 sm:w-72 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+              className="w-40 sm:w-96"
+              inputClassName="h-8 text-xs"
             />
             <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
               <X className="h-4 w-4" />
@@ -2991,12 +2992,12 @@ function AllEstimatesModal({
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Estimates</h2>
           <div className="flex items-center gap-3">
-            <input
-              type="text"
+            <SearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               placeholder="Search description, stage…"
-              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+              className="w-72"
+              inputClassName="h-8 text-xs"
             />
             <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
               <X className="h-4 w-4" />
@@ -3116,12 +3117,12 @@ function ClientAllVisitsModal({
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">{title}</h2>
           <div className="flex items-center gap-3">
-              <input
-                type="text"
+              <SearchInput
                 value={historySearch}
-                onChange={(e) => setHistorySearch(e.target.value)}
+                onChange={setHistorySearch}
                 placeholder="Search service, crew, date…"
-                className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-52 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                className="w-72"
+                inputClassName="h-8 text-xs"
               />
             <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
               <X className="h-4 w-4" />

@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Plus, Search, Pencil, Trash2, DollarSign } from "lucide-react";
+import { Plus, Pencil, Trash2, DollarSign } from "lucide-react";
 import { useAllCRMServices, useDeleteCRMService, useBulkImportCRMServices } from "@/lib/hooks/use-crm-jobs";
 import type { CRMService } from "@/types/crm-jobs";
 import { formatCurrency } from "@/lib/utils";
@@ -14,6 +13,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { BulkServicePriceDialog } from "./BulkServicePriceDialog";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 const SERVICE_TEMPLATE_COLUMNS = [
   "name", "code", "category", "unit", "defaultRate", "productionRate", "isActive",
@@ -93,15 +93,12 @@ export function ServicesList({ onAdd, onEdit }: Props) {
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 gap-y-2">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search services…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search services…"
+          className="flex-1 max-w-xs"
+        />
         <div className="flex rounded-md border overflow-hidden text-xs">
           {(["active", "inactive", "all"] as Tab[]).map((t) => (
             <button

@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import { useLeads } from "@/lib/hooks/use-clients";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, UserPlus, Building2, Home } from "lucide-react";
+import { UserPlus, Building2, Home } from "lucide-react";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ClientDetailPanel } from "@/components/crm/ClientDetailPanel";
 import { LeadRevenuePotential } from "@/components/crm/leads/LeadsList";
 import { cn } from "@/lib/utils";
 import type { Client } from "@/types/crm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 const SOURCE_COLOR: Record<string, string> = {
   Referral:    "bg-green-100 text-green-700",
@@ -97,15 +97,12 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
   const listPanel = (
     <div className="flex h-full flex-col">
       <div className="border-b p-3">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="pl-8 text-sm"
-            placeholder="Search leads…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search leads…"
+          inputClassName="text-sm"
+        />
       </div>
       <div className="border-b px-3 py-2">
         <span className="text-xs text-slate-500">

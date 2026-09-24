@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useBulkUpdateProducts } from "@/lib/hooks/use-products";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { ProductItem } from "@/types";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 interface DraftRow {
   id: string;
@@ -194,15 +194,12 @@ export function BulkPriceUpdateDialog({
         <Separator />
 
         {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search products…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 text-sm"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search products…"
+          inputClassName="text-sm"
+        />
 
         {/* Table */}
         <div className="max-h-[45vh] overflow-y-auto rounded-md border">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { AlertTriangle, ArrowRight, Loader2, Search } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ import {
 import { useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { toast } from "sonner";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 const JOB_TYPES = ["recurring", "one_time", "package", "snow", "project", "waiting_list"] as const;
 
@@ -304,15 +305,13 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
             <Label className="text-xs text-slate-500">
               Services {serviceIds.length > 0 && `(${serviceIds.length} selected)`}
             </Label>
-            <div className="relative mt-1">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-              <Input
-                placeholder="Search services…"
-                value={serviceSearch}
-                onChange={(e) => setServiceSearch(e.target.value)}
-                className="h-8 pl-8 text-xs"
-              />
-            </div>
+            <SearchInput
+              value={serviceSearch}
+              onChange={setServiceSearch}
+              placeholder="Search services…"
+              className="mt-1"
+              inputClassName="h-8 text-xs"
+            />
             <div className="mt-1.5 max-h-40 overflow-y-auto rounded-md border p-2">
               {filteredServices.map((s) => (
                 <label key={s.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs text-slate-700">
@@ -435,15 +434,13 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
           {result.candidates.length > 0 && (
             <>
               <div className="flex flex-wrap items-center gap-2 border-b p-3">
-                <div className="relative min-w-[200px] flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder="Search these lines…"
-                    value={rowSearch}
-                    onChange={(e) => setRowSearch(e.target.value)}
-                    className="pl-8 text-sm"
-                  />
-                </div>
+                <SearchInput
+                  value={rowSearch}
+                  onChange={setRowSearch}
+                  placeholder="Search these lines…"
+                  className="min-w-[200px] flex-1"
+                  inputClassName="text-sm"
+                />
                 {/* Bulk actions act on what the search is showing, so you can
                     exclude a whole client or service in one go: search their
                     name, Exclude shown, then clear the search. */}

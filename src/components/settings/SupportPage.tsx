@@ -14,7 +14,6 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   DOC_SECTIONS,
@@ -25,6 +24,7 @@ import {
 } from "@/lib/docs-content";
 import { localizeGuideHref } from "@/lib/docs-guides";
 import { DocsEyebrow } from "@/components/docs/DocsBrand";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 // Ported from the former DocsPage.tsx sidebar, but instead of swapping the
@@ -79,15 +79,12 @@ function Sidebar({
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-slate-100 p-4">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
-            placeholder="Search guides…"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-8 h-8 text-sm"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={onSearchChange}
+          placeholder="Search guides…"
+          inputClassName="h-8 text-sm"
+        />
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3">

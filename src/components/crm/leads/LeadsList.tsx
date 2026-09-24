@@ -41,7 +41,7 @@ import { matchesAllFilterRows, parseMultiValue, type FilterRow } from "@/lib/cli
 import { useLeadFilterFields } from "@/lib/hooks/use-lead-filter-fields";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, UserCheck, Search, XCircle, Building2, Home, ChevronDown, X, Maximize2 } from "lucide-react";
+import { Plus, UserCheck, XCircle, Building2, Home, ChevronDown, X, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -50,6 +50,7 @@ import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSe
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import { ACCOUNT_TYPE_COLOR } from "@/lib/account-type-colors";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 /** "Date added" for the leads table: the lead-specific client_since date when
  *  set, else the row's created_at. Both are rendered in the browser's local
@@ -396,10 +397,13 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
     <div className="flex h-full flex-col gap-3">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input placeholder="Search leads…" className="h-8 pl-8 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search leads…"
+          className="flex-1 max-w-sm"
+          inputClassName="h-8 text-sm"
+        />
 
         <ClientFilterPopover fields={FILTER_FIELDS} rows={filterRows} onRowsChange={setFilterRows} />
 

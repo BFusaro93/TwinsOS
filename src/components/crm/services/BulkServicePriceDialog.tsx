@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, Fragment } from "react";
-import { Search, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,7 @@ import {
 import type { CRMService } from "@/types/crm-jobs";
 import type { RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
 import { toast } from "sonner";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 interface ServiceDraft {
   id: string;
@@ -348,15 +349,12 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
 
         <Separator />
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search services…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 text-sm"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search services…"
+          inputClassName="text-sm"
+        />
 
         {/* Table */}
         <div className="max-h-[45vh] overflow-y-auto rounded-md border">

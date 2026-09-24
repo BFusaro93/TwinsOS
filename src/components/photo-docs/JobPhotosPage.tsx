@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Camera, MapPin, Search, Images, Plus, X, Maximize2, Minimize2,
+  Camera, MapPin, Images, Plus, X, Maximize2, Minimize2,
   Pencil, Check, Archive, ArchiveRestore, Link2, FileText, Trash2, User,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { SearchInput } from "@/components/shared/SearchInput";
 
 type StatusFilter = PhotoJobStatus | "all";
 type ArchiveFilter = "current" | "archived";
@@ -626,10 +627,12 @@ export function JobPhotosPage() {
 
         {/* Search + Filters — inline single row */}
         <div className="flex flex-wrap items-end gap-3">
-          <div className="relative w-full max-w-xs">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input placeholder="Search jobs…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search jobs…"
+            className="w-full max-w-xs"
+          />
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</span>
             <div className="flex flex-wrap gap-1.5">
