@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { DollarSign, Receipt, AlertCircle, TrendingUp } from "lucide-react";
 import {
@@ -100,7 +101,7 @@ export function useReportData(options: { enabled?: boolean } = {}) {
         paymentsRes,
       ] = await Promise.all([
         sb.from("clients").select("id, status").is("deleted_at", null),
-        sb.from("crm_invoices").select("id, total_cents, balance_cents, invoice_date, due_date, status").is("deleted_at", null),
+        sb.from("crm_invoices").select("id, total_cents, balance_cents, invoice_date, due_date, terms, status").is("deleted_at", null),
         sb.from("crm_jobs").select("id, status, created_at").is("deleted_at", null),
         sb
           .from("estimates")
@@ -148,10 +149,15 @@ export function useReportData(options: { enabled?: boolean } = {}) {
         (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
         0
       );
+      // Same effective due date as isInvoiceOverdue() (the Invoices list's
+      // Past Due tab this card links to): a due-on-receipt invoice with no
+      // due_date is due on its invoice date. Checking due_date alone left
+      // every such invoice out of Overdue AR.
       const overdueAR = outstanding
-        .filter(
-          (i: { due_date: string | null }) => i.due_date && i.due_date < todayDate
-        )
+        .filter((i: { due_date: string | null; terms: string | null; invoice_date: string | null }) => {
+          const due = i.due_date ?? (i.terms === "due_on_receipt" ? i.invoice_date : null);
+          return !!due && due < todayDate;
+        })
         .reduce(
           (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
           0
@@ -236,12 +242,15 @@ export function KPICard({
   value,
   sub,
   accent,
+  href,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   sub?: string;
   accent?: "green" | "amber" | "red" | "blue";
+  /** Makes the card a link to the report/list behind the number. */
+  href?: string;
 }) {
   const accentClass = {
     green: "bg-green-50 text-green-600",
@@ -250,8 +259,7 @@ export function KPICard({
     blue: "bg-blue-50 text-blue-600",
   }[accent ?? "blue"] ?? "bg-blue-50 text-blue-600";
 
-  return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm">
+  const body = (
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
@@ -262,7 +270,15 @@ export function KPICard({
           <Icon className="h-5 w-5" />
         </div>
       </div>
-    </div>
+  );
+
+  const cardClass = "rounded-xl border bg-white p-5 shadow-sm";
+  return href ? (
+    <Link href={href} className={cn(cardClass, "block transition-shadow hover:shadow-md hover:border-slate-300")}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cardClass}>{body}</div>
   );
 }
 
@@ -291,6 +307,17 @@ export function RevenueSnapshot() {
 
   if (!data) return null;
 
+  // Each card opens the report behind its number (pre-filtered to this year);
+  // a login that can see these figures via the accounting lists but not the
+  // Report Center gets the equivalent filtered list instead of a dead end.
+  const reports = can("view_report_center");
+  const links = {
+    revenue: reports ? "/crm/admin/reports/r/invoiced-income-by-client" : "/crm/accounting/invoices",
+    outstanding: reports ? "/crm/admin/reports/r/ar-aging" : "/crm/accounting/invoices?filter=open",
+    overdue: "/crm/accounting/invoices?filter=past_due",
+    won: reports ? "/crm/admin/reports/r/won-estimates-by-service" : "/crm/estimates?stage=accepted,invoiced",
+  };
+
   return (
     <section>
       <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
@@ -300,6 +327,7 @@ export function RevenueSnapshot() {
         <KPICard
           icon={DollarSign}
           label="Revenue YTD"
+          href={links.revenue}
           value={formatCurrency(data.revenueYTD)}
           sub={`${data.invoiceCountYTD} invoices`}
           accent="green"
@@ -307,6 +335,7 @@ export function RevenueSnapshot() {
         <KPICard
           icon={Receipt}
           label="Outstanding AR"
+          href={links.outstanding}
           value={formatCurrency(data.outstandingAR)}
           sub="Unpaid invoices"
           accent="blue"
@@ -314,6 +343,7 @@ export function RevenueSnapshot() {
         <KPICard
           icon={AlertCircle}
           label="Overdue AR"
+          href={links.overdue}
           value={formatCurrency(data.overdueAR)}
           sub="Past due date"
           accent={data.overdueAR > 0 ? "red" : "green"}
@@ -321,6 +351,7 @@ export function RevenueSnapshot() {
         <KPICard
           icon={TrendingUp}
           label="Won Estimates YTD"
+          href={links.won}
           value={formatCurrency(data.estimatesValueWon)}
           sub={formatPct(data.estimatesWon, data.estimatesTotal) + " close rate YTD"}
           accent="blue"

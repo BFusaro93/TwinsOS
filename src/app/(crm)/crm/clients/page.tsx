@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Users, Minimize2, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -16,6 +17,7 @@ import { useClients, useBulkImportClients } from "@/lib/hooks/use-clients";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
+import type { FilterRow } from "@/lib/client-filters";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 
@@ -26,8 +28,24 @@ const CLIENT_TEMPLATE_COLUMNS = [
   "source", "accountNumber",
 ];
 
+// useSearchParams (for ?status= dashboard deep-links) needs a Suspense boundary.
 export default function ClientsPage() {
+  return (
+    <Suspense>
+      <ClientsPageInner />
+    </Suspense>
+  );
+}
+
+function ClientsPageInner() {
   const { can, isLoading: permissionsLoading } = usePermissions();
+  // ?status=active (My Day's "Active Clients" card) pre-applies a Status
+  // filter row in both the list and table views; it stays removable.
+  const statusParam = useSearchParams().get("status");
+  const initialFilterRows = useMemo<FilterRow[]>(
+    () => (statusParam ? [{ id: "url-status", field: "status", operator: "eq", value: statusParam }] : []),
+    [statusParam]
+  );
   const { data: clients } = useClients();
   const { mutateAsync: bulkImportClients } = useBulkImportClients();
   const [selected, setSelected] = useState<Client | null>(null);
@@ -133,7 +151,11 @@ export default function ClientsPage() {
             expanded={expanded}
             onBack={() => { setSelected(null); setExpanded(false); }}
             listPanel={
-              <ClientList selectedId={selected?.id ?? null} onSelect={(c) => { setSelected(c); setExpanded(false); }} />
+              <ClientList
+                selectedId={selected?.id ?? null}
+                onSelect={(c) => { setSelected(c); setExpanded(false); }}
+                initialFilterRows={initialFilterRows}
+              />
             }
             detailPanel={selected ? <ClientDetailPanel clientId={selected.id} expanded={expanded} onExpandChange={setExpanded} /> : null}
             emptyState={
@@ -146,6 +168,7 @@ export default function ClientsPage() {
           />
         ) : (
           <ClientsTable
+            initialFilterRows={initialFilterRows}
             onSelect={(client) => {
               setSelected(client);
               setViewMode("list");

@@ -54,6 +54,11 @@ function getTodayLong(): string {
   }).format(new Date());
 }
 
+// Each KPI card opens the list it counts, pre-filtered to the same records —
+// same convention as the Equipt dashboard's StatCards.
+const KPI_CARD_CLASS =
+  "block rounded-lg border bg-white p-4 shadow-sm transition-shadow hover:shadow-md hover:border-slate-300";
+
 function SectionHeader({ title, href }: { title: string; href: string }) {
   return (
     <div className="flex items-center justify-between pb-2 border-b">
@@ -94,7 +99,12 @@ export function MyDay() {
   );
   const pipelineValueCents = pendingEstimates.reduce((s, e) => s + e.totalCents, 0);
 
-  const outstandingInvoices = (allInvoices ?? []).filter((i) => i.balanceCents > 0);
+  // Same rule as the Invoices list's "Open" tab this card links to — a draft
+  // hasn't been issued, so it isn't outstanding (it used to be counted here,
+  // which made the card and the list disagree).
+  const outstandingInvoices = (allInvoices ?? []).filter(
+    (i) => i.status !== "draft" && i.status !== "void" && i.balanceCents > 0
+  );
   const totalBalanceCents = outstandingInvoices.reduce((s, i) => s + i.balanceCents, 0);
 
   const activeClients = (allClients ?? []).filter((c) => c.status === "active");
@@ -136,7 +146,7 @@ export function MyDay() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Open Tickets */}
-        <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <Link href="/crm/tickets?status=open" className={KPI_CARD_CLASS}>
           <div className="flex items-start justify-between mb-2">
             <span className="text-xs font-medium text-slate-500">Open Tickets</span>
             <Ticket className="h-4 w-4 text-orange-400" />
@@ -149,10 +159,10 @@ export function MyDay() {
           <div className="text-xs text-slate-400 mt-1">
             {ticketsLoading ? <Skeleton className="h-3 w-20" /> : `${overdueCount} overdue`}
           </div>
-        </div>
+        </Link>
 
         {/* Pending Estimates */}
-        <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <Link href="/crm/estimates?stage=draft,quote,sent" className={KPI_CARD_CLASS}>
           <div className="flex items-start justify-between mb-2">
             <span className="text-xs font-medium text-slate-500">Pending Estimates</span>
             <ClipboardSignature className="h-4 w-4 text-blue-400" />
@@ -169,10 +179,10 @@ export function MyDay() {
               `${formatCurrency(pipelineValueCents)} pipeline`
             )}
           </div>
-        </div>
+        </Link>
 
         {/* Outstanding Invoices */}
-        <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <Link href="/crm/accounting/invoices?filter=open" className={KPI_CARD_CLASS}>
           <div className="flex items-start justify-between mb-2">
             <span className="text-xs font-medium text-slate-500">Outstanding Invoices</span>
             <Receipt className="h-4 w-4 text-red-400" />
@@ -189,10 +199,10 @@ export function MyDay() {
               `${formatCurrency(totalBalanceCents)} outstanding`
             )}
           </div>
-        </div>
+        </Link>
 
         {/* Active Clients */}
-        <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <Link href="/crm/clients?status=active" className={KPI_CARD_CLASS}>
           <div className="flex items-start justify-between mb-2">
             <span className="text-xs font-medium text-slate-500">Active Clients</span>
             <UserRound className="h-4 w-4 text-green-400" />
@@ -209,7 +219,7 @@ export function MyDay() {
               `${newThisMonth} added this month`
             )}
           </div>
-        </div>
+        </Link>
       </div>
 
       {showRevenueSnapshot && <RevenueSnapshot />}
@@ -239,7 +249,7 @@ export function MyDay() {
                 recentTickets.map((t) => (
                   <Link
                     key={t.id}
-                    href="/crm/tickets"
+                    href={`/crm/tickets?open=${t.id}`}
                     className="flex items-center gap-3 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
                   >
                     <span className="font-mono text-[11px] text-slate-400 shrink-0">
@@ -367,7 +377,7 @@ export function MyDay() {
         <div className="flex min-w-0 flex-col gap-4">
           {/* Outstanding Invoices */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices" />
+            <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices?filter=open" />
             <div className="mt-3">
               {invoicesLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (

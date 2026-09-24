@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
@@ -128,7 +128,24 @@ export function EstimatesList({ clientId }: Props) {
   const { data: defaultDocTemplate } = useDocumentTemplate(defaultTemplateId);
   const [emailingSelected, setEmailingSelected] = useState(false);
   const [dialogOpen,      setDialogOpen]      = useState(false);
-  const [stageFilter,     setStageFilter]     = useState<StageFilter>("all");
+  // Dashboard deep-links: ?stage=sent picks that tab; ?stage=draft,quote,sent
+  // (My Day's "Pending Estimates") filters to several stages at once and shows
+  // a dismissible chip, since the tabs only select one stage.
+  const searchParams = useSearchParams();
+  const urlStages = useMemo(
+    () => (searchParams.get("stage") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+    [searchParams]
+  );
+  const [stageFilter,     setStageFilterState] = useState<StageFilter>(
+    () => (urlStages.length === 1 ? (urlStages[0] as StageFilter) : "all")
+  );
+  const [stageSet,        setStageSet]        = useState<string[] | null>(
+    () => (urlStages.length > 1 ? urlStages : null)
+  );
+  function setStageFilter(value: StageFilter) {
+    setStageSet(null);
+    setStageFilterState(value);
+  }
   const [search,          setSearch]          = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState<FilterKey | null>(null);
   const [filterValue,     setFilterValue]     = useState("");
@@ -177,7 +194,9 @@ export function EstimatesList({ clientId }: Props) {
   }, [allEstimates, stageTabs]);
 
   const filtered = useMemo(() => {
-    let list = stageFilter === "all" ? allEstimates : allEstimates.filter((e) => e.stage === stageFilter);
+    let list = stageSet
+      ? allEstimates.filter((e) => stageSet.includes(e.stage))
+      : stageFilter === "all" ? allEstimates : allEstimates.filter((e) => e.stage === stageFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -200,7 +219,7 @@ export function EstimatesList({ clientId }: Props) {
       });
     }
     return list;
-  }, [allEstimates, stageFilter, search, activeFilterKey, filterValue]);
+  }, [allEstimates, stageFilter, stageSet, search, activeFilterKey, filterValue]);
 
   const totalIncome  = filtered.reduce((s, e) => s + (e.revenueCents ?? 0), 0);
   const totalGP      = filtered.reduce((s, e) => s + (e.grossProfitCents ?? 0), 0);
@@ -477,7 +496,7 @@ export function EstimatesList({ clientId }: Props) {
                   onClick={() => setStageFilter(value)}
                   className={cn(
                     "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
-                    stageFilter === value
+                    !stageSet && stageFilter === value
                       ? "bg-white text-slate-800"
                       : "text-slate-300 hover:text-white"
                   )}
@@ -486,7 +505,7 @@ export function EstimatesList({ clientId }: Props) {
                   {count > 0 && (
                     <span className={cn(
                       "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                      stageFilter === value
+                      !stageSet && stageFilter === value
                         ? "bg-slate-200 text-slate-700"
                         : "bg-white/20 text-white"
                     )}>
@@ -497,6 +516,20 @@ export function EstimatesList({ clientId }: Props) {
               );
             })}
           </div>
+          {stageSet && (
+            <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded bg-white px-2 py-1 text-xs font-medium text-slate-800">
+              Stages: {stageSet.map((st) => stageLabel[st] ?? st).join(", ")}
+              <button
+                type="button"
+                onClick={() => setStageSet(null)}
+                className="text-slate-400 hover:text-slate-700"
+                aria-label="Clear stage filter"
+                title="Clear stage filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
           <SearchInput
             value={search}
             onChange={setSearch}
@@ -591,7 +624,7 @@ export function EstimatesList({ clientId }: Props) {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={colSpan} className="py-20 text-center text-sm text-slate-400">
-                  {stageFilter !== "all" || activeFilterKey || search
+                  {stageFilter !== "all" || stageSet || activeFilterKey || search
                     ? "No estimates match the current filters"
                     : "No estimates yet — create one to get started"}
                 </td>

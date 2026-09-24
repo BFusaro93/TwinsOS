@@ -484,7 +484,11 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     ? categoryOptions.map((o) => o.value)
     : FALLBACK_CATEGORIES;
 
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | "all">("all");
+  // ?status=open — dashboard deep-links (My Day's "Open Tickets" card).
+  const urlStatus = useSearchParams().get("status");
+  const [statusFilter, setStatusFilter] = useState<TicketStatus | "all">(() =>
+    STATUS_TABS.some((t) => t.value === urlStatus) ? (urlStatus as TicketStatus) : "all"
+  );
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");

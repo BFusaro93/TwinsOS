@@ -24,13 +24,15 @@ const STATUS_COLOR: Record<string, string> = {
 interface Props {
   selectedId: string | null;
   onSelect: (client: Client) => void;
+  /** Seeds the filter rows, e.g. from a dashboard deep-link (?status=active). */
+  initialFilterRows?: FilterRow[];
 }
 
-export function ClientList({ selectedId, onSelect }: Props) {
+export function ClientList({ selectedId, onSelect, initialFilterRows }: Props) {
   const { data: clients, isLoading } = useClients();
   const { fields: FILTER_FIELDS, ctx: filterCtx } = useClientFilterFields();
   const [search, setSearch] = useState("");
-  const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
+  const [filterRows, setFilterRows] = useState<FilterRow[]>(initialFilterRows ?? []);
   const router = useRouter();
 
   const activeFilterCount = filterRows.filter((r) => r.value !== "").length;

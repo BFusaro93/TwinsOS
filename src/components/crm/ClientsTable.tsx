@@ -247,9 +247,11 @@ function BulkEditDialog({
 
 interface Props {
   onSelect?: (client: Client) => void;
+  /** Seeds the filter rows, e.g. from a dashboard deep-link (?status=active). */
+  initialFilterRows?: FilterRow[];
 }
 
-export function ClientsTable({ onSelect }: Props) {
+export function ClientsTable({ onSelect, initialFilterRows }: Props) {
   const { data: clients, isLoading } = useClients();
   const orgTags = useOrgTags();
   const { mutateAsync: bulkCancel } = useBulkCancelClients();
@@ -266,7 +268,7 @@ export function ClientsTable({ onSelect }: Props) {
 
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
+  const [filterRows, setFilterRows] = useState<FilterRow[]>(initialFilterRows ?? []);
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldSearch, setFieldSearch] = useState("");
 
