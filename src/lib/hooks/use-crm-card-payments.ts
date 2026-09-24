@@ -1,4 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 
 export interface CreatePaymentIntentResult {
   clientSecret: string;

@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 
 /** The org's configured non-admin roles allowed to grant write access via
  * the OAuth sign-in flow (Settings > Public API Keys > OAuth Write Access). */

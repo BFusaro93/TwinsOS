@@ -1,9 +1,9 @@
 "use client";
 
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
-import { useHydrated } from "@/lib/hooks/use-hydrated";
 import type { Permissions } from "@/types/crm-roles";
 
 interface PermissionsResult {
@@ -59,20 +59,18 @@ async function fetchUserPermissions(queryClient: QueryClient): Promise<{
 }
 
 /**
- * Shared ["crm-permissions"] query. Reports "still loading" until hydration
- * finishes: the server never has permissions, so a late-hydrating Suspense
- * boundary (e.g. TicketsList) must not render permission-gated UI from a
- * query that resolved in the meantime — that's a hydration mismatch.
+ * Shared ["crm-permissions"] query. Like every useQuery here it reports
+ * "still loading" until hydration finishes (see use-query.ts), so a
+ * late-hydrating Suspense boundary (e.g. TicketsList) never renders
+ * permission-gated UI the server HTML didn't have.
  */
 function usePermissionsQuery() {
   const queryClient = useQueryClient();
-  const hydrated = useHydrated();
-  const query = useQuery({
+  return useQuery({
     queryKey: ["crm-permissions"],
     queryFn: () => fetchUserPermissions(queryClient),
     staleTime: 5 * 60 * 1000, // cache 5 min — permissions don't change often
   });
-  return hydrated ? query : { data: undefined, isLoading: true };
 }
 
 export function usePermissions(): PermissionsResult {

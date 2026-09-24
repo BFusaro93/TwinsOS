@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapAuditEntry } from "@/lib/supabase/mappers";
 import type { AuditEntry, AuditRecordType } from "@/types/audit";

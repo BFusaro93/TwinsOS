@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import type { ClientPortalStatusResponse } from "@/app/api/crm/clients/[clientId]/portal-status/route";
 
 export type { ClientPortalStatusResponse };
