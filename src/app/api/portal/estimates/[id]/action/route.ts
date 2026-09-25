@@ -5,6 +5,7 @@ import { submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
+import { recordAcceptedVersion } from "@/lib/estimates/versions";
 
 export async function POST(
   req: Request,
@@ -196,6 +197,8 @@ export async function POST(
     // reflects what was actually accepted.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await recalcEstimateTotals(supabase as any, id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await recordAcceptedVersion(supabase as any, id, signatureName!.trim(), "client_portal");
   }
 
   return NextResponse.json({ success: true, status: patch.stage });

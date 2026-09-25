@@ -272,6 +272,11 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
               Sent to {version.sentToEmail}
             </span>
           )}
+          {snapshot.acceptedBy && (
+            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] text-green-700">
+              Accepted by {snapshot.acceptedBy}{snapshot.acceptedVia === "client_portal" ? " (portal)" : ""}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-slate-700">
@@ -1044,6 +1049,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
           {activeTab === "details" && (
             <>
+              {/* A sent estimate's proposal link renders the live estimate, so
+                  every edit here is visible to (and acceptable by) the client
+                  immediately — before it's re-sent. Say so while editing. */}
+              {estimate.stage === "sent" && liveProposalUrl && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 shrink-0">
+                  This proposal is live — the client&apos;s link shows changes as you make them and can accept the current version. Send it again to notify them and record a new version.
+                </div>
+              )}
+
               {/* Open change requests from the client */}
               {openChangeRequests.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 divide-y divide-amber-200 shrink-0">

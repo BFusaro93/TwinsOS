@@ -724,6 +724,10 @@ export interface EstimateVersion {
     totalCents: number;
     notes: string | null;
     validUntil: string | null;
+    /** Set on the version recorded at acceptance (not on sent versions). */
+    acceptedBy?: string;
+    acceptedAt?: string;
+    acceptedVia?: "proposal_link" | "client_portal";
     lineItems: {
       id: string;
       serviceName: string | null;
