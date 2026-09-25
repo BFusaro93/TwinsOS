@@ -19,6 +19,19 @@ async function fetchOrgPlan(queryClient: QueryClient): Promise<string | null> {
   return org.plan;
 }
 
+async function fetchPurchasedAddons(queryClient: QueryClient): Promise<string[]> {
+  const profile = await fetchCurrentProfile(queryClient);
+  if (!profile) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("organization_addons")
+    .select("addon_key")
+    .eq("org_id", profile.orgId)
+    .eq("enabled", true);
+  if (error) throw error;
+  return data.map((row) => row.addon_key);
+}
+
 /**
  * Gates a module (Landscapt/Equipt) by the org's subscription plan — separate
  * from per-user role gates like useCrmAccess. A DOWNGRADE_STATUSES webhook
@@ -40,18 +53,27 @@ export function useModuleAccess(module: PlatformModule): { allowed: boolean; isL
 }
 
 /**
- * Gates a bundled add-on (e.g. Job Photos) by the org's subscription plan.
- * Shares useModuleAccess's query key so both hooks read the same cached
- * org.plan fetch instead of issuing a duplicate request.
+ * Gates an add-on (e.g. Job Photos) the same way orgHasAddon does server-side:
+ * allowed if the org's plan bundles it OR the org bought it standalone
+ * (organization_addons.enabled). Shares useModuleAccess's query key so both
+ * hooks read the same cached org.plan fetch instead of issuing a duplicate
+ * request.
  */
 export function useAddonAccess(addon: BundledAddonKey): { allowed: boolean; isLoading: boolean } {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data: plan, isLoading: planLoading } = useQuery({
     queryKey: ["org-plan-for-module-access"],
     queryFn: () => fetchOrgPlan(queryClient),
     staleTime: 5 * 60 * 1000,
   });
+  const { data: purchased, isLoading: addonsLoading } = useQuery({
+    queryKey: ["org-addons-for-access"],
+    queryFn: () => fetchPurchasedAddons(queryClient),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  if (isLoading || data == null) return { allowed: true, isLoading: true };
-  return { allowed: planIncludesAddon(data, addon), isLoading: false };
+  if (planLoading || plan == null) return { allowed: true, isLoading: true };
+  if (planIncludesAddon(plan, addon)) return { allowed: true, isLoading: false };
+  if (addonsLoading || purchased == null) return { allowed: true, isLoading: true };
+  return { allowed: purchased.includes(addon), isLoading: false };
 }
