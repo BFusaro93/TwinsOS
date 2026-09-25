@@ -617,6 +617,7 @@ export function SocialMediaDashboard() {
     for (const p of activePlatforms) {
       const s = rangeRows.find((r) => r.weekStart === w && r.platform === p);
       row[p] = s?.views ?? null;
+      row[`${p}_pv`] = s?.profileViews ?? null;
       const eng = s ? engagementsOf(s) : null;
       row[`${p}_er`] = s && s.views && eng != null ? +((eng / s.views) * 100).toFixed(2) : null;
       row[`${p}_followers`] = s?.followers ?? null;
@@ -820,6 +821,18 @@ export function SocialMediaDashboard() {
                 </BarChart>
               </ResponsiveContainer>
             </Card>
+            <Card title="Profile Views by Week">
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={weeklySeries}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v: number) => fmtCompact(v)} width={40} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {activePlatforms.map((p) => <Bar key={p} dataKey={`${p}_pv`} name={p} stackId="pv" fill={colorOf(p)} />)}
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
             <Card title="Engagement Rate by Week (%)">
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={weeklySeries}>
@@ -835,33 +848,31 @@ export function SocialMediaDashboard() {
                 </LineChart>
               </ResponsiveContainer>
             </Card>
-            <div className="lg:col-span-2">
-              <Card title={hasFollowerCounts ? "Followers by Week" : "Net New Followers by Week"}>
-                <ResponsiveContainer width="100%" height={240}>
-                  {hasFollowerCounts ? (
-                    <LineChart data={weeklySeries}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v: number) => fmtCompact(v)} width={40} />
-                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {activePlatforms.map((p) => (
-                        <Line key={p} type="monotone" dataKey={`${p}_followers`} name={p} stroke={colorOf(p)} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                      ))}
-                    </LineChart>
-                  ) : (
-                    <BarChart data={weeklySeries}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={32} />
-                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {activePlatforms.map((p) => <Bar key={p} dataKey={`${p}_net`} name={p} fill={colorOf(p)} />)}
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              </Card>
-            </div>
+            <Card title={hasFollowerCounts ? "Followers by Week" : "Net New Followers by Week"}>
+              <ResponsiveContainer width="100%" height={240}>
+                {hasFollowerCounts ? (
+                  <LineChart data={weeklySeries}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v: number) => fmtCompact(v)} width={40} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {activePlatforms.map((p) => (
+                      <Line key={p} type="monotone" dataKey={`${p}_followers`} name={p} stroke={colorOf(p)} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                  </LineChart>
+                ) : (
+                  <BarChart data={weeklySeries}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={32} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {activePlatforms.map((p) => <Bar key={p} dataKey={`${p}_net`} name={p} fill={colorOf(p)} />)}
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </Card>
           </div>
         )}
       </div>
