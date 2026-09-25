@@ -159,6 +159,13 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         highlight: false,
         values: { starter: true, cmms: false, growth: true, enterprise: true },
       },
+      {
+        key: "job_photos",
+        label: "Job photos",
+        description: "Before/during/after photo capture from the field, with on-image annotation, tagging, and before/after comparisons.",
+        highlight: false,
+        values: { starter: "Add-on", cmms: false, growth: true, enterprise: true },
+      },
     ],
   },
   {
