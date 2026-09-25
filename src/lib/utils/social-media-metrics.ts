@@ -232,6 +232,8 @@ export interface SocialTotals {
   posts: number;
   views: number;
   profileViews: number;
+  /** Profile views ÷ views — how often viewers go on to check out the profile. */
+  profileViewRate: number | null;
   engagements: number;
   engagementRate: number | null;
   netNewFollowers: number;
@@ -244,12 +246,18 @@ export function totalsOf(rows: SocialWeekStat[], netNew: Map<string, number | nu
   // Engagement rate only counts rows that have both views and engagements, so
   // a week with views but no likes typed yet doesn't drag the rate down.
   let rateViews = 0, rateEng = 0;
+  // Same rule for profile view rate: only rows with both numbers entered.
+  let pvRateViews = 0, pvRatePv = 0;
   const weeks = new Set<string>();
   for (const r of rows) {
     weeks.add(r.weekStart);
     posts += r.posts ?? 0;
     views += r.views ?? 0;
     profileViews += r.profileViews ?? 0;
+    if (r.profileViews != null && r.views) {
+      pvRateViews += r.views;
+      pvRatePv += r.profileViews;
+    }
     const e = engagementsOf(r);
     engagements += e ?? 0;
     if (e != null && r.views) {
@@ -263,6 +271,7 @@ export function totalsOf(rows: SocialWeekStat[], netNew: Map<string, number | nu
     posts,
     views,
     profileViews,
+    profileViewRate: pvRateViews > 0 ? pvRatePv / pvRateViews : null,
     engagements,
     engagementRate: rateViews > 0 ? rateEng / rateViews : null,
     netNewFollowers,
