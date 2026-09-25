@@ -7,6 +7,7 @@ import { orgEmailFrom } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
+import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
 const log = logger.child("proposal-accept");
 
@@ -111,6 +112,15 @@ export async function POST(
     return NextResponse.json(
       { error: "This proposal has expired. Use Request changes to ask for an updated one." },
       { status: 410 }
+    );
+  }
+
+  // The client can only accept the version their link shows. If staff have
+  // edited past it, accepting would apply terms the client never saw.
+  if (await isChangedSinceSent(supabase, shareToken.estimate_id)) {
+    return NextResponse.json(
+      { error: "This proposal was updated after it was sent to you. We'll send you the latest version shortly." },
+      { status: 409 }
     );
   }
 

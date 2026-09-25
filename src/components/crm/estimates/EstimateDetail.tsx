@@ -272,6 +272,11 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
               Sent to {version.sentToEmail}
             </span>
           )}
+          {snapshot.sharedVia === "link" && !version.sentToEmail && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+              Shared via link
+            </span>
+          )}
           {snapshot.acceptedBy && (
             <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] text-green-700">
               Accepted by {snapshot.acceptedBy}{snapshot.acceptedVia === "client_portal" ? " (portal)" : ""}
@@ -384,7 +389,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // D-26: the estimate's live public proposal URL — surfaced as Copy/Open
   // actions so staff can hand the link to a client without re-sending the
   // email (which was previously the only way to reach it).
-  const { data: shareLink } = useEstimateShareLink(estimate?.id ?? "");
+  const { data: shareLink } = useEstimateShareLink(estimate?.id ?? "", estimate?.updatedAt ?? null);
   const { mutateAsync: ensureShareLink, isPending: ensuringShareLink } = useEnsureEstimateShareLink();
   const liveProposalUrl = shareLink?.url ?? null;
 
@@ -1049,12 +1054,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
           {activeTab === "details" && (
             <>
-              {/* A sent estimate's proposal link renders the live estimate, so
-                  every edit here is visible to (and acceptable by) the client
-                  immediately — before it's re-sent. Say so while editing. */}
-              {estimate.stage === "sent" && liveProposalUrl && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 shrink-0">
-                  This proposal is live — the client&apos;s link shows changes as you make them and can accept the current version. Send it again to notify them and record a new version.
+              {/* The client's link shows the last SENT version (see
+                  lib/estimates/proposal-content.ts). Once staff edit past it,
+                  say so — the client still sees the old version and can't
+                  accept until it's sent (or its link copied) again. */}
+              {estimate.stage === "sent" && liveProposalUrl && shareLink?.changedSinceSent && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 shrink-0">
+                  Edited since Version {shareLink.publishedVersion} was sent — the client still sees Version {shareLink.publishedVersion} and can&apos;t accept until you send it again (Send, or Copy link).
                 </div>
               )}
 

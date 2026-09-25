@@ -6,6 +6,7 @@ import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
+import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
 export async function POST(
   req: Request,
@@ -81,6 +82,12 @@ export async function POST(
     return NextResponse.json(
       { error: "This estimate has expired. Request changes to get an updated one." },
       { status: 410 }
+    );
+  }
+  if (action === "accept" && await isChangedSinceSent(supabase, estimate.id)) {
+    return NextResponse.json(
+      { error: "This estimate was updated after it was sent to you. We'll send you the latest version shortly." },
+      { status: 409 }
     );
   }
 

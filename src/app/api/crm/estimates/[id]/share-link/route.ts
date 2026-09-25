@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
 import { logger } from "@/lib/logger";
+import { publishSharedVersion } from "@/lib/estimates/versions";
+import { getPublishedProposal, isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
 const log = logger.child("estimate-share-link");
 
@@ -41,8 +43,14 @@ export async function GET(
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
   const live = await findLiveShareToken(supabase, estimateId);
+  // Which version the client's link shows, and whether the estimate has been
+  // edited since — the header tells staff their edits aren't visible yet.
+  const published = await getPublishedProposal(supabase, estimateId);
+  const changedSinceSent = await isChangedSinceSent(supabase, estimateId);
   return NextResponse.json(
-    live ? { url: proposalUrlFor(live.token), token: live.token, expiresAt: live.expiresAt } : { url: null },
+    live
+      ? { url: proposalUrlFor(live.token), token: live.token, expiresAt: live.expiresAt, publishedVersion: published?.versionNumber ?? null, changedSinceSent }
+      : { url: null, publishedVersion: published?.versionNumber ?? null, changedSinceSent },
   );
 }
 
@@ -75,9 +83,13 @@ export async function POST(
     .from("estimates").select("id, org_id").eq("id", estimateId).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
+  // Handing out the link is sending it: publish the current estimate so the
+  // link shows what staff see right now (no-op if nothing changed).
+  const publishedVersion = await publishSharedVersion(supabase, estimateId, user.id);
+
   const live = await findLiveShareToken(supabase, estimateId);
   if (live) {
-    return NextResponse.json({ url: proposalUrlFor(live.token), token: live.token, expiresAt: live.expiresAt, created: false });
+    return NextResponse.json({ url: proposalUrlFor(live.token), token: live.token, expiresAt: live.expiresAt, created: false, publishedVersion });
   }
 
   const expiresAt = new Date(Date.now() + expiresInDays * 86_400_000).toISOString();
@@ -97,5 +109,6 @@ export async function POST(
     token: inserted.token as string,
     expiresAt: (inserted.expires_at as string | null) ?? null,
     created: true,
+    publishedVersion,
   });
 }

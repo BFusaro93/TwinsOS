@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { createClient } from "@supabase/supabase-js";
-import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { buildProposalContent, getPublishedProposal } from "@/lib/estimates/proposal-content";
 import { isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 
 // Public route — no auth. Uses service role to read across RLS.
@@ -103,31 +103,21 @@ export async function GET(
   const sameAsBilling = propertyLines.join("|").toLowerCase() === clientAddressLines.join("|").toLowerCase();
   const serviceAddressLines = propertyLines.length > 0 && !sameAsBilling ? propertyLines : null;
 
-  const lineItems = ((est.estimate_line_items ?? []) as Record<string, unknown>[])
-    .filter((li) => !li.deleted_at && li.status === "quote")
-    .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0))
-    .map((li) => ({
-      id: li.id as string,
-      rowType: ((li.row_type as string) ?? "item") as "item" | "section",
-      sectionName: li.section_name as string | null,
-      serviceName: li.service_name as string | null,
-      estimateDesc: li.estimate_desc as string | null,
-      qty: (li.qty as number) ?? 1,
-      unitType: li.unit_type as string | null,
-      rateCents: (li.rate_cents as number) ?? 0,
-      visits: (li.visits as number) ?? 1,
-      totalCents: (li.total_cents as number) ?? 0,
-      status: li.status as string,
-      tier: li.tier as string | null,
-    }));
+  // The client sees the last SENT version, not the live estimate — staff can
+  // keep editing a sent estimate without the client seeing (or accepting) a
+  // half-finished revision. Falls back to live content when nothing has been
+  // published with proposal content yet (estimates sent before this change).
+  const published = await getPublishedProposal(supabase, shareToken.estimate_id);
+  const content = published?.content ?? buildProposalContent(est as Record<string, unknown>);
 
   return NextResponse.json({
     estimateNumber: est.estimate_number,
-    description: est.description ?? null,
+    description: content.description,
     createdAt: est.created_at,
-    validUntil: est.valid_until_date ?? null,
-    expired: await isEstimatePastValidUntil(supabase, shareToken.org_id, est.valid_until_date),
-    notes: est.notes ?? null,
+    validUntil: content.validUntil,
+    // Expiry follows the version the client is looking at.
+    expired: await isEstimatePastValidUntil(supabase, shareToken.org_id, content.validUntil),
+    notes: content.notes,
     stage: est.stage,
     alreadyAccepted: !!shareToken.accepted_at,
     acceptedAt: shareToken.accepted_at ?? null,
@@ -150,31 +140,21 @@ export async function GET(
     // estimate_line_items shows a total the client cannot reconcile — and,
     // worse, deselecting any optional item re-derived the price from line
     // items alone and silently dropped these from what the client accepted.
-    directCosts: ((est.estimate_direct_costs ?? []) as Record<string, unknown>[])
-      .slice()
-      .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0))
-      .map((d) => ({
-        id: d.id as string,
-        description: (d.description as string | null) ?? "",
-        qty: Number(d.qty ?? 0),
-        rateCents: (d.rate_cents as number) ?? 0,
-        totalCents: (d.total_cents as number) ?? 0,
-      })),
+    directCosts: content.directCosts,
+    subtotalCents: content.subtotalCents,
+    taxRateBps: content.taxRateBps,
+    taxCents: content.taxCents,
+    discountCents: content.discountCents,
+    discountType: content.discountType,
+    discountValue: content.discountValue,
+    showDiscounts: content.showDiscounts,
+    totalCents: content.totalCents,
 
-    subtotalCents: est.subtotal_cents ?? 0,
-    taxRateBps: est.tax_rate_bps ?? 0,
-    taxCents: est.tax_cents ?? 0,
-    discountCents: est.discount_cents ?? 0,
-    discountType: (est.discount_type as "percent" | "flat" | null) ?? null,
-    discountValue: (est.discount_value as number | null) ?? null,
-    showDiscounts: est.show_discounts ?? false,
-    totalCents: est.total_cents ?? 0,
+    tiersEnabled: content.tiersEnabled,
+    tierLabels: content.tierLabels,
+    displaySettings: content.displaySettings,
 
-    tiersEnabled: est.tiers_enabled ?? false,
-    tierLabels: (est.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
-    displaySettings: toDisplaySettings(est.display_settings),
-
-    depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
+    depositRequiredCents: content.depositRequiredCents,
     depositCollectedCents: (est.deposit_collected_cents as number) ?? 0,
     // A deposit the bank returned or the card declined. Drives the retry
     // screen an already-accepted proposal shows instead of the plain thank-you
@@ -200,7 +180,7 @@ export async function GET(
     // clear "pay by card instead" error if it isn't really available.
     achDepositAvailable: !!org?.ach_payments_enabled,
 
-    lineItems,
+    lineItems: content.lineItems,
     photos,
   });
 }
