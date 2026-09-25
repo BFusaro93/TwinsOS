@@ -1,4 +1,5 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
+import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 import {
   AR_WRITE_OFF_METHOD,
   ISSUED_INVOICE_STATUSES,
@@ -27,7 +28,7 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
     description:
       "Buckets each client's open invoice balances by how many days past due they are.",
     filters: [],
-    run: async ({ supabase }) => {
+    run: async ({ supabase, timeZone }) => {
       const { data, error } = await supabase
         .from("crm_invoices")
         .select("due_date, invoice_date, balance_cents, clients:client_id(display_name)")
@@ -53,7 +54,9 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
         total_cents: number;
       }
       const byClient = new Map<string, Buckets>();
-      const now = Date.now();
+      // Days past due on the org's calendar. Measuring from UTC midnight
+      // pushed anything due today into "1-30 days" every evening after 8pm ET.
+      const today = todayInZone(timeZone);
 
       for (const r of (data ?? []) as unknown as Row[]) {
         const clientName = r.clients?.display_name ?? "(unknown)";
@@ -68,9 +71,7 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
           };
         const balance = r.balance_cents ?? 0;
         const anchor = r.due_date ?? r.invoice_date;
-        const daysPastDue = anchor
-          ? Math.floor((now - new Date(anchor).getTime()) / 86400000)
-          : 0;
+        const daysPastDue = anchor ? daysBetweenYmd(anchor, today) : 0;
         if (daysPastDue <= 0) buckets.current_cents += balance;
         else if (daysPastDue <= 30) buckets.d1_30_cents += balance;
         else if (daysPastDue <= 60) buckets.d31_60_cents += balance;

@@ -187,7 +187,10 @@ export function useReverseChangeOrder() {
         p_change_order_id: id,
         p_delete: true,
       });
-      if (error) throw error;
+      // PostgrestError is a plain object, not an Error — rethrow as one so the
+      // tab's toast shows the RPC's reason ("removes $30,000.00, but only
+      // $28,500.00 is still unbilled…") instead of a generic failure.
+      if (error) throw new Error(error.message);
       return (data?.[0]?.new_contract_cents ?? 0) as number;
     },
     onSuccess: (_d, vars) => invalidateProjectBilling(qc, vars.projectId),
@@ -218,7 +221,10 @@ export function useApproveChangeOrder() {
         p_change_order_id: id,
         p_treatment: treatment ?? null,
       });
-      if (error) throw error;
+      // PostgrestError is a plain object, not an Error — rethrow as one so the
+      // tab's toast shows the RPC's reason ("removes $30,000.00, but only
+      // $28,500.00 is still unbilled…") instead of a generic failure.
+      if (error) throw new Error(error.message);
       return (data?.[0]?.new_contract_cents ?? 0) as number;
     },
     onSuccess: (_d, vars) => invalidateProjectBilling(qc, vars.projectId),
