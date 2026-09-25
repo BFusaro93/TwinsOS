@@ -116,6 +116,8 @@ export interface ProposalData {
   description: string | null;
   createdAt: string;
   validUntil: string | null;
+  /** Past its valid-until date on the org's calendar — can't be accepted. */
+  expired?: boolean;
   notes: string | null;
   stage: string;
   alreadyAccepted: boolean;

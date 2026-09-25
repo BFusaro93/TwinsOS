@@ -783,7 +783,10 @@ export default function ProposalPage() {
           <p>{new Date(proposal.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
           {proposal.validUntil && (
             <p className="text-orange-500">
-              Valid until {new Date(proposal.validUntil).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+              {/* A bare "YYYY-MM-DD" parses as UTC midnight, which is the
+                  previous evening in the Americas — pin it to local midnight. */}
+              {proposal.expired ? "Expired" : "Valid until"}{" "}
+              {new Date(`${proposal.validUntil.slice(0, 10)}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
             </p>
           )}
         </div>
@@ -1130,8 +1133,17 @@ export default function ProposalPage() {
         </div>
       )}
 
+      {/* Past its valid-until date: no acceptance (the accept route refuses
+          it too) — the client can still ask for an updated proposal below. */}
+      {depositStep === 'idle' && proposal.expired && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+          <p className="font-semibold">This proposal has expired.</p>
+          <p className="mt-1">Prices and availability may have changed. Use Request changes below and we&apos;ll send you an updated proposal.</p>
+        </div>
+      )}
+
       {/* Accept section */}
-      {depositStep === 'idle' && (
+      {depositStep === 'idle' && !proposal.expired && (
       <div className="rounded-lg border bg-white p-6 shadow-sm space-y-5">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Accept This Proposal</h2>

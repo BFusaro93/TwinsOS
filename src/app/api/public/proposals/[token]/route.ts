@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { createClient } from "@supabase/supabase-js";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
@@ -113,6 +114,7 @@ export async function GET(
     description: est.description ?? null,
     createdAt: est.created_at,
     validUntil: est.valid_until_date ?? null,
+    expired: await isEstimatePastValidUntil(supabase, shareToken.org_id, est.valid_until_date),
     notes: est.notes ?? null,
     stage: est.stage,
     alreadyAccepted: !!shareToken.accepted_at,

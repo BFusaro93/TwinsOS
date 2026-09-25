@@ -5,6 +5,7 @@ import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { orgEmailFrom } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 
 const log = logger.child("proposal-accept");
 
@@ -99,11 +100,17 @@ export async function POST(
   // logged-in portal's own accept route (api/portal/estimates/[id]/action).
   const { data: currentEstimate } = await supabase
     .from("estimates")
-    .select("stage, total_cents")
+    .select("stage, total_cents, valid_until_date")
     .eq("id", shareToken.estimate_id)
     .single();
   if (!currentEstimate || currentEstimate.stage !== "sent") {
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
+  }
+  if (await isEstimatePastValidUntil(supabase, shareToken.org_id, currentEstimate.valid_until_date)) {
+    return NextResponse.json(
+      { error: "This proposal has expired. Use Request changes to ask for an updated one." },
+      { status: 410 }
+    );
   }
 
   // The deposit block is anyone-with-the-link input and had no validation at
