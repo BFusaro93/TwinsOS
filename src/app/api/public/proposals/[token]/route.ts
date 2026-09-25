@@ -50,7 +50,8 @@ export async function GET(
     .from("estimates")
     .select(`
       *,
-      clients(display_name),
+      clients(display_name, billing_address, billing_city, billing_state, billing_zip),
+      client_properties(address, city, state, zip),
       estimate_line_items(*),
       estimate_direct_costs(id, description, qty, rate_cents, total_cents, sort_order)
     `)
@@ -90,6 +91,17 @@ export async function GET(
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
 
+  const client = (est.clients as Record<string, string | null> | null) ?? {};
+  const property = (est.client_properties as Record<string, string | null> | null) ?? null;
+  const addressLines = (street: string | null | undefined, city: string | null | undefined, state: string | null | undefined, zip: string | null | undefined) => {
+    const cityLine = [[city, state].filter(Boolean).join(", "), zip].filter(Boolean).join(" ");
+    return [street, cityLine].map((l) => (l ?? "").trim()).filter(Boolean);
+  };
+  const clientAddressLines = addressLines(client.billing_address, client.billing_city, client.billing_state, client.billing_zip);
+  const propertyLines = property ? addressLines(property.address, property.city, property.state, property.zip) : [];
+  const sameAsBilling = propertyLines.join("|").toLowerCase() === clientAddressLines.join("|").toLowerCase();
+  const serviceAddressLines = propertyLines.length > 0 && !sameAsBilling ? propertyLines : null;
+
   const lineItems = ((est.estimate_line_items ?? []) as Record<string, unknown>[])
     .filter((li) => !li.deleted_at && li.status === "quote")
     .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0))
@@ -119,7 +131,9 @@ export async function GET(
     acceptedAt: shareToken.accepted_at ?? null,
     acceptedByName: shareToken.accepted_by_name ?? null,
 
-    clientName: (est.clients as Record<string, unknown> | null)?.display_name ?? null,
+    clientName: client.display_name ?? null,
+    clientAddressLines,
+    serviceAddressLines,
 
     orgName: org?.name ?? "",
     orgPhone: addr.phone ?? "",

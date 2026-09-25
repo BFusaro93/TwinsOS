@@ -3,7 +3,10 @@
 // toggle change is consistent everywhere the client can view the estimate.
 
 export interface DisplaySettings {
+  showVisits: boolean;
+  /** The quantity only (e.g. "1", "12 cu yd"). Visits and unit have their own toggles. */
   showQuantities: boolean;
+  showUnits: boolean;
   showLinePrices: boolean;
   showLineTotals: boolean;
   showSectionSubtotals: boolean;
@@ -12,7 +15,9 @@ export interface DisplaySettings {
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
+  showVisits: true,
   showQuantities: true,
+  showUnits: true,
   showLinePrices: true,
   showLineTotals: true,
   showSectionSubtotals: true,
@@ -22,7 +27,15 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
 
 export function toDisplaySettings(raw: unknown): DisplaySettings {
   const r = (raw as Partial<DisplaySettings>) ?? {};
-  return { ...DEFAULT_DISPLAY_SETTINGS, ...r };
+  // showQuantities used to gate visits + qty + unit together. Settings saved
+  // before the split carry only that key, so it seeds the two new toggles —
+  // an estimate that hid quantities keeps hiding visits and unit too.
+  const legacy = typeof r.showQuantities === "boolean" ? r.showQuantities : undefined;
+  return {
+    ...DEFAULT_DISPLAY_SETTINGS,
+    ...(legacy === undefined ? {} : { showVisits: legacy, showUnits: legacy }),
+    ...r,
+  };
 }
 
 /**

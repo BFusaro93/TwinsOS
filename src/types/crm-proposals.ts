@@ -123,6 +123,10 @@ export interface ProposalData {
   acceptedByName: string | null;
 
   clientName: string | null;
+  /** Billing address, one line per entry — the same address the PDF prints under "Prepared for". */
+  clientAddressLines: string[];
+  /** The estimate's property, when it has one at a different address than billing. */
+  serviceAddressLines: string[] | null;
 
   orgName: string;
   orgPhone: string;

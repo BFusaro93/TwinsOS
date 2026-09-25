@@ -2361,7 +2361,9 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                 className="text-[11px] text-white/70 hover:text-white"
                 onClick={() => setAllEstimatesOpen(true)}
               >
-                All
+                {/* Accepted and lost estimates drop out of this column, so the
+                    total tells you there's more behind "All". */}
+                All ({(estimates ?? []).length})
               </button>
             </div>
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
