@@ -29,6 +29,9 @@ export interface ProposalContent {
     totalCents: number;
     status: string;
     tier: string | null;
+    /** For the PDF, which prints the adjusted, complexity-scaled rate. */
+    adjRateCents: number | null;
+    complexityBps: number | null;
   }[];
   directCosts: { id: string; description: string; qty: number; rateCents: number; totalCents: number }[];
   subtotalCents: number;
@@ -64,6 +67,8 @@ export function buildProposalContent(est: Record<string, unknown>): ProposalCont
       totalCents: (li.total_cents as number) ?? 0,
       status: li.status as string,
       tier: (li.tier as string | null) ?? null,
+      adjRateCents: (li.adj_rate_cents as number | null) ?? null,
+      complexityBps: (li.complexity_bps as number | null) ?? null,
     }));
 
   return {

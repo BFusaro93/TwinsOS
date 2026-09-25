@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { EstimateDocument, EstimateDocumentMulti } from "@/components/crm/estimates/pdf/EstimateDocument";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { getPublishedProposal } from "@/lib/estimates/proposal-content";
 
 // Shared by the single-estimate and bulk PDF routes, plus the
 // accepted-estimate notification email (estimate-client-notify.ts) — the
@@ -12,7 +13,8 @@ async function buildEstimatePDFData(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   estimateId: string,
-  orgId: string
+  orgId: string,
+  opts: { published?: boolean } = {}
 ): Promise<{ estimate: EstimatePDFData; org: OrgPDFData } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est, error: estErr } = await (supabase as any)
@@ -139,6 +141,43 @@ async function buildEstimatePDFData(
     logoUrl: (customizations.logoDataUrl as string) ?? null,
   };
 
+  // Client-facing copies of a sent estimate print the version the client was
+  // sent, not unsent edits (see lib/estimates/proposal-content.ts).
+  if (opts.published && est.stage === "sent") {
+    const published = await getPublishedProposal(supabase, estimateId);
+    if (published) {
+      const c = published.content;
+      Object.assign(estimateData, {
+        description: c.description,
+        validUntil: c.validUntil,
+        notes: c.notes,
+        subtotalCents: c.subtotalCents,
+        taxRateBps: c.taxRateBps,
+        taxCents: c.taxCents,
+        discountCents: c.discountCents,
+        showDiscounts: c.showDiscounts,
+        totalCents: c.totalCents,
+        depositRequiredCents: c.depositRequiredCents,
+        tiersEnabled: c.tiersEnabled,
+        tierLabels: c.tierLabels,
+        displaySettings: c.displaySettings,
+        lineItems: c.lineItems.map((li) => ({
+          rowType: li.rowType,
+          sectionName: li.sectionName,
+          serviceName: li.serviceName,
+          estimateDesc: li.estimateDesc,
+          qty: li.qty,
+          unitType: li.unitType,
+          rateCents: li.adjRateCents ?? li.rateCents,
+          visits: li.visits,
+          totalCents: li.totalCents,
+          tier: (li.tier as "basic" | "standard" | "premium" | null) ?? null,
+          complexityBps: li.complexityBps,
+        })),
+      });
+    }
+  }
+
   return { estimate: estimateData, org: orgData };
 }
 
@@ -146,9 +185,10 @@ export async function renderEstimatePDF(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   estimateId: string,
-  orgId: string
+  orgId: string,
+  opts: { published?: boolean } = {}
 ): Promise<Buffer | null> {
-  const built = await buildEstimatePDFData(supabase, estimateId, orgId);
+  const built = await buildEstimatePDFData(supabase, estimateId, orgId, opts);
   if (!built) return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
