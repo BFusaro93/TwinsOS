@@ -264,6 +264,12 @@ export function useUpdateRequisition() {
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: before } = await (supabase as any)
+        .from("requisitions")
+        .select("grand_total")
+        .eq("id", id)
+        .single();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("requisitions")
         .update({
@@ -280,6 +286,10 @@ export function useUpdateRequisition() {
         })
         .eq("id", id);
       if (error) throw error;
+      // Shipping/discount/tax edits move the total just like line items do.
+      if (before && before.grand_total !== grandTotal) {
+        await resubmitReqForApprovalIfNeeded(supabase, id, grandTotal);
+      }
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
