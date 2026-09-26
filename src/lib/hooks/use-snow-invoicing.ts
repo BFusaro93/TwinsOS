@@ -32,6 +32,10 @@ export function billingGroupKey(visit: CRMJobVisit): string {
 
 // ── uninvoiced snow visits ────────────────────────────────────────────────────
 
+/** A queued visit, flagged when its job already has an unlinked invoice line
+ *  for the same date (`null` = that invoice has no number yet). */
+export type UninvoicedSnowVisit = CRMJobVisit & { possibleDuplicateInvoiceNumber?: number | null };
+
 export function useUninvoicedSnowVisits(filters: {
   stormEventId?: string;
   clientId?: string;
@@ -102,9 +106,37 @@ export function useUninvoicedSnowVisits(filters: {
         visits.filter((v) => invoicedVisitIds.has(v.id)).map((v) => billingGroupKey(v))
       );
 
-      return visits.filter(
+      const queue = visits.filter(
         (v) => !invoicedVisitIds.has(v.id) && !groupsWithExistingInvoice.has(billingGroupKey(v))
       );
+      if (queue.length === 0) return [];
+
+      // An invoice made by hand (or via the API) for a snow push has no
+      // visit_id on its line, so the check above can't see it and the visit
+      // stayed in this queue — generating would bill the client a second
+      // time. Flag any queued visit whose job already has a non-void invoice
+      // line for the same service date so the user can decide.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: jobLines, error: jobLinesErr } = await (supabase as any)
+        .from("crm_invoice_line_items")
+        .select("service_date, visit_id, crm_invoices!inner(invoice_number, crm_job_id, status, deleted_at)")
+        .in("crm_invoices.crm_job_id", [...new Set(queue.map((v) => v.jobId))])
+        .is("crm_invoices.deleted_at", null)
+        .neq("crm_invoices.status", "void")
+        .is("visit_id", null);
+      if (jobLinesErr) throw jobLinesErr;
+      const invoiceByJobDate = new Map<string, number | null>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const l of (jobLines ?? []) as any[]) {
+        if (!l.service_date || !l.crm_invoices?.crm_job_id) continue;
+        invoiceByJobDate.set(`${l.crm_invoices.crm_job_id}|${l.service_date}`, l.crm_invoices.invoice_number ?? null);
+      }
+      return queue.map((v): UninvoicedSnowVisit => {
+        const key = `${v.jobId}|${v.scheduledDate}`;
+        return invoiceByJobDate.has(key)
+          ? { ...v, possibleDuplicateInvoiceNumber: invoiceByJobDate.get(key) ?? null }
+          : v;
+      });
     },
   });
 }

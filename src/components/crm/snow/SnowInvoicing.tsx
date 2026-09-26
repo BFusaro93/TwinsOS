@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency, cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
+import type { UninvoicedSnowVisit } from "@/lib/hooks/use-snow-invoicing";
 import { Snowflake, FileText } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -45,6 +47,7 @@ export function SnowInvoicing() {
   });
   const generateInvoices = useGenerateSnowInvoices();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirm, confirmDialog] = useConfirm();
 
   const perEventPerInchJobIds = useMemo(
     () => visits.filter((v) => v.job?.invoiceType === "per_event_per_inch" && v.job?.id).map((v) => v.job!.id),
@@ -120,6 +123,21 @@ export function SnowInvoicing() {
       .filter((g) => g.visits.length > 0);
 
     if (groups.length === 0) { toast.error("No visits selected"); return; }
+
+    const flagged = rows.filter(
+      (r) => selectedIds.has(r.visit.id) && (r.visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber !== undefined
+    );
+    if (flagged.length > 0) {
+      const nums = [...new Set(flagged.map((r) => (r.visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber))]
+        .map((n) => (n == null ? "an unnumbered draft" : `#${n}`)).join(", ");
+      const ok = await confirm({
+        title: `${flagged.length} selected visit${flagged.length > 1 ? "s may" : " may"} already be billed`,
+        description: `Invoice ${nums} already has a line for the same job and date. Generating will bill it again.`,
+        confirmLabel: "Bill anyway",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
 
     try {
       const result = await generateInvoices.mutateAsync(groups);
@@ -246,7 +264,16 @@ export function SnowInvoicing() {
                           {visit.clientName ?? "—"}
                         </Link>
                       </td>
-                      <td className="px-2 py-2 text-slate-500">{visit.scheduledDate}</td>
+                      <td className="px-2 py-2 text-slate-500">
+                        {visit.scheduledDate}
+                        {(visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber !== undefined && (
+                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                            Possibly billed on {(visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber == null
+                              ? "a draft invoice"
+                              : `invoice #${(visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber}`}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2 py-2 text-slate-500">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
                       <td className="px-2 py-2 text-slate-500">{describeAmount(visit, groupSize, tiersByJobId)}</td>
                       <td className="px-2 py-2 text-right font-medium text-slate-700">{formatCurrency(amountCents)}</td>
@@ -264,6 +291,7 @@ export function SnowInvoicing() {
           </table>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }
