@@ -309,6 +309,9 @@ export function FormConfigure({ form }: Props) {
           <Label className="text-xs font-medium text-slate-700">Update Options</Label>
           <p className="text-[11px] text-slate-400">
             When a form is submitted by an existing account, how should it be updated?
+            Public submissions are unverified, so an existing account&apos;s email, phone,
+            name and filled-in address are never overwritten — differences are listed on
+            the ticket for you to review.
           </p>
           <Select value={updateStrategy} onValueChange={(v) => setUpdateStrategy(v as AccountUpdateStrategy)}>
             <SelectTrigger className="h-9 text-sm">

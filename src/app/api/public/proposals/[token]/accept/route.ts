@@ -5,6 +5,7 @@ import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { orgEmailFrom } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { escapeHtml } from "@/lib/utils/escape-html";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
@@ -102,11 +103,25 @@ export async function POST(
   // logged-in portal's own accept route (api/portal/estimates/[id]/action).
   const { data: currentEstimate } = await supabase
     .from("estimates")
-    .select("stage, total_cents, valid_until_date")
+    .select("stage, total_cents, valid_until_date, tiers_enabled")
     .eq("id", shareToken.estimate_id)
     .single();
   if (!currentEstimate || currentEstimate.stage !== "sent") {
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
+  }
+  // A Good/Better/Best proposal is accepted for exactly one tier. Without a
+  // tier the fallback below would win every quote line — all three tiers.
+  if (currentEstimate.tiers_enabled && !body.selectedTier) {
+    const { count: tieredCount } = await supabase
+      .from("estimate_line_items")
+      .select("id", { count: "exact", head: true })
+      .eq("estimate_id", shareToken.estimate_id)
+      .eq("status", "quote")
+      .is("deleted_at", null)
+      .not("tier", "is", null);
+    if ((tieredCount ?? 0) > 0) {
+      return NextResponse.json({ error: "Please choose a package to accept" }, { status: 400 });
+    }
   }
   if (await isEstimatePastValidUntil(supabase, shareToken.org_id, currentEstimate.valid_until_date)) {
     return NextResponse.json(
@@ -242,6 +257,8 @@ export async function POST(
       .update({ status: "won" })
       .eq("estimate_id", shareToken.estimate_id)
       .in("id", body.acceptedLineItemIds)
+      // Only still-open lines: a line staff marked lost can't be revived.
+      .eq("status", "quote")
       .is("deleted_at", null);
 
     await supabase
@@ -370,12 +387,19 @@ export async function POST(
   return NextResponse.json({ ok: true, totalCents: est?.total_cents ?? null });
 }
 
-function buildConfirmationEmail({
-  orgName, brandColor, orgPhone, clientName, estimateNumber, total, acceptedByName,
-}: {
+function buildConfirmationEmail(raw: {
   orgName: string; brandColor: string; orgPhone: string; clientName: string;
   estimateNumber: number; total: string; acceptedByName: string;
 }) {
+  // Every value here can come from the anonymous proposal-link submitter
+  // (acceptedByName) or from freeform org/client fields — escape them all.
+  const orgName = escapeHtml(raw.orgName);
+  const brandColor = /^#[0-9a-fA-F]{3,8}$/.test(raw.brandColor) ? raw.brandColor : "#60ab45";
+  const orgPhone = escapeHtml(raw.orgPhone);
+  const clientName = escapeHtml(raw.clientName);
+  const acceptedByName = escapeHtml(raw.acceptedByName);
+  const total = escapeHtml(raw.total);
+  const { estimateNumber } = raw;
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
