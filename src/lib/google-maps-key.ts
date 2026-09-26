@@ -34,6 +34,7 @@ export async function resolveGoogleMapsKey(
       .eq("org_id", orgId)
       .eq("addon_key", "route_optimization")
       .eq("enabled", true)
+      .not("stripe_subscription_item_id", "is", null)
       .maybeSingle();
     entitled = !!addon;
   }

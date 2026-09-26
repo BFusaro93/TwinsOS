@@ -13,8 +13,11 @@ type AnyClient = ReturnType<typeof createClient<any>>;
  * access needs the identical check at more than one call site.
  */
 export async function orgHasAddon(db: AnyClient, orgId: string, addon: BundledAddonKey): Promise<boolean> {
-  const { data: org } = await db.from("organizations").select("plan").eq("id", orgId).single();
-  if (org && planIncludesAddon(org.plan, addon)) return true;
+  const { data: org } = await db.from("organizations").select("plan, trial_ends_at").eq("id", orgId).single();
+  // A trial bundles everything, but only until it ends (null = open-ended).
+  const trialExpired =
+    org?.plan === "trial" && org.trial_ends_at != null && new Date(org.trial_ends_at).getTime() <= Date.now();
+  if (org && !trialExpired && planIncludesAddon(org.plan, addon)) return true;
 
   const { data: addonRow } = await db
     .from("organization_addons")
@@ -22,6 +25,7 @@ export async function orgHasAddon(db: AnyClient, orgId: string, addon: BundledAd
     .eq("org_id", orgId)
     .eq("addon_key", addon)
     .eq("enabled", true)
+    .not("stripe_subscription_item_id", "is", null)
     .maybeSingle();
   return !!addonRow;
 }

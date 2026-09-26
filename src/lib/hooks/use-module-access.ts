@@ -27,7 +27,10 @@ async function fetchPurchasedAddons(queryClient: QueryClient): Promise<string[]>
     .from("organization_addons")
     .select("addon_key")
     .eq("org_id", profile.orgId)
-    .eq("enabled", true);
+    .eq("enabled", true)
+    // Purchased = backed by a Stripe subscription item (bundled/trial access
+    // comes from the plan, not from a row).
+    .not("stripe_subscription_item_id", "is", null);
   if (error) throw error;
   return data.map((row) => row.addon_key);
 }

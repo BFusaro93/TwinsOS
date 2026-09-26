@@ -40,7 +40,8 @@ export async function GET(request: Request) {
     .from("organization_addons")
     .select("org_id, organizations(id, stripe_customer_id)")
     .eq("addon_key", "sms")
-    .eq("enabled", true);
+    .eq("enabled", true)
+    .not("stripe_subscription_item_id", "is", null);
   if (error) {
     log.error("failed to list orgs with SMS addon enabled", { error });
     return NextResponse.json({ error: "Failed to list SMS-enabled orgs" }, { status: 500 });

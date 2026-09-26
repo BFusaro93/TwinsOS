@@ -54,17 +54,14 @@ export async function POST(request: Request) {
 
   const serviceClient = createServiceClient();
 
-  // A plan that already bundles this add-on gets it free — just mark it
-  // enabled in our own records without ever touching Stripe, and refuse to
-  // let it be turned off (it's not optional, the plan includes it).
+  // A plan that already bundles this add-on (or a trial, which bundles
+  // everything) gets it free and can't turn it off. Nothing is written:
+  // an organization_addons row means a PURCHASED add-on, and writing one here
+  // used to leave trial-enabled add-ons free forever after subscribing.
   if (planIncludesAddon(org.plan, addon as BundledAddonKey)) {
     if (!enabled) {
       return NextResponse.json({ error: "This add-on is included in your plan and can't be removed" }, { status: 422 });
     }
-    const { error: upsertErr } = await serviceClient
-      .from("organization_addons")
-      .upsert({ org_id: org.id, addon_key: addon, enabled: true }, { onConflict: "org_id,addon_key" });
-    if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 });
     return NextResponse.json({ enabled: true, bundled: true });
   }
 
