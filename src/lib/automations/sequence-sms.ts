@@ -102,7 +102,7 @@ export async function resolveSmsStepContent(
 export async function sendResolvedSequenceSms(
   supabase: AnyClient,
   params: { orgId: string; clientId: string | null; toPhone: string; bodyText: string }
-): Promise<{ ok: true; sid: string | null } | { ok: false; reason: string }> {
+): Promise<{ ok: true; sid: string | null } | { ok: false; reason: string; permanent?: boolean }> {
   const sendResult = await sendClientSms(supabase, {
     orgId: params.orgId,
     clientId: params.clientId,

@@ -69,16 +69,23 @@ export async function GET(request: Request) {
   if (!orgId) return NextResponse.json({ error: "No organization for this user" }, { status: 403 });
 
   // Crew accounts log in as the crew itself — find the crew by user_id on
-  // crm_crews, same lookup useMyCrewVisits() does client-side.
+  // crm_crews. Same rules as resolveCallerCrewId() (which the per-visit
+  // action routes use to authorize): skip soft-deleted crews, and take the
+  // oldest row rather than .maybeSingle() so a user attached to two crews
+  // doesn't turn into a 500 — the list and the actions must agree on which
+  // crew the caller is.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: crew, error: crewError } = await (supabase as any)
+  const { data: crewRows, error: crewError } = await (supabase as any)
     .from("crm_crews")
     .select("id, name")
     .eq("user_id", user.id)
     .eq("org_id", orgId)
-    .maybeSingle();
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
 
   if (crewError) return NextResponse.json({ error: crewError.message }, { status: 500 });
+  const crew = ((crewRows ?? []) as { id: string; name: string }[])[0] ?? null;
   if (!crew) {
     return NextResponse.json({
       date, crewId: null, crewName: null, visits: [], stops: [],

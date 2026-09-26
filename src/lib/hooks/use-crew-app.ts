@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
+import { fetchCallerCrew, resolveCallerCrewId } from "@/lib/supabase/crew-id";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -207,18 +208,12 @@ export function useMyCrewVisits(date: string) {
   return useQuery<CRMJobVisit[]>({
     queryKey: ["crew-app-visits", date],
     queryFn: async () => {
-      const { supabase, userId, hidePricing } = await getAuthContext();
+      const { supabase, userId, orgId, hidePricing } = await getAuthContext();
 
       // Crew accounts log in as the crew itself — find the crew by user_id on crm_crews
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: crew } = await (supabase as any)
-        .from("crm_crews")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (!crew) return [];
-      const membership = { crew_id: crew.id as string };
+      const crewId = await resolveCallerCrewId(supabase, userId, orgId);
+      if (!crewId) return [];
+      const membership = { crew_id: crewId };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
@@ -278,20 +273,16 @@ export function useStopDetail(anchorVisitId: string) {
   return useQuery<Stop | null>({
     queryKey: ["crew-app-stop", anchorVisitId],
     queryFn: async () => {
-      const { supabase, userId, hidePricing } = await getAuthContext();
+      const { supabase, userId, orgId, hidePricing } = await getAuthContext();
       const select = crewVisitSelect(hidePricing);
 
       // Scope the anchor to the caller's own crew. This used to fetch any
       // visit by id, so a crew account could deep-link
       // /crm/crew/stops/<any visit id> and pull up another crew's stop —
       // client, address, notes and (before the select was narrowed) pricing.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: crew } = await (supabase as any)
-        .from("crm_crews")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (!crew) return null;
+      const callerCrewId = await resolveCallerCrewId(supabase, userId, orgId);
+      if (!callerCrewId) return null;
+      const crew = { id: callerCrewId };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: anchorRow, error: anchorErr } = await (supabase as any)
@@ -522,13 +513,10 @@ export function useMyCrewInfo() {
   return useQuery({
     queryKey: ["my-crew-info"],
     queryFn: async () => {
-      const { supabase, userId } = await getAuthContext();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: crew } = await (supabase as any)
-        .from("crm_crews")
-        .select("id, name, color")
-        .eq("user_id", userId)
-        .maybeSingle();
+      const { supabase, userId, orgId } = await getAuthContext();
+      const crew = await fetchCallerCrew<{ id: string; name: string; color: string | null }>(
+        supabase, userId, orgId, "id, name, color"
+      );
 
       if (!crew) return null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -567,13 +555,8 @@ export function useCrewDriveToday(date: string) {
   return useQuery<{ segments: CrewDriveSegment[]; openSegment: CrewDriveSegment | null; totalMinutes: number }>({
     queryKey: ["crew-drive-today", date],
     queryFn: async () => {
-      const { supabase, userId } = await getAuthContext();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: crew } = await (supabase as any)
-        .from("crm_crews")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
+      const { supabase, userId, orgId } = await getAuthContext();
+      const crew = await fetchCallerCrew(supabase, userId, orgId);
       if (!crew) return { segments: [], openSegment: null, totalMinutes: 0 };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

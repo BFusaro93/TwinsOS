@@ -7,6 +7,9 @@ import { processDueEnrollment } from "@/lib/automations/sequence-processor";
 import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
 import { EMAIL_FROM } from "@/lib/email/send";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("crm-processor");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -556,6 +559,12 @@ async function handleRun(request: Request) {
       .is("stopped_at", null)
       .is("deleted_at", null)
       .eq("awaiting_approval", false)
+      // Oldest-due first. With no ORDER BY Postgres returned an arbitrary
+      // (in practice stable) 50, so a backlog of rows that kept failing
+      // could starve everything behind them. Each row is still claimed
+      // atomically inside processDueEnrollment, so an overlapping run (or
+      // an immediate post-enrollment run) can't double-send it.
+      .order("next_fire_at", { ascending: true })
       .limit(50);
 
     if (callerOrgId) {
@@ -564,7 +573,7 @@ async function handleRun(request: Request) {
 
     const { data: enrollments, error: enrollErr } = await enrollQuery;
     if (enrollErr) {
-      console.error("[crm-processor] enrollment query error:", enrollErr.message);
+      log.error("enrollment query error", { error: enrollErr.message });
     }
 
     for (const enrollment of enrollments ?? []) {
@@ -576,7 +585,7 @@ async function handleRun(request: Request) {
       }
     }
   } catch (crmErr) {
-    console.error("[crm-processor] fatal error:", crmErr);
+    log.error("fatal error", { error: crmErr instanceof Error ? crmErr.message : String(crmErr) });
   }
 
   return NextResponse.json({

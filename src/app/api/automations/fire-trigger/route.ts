@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
+import { logger } from "@/lib/logger";
 import type { TriggerType } from "@/types/crm-automations";
 
 /**
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await fireSimpleTrigger(db, {
+  const enrollmentIds = await fireSimpleTrigger(db, {
     orgId: profile.org_id,
     clientId: body.clientId,
     estimateId: body.estimateId ?? null,
@@ -111,6 +113,25 @@ export async function POST(req: NextRequest) {
     triggerType: body.triggerType as TriggerType,
     matchValues: Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : undefined,
   });
+
+  // Send any step that's due right now (an email with no wait in front of
+  // it) instead of leaving it for the next /api/automations/run sweep — same
+  // as the visit-completed path. Service role: the processor writes to
+  // tables the caller's RLS session doesn't cover. Only ids this request
+  // just created (for the caller's verified org) are processed.
+  if (enrollmentIds.length > 0) {
+    const admin = createServiceClient();
+    for (const enrollmentId of enrollmentIds) {
+      try {
+        await processEnrollmentImmediately(admin, enrollmentId);
+      } catch (err) {
+        logger.error("[fire-trigger] immediate processing failed", {
+          enrollmentId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

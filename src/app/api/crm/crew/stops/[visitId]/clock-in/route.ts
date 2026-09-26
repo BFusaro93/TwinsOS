@@ -7,6 +7,9 @@ import { logger } from "@/lib/logger";
 
 const log = logger.child("crew/stops/clock-in");
 
+/** crm_job_visits statuses a crew action must never touch. */
+const TERMINAL_STATUS_FILTER = "(completed,cancelled,skipped)";
+
 const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
   // so the actual local time-of-day must come from the client's browser clock.
@@ -107,7 +110,12 @@ export async function POST(
     .eq("client_id", anchor.client_id)
     .eq("scheduled_date", anchor.scheduled_date)
     .is("deleted_at", null)
-    .not("status", "in", "(cancelled,skipped)");
+    // Terminal visits are never part of the stop being started. 'completed'
+    // used to be missing here, so a visit the office had already marked
+    // complete (without a crew clock-in) got flipped back to in_progress —
+    // and then re-completed, re-running its invoicing/automation side
+    // effects, when the crew clocked the stop out.
+    .not("status", "in", TERMINAL_STATUS_FILTER);
   if (candErr) return NextResponse.json({ error: candErr.message }, { status: 500 });
 
   const anchorKey = stopKeyForVisit(toStopKeyInput(anchor));
@@ -166,6 +174,11 @@ export async function POST(
       updated_at: now,
     })
     .in("id", siblingIds)
+    // Re-checked at write time, not just at read time: a double tap (or the
+    // office completing a sibling in between) must not re-stamp clocked_in_at
+    // or re-open a visit that's already finished.
+    .is("clocked_in_at", null)
+    .not("status", "in", TERMINAL_STATUS_FILTER)
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

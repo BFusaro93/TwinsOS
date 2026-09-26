@@ -7,6 +7,7 @@ import { format, parseISO, differenceInMinutes } from "date-fns";
 import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
 import { useMyCrewStops, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
 import { Button } from "@/components/ui/button";
 import { visitServiceNames } from "@/lib/utils/visit-stops";
@@ -106,7 +107,11 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
 
 export default function CrewSchedulePage() {
   const router = useRouter();
-  const today = format(new Date(), "yyyy-MM-dd");
+  // The ORG's calendar day, not the tablet's — the same day /api/crm/crew/visits
+  // and the dispatch board use. A device clock in another zone (or just past
+  // midnight UTC-wise) used to open on a different day's route.
+  const { today: orgToday } = useOrgDates();
+  const today = orgToday();
   const { data: stops = [], isLoading } = useMyCrewStops(today);
   const { data: crewInfo } = useMyCrewInfo();
   const { data: drive } = useCrewDriveToday(today);
@@ -147,7 +152,7 @@ export default function CrewSchedulePage() {
         <div className="flex items-center justify-between mt-1">
           <div>
             <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">
-              {format(new Date(), "EEEE, MMMM d")}
+              {format(parseISO(today), "EEEE, MMMM d")}
             </p>
             <h1 className="text-lg font-bold text-slate-900">
               {crewInfo?.crewName ?? "My Schedule"}

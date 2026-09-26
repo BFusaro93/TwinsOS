@@ -3,6 +3,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { verifyTwilioRequest, parseTwilioForm } from "@/lib/sms/verify-twilio-request";
 import { notifyStaffOfNewTicket, notifyTicketComment } from "@/lib/ticket-notify";
 import { getOrgTwilioAuthToken } from "@/lib/twilio/client";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("twilio inbound webhook");
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
@@ -44,10 +47,10 @@ export async function POST(request: Request) {
   // organizations.twilio_messaging_service_sid, used by sendClientSms) —
   // when the inbound webhook's MessagingServiceSid matches a configured
   // org, scope the client lookup to that org so two orgs' clients can never
-  // collide on a reused/shared phone number. Falls back to matching across
-  // all orgs only when no org has that MessagingServiceSid configured
-  // (single shared platform number, e.g. local dev or a not-yet-configured
-  // org) — same as the prior behavior for that case. Resolved before
+  // collide on a reused/shared phone number. When no org has that
+  // MessagingServiceSid configured (the shared platform sender), the
+  // candidates are narrowed to the orgs that send through it — see the
+  // client match below. Resolved before
   // signature verification (a plain lookup, no side effects) because which
   // Auth Token verifies the signature depends on the answer — see below.
   const messagingServiceSid = params.MessagingServiceSid;
@@ -74,7 +77,7 @@ export async function POST(request: Request) {
   }
 
   if (!verifyTwilioRequest(authToken, signature, url, params)) {
-    console.error("[twilio inbound webhook] signature verification failed");
+    log.error("signature verification failed");
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -86,47 +89,105 @@ export async function POST(request: Request) {
   }
 
   const digits = last10Digits(from);
+  const keyword = body.trim().toUpperCase();
+
+  // ── Which tenant's clients can this text belong to? ──────────────────────
+  // When the MessagingServiceSid resolved to an org above, only that org.
+  // Otherwise the message came in on the shared platform sender (or an
+  // unknown one), which every org WITHOUT its own messaging service sends
+  // from — so only those orgs are candidates (an org with its own number
+  // can't have texted this person from the shared one). This used to match
+  // the first client with this phone across ALL orgs, filing another
+  // tenant's customer's reply (and STOP) on whichever org came back first.
+  // There is no per-org phone-number column, so the inbound `To` can't
+  // narrow it further than the messaging service does.
+  let candidateOrgIds: string[] | null = null;
+  if (!ownerOrgId) {
+    const { data: sharedOrgs } = await supabase
+      .from("organizations")
+      .select("id")
+      .is("twilio_messaging_service_sid", null);
+    candidateOrgIds = ((sharedOrgs ?? []) as { id: string }[]).map((o) => o.id);
+  }
+
   let clientQuery = supabase
     .from("clients")
-    .select("id, org_id, primary_phone, display_name")
+    .select("id, org_id, primary_phone, display_name, created_at")
     .not("primary_phone", "is", null)
     // A soft-deleted client must not claim an inbound text — the message would
     // be filed against a record no screen shows.
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
   if (ownerOrgId) clientQuery = clientQuery.eq("org_id", ownerOrgId);
+  else clientQuery = clientQuery.in("org_id", candidateOrgIds ?? []);
   const { data: clients } = await clientQuery;
 
-  const matched = (clients ?? []).find(
-    (c: { primary_phone: string | null }) => c.primary_phone && last10Digits(c.primary_phone) === digits
-  ) as { id: string; org_id: string; display_name: string } | undefined;
+  type MatchedClient = { id: string; org_id: string; display_name: string };
+  const allMatches = ((clients ?? []) as (MatchedClient & { primary_phone: string | null })[]).filter(
+    (c) => c.primary_phone && last10Digits(c.primary_phone) === digits
+  );
 
-  if (!matched) {
-    console.error(`[twilio inbound webhook] no client matched for ${from}`);
+  if (allMatches.length === 0) {
+    log.warn("no client matched inbound sms", { ownerOrgId });
     return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
   }
 
-  await supabase.from("client_activity").insert({
-    org_id: matched.org_id,
-    client_id: matched.id,
-    activity_type: "sms",
-    direction: "inbound",
-    body,
-    sent_to: from,
-    status: "received",
-    ref_id: messageSid,
-    ref_table: "twilio_messages",
-    occurred_at: new Date().toISOString(),
-  });
+  const matchedOrgIds = [...new Set(allMatches.map((c) => c.org_id))];
+  if (matchedOrgIds.length > 1) {
+    // The same number is a client in more than one org on the shared sender,
+    // so there's no way to tell whose customer replied. Don't file the text
+    // (timeline row / ticket) on any tenant.
+    //
+    // STOP is still honored for every one of those orgs: sendClientSms()
+    // gates purely on clients.sms_opt_in, and each of these orgs sends to
+    // this person from the very sender they just opted out of — leaving the
+    // flag set would let any of them text again. START is deliberately NOT
+    // applied: consent must never be granted to a tenant it wasn't given to.
+    if (OPT_OUT_KEYWORDS.has(keyword)) {
+      await supabase.from("clients").update({ sms_opt_in: false }).in("id", allMatches.map((c) => c.id));
+    }
+    log.warn("inbound sms matched clients in multiple orgs; not attached to any tenant", {
+      orgCount: matchedOrgIds.length,
+      optOutApplied: OPT_OUT_KEYWORDS.has(keyword),
+    });
+    return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
+  }
 
-  const keyword = body.trim().toUpperCase();
+  // One org. Every client in it with this number (duplicates, a household
+  // sharing a phone) gets the opt-out and the timeline row — opting out only
+  // the first match left the others still textable after a STOP.
+  const orgMatches: MatchedClient[] = allMatches;
+  const matchedIds = orgMatches.map((c) => c.id);
+  const orgId = orgMatches[0].org_id;
+
+  await supabase.from("client_activity").insert(
+    orgMatches.map((c) => ({
+      org_id: c.org_id,
+      client_id: c.id,
+      activity_type: "sms",
+      direction: "inbound",
+      body,
+      sent_to: from,
+      status: "received",
+      ref_id: messageSid,
+      ref_table: "twilio_messages",
+      occurred_at: new Date().toISOString(),
+    }))
+  );
+
   if (OPT_OUT_KEYWORDS.has(keyword)) {
-    await supabase.from("clients").update({ sms_opt_in: false }).eq("id", matched.id);
+    await supabase.from("clients").update({ sms_opt_in: false }).eq("org_id", orgId).in("id", matchedIds);
   } else if (OPT_IN_KEYWORDS.has(keyword)) {
     await supabase
       .from("clients")
       .update({ sms_opt_in: true, sms_opt_in_at: new Date().toISOString(), sms_opt_in_source: "keyword" })
-      .eq("id", matched.id);
+      .eq("org_id", orgId)
+      .in("id", matchedIds);
   }
+
+  // The ticket goes on one client: the one that already has an open text
+  // conversation, else the oldest matching record.
+  let matched: MatchedClient = orgMatches[0];
 
   // A real reply (not a STOP/START/HELP-style system command) needs a staff
   // response — surface it as a ticket. An open "text" ticket for this client
@@ -135,9 +196,9 @@ export async function POST(request: Request) {
   if (!SKIP_TICKET_KEYWORDS.has(keyword) && body.trim()) {
     const { data: openTicket } = await supabase
       .from("crm_tickets")
-      .select("id, ticket_number, subject, assigned_to_id, assigned_to")
-      .eq("org_id", matched.org_id)
-      .eq("client_id", matched.id)
+      .select("id, ticket_number, subject, assigned_to_id, assigned_to, client_id")
+      .eq("org_id", orgId)
+      .in("client_id", matchedIds)
       .eq("type", "text")
       .in("status", OPEN_TICKET_STATUSES)
       .is("deleted_at", null)
@@ -146,6 +207,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (openTicket) {
+      matched = orgMatches.find((c) => c.id === openTicket.client_id) ?? matched;
       await supabase.from("comments").insert({
         org_id: matched.org_id,
         created_by: null,
@@ -181,7 +243,7 @@ export async function POST(request: Request) {
         .single();
 
       if (ticketErr) {
-        console.error("[twilio inbound webhook] failed to create text ticket:", ticketErr);
+        log.error("failed to create text ticket", { error: ticketErr.message });
       } else if (ticket) {
         await notifyStaffOfNewTicket(supabase, {
           orgId: matched.org_id,

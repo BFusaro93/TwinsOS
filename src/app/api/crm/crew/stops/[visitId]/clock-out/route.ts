@@ -12,6 +12,9 @@ import { isoInZone, todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("crew/stops/clock-out");
 
+/** crm_job_visits statuses a crew action must never touch. */
+const TERMINAL_STATUS_FILTER = "(completed,cancelled,skipped)";
+
 const Body = z.object({
   notes: z.string().optional(),
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
@@ -134,7 +137,11 @@ export async function POST(
 
   // Already-completed siblings (e.g. an office user closed one out manually)
   // are excluded from both the split and the update — their own value stands.
-  const openRows = stopRows.filter((r) => !r.clocked_out_at);
+  // Keyed on status as well as clocked_out_at: the office "Mark Complete"
+  // path finishes a visit without ever setting clocked_out_at, and sweeping
+  // those up here re-completed them and re-fired their completion side
+  // effects (invoice line, timeline row, automations).
+  const openRows = stopRows.filter((r) => !r.clocked_out_at && r.status !== "completed");
   if (openRows.length === 0) {
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
   }
@@ -195,12 +202,16 @@ export async function POST(
   const openIds = openRows.map((r) => r.id);
 
   // Per-sibling writes differ (actual_hours), so this is a loop rather than
-  // one batched update. Idempotent/recoverable: re-running only touches rows
-  // still missing clocked_out_at, using the same startedAt each time.
+  // one batched update. Each write is conditional on the row STILL being
+  // open (clocked_out_at null, not terminal) and returns the row, so two
+  // concurrent clock-outs (double tap, offline-queue replay racing the live
+  // request) can't both transition the same visit — only the request whose
+  // write actually landed goes on to run the side effects for it below.
   const updateErrors: string[] = [];
+  const transitionedRows: VisitRow[] = [];
   for (const row of openRows) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
+    const { data: updated, error } = await (supabase as any)
       .from("crm_job_visits")
       .update({
         clocked_out_at: now,
@@ -217,21 +228,37 @@ export async function POST(
         completion_notes: (row.id === anchor.id || !anchorIsOpen) ? (notes ?? null) : undefined,
         updated_at: now,
       })
-      .eq("id", row.id);
+      .eq("id", row.id)
+      .is("clocked_out_at", null)
+      .not("status", "in", TERMINAL_STATUS_FILTER)
+      .select("id");
     if (error) updateErrors.push(`${row.id}: ${error.message}`);
+    else if (((updated ?? []) as unknown[]).length > 0) transitionedRows.push(row);
   }
   if (updateErrors.length > 0) {
     return NextResponse.json({ error: `Failed to clock out: ${updateErrors.join("; ")}` }, { status: 500 });
   }
 
+  // Everything below is a one-time consequence of a visit being completed,
+  // so it runs only for rows THIS request transitioned. If a concurrent
+  // request already closed them all, just return the current state.
+  if (transitionedRows.length === 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: currentRows } = await (supabase as any)
+      .from("crm_job_visits")
+      .select()
+      .in("id", openIds);
+    return NextResponse.json({ visitIds: openIds, visits: currentRows, alreadyClockedOut: true });
+  }
+
   // Push each affected service's next package-sequenced visit date out if it
   // completed later than its static schedule assumed. Non-fatal.
-  for (const row of openRows) {
+  for (const row of transitionedRows) {
     try {
       await recalcNextPackageVisitDate(supabase, row.job_service_id,
         isoInZone(new Date(now), await getOrgTimeZone(supabase, row.org_id as string)));
     } catch (err) {
-      console.error("[crew/stops/clock-out] package min_days recalc failed:", err);
+      log.error("package min_days recalc failed", { visitId: row.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -264,8 +291,10 @@ export async function POST(
       totalLaborCents += Math.round(hours * burdenRate);
     }
 
+    // Shares are still computed over every open row (the labor total covers
+    // the whole stop); only the rows this request closed get written.
     const totalAllocHours = openRows.reduce((s, r) => s + (allocation?.get(r.id) ?? 0), 0);
-    for (const row of openRows) {
+    for (const row of transitionedRows) {
       const share = totalAllocHours > 0 ? (allocation?.get(row.id) ?? 0) / totalAllocHours : 1 / openRows.length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
@@ -277,18 +306,22 @@ export async function POST(
     // Roll up to every job touched by this stop (usually one, but a stop can
     // span jobs — e.g. a recurring Mowing job plus a one-off Mulch job).
     const jobIds = [...new Set(stopRows.map((r) => r.job_id))];
+    const jobAdmin = createServiceClient();
     for (const jobId of jobIds) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: visitTotals } = await (supabase as any)
+      // Job-level totals go through the service client: the job's visits
+      // span every crew (crew RLS only returns the caller's own crew's
+      // visits, which undercounted the job), and crew accounts can't UPDATE
+      // crm_jobs at all — the rollup below was silently a no-op for them.
+      // jobId comes from a visit whose ownership was already proven above.
+      const { data: visitTotals } = await jobAdmin
         .from("crm_job_visits")
         .select("actual_labor_cost_cents")
         .eq("job_id", jobId)
         .is("deleted_at", null);
       const jobLaborCents = (visitTotals ?? []).reduce(
-        (sum: number, v: { actual_labor_cost_cents: number }) => sum + (v.actual_labor_cost_cents ?? 0), 0
+        (sum: number, v: { actual_labor_cost_cents: number | null }) => sum + (v.actual_labor_cost_cents ?? 0), 0
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await jobAdmin
         .from("crm_jobs")
         .update({ actual_labor_cost_cents: jobLaborCents })
         .eq("id", jobId);
@@ -303,7 +336,7 @@ export async function POST(
   // so this runs under the service-role client pinned to the visit's org;
   // ownership was proven by assertCallerOwnsVisit above. Non-fatal.
   const serviceClient = createServiceClient();
-  for (const row of openRows) {
+  for (const row of transitionedRows) {
     try {
       const sideEffects = await applyVisitCompletionSideEffects({
         supabase: serviceClient,

@@ -87,6 +87,11 @@ export async function POST(
     .from("crm_job_visits")
     .update({ paused_at: now, updated_at: now })
     .in("id", openIds)
+    // Re-checked at write time: a second (double-tap) pause must not move
+    // paused_at forward — that would silently drop the break time between
+    // the two taps — and a stop clocked out in between must not be re-paused.
+    .is("paused_at", null)
+    .is("clocked_out_at", null)
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

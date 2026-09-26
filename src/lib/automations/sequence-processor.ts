@@ -25,15 +25,145 @@ export type ProcessOutcome =
   | { skipped: { enrollmentId: string; reason: string } };
 
 /**
+ * How long a claimed enrollment is hidden from other runs while one run
+ * works its current step. Every branch that finishes a step writes its own
+ * next_fire_at, so this only matters when a run dies mid-step (or a branch
+ * bails without rescheduling) — the step then becomes due again after this.
+ */
+const CLAIM_LEASE_MS = 10 * 60 * 1000;
+
+/** Sends that fail for a reason that might clear (provider outage, rate
+ *  limit, missing config) are retried this many times in total, then the
+ *  enrollment is stopped. */
+const MAX_SEND_ATTEMPTS = 5;
+/** First retry delay; doubles each attempt (15m, 30m, 1h, 2h). */
+const SEND_RETRY_BASE_MS = 15 * 60 * 1000;
+
+/**
+ * Atomically claims the enrollment's current step: only one caller can move
+ * next_fire_at from "due" to "leased" for a given position, so the cron
+ * sweep (now every 15 minutes) and an immediate post-enrollment run can
+ * never both send the same email/SMS.
+ */
+async function claimEnrollmentStep(adminClient: AnyClient, enrollment: DueEnrollmentRow): Promise<boolean> {
+  const now = Date.now();
+  const { data } = await adminClient
+    .from("crm_sequence_enrollments")
+    .update({ next_fire_at: new Date(now + CLAIM_LEASE_MS).toISOString() })
+    .eq("id", enrollment.id)
+    .eq("next_event_position", enrollment.next_event_position)
+    .lte("next_fire_at", new Date(now).toISOString())
+    .is("completed_at", null)
+    .is("stopped_at", null)
+    .eq("awaiting_approval", false)
+    .select("id");
+  return ((data ?? []) as unknown[]).length > 0;
+}
+
+interface SendFailureContext {
+  orgId: string;
+  enrollId: string;
+  sequenceId: string;
+  clientId: string | null;
+  eventId: string;
+  eventType: "email" | "text_message";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  events: any[];
+  position: number;
+  nowIso: string;
+}
+
+/**
+ * What happens when an email/SMS step can't go out. Returning `skipped`
+ * without touching the enrollment (the old behavior) left it due forever:
+ * the sweep kept picking the same rows up, and the one-active-enrollment
+ * rule meant the client could never be re-enrolled either.
+ *
+ *  - permanent (opted out, bounced, no SMS consent, no usable recipient,
+ *    provider rejected the message itself): log it and move past this step
+ *    so the rest of the sequence still runs — the same thing a human would
+ *    do with an undeliverable message.
+ *  - transient (provider down, rate-limited, not configured yet): push
+ *    next_fire_at out with exponential backoff; after MAX_SEND_ATTEMPTS the
+ *    enrollment is stopped (stopped_at — the existing "ended without
+ *    finishing" state) so it stops occupying the client's active slot.
+ */
+async function handleSendFailure(
+  adminClient: AnyClient,
+  ctx: SendFailureContext,
+  reason: string,
+  permanent: boolean
+): Promise<ProcessOutcome> {
+  const prefix = ctx.eventType === "email" ? "email" : "sms";
+  const logBase = {
+    orgId: ctx.orgId, enrollmentId: ctx.enrollId, sequenceId: ctx.sequenceId, clientId: ctx.clientId,
+    eventId: ctx.eventId, eventType: ctx.eventType,
+  };
+
+  if (permanent) {
+    const action = await advanceEnrollmentPastStep(adminClient, {
+      enrollmentId: ctx.enrollId,
+      events: ctx.events,
+      completedPosition: ctx.position,
+      nowIso: ctx.nowIso,
+    });
+    await logSequenceExecution(adminClient, { ...logBase, action: `${prefix}_skipped`, detail: `${reason} — step skipped` });
+    return { skipped: { enrollmentId: ctx.enrollId, reason: `${reason} — step skipped, ${action}` } };
+  }
+
+  // Attempt count comes from the execution log rather than a new column —
+  // one row per failed attempt at this exact step of this enrollment.
+  const { count } = await adminClient
+    .from("crm_sequence_execution_log")
+    .select("id", { count: "exact", head: true })
+    .eq("enrollment_id", ctx.enrollId)
+    .eq("event_id", ctx.eventId)
+    .eq("action", `${prefix}_send_failed`);
+  const attempt = (count ?? 0) + 1;
+
+  await logSequenceExecution(adminClient, {
+    ...logBase, action: `${prefix}_send_failed`, detail: `attempt ${attempt}/${MAX_SEND_ATTEMPTS}: ${reason}`,
+  });
+
+  if (attempt >= MAX_SEND_ATTEMPTS) {
+    await adminClient
+      .from("crm_sequence_enrollments")
+      .update({ stopped_at: ctx.nowIso, updated_at: ctx.nowIso })
+      .eq("id", ctx.enrollId);
+    await logSequenceExecution(adminClient, {
+      ...logBase, action: "stopped_send_failed", detail: `gave up after ${attempt} attempts: ${reason}`,
+    });
+    return { skipped: { enrollmentId: ctx.enrollId, reason: `${reason} — gave up after ${attempt} attempts, enrollment stopped` } };
+  }
+
+  const retryAt = new Date(Date.now() + SEND_RETRY_BASE_MS * 2 ** (attempt - 1)).toISOString();
+  await adminClient
+    .from("crm_sequence_enrollments")
+    .update({ next_fire_at: retryAt, updated_at: ctx.nowIso })
+    .eq("id", ctx.enrollId);
+  return { skipped: { enrollmentId: ctx.enrollId, reason: `${reason} — retry ${attempt + 1}/${MAX_SEND_ATTEMPTS} at ${retryAt}` } };
+}
+
+/**
  * Processes exactly one due step for one enrollment: evaluates stop
  * conditions, dispatches on the current event's type (wait/email/text_message/
  * alert/ticket/update/note/tags/if_branch), and advances (or completes/stops) the
- * enrollment. Shared by the daily cron sweep (`/api/automations/run`) and by
+ * enrollment. Shared by the cron sweep (every 15 min, `/api/automations/run`) and by
  * the immediate-send path fired right when a client is enrolled — this is the
  * single source of truth for "what happens when a sequence step comes due" so
  * both call sites stay in lockstep.
  */
 export async function processDueEnrollment(
+  adminClient: AnyClient,
+  enrollment: DueEnrollmentRow
+): Promise<ProcessOutcome> {
+  if (!(await claimEnrollmentStep(adminClient, enrollment))) {
+    return { skipped: { enrollmentId: enrollment.id, reason: "already claimed by another run (or no longer due)" } };
+  }
+  return runClaimedStep(adminClient, enrollment);
+}
+
+async function runClaimedStep(
   adminClient: AnyClient,
   enrollment: DueEnrollmentRow
 ): Promise<ProcessOutcome> {
@@ -145,12 +275,15 @@ export async function processDueEnrollment(
       fromSelection: eventConfig.from,
       cardExpiryContext,
     });
+    const failureCtx: SendFailureContext = {
+      orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+      eventType: "email", events: events ?? [], position: next_event_position, nowIso,
+    };
+    // Every resolve error is about the recipient (not found, do_not_market,
+    // hard-bounced, no address for the selected 'to' options) — none of
+    // them change by retrying, so skip the step.
     if ("error" in built) {
-      await logSequenceExecution(adminClient, {
-        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-        eventId: currentEvent.id, eventType: "email", action: "email_skipped", detail: built.error,
-      });
-      return { skipped: { enrollmentId: enrollId, reason: built.error } };
+      return handleSendFailure(adminClient, failureCtx, built.error, true);
     }
 
     // "Requires approval" — park the step in the approval queue instead of
@@ -205,11 +338,7 @@ export async function processDueEnrollment(
       replyTo: built.replyTo,
     });
     if (!sendResult.ok) {
-      await logSequenceExecution(adminClient, {
-        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-        eventId: currentEvent.id, eventType: "email", action: "email_skipped", detail: sendResult.reason,
-      });
-      return { skipped: { enrollmentId: enrollId, reason: sendResult.reason } };
+      return handleSendFailure(adminClient, failureCtx, sendResult.reason, sendResult.permanent === true);
     }
 
     const action = await advanceEnrollmentPastStep(adminClient, {
@@ -234,12 +363,13 @@ export async function processDueEnrollment(
       bodyTemplate: eventConfig.message ?? "",
       cardExpiryContext,
     });
+    const failureCtx: SendFailureContext = {
+      orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+      eventType: "text_message", events: events ?? [], position: next_event_position, nowIso,
+    };
+    // No phone / no SMS consent — permanent for this step.
     if ("error" in built) {
-      await logSequenceExecution(adminClient, {
-        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-        eventId: currentEvent.id, eventType: "text_message", action: "sms_skipped", detail: built.error,
-      });
-      return { skipped: { enrollmentId: enrollId, reason: built.error } };
+      return handleSendFailure(adminClient, failureCtx, built.error, true);
     }
 
     // "Requires approval" — same park-in-the-queue pattern as email.
@@ -279,11 +409,7 @@ export async function processDueEnrollment(
       bodyText: built.bodyText,
     });
     if (!sendResult.ok) {
-      await logSequenceExecution(adminClient, {
-        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-        eventId: currentEvent.id, eventType: "text_message", action: "sms_skipped", detail: sendResult.reason,
-      });
-      return { skipped: { enrollmentId: enrollId, reason: sendResult.reason } };
+      return handleSendFailure(adminClient, failureCtx, sendResult.reason, sendResult.permanent === true);
     }
 
     const action = await advanceEnrollmentPastStep(adminClient, {
@@ -554,20 +680,28 @@ export async function processDueEnrollment(
 
 /**
  * Drives a freshly-created enrollment through every step that's due right
- * now (no `wait` in front of it) instead of leaving it for the next daily
+ * now (no `wait` in front of it) instead of leaving it for the next
  * cron sweep — this is what makes a job-completion email send within
  * seconds of the visit being marked complete rather than at the next
  * `/api/automations/run` run. Stops as soon as a step schedules the
  * enrollment into the future (a `wait`), parks it for approval, completes
- * it, or stops it — the remaining steps are then picked up by the daily
+ * it, or stops it — the remaining steps are then picked up by the 15-minute
  * cron like any other enrollment. Capped at maxSteps as a backstop against
  * a misconfigured sequence looping on itself.
+ *
+ * A failed step can't be re-attempted within one call: processDueEnrollment
+ * claims the step by pushing next_fire_at into the future, and a failure
+ * either leaves it there (retry backoff / lease) — which ends this loop — or
+ * moves past the step. The position check below is a second guard: if a
+ * step ran and the enrollment is still due at the SAME position, stop rather
+ * than spin on it.
  */
 export async function processEnrollmentImmediately(
   adminClient: AnyClient,
   enrollmentId: string,
   maxSteps = 10
 ): Promise<void> {
+  let lastPosition: number | null = null;
   for (let i = 0; i < maxSteps; i++) {
     const { data: row } = await adminClient
       .from("crm_sequence_enrollments")
@@ -577,7 +711,10 @@ export async function processEnrollmentImmediately(
 
     if (!row || row.completed_at || row.stopped_at || row.awaiting_approval) return;
     if (new Date(row.next_fire_at).getTime() > Date.now()) return; // scheduled for later (e.g. behind a wait step)
+    if (lastPosition !== null && row.next_event_position === lastPosition) return;
 
-    await processDueEnrollment(adminClient, row);
+    lastPosition = row.next_event_position;
+    const outcome = await processDueEnrollment(adminClient, row);
+    if ("skipped" in outcome && outcome.skipped.reason.startsWith("already claimed")) return;
   }
 }
