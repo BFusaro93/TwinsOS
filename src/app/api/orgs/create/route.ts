@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isBillablePlan } from "@/lib/stripe/plans";
 
+const TRIAL_DAYS = 30;
+
 /**
  * POST /api/orgs/create
  *
@@ -49,7 +51,14 @@ export async function POST(request: Request) {
 
   const { data: org, error: orgErr } = await adminClient
     .from("organizations")
-    .insert({ name: companyName, slug, pending_plan: pendingPlan })
+    .insert({
+      name: companyName,
+      slug,
+      pending_plan: pendingPlan,
+      // No column default — without this a new org's trial never expires
+      // (use-trial-status treats a null trial_ends_at as open-ended).
+      trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+    })
     .select("id")
     .single();
 

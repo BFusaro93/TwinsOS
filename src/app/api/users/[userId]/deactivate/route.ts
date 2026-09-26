@@ -64,5 +64,16 @@ export async function POST(
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
+  // The GoTrue ban doesn't reach MCP/OAuth tokens — those are our own rows
+  // (checked by lib/api/auth.ts), so revoke them explicitly.
+  const { error: revokeError } = await adminClient
+    .from("oauth_tokens")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .is("revoked_at", null);
+  if (revokeError) {
+    return NextResponse.json({ error: revokeError.message }, { status: 500 });
+  }
+
   return NextResponse.json({ success: true });
 }

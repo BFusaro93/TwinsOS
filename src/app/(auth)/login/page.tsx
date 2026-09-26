@@ -11,10 +11,17 @@ import { Label } from "@/components/ui/label";
  *  relative path set by middleware.ts. Rejects absolute/protocol-relative
  *  URLs so a crafted `?redirectTo=` can't be used as an open redirect. */
 function safeRedirectTarget(redirectTo: string | null): string {
-  if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
-    return redirectTo;
+  if (!redirectTo || !redirectTo.startsWith("/")) return "/home";
+  // Resolve rather than prefix-check: browsers treat "\" as "/", so
+  // "/\evil.com" passes a startsWith("//") test but navigates off-site.
+  try {
+    const base = window.location.origin;
+    const url = new URL(redirectTo, base);
+    if (url.origin !== base) return "/home";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/home";
   }
-  return "/home";
 }
 
 export default function LoginPage() {

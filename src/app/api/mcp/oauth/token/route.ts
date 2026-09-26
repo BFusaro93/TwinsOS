@@ -177,9 +177,14 @@ export async function POST(request: Request) {
     // authorization decision, not just a display value.
     const { data: currentProfile } = await db
       .from("profiles")
-      .select("role")
+      .select("role, status, org_id")
       .eq("id", existing.user_id)
       .maybeSingle();
+    // A deactivated user (or one no longer in this org) must not be able to
+    // keep rotating a 90-day refresh token.
+    if (!currentProfile || currentProfile.status !== "active" || currentProfile.org_id !== existing.org_id) {
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
+    }
     const { data: org } = await db.from("organizations").select("oauth_write_roles").eq("id", existing.org_id).maybeSingle();
     const allowedForCurrentRole = allowedScopeStringsForRole(currentProfile?.role ?? "", org?.oauth_write_roles ?? []);
     const cappedScopes = (existing.scopes ?? []).filter((s: string) => allowedForCurrentRole.has(s));
