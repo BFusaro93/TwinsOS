@@ -4,7 +4,9 @@ import { Switch } from "@/components/ui/switch";
 import type { DisplaySettings } from "@/lib/estimate-display-settings";
 
 export const DISPLAY_TOGGLES: { key: keyof DisplaySettings; label: string; description: string }[] = [
-  { key: "showQuantities", label: "Quantities", description: "Show visit count and quantity/unit on each line" },
+  { key: "showVisits", label: "Visits", description: "Show the number of visits on each line" },
+  { key: "showQuantities", label: "Quantities", description: "Show the quantity on each line" },
+  { key: "showUnits", label: "Units", description: "Show the unit (visit, cu yd, sq ft…) on each line" },
   { key: "showLinePrices", label: "Line prices", description: "Show the per-visit rate on each line" },
   { key: "showLineTotals", label: "Line totals", description: "Show each line item's total" },
   { key: "showSectionSubtotals", label: "Section subtotals", description: "Show a subtotal under each section" },

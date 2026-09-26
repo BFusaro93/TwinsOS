@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, CheckCircle2, Loader2, MessageSquarePlus, CreditCard, Landmark } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, MessageSquarePlus, CreditCard, Landmark, Download } from "lucide-react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
@@ -136,18 +136,19 @@ function DepositCardForm({
   );
 }
 
-// Meta line combining visit count / qty (gated by showQuantities) and the
+// Meta line combining visit count (showVisits), qty (showQuantities) and the
 // per-unit rate (gated by showLinePrices, with hideZeroPrices suppressing
-// just the rate when it's $0 rather than dropping the whole row). The rate's
-// suffix is the line's own unit ("/cu yd" for mulch, "/visit" when unitless).
+// just the rate when it's $0 rather than dropping the whole row). showUnits
+// gates the unit wherever it appears: after the qty ("12 cu yd") and as the
+// rate's suffix ("/cu yd" for mulch, "/visit" when unitless).
 function lineMeta(li: ProposalLineItem, settings: DisplaySettings): string | null {
   const parts: string[] = [];
-  if (settings.showQuantities) {
-    if (li.visits > 1) parts.push(`${li.visits} visits`);
-    if (li.qty > 1) parts.push(`${li.qty.toLocaleString()} ${unitLabel(li.unitType, "")}`.trim());
+  if (settings.showVisits && li.visits > 1) parts.push(`${li.visits} visits`);
+  if (settings.showQuantities && li.qty > 1) {
+    parts.push(`${li.qty.toLocaleString()} ${settings.showUnits ? unitLabel(li.unitType, "") : ""}`.trim());
   }
   if (settings.showLinePrices && !(settings.hideZeroPrices && li.rateCents === 0)) {
-    parts.push(`${cents(li.rateCents)}/${unitLabel(li.unitType)}`);
+    parts.push(settings.showUnits ? `${cents(li.rateCents)}/${unitLabel(li.unitType)}` : cents(li.rateCents));
   }
   return parts.length ? parts.join(" × ") : null;
 }
@@ -275,6 +276,20 @@ function SignaturePad({ onSave }: { onSave: (dataUrl: string | null) => void }) 
   );
 }
 
+// A plain link, not a fetch: the browser handles the download itself, and the
+// share token in the URL is the only credential the route needs.
+function DownloadPdfButton({ token, className = "" }: { token: string; className?: string }) {
+  return (
+    <a
+      href={`/api/public/proposals/${token}/pdf?download=1`}
+      className={`inline-flex h-9 items-center gap-1.5 rounded-md border bg-white px-3 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 ${className}`}
+    >
+      <Download className="h-4 w-4" />
+      Download PDF
+    </a>
+  );
+}
+
 // ── Request changes ────────────────────────────────────────────────────────────
 
 function RequestChangesSection({ token }: { token: string }) {
@@ -319,14 +334,15 @@ function RequestChangesSection({ token }: { token: string }) {
 
   if (!open) {
     return (
-      <div className="text-center">
-        <button
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 underline underline-offset-2"
-        >
-          <MessageSquarePlus className="h-3.5 w-3.5" />
-          Need something changed? Request changes
-        </button>
+      <div className="flex flex-col items-center justify-between gap-3 rounded-lg border bg-white p-4 shadow-sm sm:flex-row">
+        <div className="text-center sm:text-left">
+          <p className="text-sm font-semibold text-slate-800">Need something changed?</p>
+          <p className="text-sm text-slate-500">Tell us what you&apos;d like adjusted before you accept.</p>
+        </div>
+        <Button variant="outline" className="h-10 shrink-0 px-4" onClick={() => setOpen(true)}>
+          <MessageSquarePlus className="mr-2 h-4 w-4" />
+          Request changes
+        </Button>
       </div>
     );
   }
@@ -749,6 +765,7 @@ export default function ProposalPage() {
               email you if anything goes wrong. Your acceptance is already recorded either way.
             </p>
           )}
+          <DownloadPdfButton token={token} className="mt-5" />
           {proposal.orgPhone && (
             <p className="mt-4 text-sm text-slate-400">
               Questions? Call us at <strong className="text-slate-600">{proposal.orgPhone}</strong>
@@ -789,14 +806,28 @@ export default function ProposalPage() {
               {new Date(`${proposal.validUntil.slice(0, 10)}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
             </p>
           )}
+          <DownloadPdfButton token={token} className="mt-3" />
         </div>
       </div>
 
       {/* Prepared for */}
       {proposal.clientName && (
-        <div className="mb-6 rounded-lg border bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Prepared For</p>
-          <p className="mt-1 text-base font-semibold text-slate-800">{proposal.clientName}</p>
+        <div className="mb-6 flex flex-col gap-4 rounded-lg border bg-white p-4 shadow-sm sm:flex-row sm:gap-10">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Prepared For</p>
+            <p className="mt-1 text-base font-semibold text-slate-800">{proposal.clientName}</p>
+            {proposal.clientAddressLines.map((line) => (
+              <p key={line} className="text-sm text-slate-500">{line}</p>
+            ))}
+          </div>
+          {proposal.serviceAddressLines && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Service Address</p>
+              {proposal.serviceAddressLines.map((line, i) => (
+                <p key={line} className={i === 0 ? "mt-1 text-base text-slate-700" : "text-sm text-slate-500"}>{line}</p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1191,7 +1222,9 @@ export default function ProposalPage() {
 
       {/* Request changes */}
       {depositStep === 'idle' && (
-        <RequestChangesSection token={token} />
+        <div className="mt-4">
+          <RequestChangesSection token={token} />
+        </div>
       )}
 
       {/* Footer */}

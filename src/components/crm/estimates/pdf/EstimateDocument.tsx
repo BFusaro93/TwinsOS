@@ -360,12 +360,14 @@ function LineItemTableHeader({ settings, backgroundColor }: { settings: DisplayS
   return (
     <View style={[S.tableHeader, { backgroundColor }]}>
       <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
+      {settings.showVisits && (
+        <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Visits</Text></View>
+      )}
       {settings.showQuantities && (
-        <>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Visits</Text></View>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
-        </>
+        <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
+      )}
+      {settings.showUnits && (
+        <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
       )}
       {settings.showLinePrices && (
         <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
@@ -398,12 +400,14 @@ function LineItemSections({
               <View style={S.cellService}>
                 {li.estimateDesc ? <RichText html={li.estimateDesc} style={S.serviceDescText} /> : null}
               </View>
+              {settings.showVisits && (
+                <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
+              )}
               {settings.showQuantities && (
-                <>
-                  <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
-                  <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
-                  <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
-                </>
+                <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
+              )}
+              {settings.showUnits && (
+                <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
               )}
               {settings.showLinePrices && (
                 <View style={S.cellNum}>
