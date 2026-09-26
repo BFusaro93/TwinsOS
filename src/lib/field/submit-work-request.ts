@@ -1,4 +1,5 @@
 import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 const VALID_PRIORITIES = new Set(["low", "medium", "high", "critical"]);
 
@@ -117,8 +118,8 @@ export async function submitWorkRequest(
               subject,
               html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
                 <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
-                <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
-                <p style="margin:0 0 24px;color:#475569">${input.requestedBy} submitted: <strong>${requestNumber} — ${input.title}</strong>.</p>
+                <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(p.name ?? "there")},</p>
+                <p style="margin:0 0 24px;color:#475569">${escapeHtml(input.requestedBy)} submitted: <strong>${escapeHtml(String(requestNumber))} — ${escapeHtml(input.title)}</strong>.</p>
                 <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
               </div>`,
             })

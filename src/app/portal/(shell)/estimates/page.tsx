@@ -15,6 +15,7 @@ interface LineItemRow {
   status: string;
   row_type: "item" | "section" | null;
   section_name: string | null;
+  tier: string | null;
 }
 
 interface EstimateRow {
@@ -26,6 +27,8 @@ interface EstimateRow {
   expires_at: string | null;
   created_at: string;
   display_settings: unknown;
+  tiers_enabled: boolean | null;
+  tier_labels: { basic?: string; standard?: string; premium?: string } | null;
   line_items: LineItemRow[];
 }
 
@@ -49,8 +52,8 @@ export default async function EstimatesPage() {
   const { data: estimates } = await (supabase as any)
     .from("estimates")
     .select(
-      "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, " +
-        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name)"
+      "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
+        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name, tier)"
     )
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
@@ -78,6 +81,8 @@ export default async function EstimatesPage() {
         total_price_cents: c.totalCents,
         expires_at: c.validUntil,
         display_settings: c.displaySettings,
+        tiers_enabled: c.tiersEnabled,
+        tier_labels: c.tierLabels,
         line_items: c.lineItems.map((li) => ({
           id: li.id,
           description: li.estimateDesc ?? li.serviceName ?? "",
@@ -88,11 +93,18 @@ export default async function EstimatesPage() {
           status: li.status,
           row_type: li.rowType,
           section_name: li.sectionName,
+          tier: li.tier,
         })),
       };
     }
     return {
       ...e,
+      tiers_enabled: e.tiers_enabled ?? false,
+      tier_labels: {
+        basic: e.tier_labels?.basic ?? "Basic",
+        standard: e.tier_labels?.standard ?? "Standard",
+        premium: e.tier_labels?.premium ?? "Premium",
+      },
       display_settings: toDisplaySettings(e.display_settings),
       line_items: e.line_items.map((li) => ({ ...li, description: li.description ?? "" })),
     };

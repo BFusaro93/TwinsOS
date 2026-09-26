@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -146,10 +147,20 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      const json = await res.json() as { parentWorkOrderId?: string; error?: string };
+      const json = await res.json() as { parentWorkOrderId?: string; error?: string; warning?: string; shortParts?: string[] };
       if (!res.ok) throw new Error(json.error ?? "Failed to generate work orders");
       await queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       await queryClient.invalidateQueries({ queryKey: ["pm-schedules"] });
+      // Generation deducts the schedule's parts from inventory.
+      await queryClient.invalidateQueries({ queryKey: ["parts"] });
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["wo-parts"] });
+      if (json.shortParts && json.shortParts.length > 0) {
+        toast.warning(
+          `Not enough stock for: ${[...new Set(json.shortParts)].join(", ")}. Quantity on hand was set to 0 instead of going negative.`
+        );
+      }
+      if (json.warning) toast.warning(json.warning);
       if (json.parentWorkOrderId) {
         setSelectedWorkOrderId(json.parentWorkOrderId);
         router.push("/cmms/work-orders");

@@ -23,7 +23,7 @@ export async function sendClientSms(
      */
     createdBy?: string | null;
   }
-): Promise<{ ok: true; sid: string | null } | { ok: false; reason: string }> {
+): Promise<{ ok: true; sid: string | null } | { ok: false; reason: string; permanent?: boolean }> {
   // TCPA consent gate, enforced here (the actual Twilio call) rather than
   // only in the automation-content resolver, so no future call site — a
   // manual 1:1 text feature, say — can accidentally bypass it.
@@ -33,7 +33,7 @@ export async function sendClientSms(
       .select("sms_opt_in")
       .eq("id", params.clientId)
       .single();
-    if (!client?.sms_opt_in) return { ok: false, reason: "client has not opted in to SMS" };
+    if (!client?.sms_opt_in) return { ok: false, reason: "client has not opted in to SMS", permanent: true };
   }
 
   // Every org can override its Account SID / Messaging Service SID — set
@@ -92,7 +92,15 @@ export async function sendClientSms(
 
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { ok: false, reason: `Twilio send failed: ${payload?.message ?? res.statusText}` };
+    // A 400 is Twilio rejecting THIS message (invalid/landline number, the
+    // recipient texted STOP — 21211/21614/21610, …): retrying can never
+    // succeed. Anything else (401 bad creds, 429, 5xx) may clear on its own,
+    // so automation callers retry those with backoff instead.
+    return {
+      ok: false,
+      reason: `Twilio send failed: ${payload?.message ?? res.statusText}${payload?.code ? ` (code ${payload.code})` : ""}`,
+      permanent: res.status === 400,
+    };
   }
 
   if (params.clientId) {

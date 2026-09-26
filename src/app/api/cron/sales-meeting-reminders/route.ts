@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 
@@ -17,11 +16,14 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
  *     always fires (fixed REMINDER_LEAD_MINUTES window), not gated behind
  *     any automation being configured, since a rep should always know their
  *     day is coming up regardless of what an admin has set up.
- *  2. If the meeting has a client, `sales_meeting_reminder` fires as a real
- *     automation trigger (see /api/crm/sales-meetings/automation-date-triggers
- *     for the actual enrollment logic, which respects each automation's own
- *     configured "minutes before" lead time) — this is what lets an admin
- *     build a client-facing email/text reminder in the Automations builder.
+ *  2. Client-facing automation reminders are NOT fired from here any more.
+ *     This route used to also call fireSimpleTrigger("sales_meeting_reminder")
+ *     for every meeting entering its fixed 60-minute window, which ignored
+ *     each trigger's configured "minutes before": a 30-minute reminder went
+ *     out at T-60, and a sequence configured for a day ahead could be
+ *     enrolled a second time at T-60 when re-entry was allowed.
+ *     /api/crm/sales-meetings/automation-date-triggers (same 15-min cadence)
+ *     is the single enrollment path and honors the configured lead time.
  *
  * `reminder_sent_at` dedupes rep notifications across runs (15-min cadence
  * would otherwise re-notify on every tick within the window).
@@ -84,7 +86,6 @@ export async function GET(request: Request) {
     if (!claimed?.length) continue;
 
     const rep = meeting.crm_employees as Record<string, unknown> | null;
-    const clientId = meeting.client_id as string | null;
     const clientName = (meeting.clients as Record<string, unknown> | null)?.display_name as string
       ?? (meeting.lead_name as string | null)
       ?? "a new lead";
@@ -154,15 +155,6 @@ export async function GET(request: Request) {
           // continue to next meeting if one email fails
         }
       }
-    }
-
-    if (clientId) {
-      await fireSimpleTrigger(supabase, {
-        orgId: meeting.org_id as string,
-        clientId,
-        meetingId: meeting.id as string,
-        triggerType: "sales_meeting_reminder",
-      });
     }
   }
 

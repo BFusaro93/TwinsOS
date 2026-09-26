@@ -258,7 +258,8 @@ export function SubscriptionTab() {
           {plansData.addons
             .filter((a) => addonAppliesToModules(a.key as AddonKey, currentPlanModules))
             .map((a) => {
-            const bundled = currentPlan?.bundledAddons.includes(a.key) ?? false;
+            // A trial has no plan entry but includes every add-on.
+            const bundled = currentPlan ? currentPlan.bundledAddons.includes(a.key) : billing?.plan === "trial";
             const enabled = bundled || (billing?.enabledAddons.includes(a.key) ?? false);
             const priceLabel = a.configured ? formatPrice(a.amountCents, a.currency, a.interval) ?? "Contact us" : "Not configured";
             return (

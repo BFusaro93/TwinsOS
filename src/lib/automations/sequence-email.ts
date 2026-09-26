@@ -227,7 +227,7 @@ export async function sendResolvedSequenceEmail(
     subject: string;
     bodyHtml: string;
   }
-): Promise<{ ok: true; resendId: string | null } | { ok: false; reason: string }> {
+): Promise<{ ok: true; resendId: string | null } | { ok: false; reason: string; permanent?: boolean }> {
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, reason: "RESEND_API_KEY not configured" };
 
@@ -253,7 +253,21 @@ export async function sendResolvedSequenceEmail(
     html: params.bodyHtml,
     ...(replyTo ? { replyTo } : {}),
   });
-  if (sendErr) return { ok: false, reason: `email send failed: ${String(sendErr)}` };
+  if (sendErr) {
+    // Resend's error is a plain { name, message, statusCode } object, not an
+    // Error — String() on it produced "[object Object]" in every log line.
+    const errObj = sendErr as { name?: string; message?: string; statusCode?: number | null };
+    const status = typeof errObj.statusCode === "number" ? errObj.statusCode : null;
+    const detail = [errObj.name, errObj.message].filter(Boolean).join(": ") || JSON.stringify(sendErr);
+    return {
+      ok: false,
+      reason: `email send failed: ${detail}${status ? ` (HTTP ${status})` : ""}`,
+      // 400/422 = Resend rejected this message itself (malformed address,
+      // invalid payload) — resending the same thing can't succeed. Rate
+      // limits, auth and 5xx are worth retrying.
+      permanent: status === 400 || status === 422,
+    };
+  }
 
   const toEmailsJoined = params.toEmails.join(", ");
 

@@ -18,6 +18,9 @@ const log = logger.child("stripe webhook");
 // still-active or still-retrying states, not a final "not paying" outcome.
 const DOWNGRADE_STATUSES = new Set(["canceled", "unpaid", "incomplete_expired", "paused"]);
 
+/** How long a canceled org keeps read-only access before it's locked out. */
+const CANCELED_ACCESS_DAYS = 90;
+
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Billing is not configured yet" }, { status: 400 });
@@ -185,9 +188,24 @@ async function applySubscriptionToOrg(
     stripe_price_id: priceId,
   };
   if (DOWNGRADE_STATUSES.has(subscription.status)) {
-    patch.plan = "trial";
+    // Read-only for CANCELED_ACCESS_DAYS, then locked out (see
+    // 20260926190000_canceled_subscription_read_only.sql and useTrialStatus).
+    // Dropping back to "trial" used to hand out full access for free.
+    patch.plan = "canceled";
+    const currentQuery = db.from("organizations").select("plan, canceled_access_ends_at");
+    const { data: current } =
+      "id" in lookup
+        ? await currentQuery.eq("id", lookup.id).maybeSingle()
+        : await currentQuery.eq("stripe_customer_id", lookup.stripeCustomerId).maybeSingle();
+    // Repeat downgrade events (unpaid -> canceled) keep the original window.
+    if (current?.plan !== "canceled" || !current?.canceled_access_ends_at) {
+      patch.canceled_access_ends_at = new Date(
+        Date.now() + CANCELED_ACCESS_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString();
+    }
   } else if (plan) {
     patch.plan = plan;
+    patch.canceled_access_ends_at = null;
   }
 
   const query = db

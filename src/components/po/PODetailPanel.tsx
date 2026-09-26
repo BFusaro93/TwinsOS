@@ -289,7 +289,12 @@ function DetailsTab({
         <LineItemsTable
           lineItems={lineItems}
           showProject
-          editable
+          // Once ordered, the DB refuses a total above the approved amount
+          // for non-admins, so don't offer edits it would reject.
+          editable={
+            !["ordered", "partially_fulfilled", "completed", "canceled"].includes(status) ||
+            currentUser.role === "admin" || currentUser.role === "manager"
+          }
           receivedQtyByLineItemId={receivedQtyByLineItemId}
           onItemsChange={setLineItems}
           onItemAdded={(item, newItems) => {

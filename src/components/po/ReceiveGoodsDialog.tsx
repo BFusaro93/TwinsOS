@@ -40,6 +40,7 @@ import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 import { computeSalesTax } from "@/lib/utils/po-tax";
+import { correctPartReceipt } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -293,7 +294,7 @@ export function ReceiveGoodsDialog({
     // mid-loop would leave earlier lines' increments applied with no receipt
     // surviving to account for them, and retrying the submission would then
     // double-increment inventory.
-    const succeeded: Array<{ productId: string; partId: string | null; quantity: number }> = [];
+    const succeeded: Array<{ productId: string; partId: string | null; quantity: number; unitCost: number }> = [];
     try {
       for (const line of linesToReceive) {
         // Find the PO line item to look up the productItemId
@@ -329,7 +330,7 @@ export function ReceiveGoodsDialog({
           poNumber: po.poNumber,
           poLineItemId: line.lineItemId,
         });
-        succeeded.push({ productId: matchedProduct.id, partId: linkedPartId, quantity: line.quantityReceived });
+        succeeded.push({ productId: matchedProduct.id, partId: linkedPartId, quantity: line.quantityReceived, unitCost: line.unitCost });
       }
     } catch (err) {
       // Reverse the inventory adjustments that already succeeded earlier in
@@ -339,13 +340,18 @@ export function ReceiveGoodsDialog({
         const supabase = createClient();
         for (const applied of succeeded) {
           if (applied.partId) {
-            const { error: partRevertErr } = await supabase.rpc("adjust_part_quantity", {
-              p_org_id: po.orgId,
-              p_part_id: applied.partId,
-              p_delta: -applied.quantity,
-              p_po_number: po.poNumber,
-            });
-            if (partRevertErr) {
+            // Takes the units back out of the cost layer this receipt just
+            // added (the old overload moved quantity only, leaving the
+            // layer behind, and raised if the stock had moved meanwhile).
+            try {
+              await correctPartReceipt(supabase, {
+                orgId: po.orgId,
+                partId: applied.partId,
+                delta: -Math.round(applied.quantity),
+                unitCost: applied.unitCost,
+                poNumber: po.poNumber,
+              });
+            } catch (partRevertErr) {
               toast.error(`Failed to reverse part inventory during rollback: ${errMsg(partRevertErr)}. Please review this PO's receipts manually.`);
             }
           }

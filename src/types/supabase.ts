@@ -244,6 +244,7 @@ export type Database = {
           approver_id: string | null
           approver_name: string
           approver_role: string
+          archived: boolean
           comment: string | null
           created_at: string
           decided_at: string | null
@@ -260,6 +261,7 @@ export type Database = {
           approver_id?: string | null
           approver_name?: string
           approver_role?: string
+          archived?: boolean
           comment?: string | null
           created_at?: string
           decided_at?: string | null
@@ -276,6 +278,7 @@ export type Database = {
           approver_id?: string | null
           approver_name?: string
           approver_role?: string
+          archived?: boolean
           comment?: string | null
           created_at?: string
           decided_at?: string | null
@@ -10830,6 +10833,7 @@ export type Database = {
           address: Json
           billing_interval: string
           brand_color: string
+          canceled_access_ends_at: string | null
           cc_processing_fee_bps: number
           cc_processing_fee_enabled: boolean
           cc_processing_fee_threshold_cents: number
@@ -10874,6 +10878,7 @@ export type Database = {
           address?: Json
           billing_interval?: string
           brand_color?: string
+          canceled_access_ends_at?: string | null
           cc_processing_fee_bps?: number
           cc_processing_fee_enabled?: boolean
           cc_processing_fee_threshold_cents?: number
@@ -10918,6 +10923,7 @@ export type Database = {
           address?: Json
           billing_interval?: string
           brand_color?: string
+          canceled_access_ends_at?: string | null
           cc_processing_fee_bps?: number
           cc_processing_fee_enabled?: boolean
           cc_processing_fee_threshold_cents?: number
@@ -12334,6 +12340,7 @@ export type Database = {
       }
       purchase_orders: {
         Row: {
+          approved_total_cents: number | null
           check_number: string | null
           created_at: string
           created_by: string | null
@@ -12362,6 +12369,7 @@ export type Database = {
           vendor_name: string
         }
         Insert: {
+          approved_total_cents?: number | null
           check_number?: string | null
           created_at?: string
           created_by?: string | null
@@ -12390,6 +12398,7 @@ export type Database = {
           vendor_name?: string
         }
         Update: {
+          approved_total_cents?: number | null
           check_number?: string | null
           created_at?: string
           created_by?: string | null
@@ -12621,6 +12630,7 @@ export type Database = {
       }
       requisitions: {
         Row: {
+          approved_total_cents: number | null
           converted_po_id: string | null
           created_at: string
           created_by: string | null
@@ -12647,6 +12657,7 @@ export type Database = {
           work_order_id: string | null
         }
         Insert: {
+          approved_total_cents?: number | null
           converted_po_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -12673,6 +12684,7 @@ export type Database = {
           work_order_id?: string | null
         }
         Update: {
+          approved_total_cents?: number | null
           converted_po_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -14429,6 +14441,14 @@ export type Database = {
           new_status: string
           was_newly_paid: boolean
         }[]
+      }
+      decide_approval: {
+        Args: { p_comment?: string; p_request_id: string; p_status: string }
+        Returns: Json
+      }
+      submit_for_approval: {
+        Args: { p_entity_id: string; p_entity_type: string }
+        Returns: Json
       }
       approve_change_order: {
         Args: { p_change_order_id: string; p_treatment?: string }

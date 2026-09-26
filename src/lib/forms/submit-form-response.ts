@@ -258,7 +258,9 @@ export async function submitFormResponse(
   // ── Account matching ──────────────────────────────────────────────────────────
   const matchStrategy: string = form.account_matching_strategy ?? "email";
   const autoManage: boolean = form.auto_manage_accounts ?? false;
-  const updateStrategy: string = form.account_update_strategy ?? "add_new";
+  // form.account_update_strategy ("add_new" | "replace_all") no longer changes
+  // what is written: an anonymous submission may only fill blanks on a
+  // matched client (see "Auto-manage" below).
 
   const mappedEmail = mappedData["client.email"] ?? mappedData["contact.email"] ?? null;
   const mappedFirstName = mappedData["client.first_name"] ?? mappedData["contact.first_name"] ?? null;
@@ -323,6 +325,13 @@ export async function submitFormResponse(
 
   function normalizePhoneDigits(value: string): string {
     return value.replace(/\D/g, "");
+  }
+
+  /** Digits with a leading US country code dropped, so "+1 (555) 123-4567"
+   *  and "555-123-4567" compare equal. */
+  function comparablePhone(value: string): string {
+    const d = normalizePhoneDigits(value);
+    return d.length === 11 && d.startsWith("1") ? d.slice(1) : d;
   }
 
   /** Email matching must be case-insensitive (Postgres `=` on text is not) —
@@ -471,35 +480,57 @@ export async function submitFormResponse(
   }
 
   // ── Auto-manage: create or update client ─────────────────────────────────────
+  // The public submitter is anonymous: matching on an email/phone proves only
+  // that they KNOW it, not that they own the account. So a submission that
+  // matched an EXISTING client may never rewrite who that client is or how we
+  // reach them — billing/contact email, phone, display name, or an address
+  // already on file — and "replace_all" is treated as fill-blanks. Anything
+  // the submitter sent that differs from the record is listed on the ticket
+  // (and so the client's activity timeline) for staff to review and apply by
+  // hand. Email and phone are never written to an existing client at all,
+  // even into an empty field, since that is exactly how an attacker would
+  // attach their own inbox/number to someone else's account. A client CREATED
+  // by this submission gets the submitted data as-is.
+  const reviewChanges: string[] = [];
+  const noteChange = (label: string, current: string | null | undefined, submitted: string | null | undefined) => {
+    if (!submitted) return;
+    if ((current ?? "").trim().toLowerCase() === submitted.trim().toLowerCase()) return;
+    reviewChanges.push(`${label}: "${submitted}"${current ? ` (on file: "${current}")` : ""}`);
+  };
+  // True when the submission matched a pre-existing client (as opposed to
+  // one created below) — whether or not the form auto-manages accounts.
+  const matchedExistingClient = relatedClientId !== null;
   if (autoManage) {
     if (relatedClientId) {
       result = "Account Updated";
       const clientPatch: Record<string, string> = {};
 
-      if (updateStrategy === "replace_all") {
-        if (mappedData["client.email"]) clientPatch.billing_email = mappedData["client.email"];
-        if (mappedData["client.phone"]) clientPatch.primary_phone = mappedData["client.phone"];
-        if (mappedData["client.company_name"]) clientPatch.display_name = mappedData["client.company_name"];
-        if (mappedData["client.address_line1"]) clientPatch.billing_address = mappedData["client.address_line1"];
-        if (mappedData["client.city"]) clientPatch.billing_city = mappedData["client.city"];
-        if (mappedData["client.state"]) clientPatch.billing_state = mappedData["client.state"];
-        if (mappedData["client.zip"]) clientPatch.billing_zip = mappedData["client.zip"];
-        if (mappedData["client.notes"]) clientPatch.notes_to_crew = mappedData["client.notes"];
-        if (mappedData["client.source"]) clientPatch.source = mappedData["client.source"];
-      } else {
-        const { data: existing } = await db
-          .from("clients")
-          .select("billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, source")
-          .eq("id", relatedClientId)
-          .single();
-        if (!existing?.billing_email && mappedData["client.email"]) clientPatch.billing_email = mappedData["client.email"];
-        if (!existing?.primary_phone && mappedData["client.phone"]) clientPatch.primary_phone = mappedData["client.phone"];
-        if (!existing?.billing_address && mappedData["client.address_line1"]) clientPatch.billing_address = mappedData["client.address_line1"];
-        if (!existing?.billing_city && mappedData["client.city"]) clientPatch.billing_city = mappedData["client.city"];
-        if (!existing?.billing_state && mappedData["client.state"]) clientPatch.billing_state = mappedData["client.state"];
-        if (!existing?.billing_zip && mappedData["client.zip"]) clientPatch.billing_zip = mappedData["client.zip"];
-        if (!existing?.source && mappedData["client.source"]) clientPatch.source = mappedData["client.source"];
-      }
+      const { data: existing } = await db
+        .from("clients")
+        .select("display_name, billing_email, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, notes_to_crew, source")
+        .eq("id", relatedClientId)
+        .single();
+
+      // Never written directly on an existing client — review only.
+      noteChange("Billing email", existing?.billing_email, mappedData["client.email"]);
+      noteChange("Phone", existing?.primary_phone, mappedData["client.phone"]);
+      noteChange("Account name", existing?.display_name, mappedData["client.company_name"]);
+      noteChange("Crew notes", existing?.notes_to_crew, mappedData["client.notes"]);
+
+      // Address/source: fill blanks only (both strategies); a differing value
+      // over an existing one goes to review.
+      const fillOrReview = (column: string, label: string, key: string) => {
+        const submitted = mappedData[key];
+        if (!submitted) return;
+        const current = (existing as Record<string, string | null> | null)?.[column] ?? null;
+        if (!current) clientPatch[column] = submitted;
+        else noteChange(label, current, submitted);
+      };
+      fillOrReview("billing_address", "Billing address", "client.address_line1");
+      fillOrReview("billing_city", "Billing city", "client.city");
+      fillOrReview("billing_state", "Billing state", "client.state");
+      fillOrReview("billing_zip", "Billing zip", "client.zip");
+      if (!existing?.source && mappedData["client.source"]) clientPatch.source = mappedData["client.source"];
 
       if (Object.keys(clientPatch).length > 0) {
         await db.from("clients").update(clientPatch).eq("id", relatedClientId);
@@ -513,31 +544,28 @@ export async function submitFormResponse(
           .eq("is_primary", true)
           .maybeSingle();
 
-        const contactPatch: Record<string, string | boolean> = {};
-        if (updateStrategy === "replace_all") {
-          if (mappedFirstName) contactPatch.first_name = mappedFirstName;
-          if (mappedLastName) contactPatch.last_name = mappedLastName;
-          if (mappedData["contact.email"] ?? mappedEmail) contactPatch.email = (mappedData["contact.email"] ?? mappedEmail)!;
-          if (mappedData["contact.phone"] ?? mappedPhone) contactPatch.phone = (mappedData["contact.phone"] ?? mappedPhone)!;
+        const submittedContactEmail = mappedData["contact.email"] ?? mappedEmail;
+        const submittedContactPhone = mappedData["contact.phone"] ?? mappedPhone;
+        if (primaryContact) {
+          const contactPatch: Record<string, string> = {};
+          if (!primaryContact.first_name && mappedFirstName) contactPatch.first_name = mappedFirstName;
+          else noteChange("Contact first name", primaryContact.first_name, mappedFirstName);
+          if (!primaryContact.last_name && mappedLastName) contactPatch.last_name = mappedLastName;
+          else noteChange("Contact last name", primaryContact.last_name, mappedLastName);
+          noteChange("Contact email", primaryContact.email, submittedContactEmail);
+          noteChange("Contact phone", primaryContact.phone, submittedContactPhone);
+          if (Object.keys(contactPatch).length > 0) {
+            await db.from("client_contacts").update(contactPatch).eq("id", primaryContact.id);
+          }
         } else {
-          if (!primaryContact?.first_name && mappedFirstName) contactPatch.first_name = mappedFirstName;
-          if (!primaryContact?.last_name && mappedLastName) contactPatch.last_name = mappedLastName;
-          if (!primaryContact?.email && (mappedData["contact.email"] ?? mappedEmail)) contactPatch.email = (mappedData["contact.email"] ?? mappedEmail)!;
-          if (!primaryContact?.phone && (mappedData["contact.phone"] ?? mappedPhone)) contactPatch.phone = (mappedData["contact.phone"] ?? mappedPhone)!;
-        }
-
-        if (primaryContact && Object.keys(contactPatch).length > 0) {
-          await db.from("client_contacts").update(contactPatch).eq("id", primaryContact.id);
-        } else if (!primaryContact && (mappedFirstName || submittedFirstName)) {
-          await db.from("client_contacts").insert({
-            org_id: form.org_id,
-            client_id: relatedClientId,
-            first_name: mappedFirstName ?? submittedFirstName ?? "Unknown",
-            last_name: mappedLastName ?? null,
-            email: mappedData["contact.email"] ?? mappedEmail ?? null,
-            phone: mappedData["contact.phone"] ?? mappedPhone ?? null,
-            is_primary: true,
-          });
+          // Creating a primary contact would hand the submitter's email/phone
+          // the account's primary channel — leave it for staff.
+          const fullName = [mappedFirstName ?? submittedFirstName, mappedLastName].filter(Boolean).join(" ");
+          reviewChanges.push(
+            `New primary contact: ${fullName || "(no name)"}` +
+              (submittedContactEmail ? `, ${submittedContactEmail}` : "") +
+              (submittedContactPhone ? `, ${submittedContactPhone}` : "")
+          );
         }
       }
     } else {
@@ -602,7 +630,29 @@ export async function submitFormResponse(
     const optInField = formFields.find((f: { field_type?: string }) => f.field_type === "sms_optin");
     if (optInField && formData[optInField.label] === "true") {
       if (submittedPhone) {
-        if (relatedClientId) {
+        // Consent is only recorded against a number the client already has
+        // on file (or on a client this submission just created). Otherwise
+        // an anonymous submitter could opt a stranger's matched account into
+        // texting — consent attaches to the account's phone, not theirs.
+        let phoneOnFile = !matchedExistingClient;
+        if (relatedClientId && matchedExistingClient) {
+          const target = comparablePhone(submittedPhone);
+          const [{ data: clientRow }, { data: contactRows }] = await Promise.all([
+            db.from("clients").select("primary_phone").eq("id", relatedClientId).maybeSingle(),
+            db.from("client_contacts").select("phone").eq("client_id", relatedClientId).is("deleted_at", null).not("phone", "is", null),
+          ]);
+          const onFile = [
+            clientRow?.primary_phone as string | null | undefined,
+            ...((contactRows ?? []) as { phone: string | null }[]).map((c) => c.phone),
+          ];
+          phoneOnFile = !!target && onFile.some((ph) => !!ph && comparablePhone(ph) === target);
+          if (!phoneOnFile) {
+            reviewChanges.push(
+              `SMS consent was given for ${submittedPhone}, which isn't a phone number on file — consent NOT recorded`
+            );
+          }
+        }
+        if (relatedClientId && phoneOnFile) {
           await db
             .from("clients")
             .update({
@@ -654,6 +704,9 @@ export async function submitFormResponse(
       submittedMessage ? `\nMessage:\n${submittedMessage}` : null,
       "\n--- Full submission ---",
       Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
+      reviewChanges.length
+        ? `\n--- Submitted changes NOT applied (verify with the client before updating their account) ---\n${reviewChanges.join("\n")}`
+        : null,
     ].filter(Boolean).join("\n");
 
     // Note: crm_tickets has no "source" column (unlike clients) — don't

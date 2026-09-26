@@ -58,7 +58,8 @@ export function useBillingInfo() {
         .from("organization_addons")
         .select("addon_key")
         .eq("org_id", profile.org_id)
-        .eq("enabled", true);
+        .eq("enabled", true)
+        .not("stripe_subscription_item_id", "is", null);
 
       const { seatsIncluded, seatOverageCents } = getSeatConfig(data.plan, {
         seatsIncludedOverride: data.seats_included_override,

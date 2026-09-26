@@ -11,12 +11,29 @@ function todayKey(): string {
 
 /** Persistent (dismissible-per-day) trial countdown, shown above the app shell — see (crm)/layout.tsx and (dashboard)/layout.tsx. */
 export function TrialBanner() {
-  const { isTrial, isExpired, trialEndsAt, daysRemaining, isLoading } = useTrialStatus();
+  const { isTrial, isExpired, trialEndsAt, daysRemaining, isReadOnly, accessEndsAt, isLoading } = useTrialStatus();
   const [dismissed, setDismissed] = useState(true); // avoid a flash before we know today's dismiss state
 
   useEffect(() => {
     setDismissed(typeof window !== "undefined" && localStorage.getItem(todayKey()) === "1");
   }, []);
+
+  // Canceled subscription: not dismissible — every save will fail, so the
+  // reason has to stay on screen.
+  if (!isLoading && isReadOnly && accessEndsAt) {
+    const until = new Date(accessEndsAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return (
+      <div className="flex items-center gap-3 bg-amber-500 px-4 py-2 text-sm text-white">
+        <span>
+          Your subscription was canceled — your account is read-only until {until} ({daysRemaining} day
+          {daysRemaining === 1 ? "" : "s"} left).{" "}
+          <Link href="/settings?tab=subscription" className="font-semibold underline underline-offset-2">
+            Resubscribe
+          </Link>
+        </span>
+      </div>
+    );
+  }
 
   // An open-ended trial (plan = "trial" with no trial_ends_at — e.g. the
   // internal Twins org) has nothing to count down to; useTrialStatus reports

@@ -35,8 +35,14 @@ interface Estimate {
   expires_at: string | null;
   created_at: string;
   display_settings?: DisplaySettings;
+  /** Good/Better/Best estimate: the client accepts exactly one tier. */
+  tiers_enabled?: boolean;
+  tier_labels?: { basic: string; standard: string; premium: string };
   line_items?: LineItem[];
 }
+
+const TIERS = ["basic", "standard", "premium"] as const;
+type Tier = (typeof TIERS)[number];
 
 interface LineItem {
   id: string;
@@ -49,6 +55,7 @@ interface LineItem {
   status: string;
   row_type?: "item" | "section" | null;
   section_name?: string | null;
+  tier?: string | null;
 }
 
 interface SignDialogProps {
@@ -62,9 +69,18 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const settings = estimate.display_settings ?? DEFAULT_DISPLAY_SETTINGS;
-  const itemRows = (estimate.line_items ?? []).filter((li) => li.row_type !== "section" && li.status !== "lost");
+  const openRows = (estimate.line_items ?? []).filter((li) => li.status !== "lost");
+  const allItemRows = openRows.filter((li) => li.row_type !== "section");
+  // Tiered estimate: the client picks ONE package, and only untiered lines
+  // plus that package's lines are offered (matching the public proposal page).
+  const tiersEnabled = !!estimate.tiers_enabled && allItemRows.some((li) => li.tier != null);
+  const tierLabels = estimate.tier_labels ?? { basic: "Basic", standard: "Standard", premium: "Premium" };
+  const availableTiers = TIERS.filter((t) => allItemRows.some((li) => li.tier === t));
+  const [selectedTier, setSelectedTier] = useState<Tier | null>(null);
+  const inTier = (li: LineItem) => !tiersEnabled || li.tier == null || li.tier === selectedTier;
+  const itemRows = allItemRows.filter(inTier);
   const hasLineItems = itemRows.length > 0;
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(itemRows.map((li) => li.id)));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(allItemRows.map((li) => li.id)));
 
   function toggleItem(id: string) {
     setSelectedIds((prev) => {
@@ -74,6 +90,9 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
     });
   }
 
+  const tierTotal = (tier: Tier) =>
+    allItemRows.filter((li) => li.tier == null || li.tier === tier).reduce((sum, li) => sum + li.total_cents, 0);
+
   const selectedTotal = hasLineItems
     ? itemRows
         .filter((li) => selectedIds.has(li.id))
@@ -81,8 +100,8 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
     : estimate.total_price_cents;
 
   const sections = groupIntoSections(
-    (estimate.line_items ?? [])
-      .filter((li) => li.status !== "lost")
+    openRows
+      .filter((li) => li.row_type === "section" || inTier(li))
       // total_cents, not rate × qty: rate × qty ignored visits, so a 13-visit
       // mow at $55 read $55 (and the Selected Total followed) instead of $715.
       .map((li) => ({ ...li, totalCents: li.total_cents, rowType: li.row_type ?? "item", sectionName: li.section_name ?? null })),
@@ -91,7 +110,9 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
 
   async function handleAccept() {
     if (!name.trim()) { setError("Please type your full name to sign."); return; }
-    if (hasLineItems && selectedIds.size === 0) { setError("Please select at least one item to accept."); return; }
+    if (tiersEnabled && !selectedTier) { setError("Please choose a package."); return; }
+    const acceptedIds = itemRows.filter((li) => selectedIds.has(li.id)).map((li) => li.id);
+    if (hasLineItems && acceptedIds.length === 0) { setError("Please select at least one item to accept."); return; }
     setLoading(true);
     setError(null);
     try {
@@ -101,7 +122,8 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
         body: JSON.stringify({
           action: "accept",
           signatureName: name.trim(),
-          acceptedLineItemIds: hasLineItems ? Array.from(selectedIds) : undefined,
+          acceptedLineItemIds: hasLineItems ? acceptedIds : undefined,
+          selectedTier: tiersEnabled ? selectedTier ?? undefined : undefined,
         }),
       });
       if (!res.ok) {
@@ -127,8 +149,30 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
           </p>
         </div>
 
+        {tiersEnabled && (
+          <div>
+            <p className="text-xs font-semibold text-slate-700 mb-2">Choose your package</p>
+            <div className="grid grid-cols-3 gap-2">
+              {availableTiers.map((tier) => {
+                const isSelected = selectedTier === tier;
+                return (
+                  <button
+                    key={tier}
+                    type="button"
+                    onClick={() => setSelectedTier(tier)}
+                    className={`rounded-lg border-2 p-2.5 text-left transition ${isSelected ? "border-brand-500 bg-green-50/60" : "border-slate-200 hover:border-slate-300"}`}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{tierLabels[tier]}</p>
+                    <p className="text-sm font-bold text-slate-800">{fmt(tierTotal(tier))}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Per-item selection — uncheck anything you don't want to accept */}
-        {hasLineItems && (
+        {hasLineItems && (!tiersEnabled || selectedTier) && (
           <div className="bg-slate-50 rounded-xl border border-slate-200 text-sm max-h-64 overflow-y-auto">
             {sections.map((section, si) => (
               <div key={si}>
@@ -204,7 +248,7 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
           </button>
           <button
             onClick={handleAccept}
-            disabled={loading || !name.trim()}
+            disabled={loading || !name.trim() || (tiersEnabled && !selectedTier)}
             className="flex-1 h-10 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}

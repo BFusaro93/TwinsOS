@@ -89,15 +89,22 @@ export async function POST(
     const pauseMinutes = Math.max(0, Math.round(
       (new Date(now).getTime() - new Date(row.paused_at as string).getTime()) / 60_000
     ));
+    // Conditional on paused_at still being the exact value this request read
+    // (and break_minutes unchanged): a double tap sends two resumes that both
+    // read the same pause, and without this guard both added the elapsed
+    // break — doubling it. The loser's update matches nothing and is a no-op.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
+    let q = (supabase as any)
       .from("crm_job_visits")
       .update({
         paused_at: null,
         break_minutes: (row.break_minutes ?? 0) + pauseMinutes,
         updated_at: now,
       })
-      .eq("id", row.id);
+      .eq("id", row.id)
+      .eq("paused_at", row.paused_at);
+    q = row.break_minutes == null ? q.is("break_minutes", null) : q.eq("break_minutes", row.break_minutes);
+    const { error } = await q.select("id");
     if (error) updateErrors.push(`${row.id}: ${error.message}`);
   }
   if (updateErrors.length > 0) {

@@ -120,17 +120,21 @@ export async function POST(
         .eq("id", visitId);
 
       // Rollup to job
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: visitTotals } = await (supabase as any)
+      const jobAdmin = createServiceClient();
+      // Job-level totals go through the service client: the job's visits
+      // span every crew (crew RLS only returns the caller's own crew's
+      // visits, which undercounted the job), and crew accounts can't UPDATE
+      // crm_jobs at all — the rollup below was silently a no-op for them.
+      // jobId comes from a visit whose ownership was already proven above.
+      const { data: visitTotals } = await jobAdmin
         .from("crm_job_visits")
         .select("actual_labor_cost_cents")
         .eq("job_id", jobId)
         .is("deleted_at", null);
       const jobLaborCents = (visitTotals ?? []).reduce(
-        (sum: number, v: { actual_labor_cost_cents: number }) => sum + (v.actual_labor_cost_cents ?? 0), 0
+        (sum: number, v: { actual_labor_cost_cents: number | null }) => sum + (v.actual_labor_cost_cents ?? 0), 0
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await jobAdmin
         .from("crm_jobs")
         .update({ actual_labor_cost_cents: jobLaborCents })
         .eq("id", jobId);

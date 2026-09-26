@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 import { EMAIL_FROM } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 /**
  * Tells staff a proposal deposit was rejected.
@@ -101,9 +102,9 @@ export async function notifyStaffOfFailedDeposit(
       subject: title,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
         <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Deposit failed</h2>
-        <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
-        <p style="margin:0 0 16px;color:#475569"><strong>${clientName ?? "The client"}</strong>'s <strong>${amount}</strong> deposit ${how} for Estimate <strong>${label}</strong> was rejected.</p>
-        <p style="margin:0 0 16px;padding:12px;background:#fef2f2;border-radius:6px;color:#991b1b;font-size:14px">${reason}</p>
+        <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(p.name ?? "there")},</p>
+        <p style="margin:0 0 16px;color:#475569"><strong>${escapeHtml(clientName ?? "The client")}</strong>'s <strong>${escapeHtml(amount)}</strong> deposit ${escapeHtml(how)} for Estimate <strong>${escapeHtml(label)}</strong> was rejected.</p>
+        <p style="margin:0 0 16px;padding:12px;background:#fef2f2;border-radius:6px;color:#991b1b;font-size:14px">${escapeHtml(reason)}</p>
         <p style="margin:0 0 24px;color:#475569;font-size:14px">The proposal stays accepted — only the deposit failed. The client can pay it again from their original proposal link, which has been re-opened for exactly that.</p>
         <a href="${link}" style="display:inline-block;padding:12px 24px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Estimate</a>
       </div>`,

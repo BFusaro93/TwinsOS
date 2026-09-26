@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { renderEstimatePDF } from "@/lib/estimate-pdf";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 // Notifies staff when a CLIENT accepts or declines an estimate — via either
 // the public proposal link or the logged-in client portal. Separate from the
@@ -106,8 +107,8 @@ export async function notifyStaffOfEstimateDecision(
       subject: title,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
         <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Estimate ${verb}</h2>
-        <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
-        <p style="margin:0 0 24px;color:#475569"><strong>${clientName}</strong> has <strong style="color:${color}">${verb}</strong> Estimate <strong>#${estimateNumber}</strong>.</p>
+        <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(p.name ?? "there")},</p>
+        <p style="margin:0 0 24px;color:#475569"><strong>${escapeHtml(clientName)}</strong> has <strong style="color:${color}">${verb}</strong> Estimate <strong>#${estimateNumber}</strong>.</p>
         <a href="${link}" style="display:inline-block;padding:12px 24px;background:${color};color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Estimate</a>
       </div>`,
       ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),

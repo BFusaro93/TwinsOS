@@ -7,9 +7,16 @@ import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 
 export interface TrialStatus {
   isTrial: boolean;
+  /** Locked out of the app shells — trial ended, or a canceled org's 90 days are up. */
   isExpired: boolean;
+  /** Why isExpired is set, so the lockout screen can say the right thing. */
+  lockReason: "trial" | "canceled" | null;
   trialEndsAt: string | null;
   daysRemaining: number;
+  /** Canceled subscription, still inside its read-only window. */
+  isReadOnly: boolean;
+  /** When a canceled org's read-only access ends. */
+  accessEndsAt: string | null;
 }
 
 /**
@@ -25,11 +32,11 @@ async function fetchTrialStatus(queryClient: QueryClient) {
   const supabase = createClient();
   const { data: org, error } = await supabase
     .from("organizations")
-    .select("plan, trial_ends_at")
+    .select("plan, trial_ends_at, canceled_access_ends_at")
     .eq("id", profile.orgId)
     .single();
   if (error) throw error;
-  return { plan: org.plan, trialEndsAt: org.trial_ends_at };
+  return { plan: org.plan, trialEndsAt: org.trial_ends_at, accessEndsAt: org.canceled_access_ends_at };
 }
 
 export function useTrialStatus(): TrialStatus & { isLoading: boolean } {
@@ -41,7 +48,28 @@ export function useTrialStatus(): TrialStatus & { isLoading: boolean } {
   });
 
   if (isLoading || data == null) {
-    return { isTrial: false, isExpired: false, trialEndsAt: null, daysRemaining: 0, isLoading: true };
+    return {
+      isTrial: false, isExpired: false, lockReason: null, trialEndsAt: null, daysRemaining: 0,
+      isReadOnly: false, accessEndsAt: null, isLoading: true,
+    };
+  }
+
+  if (data.plan === "canceled") {
+    // Read-only (RLS blocks writes) until accessEndsAt, then locked out.
+    // A missing end date is treated as already ended rather than open-ended.
+    const accessEndsAt = data.accessEndsAt;
+    const msLeft = accessEndsAt ? new Date(accessEndsAt).getTime() - Date.now() : 0;
+    const ended = msLeft <= 0;
+    return {
+      isTrial: false,
+      isExpired: ended,
+      lockReason: ended ? "canceled" : null,
+      trialEndsAt: null,
+      daysRemaining: Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24))),
+      isReadOnly: !ended,
+      accessEndsAt,
+      isLoading: false,
+    };
   }
 
   const isTrial = data.plan === "trial";
@@ -50,5 +78,8 @@ export function useTrialStatus(): TrialStatus & { isLoading: boolean } {
   const daysRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60 * 24)));
   const isExpired = isTrial && trialEndsAt != null && msRemaining <= 0;
 
-  return { isTrial, isExpired, trialEndsAt, daysRemaining, isLoading: false };
+  return {
+    isTrial, isExpired, lockReason: isExpired ? "trial" : null, trialEndsAt, daysRemaining,
+    isReadOnly: false, accessEndsAt: null, isLoading: false,
+  };
 }

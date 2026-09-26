@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
+import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 
 /**
  * GET  /api/crm/sales-meetings/automation-date-triggers — called every 15
@@ -13,14 +14,23 @@ import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet }
  * Evaluates the 'sales_meeting_reminder' date-gap automation trigger type
  * (mirrors /api/crm/estimates/automation-date-triggers) and enrolls the
  * meeting's client into the trigger's sequence once the meeting falls within
- * that trigger's configured `minutes` lead time. This does NOT send
- * anything itself — it only creates rows in crm_sequence_enrollments, which
- * /api/automations/run then processes like any other enrollment.
+ * that trigger's configured `minutes` lead time (60 when the builder left
+ * it blank — the lead time the old reminder-cron path always used). This is
+ * the ONLY enrollment path for this trigger type; /api/cron/sales-meeting-
+ * reminders only notifies the rep.
+ *
+ * Each new enrollment is driven through its no-wait steps right away
+ * (processEnrollmentImmediately) — a "15 minutes before" reminder can't wait
+ * for the next /api/automations/run sweep, which would land it after the
+ * meeting started. Later waits are picked up by that sweep.
  *
  * A meeting with no client (a new-lead meeting) can't be enrolled — the
  * automations engine is entirely client-scoped. The rep still gets notified
  * directly by /api/cron/sales-meeting-reminders regardless of client_id.
  */
+
+/** Lead time for a trigger saved without a "minutes before" value. */
+const DEFAULT_LEAD_MINUTES = 60;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -61,8 +71,8 @@ async function handleRun(request: Request) {
     if (!seq?.is_active || !auto?.is_active) continue;
 
     const orgId = auto.org_id as string;
-    const minutes = (trigger.config as { minutes?: number } | null)?.minutes;
-    if (!minutes || minutes <= 0) continue;
+    const configured = Number((trigger.config as { minutes?: number } | null)?.minutes);
+    const minutes = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_LEAD_MINUTES;
 
     const windowEnd = new Date(now.getTime() + minutes * 60_000);
 
@@ -96,13 +106,16 @@ async function handleRun(request: Request) {
       });
       if (!eligible) continue;
 
-      const ok = await enrollClientInSequence(supabase, {
+      const enrollmentId = await enrollClientInSequence(supabase, {
         sequenceId: trigger.sequence_id,
         orgId,
         clientId,
         meetingId: meeting.id,
       });
-      if (ok) enrolled++;
+      if (enrollmentId) {
+        enrolled++;
+        await processEnrollmentImmediately(supabase, enrollmentId);
+      }
     }
   }
 

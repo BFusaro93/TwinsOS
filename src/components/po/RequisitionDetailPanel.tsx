@@ -328,7 +328,10 @@ function DetailsTab({
         <LineItemsTable
           lineItems={lineItems}
           showProject
-          editable
+          editable={
+            !["ordered", "closed"].includes(status) ||
+            currentUser.role === "admin" || currentUser.role === "manager"
+          }
           onItemsChange={setLineItems}
           onItemAdded={(newItem, updatedItems) => {
             // LineItemsTable already updated local state via onItemsChange.
@@ -562,6 +565,10 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   const poPrefill = useMemo(() => ({
     vendorId: requisition.vendorId ?? undefined,
     requisitionId: requisition.id,
+    taxRatePercent: requisition.taxRatePercent,
+    shippingCost: requisition.shippingCost,
+    discountCost: requisition.discountCost,
+    discountReducesTax: requisition.discountReducesTax,
     items: requisition.lineItems.map((li) => {
       // Resolve the combobox key: "product:<id>" or "part:<id>"
       // Priority: already-prefixed > partId (maintenance part) > productItemId (catalog item)
@@ -582,10 +589,12 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
         unitCost: li.unitCost / 100,
         quantity: li.quantity,
         projectId: li.projectId ?? null,
+        taxable: li.taxable !== false,
+        notes: li.notes ?? null,
       };
     }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [requisition.id, requisition.vendorId, requisition.lineItems]);
+  }), [requisition.id, requisition.vendorId, requisition.lineItems, requisition.taxRatePercent, requisition.shippingCost, requisition.discountCost, requisition.discountReducesTax]);
 
   function handleConverted(po: PurchaseOrder) {
     const newStatus: ApprovalStatus = "ordered";
