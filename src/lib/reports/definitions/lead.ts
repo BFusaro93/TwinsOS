@@ -8,7 +8,7 @@ import {
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import { isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
-import { shiftYmd, ymd, zoneDateParts } from "@/lib/time/zone";
+import { shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 
 // ============================================================
 // Lead section — pre-built reports.
@@ -409,13 +409,14 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
     name: "Key Performance Indicators (Month-to-Date)",
     description: "Compares this week to last week across leads, clients, estimates, calls, and payments.",
     filters: [],
-    run: async ({ supabase }) => {
-      const iso = (d: Date) => d.toISOString().slice(0, 10);
-      const now = new Date();
-      const thisWeekStart = iso(new Date(now.getTime() - 6 * 86400000));
-      const thisWeekEnd = iso(now);
-      const lastWeekStart = iso(new Date(now.getTime() - 13 * 86400000));
-      const lastWeekEnd = iso(new Date(now.getTime() - 7 * 86400000));
+    run: async ({ supabase, timeZone }) => {
+      // Week edges on the org's calendar — toISOString() dates are UTC, so
+      // after 8pm ET "this week" already ended tomorrow.
+      const today = todayInZone(timeZone);
+      const thisWeekStart = shiftYmd(today, -6);
+      const thisWeekEnd = today;
+      const lastWeekStart = shiftYmd(today, -13);
+      const lastWeekEnd = shiftYmd(today, -7);
 
       async function countLeads(status: "lead" | "not_lead", dateCol: string, start: string, end: string) {
         let q = supabase

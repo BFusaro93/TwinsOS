@@ -11,6 +11,7 @@ import {
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 
 // ============================================================
 // Financial section — pre-built reports.
@@ -430,13 +431,13 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       );
 
       type BalRow = { due_date: string | null; invoice_date: string | null; balance_cents: number | null };
-      const now = Date.now();
+      const today = todayInZone(timeZone); // org calendar, not UTC
       let d0_30 = 0;
       let d31_60 = 0;
       let d61_plus = 0;
       for (const r of (balData ?? []) as unknown as BalRow[]) {
         const anchor = r.due_date ?? r.invoice_date;
-        const daysPastDue = anchor ? Math.floor((now - new Date(anchor).getTime()) / 86400000) : 0;
+        const daysPastDue = anchor ? daysBetweenYmd(anchor, today) : 0;
         const balance = r.balance_cents ?? 0;
         if (daysPastDue <= 30) d0_30 += balance;
         else if (daysPastDue <= 60) d31_60 += balance;

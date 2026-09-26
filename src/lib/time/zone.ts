@@ -91,6 +91,12 @@ export function shiftYmd(dateStr: string, days: number): string {
 }
 
 /** Monday of the week containing a "YYYY-MM-DD" (weeks start Monday). */
+/** Whole calendar days from `fromYmd` to `toYmd` (both "YYYY-MM-DD"); negative
+ *  when `toYmd` is earlier. Pure date arithmetic — no clock, no zone. */
+export function daysBetweenYmd(fromYmd: string, toYmd: string): number {
+  return Math.round((Date.parse(`${toYmd.slice(0, 10)}T00:00:00Z`) - Date.parse(`${fromYmd.slice(0, 10)}T00:00:00Z`)) / 86400000);
+}
+
 export function mondayOfYmd(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const anchor = new Date(Date.UTC(y, m - 1, d));
