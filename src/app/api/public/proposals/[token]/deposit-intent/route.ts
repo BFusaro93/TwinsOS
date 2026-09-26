@@ -5,6 +5,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 
 const BodySchema = z.object({
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
@@ -73,6 +74,15 @@ export async function POST(
     .is("deleted_at", null)
     .single();
   if (!estimate) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
+  // An unaccepted proposal past its Valid until date can't take a deposit any
+  // more than it can be accepted. (A bounced deposit on an already-accepted
+  // proposal is a retry, not a new acceptance, so it isn't blocked here.)
+  if (!shareToken.accepted_at && estimate.stage === "sent") {
+    const { data: vu } = await supabase.from("estimates").select("valid_until_date").eq("id", estimate.id).single();
+    if (await isEstimatePastValidUntil(supabase, shareToken.org_id, vu?.valid_until_date)) {
+      return NextResponse.json({ error: "This proposal has expired" }, { status: 410 });
+    }
+  }
 
   // ── Who may still pay a deposit through this link ────────────────────────
   //

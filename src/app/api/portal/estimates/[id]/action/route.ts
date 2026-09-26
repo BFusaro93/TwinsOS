@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
+import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 
 export async function POST(
   req: Request,
@@ -60,18 +61,26 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: estimate } = await (supabase as any)
     .from("estimates")
-    .select("id, stage, org_id, client_id, estimate_number, sales_rep_id")
+    .select("id, stage, org_id, client_id, estimate_number, sales_rep_id, valid_until_date")
     .eq("id", id)
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
     .is("deleted_at", null)
-    .single() as { data: { id: string; stage: string; org_id: string; client_id: string; estimate_number: number; sales_rep_id: string | null } | null };
+    .single() as { data: { id: string; stage: string; org_id: string; client_id: string; estimate_number: number; sales_rep_id: string | null; valid_until_date: string | null } | null };
 
   if (!estimate) {
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
   }
   if (estimate.stage !== "sent") {
     return NextResponse.json({ error: "Estimate is no longer actionable" }, { status: 409 });
+  }
+  // Same rule as the public proposal link: past Valid until, the client can
+  // decline or ask for changes, but not accept the old price.
+  if (action === "accept" && await isEstimatePastValidUntil(supabase, estimate.org_id, estimate.valid_until_date)) {
+    return NextResponse.json(
+      { error: "This estimate has expired. Request changes to get an updated one." },
+      { status: 410 }
+    );
   }
 
   if (action === "request_changes") {

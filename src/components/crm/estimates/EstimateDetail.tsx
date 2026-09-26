@@ -404,7 +404,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       await navigator.clipboard.writeText(url);
       toast.success("Proposal link copied");
     } catch {
-      toast.error("Couldn't copy — your browser blocked clipboard access");
+      // Don't leave the user without the link — show it so it can be copied by hand.
+      toast.error("Couldn't copy automatically — copy the link below", {
+        description: url,
+        duration: 30000,
+      });
     }
   }
   async function openProposalLink() {
