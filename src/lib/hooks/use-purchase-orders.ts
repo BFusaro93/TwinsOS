@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
+import { correctPartReceipt, clampProductReduction, shortfallMessage } from "@/lib/inventory/part-stock";
 
 /**
  * A PO already in the approval pipeline ("pending" or "approved") must have
@@ -207,6 +208,11 @@ export function useUpdatePurchaseOrder() {
       notes: string | null;
     }) => {
       const supabase = createClient();
+      const { data: before } = await supabase
+        .from("purchase_orders")
+        .select("grand_total")
+        .eq("id", id)
+        .single();
       const { error } = await supabase
         .from("purchase_orders")
         .update({
@@ -225,6 +231,10 @@ export function useUpdatePurchaseOrder() {
         })
         .eq("id", id);
       if (error) throw error;
+      // Shipping/discount/tax edits move the total just like line items do.
+      if (before && before.grand_total !== grandTotal) {
+        await resubmitPOForApprovalIfNeeded(supabase, id, grandTotal);
+      }
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
@@ -945,7 +955,15 @@ export function useDeletePOLineItem() {
       const isMaintPart = (receiptLines ?? []).some((r: any) => r.is_maint_part);
 
       let reversedPartId: string | null = null;
+      let reversedPartQty = 0;     // units actually removed (may be < received)
       let reversedProductId: string | null = null;
+      let reversedProductQty = 0;
+      const { data: poRow } = await supabase
+        .from("purchase_orders")
+        .select("po_number")
+        .eq("id", poId)
+        .maybeSingle();
+      const poNumber = (poRow?.po_number as string | null | undefined) ?? "";
 
       if (totalReceived > 0) {
         // Resolve the catalog product the same way ReceiveGoodsDialog does:
@@ -991,26 +1009,37 @@ export function useDeletePOLineItem() {
             .is("deleted_at", null)
             .maybeSingle();
           if (linkedPart) {
-            const { error: partAdjustErr } = await supabase.rpc("adjust_part_quantity", {
-              p_org_id: lineItem.org_id,
-              p_part_id: linkedPart.id,
-              p_delta: -totalReceived,
-              p_po_number: "",
+            // Removes the units from this PO's cost layer, clamped to what is
+            // still on hand — units already used on work orders can't be
+            // un-received, and the old overload raised instead (blocking the
+            // delete) and never touched cost layers.
+            const res = await correctPartReceipt(supabase, {
+              orgId: lineItem.org_id,
+              partId: linkedPart.id,
+              delta: -totalReceived,
+              unitCost: Number(lineItem.unit_cost ?? 0),
+              poNumber,
             });
-            if (partAdjustErr) throw partAdjustErr;
+            const note = shortfallMessage(lineItem.product_item_name ?? "Part", res);
+            if (note) toast.warning(note);
             reversedPartId = linkedPart.id;
+            reversedPartQty = -res.appliedDelta;
           }
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: prodAdjustErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
-          p_org_id: lineItem.org_id,
-          p_product_id: productId,
-          p_delta: -totalReceived,
-          p_reason: "PO line item deleted — received quantity reversed",
-        });
-        if (prodAdjustErr) throw prodAdjustErr;
-        reversedProductId = productId;
+        const productDelta = await clampProductReduction(supabase, productId, -totalReceived);
+        if (productDelta !== 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: prodAdjustErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+            p_org_id: lineItem.org_id,
+            p_product_id: productId,
+            p_delta: productDelta,
+            p_reason: "PO line item deleted — received quantity reversed",
+          });
+          if (prodAdjustErr) throw prodAdjustErr;
+          reversedProductId = productId;
+          reversedProductQty = -productDelta;
+        }
       }
 
       // Unlink receipt lines — the FK on goods_receipt_lines.po_line_item_id
@@ -1041,20 +1070,21 @@ export function useDeletePOLineItem() {
           .update({ po_line_item_id: lineItemId })
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .in("id", (receiptLines ?? []).map((r: any) => r.id));
-        if (reversedPartId) {
-          await supabase.rpc("adjust_part_quantity", {
-            p_org_id: lineItem.org_id,
-            p_part_id: reversedPartId,
-            p_delta: totalReceived,
-            p_po_number: "",
-          });
+        if (reversedPartId && reversedPartQty > 0) {
+          await correctPartReceipt(supabase, {
+            orgId: lineItem.org_id,
+            partId: reversedPartId,
+            delta: reversedPartQty,
+            unitCost: Number(lineItem.unit_cost ?? 0),
+            poNumber,
+          }).catch(() => {});
         }
-        if (reversedProductId) {
+        if (reversedProductId && reversedProductQty > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.rpc as any)("adjust_product_item_quantity", {
             p_org_id: lineItem.org_id,
             p_product_id: reversedProductId,
-            p_delta: totalReceived,
+            p_delta: reversedProductQty,
             p_reason: "PO line item delete rolled back — header update failed",
           });
         }

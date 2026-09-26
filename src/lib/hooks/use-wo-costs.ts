@@ -4,16 +4,8 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapWOPart, mapWOLaborEntry, mapWOVendorCharge } from "@/lib/supabase/mappers";
 import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types/cmms";
+import { setWOPartStock } from "@/lib/inventory/part-stock";
 
-/**
- * Calls adjust_part_quantity() and warns the user when the requested
- * deduction was clamped at 0 instead of fully applied (using more of a part
- * than is currently in stock). The RPC itself doesn't block this — WO parts
- * usage is routinely recorded before or independent of a formal receiving
- * step — but silently applying less than requested with no signal at all
- * left inventory quietly wrong with no way for the person who typed the
- * quantity to know.
- */
 /**
  * Returns the authenticated user's org_id. Used to cross-check that a
  * client-supplied vendor_id/part_id actually belongs to the caller's own
@@ -30,21 +22,25 @@ async function getCurrentOrgId(supabase: ReturnType<typeof createClient>): Promi
   return profile.org_id as string;
 }
 
-async function adjustWOPartQuantity(
+/**
+ * Brings a wo_parts line's inventory deduction to `target` units via
+ * set_wo_part_stock(), and warns when a deduction was clamped at 0 instead
+ * of fully applied (using more of a part than is in stock). The RPC doesn't
+ * block this — WO parts usage is routinely recorded before or independent
+ * of a formal receiving step — but it records how much was REALLY deducted,
+ * so a later edit/delete credits back only that, never the full quantity.
+ */
+async function syncWOPartStock(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  partId: string,
-  delta: number,
-  workOrderId: string
+  woPartId: string,
+  target: number
 ) {
-  const { data, error } = await supabase
-    .rpc("adjust_part_quantity", { p_part_id: partId, p_delta: delta, p_work_order_id: workOrderId })
-    .single();
-  if (error) throw error;
-  if (data && delta < 0 && data.applied_delta > delta) {
-    const shortBy = delta - data.applied_delta;
+  const res = await setWOPartStock(supabase, woPartId, target);
+  if (res.requestedDelta < 0 && res.appliedDelta > res.requestedDelta) {
+    const shortBy = res.appliedDelta - res.requestedDelta;
     toast.warning(
-      `Only ${data.old_qty} in stock — ${Math.abs(shortBy)} short. Quantity on hand set to 0 instead of going negative.`
+      `Only ${res.oldQty ?? 0} in stock — ${shortBy} short. Quantity on hand set to 0 instead of going negative.`
     );
   }
 }
@@ -109,7 +105,7 @@ export function useWOParts(workOrderId: string) {
  * After adjust_part_quantity updates parts.quantity_on_hand, mirror the new
  * value to the linked product_items row so the Products page stays in sync.
  */
-async function syncPartQtyToProduct(
+export async function syncPartQtyToProduct(
   supabase: ReturnType<typeof createClient>,
   partId: string
 ) {
@@ -231,7 +227,7 @@ export function useAddWOPart() {
           // mirrors the insert path below, which the restore branch otherwise
           // bypasses entirely (was silently skipping the inventory deduction
           // and its audit_log entry).
-          await adjustWOPartQuantity(supabase, input.partId, -input.quantity, input.workOrderId);
+          await syncWOPartStock(supabase, restored.id, input.quantity);
           await syncPartQtyToProduct(supabase, input.partId);
           await linkPartToAssetFromWO(supabase, input.workOrderId, input.partId, input.partName, input.partNumber);
 
@@ -249,6 +245,8 @@ export function useAddWOPart() {
           part_number: input.partNumber,
           quantity: input.quantity,
           unit_cost: input.unitCost,
+          // Nothing taken from stock yet — set_wo_part_stock records it.
+          quantity_deducted: 0,
         })
         .select()
         .single();
@@ -256,7 +254,7 @@ export function useAddWOPart() {
 
       // Deduct from inventory when a linked part is added to a WO
       if (input.partId) {
-        await adjustWOPartQuantity(supabase, input.partId, -input.quantity, input.workOrderId);
+        await syncWOPartStock(supabase, data.id, input.quantity);
         await syncPartQtyToProduct(supabase, input.partId);
         await linkPartToAssetFromWO(supabase, input.workOrderId, input.partId, input.partName, input.partNumber);
       }
@@ -277,12 +275,11 @@ export function useUpdateWOPart() {
   return useMutation({
     mutationFn: async ({
       id,
-      workOrderId,
       quantity,
       unitCost,
     }: {
       id: string;
-      workOrderId: string;
+      workOrderId: string; // used by onSuccess for cache invalidation
       quantity: number;
       unitCost: number;
     }) => {
@@ -303,13 +300,12 @@ export function useUpdateWOPart() {
         .eq("id", id);
       if (error) throw error;
 
-      // Adjust inventory by the delta (positive = used more, negative = used less)
-      if (existing?.part_id) {
-        const delta = existing.quantity - quantity; // restore old, deduct new
-        if (delta !== 0) {
-          await adjustWOPartQuantity(supabase, existing.part_id, delta, workOrderId);
-          await syncPartQtyToProduct(supabase, existing.part_id);
-        }
+      // Move inventory so this line's deduction equals the new quantity.
+      // Works from what was actually deducted (not the old quantity), so a
+      // line whose deduction was clamped at 0 doesn't get over-credited.
+      if (existing?.part_id && existing.quantity !== quantity) {
+        await syncWOPartStock(supabase, id, quantity);
+        await syncPartQtyToProduct(supabase, existing.part_id);
       }
     },
     onSuccess: (_, { workOrderId }) => {
@@ -327,14 +323,21 @@ export function useDeleteWOPart() {
       id,
       workOrderId,
       partId,
-      quantity,
     }: {
       id: string;
       workOrderId: string;
       partId: string | null;
-      quantity: number;
+      /** Kept for callers; the credit uses wo_parts.quantity_deducted. */
+      quantity?: number;
     }) => {
       const supabase = createClient();
+      // Return to stock only what this line actually took out. Done before
+      // the soft delete so a failure here leaves the line (and its record
+      // of what it deducted) intact rather than stranding the units.
+      if (partId) {
+        await syncWOPartStock(supabase, id, 0);
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("wo_parts")
@@ -342,9 +345,7 @@ export function useDeleteWOPart() {
         .eq("id", id);
       if (error) throw error;
 
-      // Restore inventory when a part is removed from a WO
       if (partId) {
-        await adjustWOPartQuantity(supabase, partId, quantity, workOrderId);
         await syncPartQtyToProduct(supabase, partId);
       }
 

@@ -3,6 +3,8 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapWorkOrder } from "@/lib/supabase/mappers";
 import type { WorkOrder, WorkOrderStatus } from "@/types/cmms";
+import { setWOPartStock } from "@/lib/inventory/part-stock";
+import { syncPartQtyToProduct } from "@/lib/hooks/use-wo-costs";
 
 function patchWOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<WorkOrder>) {
   queryClient.setQueryData<WorkOrder[]>(["work-orders"], (old) =>
@@ -136,11 +138,25 @@ export function useUpdateWorkOrderStatus() {
         }
       }
 
+      // Previous status/creation time decide whether this completion consumes
+      // the automation's latest firing (see below).
+      const { data: before } = await supabase
+        .from("work_orders")
+        .select("status, created_at")
+        .eq("id", id)
+        .single();
+
       const { error } = await supabase.from("work_orders").update({ status }).eq("id", id);
       if (error) throw error;
 
-      // When completing a WO that was triggered by an automation, advance the threshold
-      if (status === "done" && automationId) {
+      // When completing a WO that was triggered by an automation, advance the
+      // threshold — but only once per firing. last_fired_value is set when the
+      // automation fires and cleared here when that firing's WO is completed,
+      // so it marks an unconsumed firing. Previously the threshold advanced on
+      // EVERY transition to done (and fell back to the already-advanced
+      // threshold once last_fired_value was cleared), so re-completing a WO —
+      // or completing an older WO from a previous cycle — skipped an interval.
+      if (status === "done" && automationId && before?.status !== "done") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: auto } = await (supabase as any)
           .from("automations")
@@ -148,17 +164,26 @@ export function useUpdateWorkOrderStatus() {
           .eq("id", automationId)
           .single();
 
-        if (auto && auto.trigger_type === "meter_threshold") {
+        // The firing this WO answers must be the automation's latest one: a
+        // WO created before last_fired_at belongs to an earlier cycle (the
+        // run route stamps last_fired_at just before creating the WO; 60s
+        // allows for app/DB clock skew).
+        const firedAt = auto?.last_fired_at ? new Date(auto.last_fired_at as string).getTime() : null;
+        const createdAt = before?.created_at ? new Date(before.created_at).getTime() : null;
+        const isLatestFiring =
+          auto?.last_fired_value != null &&
+          firedAt != null &&
+          (createdAt == null || createdAt >= firedAt - 60_000);
+
+        if (auto && auto.trigger_type === "meter_threshold" && isLatestFiring) {
           const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
           const interval = tc.interval != null ? Number(tc.interval) : null;
-          // Use last_fired_value as the base; fall back to current threshold so
-          // the advancement is always correct even if last_fired_value was cleared.
-          const baseValue = auto.last_fired_value != null
-            ? Number(auto.last_fired_value)
-            : Number(tc.threshold ?? 0);
+          const baseValue = Number(auto.last_fired_value);
 
           if (interval != null) {
             const newThreshold = baseValue + interval;
+            // Conditioned on the same firing still being unconsumed, so two
+            // concurrent completions can't both advance it.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await (supabase as any)
               .from("automations")
@@ -169,7 +194,8 @@ export function useUpdateWorkOrderStatus() {
                 last_fired_value: null,
                 updated_at: new Date().toISOString(),
               })
-              .eq("id", automationId);
+              .eq("id", automationId)
+              .eq("last_fired_at", auto.last_fired_at);
           } else {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await (supabase as any)
@@ -396,9 +422,60 @@ export function useDeleteWorkOrder() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase.from("work_orders").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+
+      // The dialog says the delete can't be undone, so sub-WOs (PM batches,
+      // split jobs) go with their parent rather than being left orphaned
+      // under a parent nobody can open. Collect the whole tree first.
+      const ids: string[] = [id];
+      for (let frontier = [id]; frontier.length > 0; ) {
+        const { data: children, error: childErr } = await supabase
+          .from("work_orders")
+          .select("id")
+          .in("parent_work_order_id", frontier)
+          .is("deleted_at", null);
+        if (childErr) throw childErr;
+        frontier = (children ?? []).map((c) => c.id as string).filter((cid) => !ids.includes(cid));
+        ids.push(...frontier);
+      }
+
+      // Parts used on these WOs go back to stock — only what each line
+      // actually deducted (set_wo_part_stock), same as removing the line.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: woParts, error: partsErr } = await (supabase as any)
+        .from("wo_parts")
+        .select("id, part_id")
+        .in("work_order_id", ids)
+        .is("deleted_at", null)
+        .not("part_id", "is", null);
+      if (partsErr) throw partsErr;
+      const touchedParts = new Set<string>();
+      for (const wp of (woParts ?? []) as { id: string; part_id: string }[]) {
+        await setWOPartStock(supabase, wp.id, 0);
+        touchedParts.add(wp.part_id);
+      }
+      for (const partId of touchedParts) {
+        await syncPartQtyToProduct(supabase, partId);
+      }
+
+      const now = new Date().toISOString();
+      // Children first, so a failure part-way never leaves a live child
+      // under a deleted parent.
+      const childIds = ids.filter((wid) => wid !== id);
+      if (childIds.length > 0) {
+        const { error: childDelErr } = await supabase
+          .from("work_orders")
+          .update({ deleted_at: now })
+          .in("id", childIds);
+        if (childDelErr) throw childDelErr;
+      }
+      const { error } = await supabase.from("work_orders").update({ deleted_at: now }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["wo-parts"] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 }

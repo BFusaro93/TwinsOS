@@ -51,6 +51,8 @@ interface DraftLineItem {
   category: string;
   projectId: string; // "none" = no project
   taxable: boolean;
+  /** Per-line note carried over from a requisition (not editable here). */
+  notes?: string | null;
 }
 
 export interface POPrefillItem {
@@ -60,6 +62,8 @@ export interface POPrefillItem {
   unitCost: number; // dollars
   quantity: number;
   projectId?: string | null;
+  taxable?: boolean;
+  notes?: string | null;
 }
 
 interface POPrefillData {
@@ -67,6 +71,11 @@ interface POPrefillData {
   projectId?: string;
   items?: POPrefillItem[];
   requisitionId?: string;
+  /** Header money fields from a requisition (cents / percent). */
+  taxRatePercent?: number;
+  shippingCost?: number;
+  discountCost?: number;
+  discountReducesTax?: boolean;
 }
 
 interface NewPODialogProps {
@@ -176,15 +185,27 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       setShippingCost(initialData.shippingCost > 0 ? (initialData.shippingCost / 100).toFixed(2) : "");
       setDiscountCost(initialData.discountCost > 0 ? (initialData.discountCost / 100).toFixed(2) : "");
       setDiscountReducesTax(initialData.discountReducesTax);
-    } else if (open && !initialData) {
-      // Sync tax rate from org settings when creating a new PO
+    } else if (open && !initialData && prefillData?.taxRatePercent == null) {
+      // Sync tax rate from org settings when creating a new PO (a
+      // requisition conversion brings its own rate instead).
       setTaxRatePercent(String(orgTaxRate ?? 7));
     }
-  }, [open, initialData, orgTaxRate]);
+  }, [open, initialData, orgTaxRate, prefillData?.taxRatePercent]);
 
   useEffect(() => {
     if (open && !initialData && prefillData) {
       if (prefillData.vendorId) setVendorId(prefillData.vendorId);
+      // Carry the requisition's tax rate, discount and shipping, as the
+      // split-by-vendor conversion does — previously a single conversion
+      // silently reset them to the org default / zero.
+      if (prefillData.taxRatePercent != null) setTaxRatePercent(String(prefillData.taxRatePercent));
+      if (prefillData.shippingCost != null) {
+        setShippingCost(prefillData.shippingCost > 0 ? (prefillData.shippingCost / 100).toFixed(2) : "");
+      }
+      if (prefillData.discountCost != null) {
+        setDiscountCost(prefillData.discountCost > 0 ? (prefillData.discountCost / 100).toFixed(2) : "");
+      }
+      if (prefillData.discountReducesTax != null) setDiscountReducesTax(prefillData.discountReducesTax);
       if (prefillData.items?.length) {
         setLineItems(
           prefillData.items.map((item) => ({
@@ -198,7 +219,8 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
             category: "",
             // Per-item project takes priority; fall back to top-level prefillData.projectId
             projectId: item.projectId ?? prefillData.projectId ?? "none",
-            taxable: true,
+            taxable: item.taxable ?? true,
+            notes: item.notes ?? null,
           }))
         );
       }
@@ -405,7 +427,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
           unitCost: Math.round(li.unitCost * 10000) / 100,
           totalCost: Math.round(li.quantity * li.unitCost * 100),
           projectId: li.projectId === "none" ? null : li.projectId,
-          notes: null,
+          notes: li.notes ?? null,
           taxable: li.taxable,
         };
       }),

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapGoodsReceipt } from "@/lib/supabase/mappers";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
+import { correctPartReceipt, clampProductReduction, shortfallMessage } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -172,7 +173,7 @@ export function useUpdateGoodsReceipt() {
       // Collect quantity changes for audit entries + inventory adjustment
       const qtyChanges: Array<{
         lineId: string; name: string; oldQty: number; newQty: number; delta: number;
-        poLineItemId: string | null; partNumber: string; isMaintPart: boolean;
+        poLineItemId: string | null; partNumber: string; isMaintPart: boolean; unitCost: number;
       }> = [];
       for (const line of input.lines) {
         const old = oldByLineId.get(line.id);
@@ -186,6 +187,7 @@ export function useUpdateGoodsReceipt() {
             poLineItemId: old.po_line_item_id,
             partNumber: old.part_number,
             isMaintPart: old.is_maint_part,
+            unitCost: line.unitCost,
           });
         }
       }
@@ -281,13 +283,18 @@ export function useUpdateGoodsReceipt() {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (chg.partNumber ? parts?.find((pt: any) => pt.part_number === chg.partNumber) : null);
             if (linkedPart) {
-              const { error: adjustErr } = await supabase.rpc("adjust_part_quantity", {
-                p_org_id: currentReceipt.org_id,
-                p_part_id: linkedPart.id,
-                p_delta: Math.round(chg.delta),
-                p_po_number: (currentReceipt.po_number as string | null) ?? "",
+              // Moves the receipt's cost layer with the quantity, and for a
+              // reduction removes only what's still on hand (units already
+              // used on work orders can't be un-received) instead of raising.
+              const res = await correctPartReceipt(supabase, {
+                orgId: currentReceipt.org_id as string,
+                partId: linkedPart.id,
+                delta: chg.delta,
+                unitCost: chg.unitCost,
+                poNumber: (currentReceipt.po_number as string | null) ?? "",
               });
-              if (adjustErr) throw adjustErr;
+              const note = shortfallMessage(chg.name, res);
+              if (note) toast.warning(note);
             }
           }
 
@@ -295,14 +302,19 @@ export function useUpdateGoodsReceipt() {
           // read-modify-write off `matchedProduct.quantity_on_hand`, which
           // was read in a separate query moments earlier and could race
           // with another concurrent receipt/adjustment on the same product.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: prodErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
-            p_org_id: currentReceipt.org_id,
-            p_product_id: matchedProduct.id,
-            p_delta: chg.delta,
-            p_reason: "goods receipt correction",
-          });
-          if (prodErr) throw prodErr;
+          // A reduction is clamped to what the product still has on hand —
+          // the RPC raises rather than go negative.
+          const productDelta = await clampProductReduction(supabase, matchedProduct.id, chg.delta);
+          if (productDelta !== 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: prodErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+              p_org_id: currentReceipt.org_id,
+              p_product_id: matchedProduct.id,
+              p_delta: productDelta,
+              p_reason: "goods receipt correction",
+            });
+            if (prodErr) throw prodErr;
+          }
         }
       }
 
@@ -394,6 +406,8 @@ export function useUpdateGoodsReceipt() {
       queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
       queryClient.invalidateQueries({ queryKey: ["goods-receipts", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "receiving", id] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
     onError: (err) => {
       toast.error(`Failed to update receipt: ${errMsg(err)}`);

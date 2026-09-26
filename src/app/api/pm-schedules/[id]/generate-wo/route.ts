@@ -3,36 +3,89 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { setWOPartStock } from "@/lib/inventory/part-stock";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("pm-generate-wo");
 
 type ServerSupabase = Awaited<ReturnType<typeof createServerClient>>;
 
 /**
- * Mirrors useAddWOPart's insert-path inventory deduction (use-wo-costs.ts) for
- * wo_parts rows created here by copying pm_schedule_asset_parts templates.
- * Without this, PM-generated parts were never deducted from parts.quantity_on_hand
- * at all — but useDeleteWOPart still credits +quantity back on delete, so
- * removing a PM-generated line inflated stock that generation never reduced.
- * Uses the session-authenticated client (not the service-role adminClient)
- * because adjust_part_quantity() requires a real auth.uid() to attribute the
- * audit entry to.
+ * Copies pm_schedule_asset_parts templates into wo_parts for a generated WO
+ * and deducts them from inventory, mirroring useAddWOPart (use-wo-costs.ts):
+ * each line is inserted with quantity_deducted 0 and then set_wo_part_stock()
+ * takes the stock, recording how much it REALLY took (deductions clamp at 0),
+ * so deleting the line later credits back only that. Uses the
+ * session-authenticated client for the RPC because it needs a real
+ * auth.uid() to attribute the audit entry to. Throws on any failure — a
+ * silently skipped deduction leaves inventory wrong with no trace.
+ * Returns the part names that were short of stock.
  */
-async function deductPartsInventory(
+async function copyTemplatePartsAndDeduct(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminClient: any,
   userClient: ServerSupabase,
+  orgId: string,
   workOrderId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   templateParts: any[]
-) {
-  const withParts = templateParts.filter((tp) => tp.part_id);
-  await Promise.all(
-    withParts.map((tp) =>
+): Promise<string[]> {
+  if (templateParts.length === 0) return [];
+  const { data: inserted, error: insertErr } = await adminClient
+    .from("wo_parts")
+    .insert(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (userClient.rpc as any)("adjust_part_quantity", {
-        p_part_id: tp.part_id,
-        p_delta: -tp.quantity,
-        p_work_order_id: workOrderId,
-      })
+      templateParts.map((tp: any) => ({
+        org_id: orgId,
+        work_order_id: workOrderId,
+        part_id: tp.part_id,
+        part_name: tp.part_name,
+        part_number: tp.part_number,
+        quantity: tp.quantity,
+        unit_cost: tp.unit_cost,
+        quantity_deducted: 0,
+      }))
     )
-  );
+    .select("id, part_id, part_name, quantity");
+  if (insertErr) throw new Error(`Failed to copy parts onto the work order: ${insertErr.message}`);
+
+  const short: string[] = [];
+  for (const row of (inserted ?? []) as { id: string; part_id: string | null; part_name: string; quantity: number }[]) {
+    if (!row.part_id) continue;
+    const res = await setWOPartStock(userClient, row.id, row.quantity);
+    if (res.appliedDelta > res.requestedDelta) short.push(row.part_name);
+  }
+  return short;
+}
+
+/**
+ * Undoes a partially generated batch: returns any parts already taken from
+ * stock and soft-deletes the WOs created so far, so a failed generation
+ * doesn't leave a half batch (which the duplicate guard would then block
+ * regenerating) or inventory taken for WOs that don't exist.
+ */
+async function rollbackGeneratedWOs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminClient: any,
+  userClient: ServerSupabase,
+  workOrderIds: string[]
+) {
+  if (workOrderIds.length === 0) return;
+  const { data: parts } = await adminClient
+    .from("wo_parts")
+    .select("id, part_id")
+    .in("work_order_id", workOrderIds)
+    .is("deleted_at", null)
+    .not("part_id", "is", null);
+  for (const wp of (parts ?? []) as { id: string }[]) {
+    await setWOPartStock(userClient, wp.id, 0).catch((err: unknown) => {
+      log.error("rollback: failed to return part to stock", { woPartId: wp.id, error: err instanceof Error ? err.message : String(err) });
+    });
+  }
+  await adminClient
+    .from("work_orders")
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", workOrderIds);
 }
 
 // The DB-level backstop for the duplicate-batch guard (see the "── 2."
@@ -54,7 +107,8 @@ function isDuplicateBatchError(error: any): boolean {
  * Parts templates (pm_schedule_asset_parts) are copied into wo_parts for each sub-WO.
  * Updates pm_schedules.next_due_date based on frequency.
  *
- * Returns: { parentWorkOrderId: string }
+ * Returns: { parentWorkOrderId: string, shortParts: string[], warning?: string }
+ * (shortParts = part names whose stock ran out; deductions clamp at 0)
  */
 export async function POST(
   request: Request,
@@ -158,8 +212,19 @@ export async function POST(
     );
   }
 
-  // ── 3. Generate a WO number prefix ───────────────────────────────────────
-  const suffix = Date.now().toString().slice(-6);
+  // ── 3. WO number from the atomic per-org counter ──────────────────────────
+  // Same next_work_order_number() every other WO path uses. The old
+  // `WO-${Date.now().slice(-6)}` could collide and skipped the org's sequence.
+  // Sub-WOs share the batch's number with a -1, -2… suffix, which can't
+  // collide with a counter-issued number.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: woNumber, error: woNumErr } = await (userClient.rpc as any)("next_work_order_number");
+  if (woNumErr || !woNumber) {
+    return NextResponse.json({ error: woNumErr?.message ?? "Failed to allocate a work order number" }, { status: 500 });
+  }
+  const baseNumber = woNumber as string;
+  const createdWOIds: string[] = [];
+  const shortParts: string[] = [];
   const dateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const isSingleAsset = scheduleAssets.length === 1;
 
@@ -184,7 +249,7 @@ export async function POST(
         asset_id: sa.asset_id,
         asset_name: sa.asset_name,
         pm_schedule_id: scheduleId,
-        work_order_number: `WO-${suffix}`,
+        work_order_number: baseNumber,
         assigned_to_id: schedule.assigned_to_id ?? null,
         assigned_to_name: schedule.assigned_to_name ?? null,
         assigned_to_ids: assigneeIds,
@@ -205,26 +270,21 @@ export async function POST(
       return NextResponse.json({ error: singleErr?.message ?? "Failed to create WO" }, { status: 500 });
     }
 
+    createdWOIds.push(singleWO.id);
+
     // Copy pm_schedule_asset_parts → wo_parts
-    const { data: templateParts } = await adminClient
+    const { data: templateParts, error: tplErr } = await adminClient
       .from("pm_schedule_asset_parts")
       .select("*")
       .eq("pm_schedule_asset_id", sa.id)
       .is("deleted_at", null);
 
-    if (templateParts && templateParts.length > 0) {
-      await adminClient.from("wo_parts").insert(
-        templateParts.map((tp) => ({
-          org_id: profile.org_id,
-          work_order_id: singleWO.id,
-          part_id: tp.part_id,
-          part_name: tp.part_name,
-          part_number: tp.part_number,
-          quantity: tp.quantity,
-          unit_cost: tp.unit_cost,
-        }))
-      );
-      await deductPartsInventory(userClient, singleWO.id, templateParts);
+    try {
+      if (tplErr) throw new Error(`Failed to load the schedule's parts: ${tplErr.message}`);
+      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, singleWO.id, templateParts ?? []));
+    } catch (err) {
+      await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
     }
 
     primaryWOId = singleWO.id;
@@ -244,7 +304,7 @@ export async function POST(
         priority: "medium",
         wo_type: "preventive",
         pm_schedule_id: scheduleId,
-        work_order_number: `WO-${suffix}-P`,
+        work_order_number: baseNumber,
         assigned_to_id: schedule.assigned_to_id ?? null,
         assigned_to_name: schedule.assigned_to_name ?? null,
         assigned_to_ids: assigneeIds,
@@ -264,6 +324,7 @@ export async function POST(
     if (parentErr || !parentWO) {
       return NextResponse.json({ error: parentErr?.message ?? "Failed to create parent WO" }, { status: 500 });
     }
+    createdWOIds.push(parentWO.id);
 
     for (let i = 0; i < scheduleAssets.length; i++) {
       const sa = scheduleAssets[i];
@@ -281,7 +342,7 @@ export async function POST(
           asset_name: sa.asset_name,
           pm_schedule_id: scheduleId,
           parent_work_order_id: parentWO.id,
-          work_order_number: `WO-${suffix}-${i + 1}`,
+          work_order_number: `${baseNumber}-${i + 1}`,
           assigned_to_id: schedule.assigned_to_id ?? null,
           assigned_to_name: schedule.assigned_to_name ?? null,
           assigned_to_ids: assigneeIds,
@@ -292,28 +353,31 @@ export async function POST(
         .select()
         .single();
 
-      if (subErr || !subWO) continue;
+      // A missing sub-WO used to be skipped silently while next_due_date
+      // still advanced — that asset's PM was simply lost for the cycle. Fail
+      // the whole batch instead (rolled back, schedule not advanced).
+      if (subErr || !subWO) {
+        await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
+        return NextResponse.json(
+          { error: `Failed to create the work order for ${sa.asset_name}: ${subErr?.message ?? "unknown error"}. Nothing was generated.` },
+          { status: 500 }
+        );
+      }
+      createdWOIds.push(subWO.id);
 
       // Copy pm_schedule_asset_parts → wo_parts for this sub-WO
-      const { data: templateParts } = await adminClient
+      const { data: templateParts, error: tplErr } = await adminClient
         .from("pm_schedule_asset_parts")
         .select("*")
         .eq("pm_schedule_asset_id", sa.id)
         .is("deleted_at", null);
 
-      if (templateParts && templateParts.length > 0) {
-        await adminClient.from("wo_parts").insert(
-          templateParts.map((tp) => ({
-            org_id: profile.org_id,
-            work_order_id: subWO.id,
-            part_id: tp.part_id,
-            part_name: tp.part_name,
-            part_number: tp.part_number,
-            quantity: tp.quantity,
-            unit_cost: tp.unit_cost,
-          }))
-        );
-        await deductPartsInventory(userClient, subWO.id, templateParts);
+      try {
+        if (tplErr) throw new Error(`Failed to load the schedule's parts: ${tplErr.message}`);
+        shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, subWO.id, templateParts ?? []));
+      } catch (err) {
+        await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
       }
     }
 
@@ -325,13 +389,24 @@ export async function POST(
   // doesn't push the next due date further out than one interval from now.
   const today = todayInZone(await getOrgTimeZone(userClient, profile.org_id as string));
   const nextDue = advanceDate(today, schedule.frequency);
-  await adminClient
+  const { error: advanceErr } = await adminClient
     .from("pm_schedules")
     .update({
       next_due_date: nextDue,
       last_completed_date: today,
     })
     .eq("id", scheduleId);
+  if (advanceErr) {
+    // The batch exists, so keep it — but say the schedule didn't move.
+    return NextResponse.json(
+      {
+        parentWorkOrderId: primaryWOId,
+        shortParts,
+        warning: `Work orders were created, but the schedule's next due date could not be advanced: ${advanceErr.message}`,
+      },
+      { status: 200 }
+    );
+  }
 
   // The update above runs through the service-role client, so fn_audit_log()
   // can't see the acting user via auth.uid() and the generic field-diff
@@ -358,7 +433,7 @@ export async function POST(
       .eq("id", scheduleAudit.id);
   }
 
-  return NextResponse.json({ parentWorkOrderId: primaryWOId });
+  return NextResponse.json({ parentWorkOrderId: primaryWOId, shortParts });
 }
 
 function advanceDate(from: string, frequency: string): string {
