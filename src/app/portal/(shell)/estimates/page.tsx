@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getPublishedProposal } from "@/lib/estimates/proposal-content";
 import PortalEstimatesPage from "@/components/portal/PortalEstimatesPage";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 
@@ -9,6 +10,8 @@ interface LineItemRow {
   description: string | null;
   quantity: number;
   unit_price_cents: number;
+  visits: number | null;
+  total_cents: number;
   status: string;
   row_type: "item" | "section" | null;
   section_name: string | null;
@@ -47,7 +50,7 @@ export default async function EstimatesPage() {
     .from("estimates")
     .select(
       "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, " +
-        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, status, sort_order, row_type, section_name)"
+        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name)"
     )
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
@@ -60,10 +63,39 @@ export default async function EstimatesPage() {
     .order("sort_order", { referencedTable: "estimate_line_items", ascending: true })
     .limit(50) as { data: EstimateRow[] | null };
 
-  const normalized = (estimates ?? []).map((e) => ({
-    ...e,
-    display_settings: toDisplaySettings(e.display_settings),
-    line_items: e.line_items.map((li) => ({ ...li, description: li.description ?? "" })),
+  // A sent estimate shows the version the client was sent, not edits the
+  // office hasn't sent yet (see lib/estimates/proposal-content.ts). The
+  // versions table is staff-only under RLS, so read it with the service
+  // client — every estimate here is already scoped to this client above.
+  const service = createServiceClient();
+  const normalized = await Promise.all((estimates ?? []).map(async (e) => {
+    const published = e.status === "sent" ? await getPublishedProposal(service, e.id) : null;
+    if (published) {
+      const c = published.content;
+      return {
+        ...e,
+        title: c.description,
+        total_price_cents: c.totalCents,
+        expires_at: c.validUntil,
+        display_settings: c.displaySettings,
+        line_items: c.lineItems.map((li) => ({
+          id: li.id,
+          description: li.estimateDesc ?? li.serviceName ?? "",
+          quantity: li.qty,
+          unit_price_cents: li.rateCents,
+          visits: li.visits,
+          total_cents: li.totalCents,
+          status: li.status,
+          row_type: li.rowType,
+          section_name: li.sectionName,
+        })),
+      };
+    }
+    return {
+      ...e,
+      display_settings: toDisplaySettings(e.display_settings),
+      line_items: e.line_items.map((li) => ({ ...li, description: li.description ?? "" })),
+    };
   }));
 
   return <PortalEstimatesPage estimates={normalized} />;

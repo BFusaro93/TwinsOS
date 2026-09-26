@@ -43,6 +43,9 @@ interface LineItem {
   description: string;
   quantity: number;
   unit_price_cents: number;
+  /** The line's real total (qty × rate × visits, after any line discount). */
+  total_cents: number;
+  visits?: number | null;
   status: string;
   row_type?: "item" | "section" | null;
   section_name?: string | null;
@@ -74,13 +77,15 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const selectedTotal = hasLineItems
     ? itemRows
         .filter((li) => selectedIds.has(li.id))
-        .reduce((sum, li) => sum + li.unit_price_cents * li.quantity, 0)
+        .reduce((sum, li) => sum + li.total_cents, 0)
     : estimate.total_price_cents;
 
   const sections = groupIntoSections(
     (estimate.line_items ?? [])
       .filter((li) => li.status !== "lost")
-      .map((li) => ({ ...li, totalCents: li.unit_price_cents * li.quantity, rowType: li.row_type ?? "item", sectionName: li.section_name ?? null })),
+      // total_cents, not rate × qty: rate × qty ignored visits, so a 13-visit
+      // mow at $55 read $55 (and the Selected Total followed) instead of $715.
+      .map((li) => ({ ...li, totalCents: li.total_cents, rowType: li.row_type ?? "item", sectionName: li.section_name ?? null })),
     settings
   );
 
@@ -152,9 +157,10 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
                             reads the raw "<p>" tags. */}
                         {looksLikeHtml(li.description) ? stripHtml(li.description) : li.description}
                         {settings.showQuantities && li.quantity > 1 && <span className="text-slate-400 text-xs ml-1">×{li.quantity}</span>}
+                        {(li.visits ?? 1) > 1 && <span className="text-slate-400 text-xs ml-1">· {li.visits} visits</span>}
                       </span>
                       {settings.showLineTotals && !(settings.hideZeroPrices && li.unit_price_cents === 0) && (
-                        <span className="text-slate-800 font-medium shrink-0">{fmt(li.unit_price_cents * li.quantity)}</span>
+                        <span className="text-slate-800 font-medium shrink-0">{fmt(li.total_cents)}</span>
                       )}
                     </label>
                   ))}

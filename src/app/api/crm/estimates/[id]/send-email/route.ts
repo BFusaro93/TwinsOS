@@ -16,6 +16,7 @@ import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
+import { loadLiveProposalContent } from "@/lib/estimates/proposal-content";
 
 const log = logger.child("send-estimate");
 
@@ -446,6 +447,8 @@ export async function POST(
 
   // Snapshot estimate state at time of (successful) send
   const versionNumber = await getNextVersionNumber(supabase, estimateId);
+  // What the proposal link will show from now on (see proposal-content.ts).
+  const proposalContent = await loadLiveProposalContent(supabase, estimateId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("estimate_versions").insert({
     org_id: est.org_id,
@@ -481,6 +484,7 @@ export async function POST(
         rowType: li.row_type ?? "item",
         sectionName: li.section_name,
       })),
+      proposal: proposalContent,
     },
   });
 

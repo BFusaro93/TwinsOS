@@ -724,6 +724,12 @@ export interface EstimateVersion {
     totalCents: number;
     notes: string | null;
     validUntil: string | null;
+    /** Set on the version recorded at acceptance (not on sent versions). */
+    acceptedBy?: string;
+    acceptedAt?: string;
+    acceptedVia?: "proposal_link" | "client_portal";
+    /** Published by Copy/Open link rather than email. */
+    sharedVia?: "link";
     lineItems: {
       id: string;
       serviceName: string | null;
@@ -807,6 +813,12 @@ export interface EstimateShareLink {
   url: string | null;
   token?: string;
   expiresAt?: string | null;
+  /** The version the client's link shows (null: nothing published yet — the
+   *  link shows the live estimate). */
+  publishedVersion?: number | null;
+  /** Edited since publishedVersion — the client still sees that version and
+   *  can't accept until it's sent again. */
+  changedSinceSent?: boolean;
 }
 
 /**
@@ -814,9 +826,11 @@ export interface EstimateShareLink {
  * been sent, or every link has expired / been accepted). Read-only — use
  * useEnsureEstimateShareLink to mint one on demand.
  */
-export function useEstimateShareLink(estimateId: string) {
+export function useEstimateShareLink(estimateId: string, revision?: string | null) {
   return useQuery({
-    queryKey: ["estimate-share-link", estimateId],
+    // `revision` (the estimate's updatedAt) re-checks changedSinceSent after
+    // each edit; invalidations on the bare key still match this prefix.
+    queryKey: ["estimate-share-link", estimateId, revision ?? null],
     queryFn: async (): Promise<EstimateShareLink> => {
       const res = await fetch(`/api/crm/estimates/${estimateId}/share-link`);
       if (!res.ok) {
@@ -850,6 +864,8 @@ export function useEnsureEstimateShareLink() {
     onSuccess: (_data, estimateId) => {
       qc.invalidateQueries({ queryKey: ["estimate-share-link", estimateId] });
       qc.invalidateQueries({ queryKey: ["estimate-share-tokens", estimateId] });
+      // Sharing the link can publish a new version.
+      qc.invalidateQueries({ queryKey: ["estimate-versions", estimateId] });
     },
   });
 }

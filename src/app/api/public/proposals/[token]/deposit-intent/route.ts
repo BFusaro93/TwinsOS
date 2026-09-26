@@ -6,6 +6,7 @@ import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
+import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
 const BodySchema = z.object({
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
@@ -82,6 +83,14 @@ export async function POST(
     if (await isEstimatePastValidUntil(supabase, shareToken.org_id, vu?.valid_until_date)) {
       return NextResponse.json({ error: "This proposal has expired" }, { status: 410 });
     }
+  }
+  // A deposit starts an acceptance — same rule: only for the version the
+  // client's link shows (retries on an already-accepted proposal excepted).
+  if (!shareToken.accepted_at && estimate.stage === "sent" && await isChangedSinceSent(supabase, estimate.id)) {
+    return NextResponse.json(
+      { error: "This proposal was updated after it was sent to you. We'll send you the latest version shortly." },
+      { status: 409 }
+    );
   }
 
   // ── Who may still pay a deposit through this link ────────────────────────

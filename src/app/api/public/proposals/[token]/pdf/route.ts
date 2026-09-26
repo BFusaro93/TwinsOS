@@ -40,7 +40,8 @@ export async function GET(
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
   // renderEstimatePDF logs and returns null on a render failure.
-  const buffer = await renderEstimatePDF(supabase, shareToken.estimate_id, shareToken.org_id);
+  // The client's copy is the version they were sent, like the page itself.
+  const buffer = await renderEstimatePDF(supabase, shareToken.estimate_id, shareToken.org_id, { published: true });
   if (!buffer) return NextResponse.json({ error: "Failed to generate PDF" }, { status: 500 });
 
   const disposition = req.nextUrl.searchParams.get("download") ? "attachment" : "inline";

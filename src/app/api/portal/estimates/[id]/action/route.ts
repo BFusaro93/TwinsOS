@@ -5,6 +5,8 @@ import { submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
+import { recordAcceptedVersion } from "@/lib/estimates/versions";
+import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
 export async function POST(
   req: Request,
@@ -80,6 +82,12 @@ export async function POST(
     return NextResponse.json(
       { error: "This estimate has expired. Request changes to get an updated one." },
       { status: 410 }
+    );
+  }
+  if (action === "accept" && await isChangedSinceSent(supabase, estimate.id)) {
+    return NextResponse.json(
+      { error: "This estimate was updated after it was sent to you. We'll send you the latest version shortly." },
+      { status: 409 }
     );
   }
 
@@ -196,6 +204,8 @@ export async function POST(
     // reflects what was actually accepted.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await recalcEstimateTotals(supabase as any, id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await recordAcceptedVersion(supabase as any, id, signatureName!.trim(), "client_portal");
   }
 
   return NextResponse.json({ success: true, status: patch.stage });
