@@ -10833,6 +10833,7 @@ export type Database = {
           address: Json
           billing_interval: string
           brand_color: string
+          canceled_access_ends_at: string | null
           cc_processing_fee_bps: number
           cc_processing_fee_enabled: boolean
           cc_processing_fee_threshold_cents: number
@@ -10877,6 +10878,7 @@ export type Database = {
           address?: Json
           billing_interval?: string
           brand_color?: string
+          canceled_access_ends_at?: string | null
           cc_processing_fee_bps?: number
           cc_processing_fee_enabled?: boolean
           cc_processing_fee_threshold_cents?: number
@@ -10921,6 +10923,7 @@ export type Database = {
           address?: Json
           billing_interval?: string
           brand_color?: string
+          canceled_access_ends_at?: string | null
           cc_processing_fee_bps?: number
           cc_processing_fee_enabled?: boolean
           cc_processing_fee_threshold_cents?: number

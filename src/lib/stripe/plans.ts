@@ -71,7 +71,7 @@ export function getPlanForPriceId(priceId: string): BillablePlan | null {
   return entry?.plan ?? null;
 }
 
-/** Modules a plan unlocks. Trial orgs (plan === "trial") and anything unrecognized get full access — see AskUserQuestion decision: trial is full-featured for the 30-day window. */
+/** Modules a plan unlocks. Trial orgs (plan === "trial") and anything unrecognized get full access — see AskUserQuestion decision: trial is full-featured for the 30-day window. A "canceled" org keeps both modules too, but read-only (enforced by RLS; see useTrialStatus for the 90-day lockout). */
 export function getModulesForPlan(plan: string): PlatformModule[] {
   if (isBillablePlan(plan)) return getPlanConfig(plan).modules;
   return ["landscapt", "equipt"];
@@ -98,6 +98,7 @@ export function getSeatConfig(
  *  its own trial special-case and silently denied every add-on (Job
  *  Photos, client portal, etc.) to brand-new trial orgs. */
 export function planIncludesAddon(plan: string, addon: BundledAddonKey): boolean {
+  if (plan === "canceled") return false;
   if (!isBillablePlan(plan)) return true;
   return (getPlanConfig(plan).bundledAddons as readonly string[]).includes(addon);
 }

@@ -38,10 +38,9 @@ async function fetchPurchasedAddons(queryClient: QueryClient): Promise<string[]>
 /**
  * Gates a module (Landscapt/Equipt) by the org's subscription plan — separate
  * from per-user role gates like useCrmAccess. A DOWNGRADE_STATUSES webhook
- * event reverts an org's plan to "trial", which getModulesForPlan treats as
- * full access, so a lapsed subscription never locks an org out mid-session;
- * enforcement here is about which paid tier an org is actively on, not a
- * punitive lockout.
+ * event moves an org to plan "canceled", which keeps both modules visible
+ * (read-only, enforced by RLS) until the 90-day lockout in useTrialStatus;
+ * enforcement here is about which paid tier an org is actively on.
  */
 export function useModuleAccess(module: PlatformModule): { allowed: boolean; isLoading: boolean } {
   const queryClient = useQueryClient();
@@ -76,6 +75,7 @@ export function useAddonAccess(addon: BundledAddonKey): { allowed: boolean; isLo
   });
 
   if (planLoading || plan == null) return { allowed: true, isLoading: true };
+  if (plan === "canceled") return { allowed: false, isLoading: false };
   if (planIncludesAddon(plan, addon)) return { allowed: true, isLoading: false };
   if (addonsLoading || purchased == null) return { allowed: true, isLoading: true };
   return { allowed: purchased.includes(addon), isLoading: false };

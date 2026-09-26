@@ -157,6 +157,12 @@ export async function processDueEnrollment(
   adminClient: AnyClient,
   enrollment: DueEnrollmentRow
 ): Promise<ProcessOutcome> {
+  // Canceled orgs are read-only — nothing goes out to their clients. The
+  // enrollment is left due, so it resumes if the org resubscribes.
+  const { data: org } = await adminClient.from("organizations").select("plan").eq("id", enrollment.org_id).maybeSingle();
+  if (org?.plan === "canceled") {
+    return { skipped: { enrollmentId: enrollment.id, reason: "org subscription is canceled" } };
+  }
   if (!(await claimEnrollmentStep(adminClient, enrollment))) {
     return { skipped: { enrollmentId: enrollment.id, reason: "already claimed by another run (or no longer due)" } };
   }
@@ -715,6 +721,6 @@ export async function processEnrollmentImmediately(
 
     lastPosition = row.next_event_position;
     const outcome = await processDueEnrollment(adminClient, row);
-    if ("skipped" in outcome && outcome.skipped.reason.startsWith("already claimed")) return;
+    if ("skipped" in outcome && (outcome.skipped.reason.startsWith("already claimed") || outcome.skipped.reason === "org subscription is canceled")) return;
   }
 }

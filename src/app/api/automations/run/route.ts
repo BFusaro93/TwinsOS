@@ -553,7 +553,10 @@ async function handleRun(request: Request) {
 
     let enrollQuery = (adminClient as AdminClient)
       .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position")
+      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position, organizations!inner(plan)")
+      // A canceled org is read-only: its automations pause (and resume if it
+      // resubscribes). Filtered here so its due rows can't crowd the batch.
+      .neq("organizations.plan", "canceled")
       .lte("next_fire_at", nowIso)
       .is("completed_at", null)
       .is("stopped_at", null)

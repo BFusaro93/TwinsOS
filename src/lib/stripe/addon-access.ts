@@ -17,6 +17,7 @@ export async function orgHasAddon(db: AnyClient, orgId: string, addon: BundledAd
   // A trial bundles everything, but only until it ends (null = open-ended).
   const trialExpired =
     org?.plan === "trial" && org.trial_ends_at != null && new Date(org.trial_ends_at).getTime() <= Date.now();
+  if (org?.plan === "canceled") return false;
   if (org && !trialExpired && planIncludesAddon(org.plan, addon)) return true;
 
   const { data: addonRow } = await db
