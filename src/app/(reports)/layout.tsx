@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { ReportsSidebar, DASHBOARDS_NAV } from "@/components/shared/ReportsSidebar";
+import { ReportsSidebar, DASHBOARDS_NAV, useDashboardPermission } from "@/components/shared/ReportsSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
@@ -50,6 +50,27 @@ function CrewBlockedGuard({ children }: { children: React.ReactNode }) {
       <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
         <h1 className="text-lg font-semibold text-slate-900">Not available</h1>
         <p className="mt-2 text-sm text-slate-500">This dashboard isn&apos;t available to crew logins.</p>
+      </div>
+    </div>
+  );
+}
+
+/** Blocks direct URL access to a built-in dashboard the viewer's Landscapt
+ *  role doesn't include — the sidebar/overview already hide the links. */
+function DashboardPermissionGuard({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { canViewDashboard, isLoading } = useDashboardPermission();
+  const item = DASHBOARDS_NAV.find(
+    (i) => i.permission && (pathname === i.href || pathname.startsWith(i.href + "/"))
+  );
+  if (!item) return <>{children}</>;
+  if (isLoading) return null;
+  if (canViewDashboard(item.permission)) return <>{children}</>;
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
+        <h1 className="text-lg font-semibold text-slate-900">Not available</h1>
+        <p className="mt-2 text-sm text-slate-500">Your role doesn&apos;t include this dashboard. Ask an admin if you need access.</p>
       </div>
     </div>
   );
@@ -107,7 +128,9 @@ export default function ReportsLayout({
               allowed={hasDrivingScoreAccess}
               isLoading={drivingScoreLoading}
             >
-              <CrewBlockedGuard>{children}</CrewBlockedGuard>
+              <CrewBlockedGuard>
+                <DashboardPermissionGuard>{children}</DashboardPermissionGuard>
+              </CrewBlockedGuard>
             </FeatureGuard>
           </InternalOnlyGuard>
         </main>
