@@ -33,12 +33,20 @@ async function fetchUserPermissions(queryClient: QueryClient): Promise<{
   const supabase = createClient();
   // Get employee record linked to this auth user
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: employee } = await (supabase as any)
+  const { data: employee, error: employeeError } = await (supabase as any)
     .from("crm_employees")
     .select("crm_role_id, crm_roles(name, permissions, deleted_at)")
     .eq("user_id", profile.userId)
     .is("deleted_at", null)
     .maybeSingle();
+
+  // Fail CLOSED: if the role can't be read, the login has no role
+  // permissions (admins still pass every check via isAdmin). Previously the
+  // error was ignored and the null result read as "no role", which the
+  // dashboard gate treated as full access.
+  if (employeeError) {
+    return { permissions: {}, isAdmin, roleId: null, roleName: null, profileRole: profile.role, hasEmployeeLink: false };
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const role = employee?.crm_roles as any;
@@ -114,8 +122,11 @@ export function useIsCrewOnly(): { isCrewOnly: boolean; isLoading: boolean } {
  * by itself, grant CRM access.
  */
 export function useCrmAccess(pathname: string): { allowed: boolean; isLoading: boolean } {
-  const { data, isLoading } = usePermissionsQuery();
+  const { data, isLoading, isError } = usePermissionsQuery();
 
+  // A failed permissions query is a denial, not an endless "loading" that
+  // lets the page through.
+  if (isError && !data) return { allowed: false, isLoading: false };
   if (isLoading || !data) return { allowed: true, isLoading: true }; // avoid a flash of the denied screen while loading
 
   if (data.isAdmin) return { allowed: true, isLoading: false };

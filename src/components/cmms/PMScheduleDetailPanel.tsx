@@ -32,11 +32,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { PausePMScheduleDialog } from "./PausePMScheduleDialog";
 import {
-  useDeletePMSchedulePause,
+  useEndPMSchedulePause,
   usePMSchedulePauses,
   usePausedPMSchedules,
-  useResumePMSchedule,
 } from "@/lib/hooks/use-pm-schedule-pauses";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import type { PMSchedule, PMSchedulePause, PMSchedulePauseState } from "@/types";
 
@@ -55,9 +55,23 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 function pauseLabel(p: PMSchedulePause): string {
   const md = (d: string) => formatDate(d).replace(/, \d{4}$/, "");
-  if (p.recursYearly && p.resumesOn) return `Every year, ${md(p.startsOn)} → ${md(p.resumesOn)} (from ${new Date(`${p.startsOn}T00:00:00`).getFullYear()})`;
+  if (p.recursYearly && p.resumesOn) {
+    const base = `Every year, ${md(p.startsOn)} → ${md(p.resumesOn)} (from ${new Date(`${p.startsOn}T00:00:00`).getFullYear()})`;
+    return p.endedOn ? `${base}, ended ${formatDate(p.endedOn)}` : base;
+  }
   if (!p.resumesOn) return `From ${formatDate(p.startsOn)} until resumed`;
   return `${formatDate(p.startsOn)} → ${formatDate(p.resumesOn)}`;
+}
+
+/**
+ * What ending this pause would do today: "remove" (hasn't started — nothing
+ * to keep), "end" (running or still to recur), or null (already over — it's
+ * history and stays, so the cycles it excused stay excused).
+ */
+function pauseEndAction(p: PMSchedulePause, today: string): "remove" | "end" | null {
+  if (p.startsOn >= today) return "remove";
+  if (p.recursYearly) return p.endedOn && p.endedOn <= today ? null : "end";
+  return p.resumesOn && p.resumesOn <= today ? null : "end";
 }
 
 function StatusValue({ schedule, pauseState }: { schedule: PMSchedule; pauseState: PMSchedulePauseState | undefined }) {
@@ -77,8 +91,26 @@ function StatusValue({ schedule, pauseState }: { schedule: PMSchedule; pauseStat
 
 function PausesSection({ pmScheduleId }: { pmScheduleId: string }) {
   const { data: pauses = [] } = usePMSchedulePauses(pmScheduleId);
-  const { mutate: deletePause, isPending } = useDeletePMSchedulePause();
+  const { mutate: endPause, isPending } = useEndPMSchedulePause();
+  const { today } = useOrgDates();
+  const [confirm, confirmDialog] = useConfirm();
   if (pauses.length === 0) return null;
+  const todayYmd = today();
+
+  async function handleEnd(p: PMSchedulePause, action: "remove" | "end") {
+    if (action === "end" && !(await confirm({
+      title: p.recursYearly ? "End this seasonal pause?" : "End this pause today?",
+      description: p.recursYearly
+        ? "It won't pause the schedule again from today on. Past seasons stay paused, so PMs they excused still don't count as missed."
+        : "The schedule runs again from today. The days already paused stay paused, so PMs they excused still don't count as missed.",
+      confirmLabel: "End pause",
+    }))) return;
+    endPause(p.id, {
+      onSuccess: () => toast.success(action === "remove" ? "Pause removed" : "Pause ended"),
+      onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't end the pause"),
+    });
+  }
+
   return (
     <>
       <Separator />
@@ -86,25 +118,31 @@ function PausesSection({ pmScheduleId }: { pmScheduleId: string }) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Pauses</p>
         <p className="mb-2 text-xs text-slate-500">PMs that fall in these windows aren&apos;t due and don&apos;t count against PM compliance.</p>
         <ul className="flex flex-col divide-y rounded border">
-          {pauses.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-              <div>
-                <p className="font-medium text-slate-800">{pauseLabel(p)}</p>
-                {p.reason && <p className="text-xs text-slate-500">{p.reason}</p>}
-              </div>
-              <button
-                type="button"
-                title="Remove this pause"
-                disabled={isPending}
-                onClick={() => deletePause(p.id)}
-                className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
+          {pauses.map((p) => {
+            const action = pauseEndAction(p, todayYmd);
+            return (
+              <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <div>
+                  <p className="font-medium text-slate-800">{pauseLabel(p)}</p>
+                  {p.reason && <p className="text-xs text-slate-500">{p.reason}</p>}
+                </div>
+                {action && (
+                  <button
+                    type="button"
+                    title={action === "remove" ? "Remove this pause (it hasn't started)" : "End this pause today"}
+                    disabled={isPending}
+                    onClick={() => void handleEnd(p, action)}
+                    className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
+      {confirmDialog}
     </>
   );
 }
@@ -180,8 +218,8 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
   const pauseState = pausedSchedules?.get(schedule.id);
   const { data: pauses = [] } = usePMSchedulePauses(schedule.id);
   const currentPause = pauses.find((p) => p.id === pauseState?.currentPauseId) ?? null;
-  const { mutate: resumeSchedule, isPending: resuming } = useResumePMSchedule();
-  const { today } = useOrgDates();
+  const { mutate: endPause, isPending: resuming } = useEndPMSchedulePause();
+  const [confirmResume, confirmResumeDialog] = useConfirm();
 
   // Check if any open (non-done, non-skipped) WOs already exist for this schedule.
   // If so, block generation until they're completed or deleted.
@@ -247,20 +285,27 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
         <div className="flex items-center gap-2">
           <StatusValue schedule={schedule} pauseState={pauseState} />
 
-          {/* A seasonal (yearly) pause can't be ended for just this year —
-              it's removed from the Pauses list instead. */}
-          {pauseState && currentPause && !currentPause.recursYearly ? (
+          {/* Resuming ENDS the current pause today (a seasonal one stops
+              recurring) — it never deletes it, so the cycles it excused stay
+              excused in PM compliance. */}
+          {pauseState && currentPause ? (
             <Button
               size="sm"
               variant="outline"
               className="gap-1.5 text-xs"
               disabled={resuming}
-              onClick={() =>
-                resumeSchedule(
-                  { pause: currentPause, today: today() },
-                  { onSuccess: () => toast.success(`${schedule.title} resumed`) }
-                )
-              }
+              title={currentPause.recursYearly ? "Ends this seasonal pause — it won't recur in later years" : "Resume the schedule today"}
+              onClick={async () => {
+                if (currentPause.recursYearly && !(await confirmResume({
+                  title: "End this seasonal pause?",
+                  description: "The schedule resumes today and the pause won't recur in later years. Past seasons stay paused.",
+                  confirmLabel: "Resume",
+                }))) return;
+                endPause(currentPause.id, {
+                  onSuccess: () => toast.success(`${schedule.title} resumed`),
+                  onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't resume the schedule"),
+                });
+              }}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               {resuming ? "Resuming…" : "Resume"}
@@ -384,6 +429,7 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
         pmScheduleId={schedule.id}
         scheduleTitle={schedule.title}
       />
+      {confirmResumeDialog}
     </div>
   );
 }
