@@ -1,5 +1,7 @@
 "use client";
 
+import { escapeHtml } from "@/lib/utils/escape-html";
+import { SandboxedHtmlPreview } from "@/components/shared/SandboxedHtmlPreview";
 import { useState, useEffect } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
 import {
@@ -98,16 +100,16 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
 
   function previewResolve(text: string) {
     return text
-      .replace(/\[clientfirstname\]/gi,   clientName?.split(" ")[0] ?? "Client")
-      .replace(/\[clientfullname\]/gi,    clientName ?? "Client")
-      .replace(/\[companyname\]/gi,       "Your Company")
-      .replace(/\[applicationdate\]/gi,   new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
-      .replace(/\[applicatorname\]/gi,    "Tech Name")
-      .replace(/\[applicatorlicense\]/gi, "12345")
-      .replace(/\[products\]/gi,          "<ul><li>Sample Product — 12 oz (EPA #12345-67)</li></ul>")
-      .replace(/\[conditions\]/gi,        "72°F, Wind 5 mph NW")
-      .replace(/\[careinstructions\]/gi,  "Keep children and pets off the treated area until dry.")
-      .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
+      .replace(/\[clientfirstname\]/gi,   () => escapeHtml(clientName?.split(" ")[0] ?? "Client"))
+      .replace(/\[clientfullname\]/gi,    () => escapeHtml(clientName ?? "Client"))
+      .replace(/\[companyname\]/gi,       () => escapeHtml("Your Company"))
+      .replace(/\[applicationdate\]/gi,   () => escapeHtml(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })))
+      .replace(/\[applicatorname\]/gi,    () => escapeHtml("Tech Name"))
+      .replace(/\[applicatorlicense\]/gi, () => escapeHtml("12345"))
+      .replace(/\[products\]/gi,          () => "<ul><li>Sample Product — 12 oz (EPA #12345-67)</li></ul>")
+      .replace(/\[conditions\]/gi,        () => escapeHtml("72°F, Wind 5 mph NW"))
+      .replace(/\[careinstructions\]/gi,  () => escapeHtml("Keep children and pets off the treated area until dry."))
+      .replace(/\[companyphonenumber\]/gi, () => escapeHtml("(555) 000-0000"));
   }
 
   function isValidEmail(email: string) {
@@ -250,10 +252,9 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
             </TabsContent>
 
             <TabsContent value="preview" className="mt-2">
-              <div
-                className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto"
-                dangerouslySetInnerHTML={{ __html: previewResolve(bodyHtml) }}
-              />
+              <div className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto">
+                <SandboxedHtmlPreview html={previewResolve(bodyHtml)} minHeight={208} />
+              </div>
             </TabsContent>
           </Tabs>
         </div>

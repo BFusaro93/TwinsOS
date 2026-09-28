@@ -1,5 +1,7 @@
 "use client";
 
+import { escapeHtml } from "@/lib/utils/escape-html";
+import { SandboxedHtmlPreview } from "@/components/shared/SandboxedHtmlPreview";
 import { useState, useEffect, useRef } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -130,16 +132,16 @@ export function SendEstimateDialog({
     const estimateTotal = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
       .format((totalCents ?? 0) / 100);
     return text
-      .replace(/\[clientfirstname\]/gi,    clientName?.split(" ")[0] ?? "Client")
-      .replace(/\[clientlastname\]/gi,     clientName?.split(" ").slice(1).join(" ") ?? "")
-      .replace(/\[clientfullname\]/gi,     clientName ?? "Client")
-      .replace(/\[companyname\]/gi,        orgName)
-      .replace(/\[estimatelink\]/gi,       estimateLinkPreviewHtml)
-      .replace(/\[estimatenumber\]/gi,     String(estimateNumber).padStart(5, "0"))
-      .replace(/\[estimatedate\]/gi,       estimateDateVal.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
-      .replace(/\[estimatetotal\]/gi,      estimateTotal)
-      .replace(/\[salesrepname\]/gi,       salesRepName?.trim() || orgName)
-      .replace(/\[companyphonenumber\]/gi, orgPhone);
+      .replace(/\[clientfirstname\]/gi,    () => escapeHtml(clientName?.split(" ")[0] ?? "Client"))
+      .replace(/\[clientlastname\]/gi,     () => escapeHtml(clientName?.split(" ").slice(1).join(" ") ?? ""))
+      .replace(/\[clientfullname\]/gi,     () => escapeHtml(clientName ?? "Client"))
+      .replace(/\[companyname\]/gi,        () => escapeHtml(orgName))
+      .replace(/\[estimatelink\]/gi,       () => estimateLinkPreviewHtml)
+      .replace(/\[estimatenumber\]/gi,     () => escapeHtml(String(estimateNumber).padStart(5, "0")))
+      .replace(/\[estimatedate\]/gi,       () => escapeHtml(estimateDateVal.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })))
+      .replace(/\[estimatetotal\]/gi,      () => escapeHtml(estimateTotal))
+      .replace(/\[salesrepname\]/gi,       () => escapeHtml(salesRepName?.trim() || orgName))
+      .replace(/\[companyphonenumber\]/gi, () => escapeHtml(orgPhone));
   }
 
   async function handleSend() {
@@ -249,10 +251,9 @@ export function SendEstimateDialog({
             </TabsContent>
 
             <TabsContent value="preview" className="mt-2">
-              <div
-                className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto"
-                dangerouslySetInnerHTML={{ __html: previewResolve(bodyHtml) }}
-              />
+              <div className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto">
+                <SandboxedHtmlPreview html={previewResolve(bodyHtml)} minHeight={208} />
+              </div>
             </TabsContent>
           </Tabs>
 

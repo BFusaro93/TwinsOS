@@ -22,6 +22,18 @@ import {
  * visit that is already clocked in is left alone, and a live visit for the
  * same service on the same scheduled_date (e.g. the first visit inserted by
  * job creation, which has no occurrence_date) counts as that occurrence.
+ *
+ * UNLINKED occurrences (job_service_id NULL with an occurrence_date — the
+ * legacy combined visits the 20260927110000 backfill stamped, or visits the
+ * generator made for a job with no services) occupy their date for EVERY
+ * service of the job, live or soft-deleted: moving or deleting one must not
+ * regenerate per-service visits on that date. An unlinked visit completes
+ * into an invoice for all of the job's services, so it also counts toward
+ * every capped service's max_visits.
+ *
+ * Every read is paginated (PostgREST caps a response at 1000 rows): a
+ * truncated read silently re-created visits that existed and under-counted
+ * max_visits usage, overbilling the client.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,8 +115,13 @@ export interface PlanArgs {
   /** Per job_service_id: ALL-TIME visits already counting toward max_visits
    *  (live rows, plus soft-deleted rows that still hold an occurrence_date —
    *  a moved/deleted occurrence consumed its slot; rows a system prune
-   *  cleared don't). Required for services with max_visits set. */
+   *  cleared don't), including the job's UNLINKED visits. Required for
+   *  services with max_visits set. */
   usedVisitsByService?: Map<string, number>;
+  /** ALL-TIME live (non-deleted) visit count for the job — what
+   *  package_total_steps caps. `existing` is window-limited for recurring
+   *  jobs, so it can't supply this. Required when package_total_steps is set. */
+  liveVisitCount?: number;
 }
 
 const keyOf = (serviceId: string | null, date: string) => `${serviceId ?? ""}|${date}`;
@@ -133,11 +150,14 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   const liveKeys = new Set<string>();
   const liveDates = new Set<string>();
   const liveUnlinkedDates = new Set<string>();
+  /** Dates held by an unlinked occurrence, live or soft-deleted. */
+  const unlinkedOccurrenceDates = new Set<string>();
   const startedDates = new Set<string>();
   const claimedServices = new Set<string>();
   let liveCount = 0;
   for (const v of existing) {
     if (v.occurrence_date) identity.add(keyOf(v.job_service_id, v.occurrence_date));
+    if (v.occurrence_date && !v.job_service_id) unlinkedOccurrenceDates.add(v.occurrence_date);
     if (v.job_service_id && (!v.deleted_at || v.occurrence_date)) claimedServices.add(v.job_service_id);
     if (v.deleted_at) continue;
     liveCount++;
@@ -147,6 +167,10 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
     if (!v.job_service_id) liveUnlinkedDates.add(v.scheduled_date);
     if (v.clocked_in_at) startedDates.add(v.scheduled_date);
   }
+  // package_total_steps counts ALL-TIME live visits (as the old cron did),
+  // not just the window `existing` covers.
+  if (args.liveVisitCount != null) liveCount = args.liveVisitCount;
+  const unlinkedHolds = (date: string) => liveUnlinkedDates.has(date) || unlinkedOccurrenceDates.has(date);
 
   const out: VisitInsert[] = [];
 
@@ -169,9 +193,9 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
       if (!s.start_date || s.included === false) continue;
       if (args.packageWindowOnly && (s.start_date < today || s.start_date > horizonEnd)) continue;
       // Per SERVICE, not per date: two package services due the same day are
-      // two visits. A live unlinked legacy visit on the date still covers it.
+      // two visits. An unlinked legacy occurrence on the date still covers it.
       if (claimedServices.has(s.id) || identity.has(keyOf(s.id, s.start_date))) continue;
-      if (liveUnlinkedDates.has(s.start_date)) continue;
+      if (unlinkedHolds(s.start_date)) continue;
       if (!hasBudget(s.id)) continue;
       out.push(base(s.start_date, s.start_date, s.id));
       claimedServices.add(s.id);
@@ -198,7 +222,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   const cap = job.package_total_steps;
 
   outer: for (const date of dates) {
-    if (liveUnlinkedDates.has(date) || startedDates.has(date)) continue;
+    if (unlinkedHolds(date) || startedDates.has(date)) continue;
     if (activeServices.length === 0) {
       if (identity.has(keyOf(null, date)) || liveDates.has(date)) continue;
       if (cap != null && liveCount + out.length >= cap) break;
@@ -225,6 +249,29 @@ function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+/**
+ * Reads EVERY row of a query, page by page. PostgREST truncates a response at
+ * its max-rows setting (1000 on Supabase) without an error, so a single
+ * select silently drops rows. `build` must return a fresh filtered query each
+ * call; pages are ordered by id for a stable split, and the loop stops on the
+ * first empty page (robust to any server-side page cap).
+ */
+export async function selectAllRows<T>(
+  build: () => AnyClient,
+  pageSize = 1000
+): Promise<{ rows: T[]; error: string | null }> {
+  const rows: T[] = [];
+  for (let from = 0; ; ) {
+    const { data, error } = await build().order("id").range(from, from + pageSize - 1);
+    if (error) return { rows, error: (error as { message: string }).message };
+    const page = (data ?? []) as T[];
+    if (page.length === 0) break;
+    rows.push(...page);
+    from += page.length;
+  }
+  return { rows, error: null };
 }
 
 export interface GenerateOptions {
@@ -262,53 +309,93 @@ export async function generateVisitsForJobs(
   const packageIds = jobs.filter((j) => j.job_type === "package").map((j) => j.id);
 
   for (const ids of chunk(jobs.map((j) => j.id), 100)) {
-    const { data, error } = await supabase
+    const { rows, error } = await selectAllRows<GeneratorService>(() => supabase
       .from("crm_job_services")
       .select("id, job_id, included, start_recurring, start_date, sort_order, max_visits")
-      .in("job_id", ids);
-    if (error) { result.errors.push(error.message); return result; }
-    services.push(...((data ?? []) as GeneratorService[]));
+      .in("job_id", ids));
+    if (error) { result.errors.push(error); return result; }
+    services.push(...rows);
   }
   const visitCols = "job_id, job_service_id, scheduled_date, occurrence_date, deleted_at, clocked_in_at";
   for (const ids of chunk(recurringIds, 100)) {
-    // Deleted rows included on purpose — they still claim their occurrence.
-    const { data, error } = await supabase
+    // Every row holding an occurrence on/after today (deleted rows included on
+    // purpose — they still claim it), plus live rows scheduled on/after today.
+    // Deleted rows a prune released (no occurrence_date) are irrelevant.
+    const { rows, error } = await selectAllRows<ExistingVisit>(() => supabase
       .from("crm_job_visits")
       .select(visitCols)
       .in("job_id", ids)
-      .or(`occurrence_date.gte.${minToday},scheduled_date.gte.${minToday}`);
-    if (error) { result.errors.push(error.message); return result; }
-    existing.push(...((data ?? []) as ExistingVisit[]));
+      .or(`occurrence_date.gte.${minToday},and(deleted_at.is.null,scheduled_date.gte.${minToday})`));
+    if (error) { result.errors.push(error); return result; }
+    existing.push(...rows);
   }
   for (const ids of chunk(packageIds, 100)) {
-    const { data, error } = await supabase.from("crm_job_visits").select(visitCols).in("job_id", ids);
-    if (error) { result.errors.push(error.message); return result; }
-    existing.push(...((data ?? []) as ExistingVisit[]));
+    const { rows, error } = await selectAllRows<ExistingVisit>(() => supabase
+      .from("crm_job_visits")
+      .select(visitCols)
+      .in("job_id", ids)
+      .or("deleted_at.is.null,occurrence_date.not.is.null"));
+    if (error) { result.errors.push(error); return result; }
+    existing.push(...rows);
   }
 
   // All-time usage for services with a visit budget — the window-limited
-  // `existing` fetch above can't see past visits, which still count.
+  // `existing` fetch above can't see past visits, which still count. A row
+  // counts while live, or soft-deleted but still holding its occurrence
+  // (moved/deleted by a user); a system prune's released rows don't.
   const usedVisitsByService = new Map<string, number>();
-  const cappedServiceIds = services.filter((s) => s.max_visits != null).map((s) => s.id);
-  for (const ids of chunk(cappedServiceIds, 100)) {
-    const { data, error } = await supabase
+  const cappedServices = services.filter((s) => s.max_visits != null);
+  const countsFilter = "deleted_at.is.null,occurrence_date.not.is.null";
+  for (const ids of chunk(cappedServices.map((s) => s.id), 100)) {
+    const { rows, error } = await selectAllRows<{ job_service_id: string }>(() => supabase
       .from("crm_job_visits")
-      .select("job_service_id, deleted_at, occurrence_date")
-      .in("job_service_id", ids);
-    if (error) { result.errors.push(error.message); return result; }
-    for (const v of (data ?? []) as { job_service_id: string; deleted_at: string | null; occurrence_date: string | null }[]) {
-      if (v.deleted_at && !v.occurrence_date) continue; // released by a system prune
+      .select("job_service_id")
+      .in("job_service_id", ids)
+      .or(countsFilter));
+    if (error) { result.errors.push(error); return result; }
+    for (const v of rows) {
       usedVisitsByService.set(v.job_service_id, (usedVisitsByService.get(v.job_service_id) ?? 0) + 1);
     }
   }
+  // An unlinked visit bills every service of its job, so it spends one visit
+  // of every capped service's budget.
+  const cappedJobIds = [...new Set(cappedServices.map((s) => s.job_id))];
+  const unlinkedByJob = new Map<string, number>();
+  for (const ids of chunk(cappedJobIds, 100)) {
+    const { rows, error } = await selectAllRows<{ job_id: string }>(() => supabase
+      .from("crm_job_visits")
+      .select("job_id")
+      .in("job_id", ids)
+      .is("job_service_id", null)
+      .or(countsFilter));
+    if (error) { result.errors.push(error); return result; }
+    for (const v of rows) unlinkedByJob.set(v.job_id, (unlinkedByJob.get(v.job_id) ?? 0) + 1);
+  }
+  for (const s of cappedServices) {
+    const extra = unlinkedByJob.get(s.job_id) ?? 0;
+    if (extra > 0) usedVisitsByService.set(s.id, (usedVisitsByService.get(s.id) ?? 0) + extra);
+  }
 
-  const { data: scheduleRows, error: schedErr } = await supabase
+  // package_total_steps caps ALL-TIME live visits — an exact count per job.
+  const liveCountByJob = new Map<string, number>();
+  for (const j of jobs) {
+    if (j.package_total_steps == null) continue;
+    const { count, error } = await supabase
+      .from("crm_job_visits")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", j.id)
+      .is("deleted_at", null);
+    if (error) { result.errors.push((error as { message: string }).message); return result; }
+    liveCountByJob.set(j.id, count ?? 0);
+  }
+
+  const { rows: scheduleRows, error: schedErr } = await selectAllRows<ScheduleRow & { org_id: string | null }>(() => supabase
     .from("crm_schedules")
     .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end")
-    .is("deleted_at", null);
-  if (schedErr) { result.errors.push(schedErr.message); return result; }
+    .is("deleted_at", null));
+  if (schedErr) { result.errors.push(schedErr); return result; }
   const schedulesByOrg = new Map<string, Map<string, ScheduleRow>>();
-  for (const r of (scheduleRows ?? []) as (ScheduleRow & { org_id: string | null })[]) {
+  for (const r of scheduleRows) {
     const k = r.org_id ?? "";
     if (!schedulesByOrg.has(k)) schedulesByOrg.set(k, new Map());
     schedulesByOrg.get(k)!.set(r.name, r);
@@ -340,6 +427,7 @@ export async function generateVisitsForJobs(
       maxVisits: opts.maxVisitsPerJob,
       fallbackOrgId: opts.fallbackOrgId,
       usedVisitsByService,
+      liveVisitCount: liveCountByJob.get(job.id),
     }));
   }
   result.planned = toInsert.length;

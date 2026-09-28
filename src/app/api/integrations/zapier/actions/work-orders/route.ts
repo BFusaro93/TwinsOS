@@ -45,10 +45,20 @@ export async function POST(request: Request) {
     assetName = asset.name;
   }
 
+  // work_order_number is NOT NULL with no default — allocate it from the
+  // atomic per-org/year counter, same as /api/v1/work-orders.
+  const { data: workOrderNumber, error: woNumErr } = await db.rpc("next_work_order_number", {
+    p_org_id_override: auth.orgId,
+  });
+  if (woNumErr || !workOrderNumber) {
+    return NextResponse.json({ error: "Could not allocate a work order number" }, { status: 500 });
+  }
+
   const { data, error } = await db
     .from("work_orders")
     .insert({
       org_id: auth.orgId,
+      work_order_number: workOrderNumber,
       title: body.title,
       asset_id: body.assetId ?? null,
       asset_name: assetName,

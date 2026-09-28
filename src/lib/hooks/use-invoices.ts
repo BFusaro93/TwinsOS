@@ -1406,8 +1406,44 @@ export function useBulkImportPayments() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
-      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+      const { data: clients } = await supabase.from("clients").select("id, display_name, account_number").is("deleted_at", null);
+      // Name matching is a fallback only: display names aren't unique, and a
+      // plain Map let the LAST duplicate silently win — payments landed on
+      // the wrong client. Track every id per name so ambiguous names can be
+      // refused, and prefer an explicit clientId / accountNumber column.
+      const idsByName = new Map<string, string[]>();
+      const byAccountNumber = new Map<string, string>();
+      const clientIds = new Set<string>();
+      for (const c of clients ?? []) {
+        clientIds.add(c.id);
+        const key = c.display_name.trim().toLowerCase();
+        idsByName.set(key, [...(idsByName.get(key) ?? []), c.id]);
+        if (c.account_number?.trim()) byAccountNumber.set(c.account_number.trim().toLowerCase(), c.id);
+      }
+      const resolveClient = (r: Record<string, string>): { clientId: string | null; reason?: string } => {
+        const explicitId = r.clientId?.trim();
+        if (explicitId) {
+          return clientIds.has(explicitId)
+            ? { clientId: explicitId }
+            : { clientId: null, reason: `Client id "${explicitId}" not found — not imported` };
+        }
+        const accountNumber = r.accountNumber?.trim();
+        if (accountNumber) {
+          const id = byAccountNumber.get(accountNumber.toLowerCase());
+          return id
+            ? { clientId: id }
+            : { clientId: null, reason: `Account number "${accountNumber}" not found — not imported` };
+        }
+        const name = r.clientName?.trim() ?? "";
+        const matches = idsByName.get(name.toLowerCase()) ?? [];
+        if (matches.length > 1) {
+          return {
+            clientId: null,
+            reason: `${matches.length} clients are named "${name}" — add an accountNumber column to say which one; not imported`,
+          };
+        }
+        return { clientId: matches[0] ?? null };
+      };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: invoices } = await (supabase as any).from("crm_invoices").select("id, invoice_number, client_id").is("deleted_at", null);
       const invoiceByNumberAndClient = new Map<string, string>(
@@ -1425,7 +1461,11 @@ export function useBulkImportPayments() {
 
       for (const [index, r] of rows.entries()) {
         const rowNumber = index + 1;
-        const clientId = byName.get(r.clientName?.trim().toLowerCase() ?? "");
+        const { clientId, reason: clientReason } = resolveClient(r);
+        if (clientReason) {
+          failures.push({ row: rowNumber, reason: clientReason });
+          continue;
+        }
         const amountCents = Math.round(parseFloat(r.amount || "0") * 100);
         if (!clientId || !amountCents || amountCents < 0) { skipped++; continue; }
 

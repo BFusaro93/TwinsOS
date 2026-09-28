@@ -11502,6 +11502,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          ended_on: string | null
           id: string
           org_id: string
           pm_schedule_id: string
@@ -11515,6 +11516,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          ended_on?: string | null
           id?: string
           org_id?: string
           pm_schedule_id: string
@@ -11528,6 +11530,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          ended_on?: string | null
           id?: string
           org_id?: string
           pm_schedule_id?: string
@@ -11637,6 +11640,7 @@ export type Database = {
       }
       pm_schedules: {
         Row: {
+          anchor_date: string | null
           asset_id: string | null
           asset_name: string
           assigned_to_id: string | null
@@ -11655,6 +11659,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          anchor_date?: string | null
           asset_id?: string | null
           asset_name?: string
           assigned_to_id?: string | null
@@ -11673,6 +11678,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          anchor_date?: string | null
           asset_id?: string | null
           asset_name?: string
           assigned_to_id?: string | null
@@ -14701,6 +14707,10 @@ export type Database = {
       pm_schedule_paused_on: {
         Args: { p_on: string; p_schedule_id: string }
         Returns: boolean
+      }
+      end_pm_schedule_pause: {
+        Args: { p_pause_id: string }
+        Returns: Json
       }
       create_invoice_from_milestone: {
         Args: {
