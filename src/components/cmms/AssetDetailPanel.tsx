@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { AssetMetricsCards } from "@/components/cmms/AssetMetricsCards";
+import { WarrantyInfo } from "@/components/cmms/WarrantyInfo";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -70,6 +72,14 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
 
   return (
     <div className="flex flex-col gap-5 p-6">
+      <AssetMetricsCards
+        assetId={asset.id}
+        warrantyEndDate={asset.warrantyEndDate}
+        purchasePrice={asset.purchasePrice}
+      />
+
+      <Separator />
+
       {/* Thumbnail + identity */}
       <div className="flex items-start gap-4">
         <ThumbnailUpload
@@ -169,6 +179,9 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
           <MetaRow label="Finance Institution" value={asset.financeInstitution} />
         </dl>
       </div>
+
+      <Separator />
+      <WarrantyInfo record={asset} />
 
       <Separator />
       <div>

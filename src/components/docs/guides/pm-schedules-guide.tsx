@@ -7,13 +7,14 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const FREQUENCIES: [string, string][] = [
-  ["Daily", "Advances the next due date by 1 day each time WOs are generated."],
-  ["Weekly", "Advances by 7 days."],
-  ["Monthly", "Advances by 1 calendar month, clamped to the last valid day of the target month."],
-  ["Quarterly", "Advances by 3 calendar months, same clamping rule."],
-  ["Annually", "Advances by 12 calendar months, same clamping rule."],
+  ["Daily", "Every day."],
+  ["Weekly", "Every 7 days — the same weekday every week."],
+  ["Monthly", "Every calendar month, on the same day of the month (clamped to the month's last day when it's shorter)."],
+  ["Quarterly", "Every 3 calendar months, same rule."],
+  ["Annually", "Every 12 calendar months, same rule."],
 ];
 
 const WORKED_EXAMPLE_ASSETS: [string, string, string][] = [
@@ -45,6 +46,9 @@ export function PMSchedulesGuide() {
           <TOCLink href="#worked-example">Worked example: fleet-wide seasonal PM</TOCLink>
           <TOCLink href="#due-dates">How &quot;due&quot; is calculated</TOCLink>
           <TOCLink href="#generating-wos">Generating work orders</TOCLink>
+          <TOCLink href="#late">Generating late (or early)</TOCLink>
+          <TOCLink href="#pausing">Pausing a schedule (off-season)</TOCLink>
+          <TOCLink href="#compliance">PM compliance</TOCLink>
           <TOCLink href="#parts">Parts, two levels</TOCLink>
           <TOCLink href="#calendar-vs-meter">Calendar-based vs. meter-based</TOCLink>
           <TOCLink href="#notifications">Notifications</TOCLink>
@@ -133,9 +137,10 @@ export function PMSchedulesGuide() {
       <Section id="due-dates" title="How &quot;due&quot; is calculated">
         <p>
           A PM schedule doesn&apos;t derive its due date from a separate start date — the{" "}
-          <strong>Next Due Date</strong> field you set (or last generated) <em>is</em> the date the
-          system tracks. There&apos;s no background job silently recalculating it; the date only
-          moves in one place, described below.
+          <strong>Next Due Date</strong> field you set <em>is</em> the schedule&apos;s calendar.
+          Every later cycle lands on that same cadence: a weekly schedule first due on a Wednesday is
+          due every Wednesday. There&apos;s no background job silently recalculating it; the date only
+          moves when work orders are generated, described below.
         </p>
         <Table>
           <thead>
@@ -177,10 +182,11 @@ export function PMSchedulesGuide() {
           </li>
         </ul>
         <p>
-          The moment work orders are generated, the schedule&apos;s next due date advances by one
-          full interval <em>from that generation date</em> — not from the previous due date. Marking
-          the resulting work order done doesn&apos;t separately move the date; generation is what
-          advances it.
+          Every generated work order is <strong>due on the schedule&apos;s Next Due Date</strong> —
+          the date this PM was actually due, which is what on-time vs. late is judged against. The
+          moment work orders are generated, Next Due moves to the next date on the schedule&apos;s
+          cadence. Marking the resulting work order done doesn&apos;t separately move the date;
+          generation is what advances it.
         </p>
         <Callout>
           <strong>Duplicate guard.</strong> You can&apos;t generate a new batch of work orders for a
@@ -188,6 +194,98 @@ export function PMSchedulesGuide() {
           existing work order(s) first, or the generate action is blocked with an error naming the
           still-open WO.
         </Callout>
+      </Section>
+
+      <Section id="late" title="Generating late (or early)">
+        <p>Because the calendar keeps its cadence, generating on the &quot;wrong&quot; day doesn&apos;t shift the schedule:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>A week late.</strong> A weekly schedule due Wednesday, Sep 23 is generated on Sunday,
+            Sep 27. The batch is due Sep 23 (so it counts as late, not missed, once it&apos;s done), and
+            Next Due becomes <strong>Wednesday, Sep 30</strong> — not the following Sunday. Finish the
+            late batch, then generate Wednesday&apos;s as usual.
+          </li>
+          <li>
+            <strong>Several weeks late.</strong> Generating creates one batch for the oldest missed week
+            and moves Next Due to the next Wednesday from today. The weeks in between count as missed —
+            generating late doesn&apos;t erase them.
+          </li>
+          <li>
+            <strong>On the day the next one is due.</strong> Generating last week&apos;s batch on this
+            Wednesday leaves this Wednesday due — it isn&apos;t skipped.
+          </li>
+          <li>
+            <strong>Early.</strong> Generating Tuesday for a Wednesday PM makes the batch due Wednesday
+            and moves Next Due one week past that.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="pausing" title="Pausing a schedule (off-season)">
+        <p>
+          Mowers don&apos;t need weekly service in January. Open the schedule and click{" "}
+          <strong>Pause</strong> (next to Generate WOs). Choose when the pause starts and one of:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>A resume date</strong> — e.g. a truck parked for a month. The schedule runs again on
+            that date.
+          </li>
+          <li>
+            <strong>Until I resume it</strong> — open-ended. A <strong>Resume</strong> button replaces
+            Pause while it&apos;s paused.
+          </li>
+          <li>
+            <strong>Repeat every year</strong> — set Dec 1 → Apr 1 once and the schedule pauses every
+            winter from then on. It needs a resume date and can&apos;t be longer than a year.
+          </li>
+        </ul>
+        <p>While a schedule is paused:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Cycles that fall inside the pause <strong>aren&apos;t due</strong> — nothing is overdue and
+            nothing counts against PM compliance.
+          </li>
+          <li>
+            <strong>Generate WOs is disabled</strong>, and the PM Due alert and the PM Due Reminder
+            automation skip it.
+          </li>
+          <li>
+            The schedule shows <strong>Paused</strong> in the list and <strong>Paused until Apr 1</strong>{" "}
+            (or just Paused) in its header.
+          </li>
+          <li>
+            When it resumes, the first PM due is the first date on its cadence after the pause — not a
+            stale date from before it.
+          </li>
+        </ul>
+        <p>
+          Every pause window is listed on the schedule&apos;s Details tab. Remove one with its{" "}
+          <strong>×</strong> button — that removes the whole window, so removing a yearly pause removes it
+          for every year.
+        </p>
+        <Callout>
+          <strong>A yearly pause can&apos;t be ended early for just one year.</strong> If spring comes
+          early, remove the yearly pause and add it back (starting next winter), or add a one-off pause
+          for this year only. Pauses can also be backdated — a pause that starts in the past clears that
+          period&apos;s missed PMs, so use it for time the equipment really was parked.
+        </Callout>
+      </Section>
+
+      <Section id="compliance" title="PM compliance">
+        <p>
+          Each asset&apos;s Performance cards and <strong>Equipt &gt; Reports &gt; PM Compliance</strong>{" "}
+          score PMs against the schedule&apos;s calendar: every cycle whose due date has passed counts
+          as done or missed — including cycles nobody generated. A multi-asset schedule counts once per
+          asset. Paused cycles don&apos;t count at all.
+        </p>
+        <p>
+          For the exact rules — every outcome, and how meter-triggered PMs count — see{" "}
+          <GuideLink href="/settings/support/asset-performance-guide#pm-compliance" className="text-[#60ab45] underline">
+            Asset Performance, Warranties &amp; Reliability Reports
+          </GuideLink>
+          .
+        </p>
       </Section>
 
       <Section id="parts" title="Parts, two levels">
@@ -258,7 +356,7 @@ export function PMSchedulesGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             PM schedules due within 7 days surface in the Notifications bell as &quot;PM
-            Due&quot; alerts.
+            Due&quot; alerts — except schedules that are paused today.
           </li>
           <li>
             The <strong>PM Due Reminder</strong> automation template (CMMS &gt; Automations) can
@@ -286,6 +384,12 @@ export function PMSchedulesGuide() {
             frequency elsewhere in CMMS uses <code>yearly</code> plus a <code>biweekly</code>{" "}
             option that PM Schedules don&apos;t have. They&apos;re not the same field — don&apos;t
             assume one implies the other.
+          </li>
+          <li>
+            <strong>Inactive vs. Paused.</strong> Older schedules may show <strong>Inactive</strong> — a
+            legacy flag with no dates behind it. Inactive schedules don&apos;t pile up missed PMs going
+            forward, but use Pause instead: it records when the schedule was off, so the history stays
+            right.
           </li>
           <li>
             <strong>Removing an asset from a schedule</strong> only affects future generations —

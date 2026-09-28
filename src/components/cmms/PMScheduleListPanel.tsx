@@ -3,6 +3,7 @@
 import { cn, formatDate, getInitials, getAvatarColor } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { PM_FREQUENCY_LABELS } from "@/lib/constants";
+import { usePausedPMSchedules } from "@/lib/hooks/use-pm-schedule-pauses";
 import type { PMSchedule } from "@/types";
 
 interface PMScheduleListPanelProps {
@@ -16,6 +17,7 @@ export function PMScheduleListPanel({
   selectedId,
   onSelect,
 }: PMScheduleListPanelProps) {
+  const { data: paused } = usePausedPMSchedules();
   return (
     <div className="flex flex-col overflow-y-auto">
       {schedules.length === 0 && (
@@ -53,7 +55,14 @@ export function PMScheduleListPanel({
                 <span className="truncate text-sm font-semibold text-slate-900">
                   {schedule.title}
                 </span>
-                {!schedule.isActive && (
+                {paused?.has(schedule.id) ? (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 border-amber-200 bg-amber-50 text-amber-700"
+                  >
+                    Paused
+                  </Badge>
+                ) : !schedule.isActive && (
                   <Badge
                     variant="outline"
                     className="shrink-0 border-slate-200 bg-slate-100 text-slate-500"

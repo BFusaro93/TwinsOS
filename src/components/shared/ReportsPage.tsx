@@ -18,6 +18,10 @@ import {
 } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { WarrantyReport } from "@/components/cmms/reports/WarrantyReport";
+import { PMComplianceReport } from "@/components/cmms/reports/PMComplianceReport";
+import { UptimeReport } from "@/components/cmms/reports/UptimeReport";
+import { ReportStatCard as StatCard, ReportSkeletonCard as SkeletonCard } from "@/components/shared/ReportStatCard";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useParts } from "@/lib/hooks/use-parts";
@@ -25,30 +29,6 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder } from "@/types";
 import type { WorkOrder, Part } from "@/types/cmms";
-
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-
-interface StatCardProps {
-  label: string;
-  value: string | number;
-  sub?: string;
-}
-
-function StatCard({ label, value, sub }: StatCardProps) {
-  return (
-    <div className="rounded-lg border bg-white shadow-sm p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
-    </div>
-  );
-}
-
-function SkeletonCard() {
-  return <div className="h-24 animate-pulse rounded-lg border bg-slate-100" />;
-}
 
 // ─── Spend Tab ────────────────────────────────────────────────────────────────
 
@@ -486,11 +466,17 @@ export function ReportsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title="Reports" description="Business analytics and reporting" />
       <Tabs defaultValue="spend">
-        <TabsList>
-          <TabsTrigger value="spend">Spend</TabsTrigger>
-          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-        </TabsList>
+        {/* Six tabs don't fit a phone; let the bar scroll sideways. */}
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <TabsList>
+            <TabsTrigger value="spend">Spend</TabsTrigger>
+            <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+            <TabsTrigger value="pm-compliance">PM Compliance</TabsTrigger>
+            <TabsTrigger value="uptime">Uptime</TabsTrigger>
+            <TabsTrigger value="warranties">Warranties</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="spend" className="mt-6">
           <SpendTab purchaseOrders={purchaseOrders} isLoading={loadingPOs} />
@@ -502,6 +488,18 @@ export function ReportsPage() {
 
         <TabsContent value="inventory" className="mt-6">
           <InventoryTab parts={parts} isLoading={loadingParts} />
+        </TabsContent>
+
+        <TabsContent value="pm-compliance" className="mt-6">
+          <PMComplianceReport />
+        </TabsContent>
+
+        <TabsContent value="uptime" className="mt-6">
+          <UptimeReport />
+        </TabsContent>
+
+        <TabsContent value="warranties" className="mt-6">
+          <WarrantyReport />
         </TabsContent>
       </Tabs>
     </div>

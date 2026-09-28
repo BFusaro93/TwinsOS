@@ -277,6 +277,20 @@ export function MetersGuide() {
             for how those work.
           </li>
           <li>
+            <strong>Meter PMs count toward PM compliance.</strong> A work order from a Meter Threshold
+            automation — created directly, or converted from the request it raised — is typed{" "}
+            <strong>Preventive</strong> and due <strong>7 days</strong> after the meter tripped. Done
+            within those 7 days is on time; a request left unconverted past 7 days counts as a missed
+            PM. See{" "}
+            <GuideLink
+              href="/settings/support/asset-performance-guide#pm-compliance"
+              className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
+            >
+              how PM compliance is scored
+            </GuideLink>
+            .
+          </li>
+          <li>
             <strong>Zapier&apos;s &quot;Meter Threshold&quot; trigger</strong> is a separate,
             per-Zap configuration that lives outside Equipt entirely — it doesn&apos;t use, share,
             or affect the Pending Reset state of any automation configured here. See{" "}

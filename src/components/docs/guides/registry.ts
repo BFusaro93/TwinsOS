@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 
 import { ApiMcpGuide } from "@/components/docs/guides/api-mcp-guide";
 import { ApprovalFlowsGuide } from "@/components/docs/guides/approval-flows-guide";
+import { AssetPerformanceGuide } from "@/components/docs/guides/asset-performance-guide";
 import { AutomationsGuide } from "@/components/docs/guides/automations-guide";
 import { ClientPortalGuide } from "@/components/docs/guides/client-portal-guide";
 import { ClientsGuide } from "@/components/docs/guides/clients-guide";
@@ -48,6 +49,7 @@ import { ZapierGuide } from "@/components/docs/guides/zapier-guide";
 export const GUIDE_COMPONENTS: Record<string, ComponentType> = {
   "api-mcp-guide": ApiMcpGuide,
   "approval-flows-guide": ApprovalFlowsGuide,
+  "asset-performance-guide": AssetPerformanceGuide,
   "automations-guide": AutomationsGuide,
   "client-portal-guide": ClientPortalGuide,
   "clients-guide": ClientsGuide,

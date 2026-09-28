@@ -74,6 +74,10 @@ export function useCreateAsset() {
         photo_url: input.photoUrl,
         notes: input.notes,
         license_plate: input.licensePlate,
+        warranty_start_date: input.warrantyStartDate,
+        warranty_term_months: input.warrantyTermMonths,
+        warranty_end_date: input.warrantyEndDate,
+        warranty_notes: input.warrantyNotes,
       }).select().single();
       if (error) throw error;
       return mapAsset(data);
@@ -113,6 +117,10 @@ export function useUpdateAsset() {
         ...(input.barcode !== undefined && { barcode: input.barcode }),
         ...(input.parentAssetId !== undefined && { parent_asset_id: input.parentAssetId }),
         ...(input.licensePlate !== undefined && { license_plate: input.licensePlate }),
+        ...(input.warrantyStartDate !== undefined && { warranty_start_date: input.warrantyStartDate }),
+        ...(input.warrantyTermMonths !== undefined && { warranty_term_months: input.warrantyTermMonths }),
+        ...(input.warrantyEndDate !== undefined && { warranty_end_date: input.warrantyEndDate }),
+        ...(input.warrantyNotes !== undefined && { warranty_notes: input.warrantyNotes }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapAsset(data);
@@ -133,6 +141,8 @@ export function useUpdateAsset() {
     onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["assets", id] });
+      // Status changes move uptime.
+      queryClient.invalidateQueries({ queryKey: ["asset-metrics"] });
     },
   });
 }
@@ -157,6 +167,8 @@ export function useUpdateAssetStatus() {
     onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["assets", id] });
+      // Status changes move uptime.
+      queryClient.invalidateQueries({ queryKey: ["asset-metrics"] });
     },
   });
 }

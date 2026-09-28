@@ -376,6 +376,63 @@ export type Database = {
           },
         ]
       }
+      asset_status_history: {
+        Row: {
+          asset_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          ended_at: string | null
+          entity_type: string
+          id: string
+          org_id: string
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ended_at?: string | null
+          entity_type: string
+          id?: string
+          org_id?: string
+          started_at: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ended_at?: string | null
+          entity_type?: string
+          id?: string
+          org_id?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_status_history_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_status_history_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assets: {
         Row: {
           air_filter_part_number: string | null
@@ -412,6 +469,10 @@ export type Database = {
           spark_plug_part_number: string | null
           status: string
           updated_at: string
+          warranty_end_date: string | null
+          warranty_notes: string | null
+          warranty_start_date: string | null
+          warranty_term_months: number | null
           year: number | null
         }
         Insert: {
@@ -449,6 +510,10 @@ export type Database = {
           spark_plug_part_number?: string | null
           status?: string
           updated_at?: string
+          warranty_end_date?: string | null
+          warranty_notes?: string | null
+          warranty_start_date?: string | null
+          warranty_term_months?: number | null
           year?: number | null
         }
         Update: {
@@ -486,6 +551,10 @@ export type Database = {
           spark_plug_part_number?: string | null
           status?: string
           updated_at?: string
+          warranty_end_date?: string | null
+          warranty_notes?: string | null
+          warranty_start_date?: string | null
+          warranty_term_months?: number | null
           year?: number | null
         }
         Relationships: [
@@ -11428,6 +11497,77 @@ export type Database = {
           },
         ]
       }
+      pm_schedule_pauses: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          org_id: string
+          pm_schedule_id: string
+          reason: string | null
+          recurs_yearly: boolean
+          resumes_on: string | null
+          starts_on: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          pm_schedule_id: string
+          reason?: string | null
+          recurs_yearly?: boolean
+          resumes_on?: string | null
+          starts_on: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          pm_schedule_id?: string
+          reason?: string | null
+          recurs_yearly?: boolean
+          resumes_on?: string | null
+          starts_on?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedule_pauses_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_pauses_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_pauses_pm_schedule_id_fkey"
+            columns: ["pm_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "pm_schedules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_pauses_pm_schedule_id_fkey"
+            columns: ["pm_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "v_pm_schedule_pause_state"
+            referencedColumns: ["pm_schedule_id"]
+          },
+        ]
+      }
       pm_schedule_parts: {
         Row: {
           created_at: string
@@ -13012,6 +13152,10 @@ export type Database = {
           status: string
           updated_at: string
           vin: string | null
+          warranty_end_date: string | null
+          warranty_notes: string | null
+          warranty_start_date: string | null
+          warranty_term_months: number | null
           year: number | null
         }
         Insert: {
@@ -13054,6 +13198,10 @@ export type Database = {
           status?: string
           updated_at?: string
           vin?: string | null
+          warranty_end_date?: string | null
+          warranty_notes?: string | null
+          warranty_start_date?: string | null
+          warranty_term_months?: number | null
           year?: number | null
         }
         Update: {
@@ -13096,6 +13244,10 @@ export type Database = {
           status?: string
           updated_at?: string
           vin?: string | null
+          warranty_end_date?: string | null
+          warranty_notes?: string | null
+          warranty_start_date?: string | null
+          warranty_term_months?: number | null
           year?: number | null
         }
         Relationships: [
@@ -13437,6 +13589,7 @@ export type Database = {
           automation_id: string | null
           categories: Json
           category: string | null
+          completed_at: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -13467,6 +13620,7 @@ export type Database = {
           automation_id?: string | null
           categories?: Json
           category?: string | null
+          completed_at?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -13497,6 +13651,7 @@ export type Database = {
           automation_id?: string | null
           categories?: Json
           category?: string | null
+          completed_at?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -14377,6 +14532,44 @@ export type Database = {
         }
         Relationships: []
       }
+      v_pm_outcomes: {
+        Row: {
+          asset_id: string | null
+          asset_name: string | null
+          completed_at: string | null
+          completed_on: string | null
+          due_date: string | null
+          due_on: string | null
+          org_id: string | null
+          outcome: string | null
+          program_id: string | null
+          program_name: string | null
+          source: string | null
+          status: string | null
+          work_order_id: string | null
+          work_order_number: string | null
+        }
+        Relationships: []
+      }
+      v_pm_schedule_pause_state: {
+        Row: {
+          current_pause_id: string | null
+          org_id: string | null
+          paused_today: boolean | null
+          paused_until: string | null
+          pm_schedule_id: string | null
+          recurs_yearly: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_snow_route_stop: {
@@ -14460,6 +14653,53 @@ export type Database = {
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
       auth_rate_limit_hit: {
         Args: { p_key: string; p_limit: number; p_window_start: string }
+        Returns: boolean
+      }
+      cmms_asset_metrics: {
+        Args: { p_asset_id?: string; p_window_days?: number }
+        Returns: {
+          asset_id: string
+          asset_tag: string
+          asset_type: string
+          cost_12mo_cents: number
+          cost_lifetime_cents: number
+          down_since: string
+          downtime_events: number
+          downtime_hours: number
+          entity_type: string
+          in_service_hours: number
+          location: string
+          mttr_hours: number
+          name: string
+          open_wo_count: number
+          pm_completed: number
+          pm_cost_12mo_cents: number
+          pm_cost_lifetime_cents: number
+          pm_due: number
+          pm_late: number
+          pm_not_generated: number
+          pm_on_time: number
+          pm_overdue: number
+          pm_skipped: number
+          purchase_price: number
+          status: string
+          uptime_pct: number
+          warranty_end_date: string
+          window_days: number
+          wo_count: number
+        }[]
+      }
+      pm_cycle_date: {
+        Args: { p_frequency: string; p_n: number; p_start: string }
+        Returns: string
+      }
+      pm_cycle_min_days: { Args: { p_frequency: string }; Returns: number }
+      pm_schedule_next_cycle: {
+        Args: { p_after: string; p_anchor: string; p_schedule_id: string }
+        Returns: string
+      }
+      pm_schedule_paused_on: {
+        Args: { p_on: string; p_schedule_id: string }
         Returns: boolean
       }
       create_invoice_from_milestone: {

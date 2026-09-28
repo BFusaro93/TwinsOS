@@ -411,6 +411,10 @@ export function mapAsset(row: AssetRow): Asset {
     photoUrl: row.photo_url,
     notes: row.notes,
     licensePlate: row.license_plate ?? null,
+    warrantyStartDate: row.warranty_start_date,
+    warrantyTermMonths: row.warranty_term_months,
+    warrantyEndDate: row.warranty_end_date,
+    warrantyNotes: row.warranty_notes,
   };
 }
 
@@ -457,6 +461,10 @@ export function mapVehicle(row: VehicleRow): Vehicle {
     photoUrl: row.photo_url,
     notes: row.notes,
     licensePlate: row.license_plate,
+    warrantyStartDate: row.warranty_start_date,
+    warrantyTermMonths: row.warranty_term_months,
+    warrantyEndDate: row.warranty_end_date,
+    warrantyNotes: row.warranty_notes,
     vin: row.vin,
     samsaraVehicleId: row.samsara_vehicle_id,
     fuelType: row.fuel_type,
@@ -501,6 +509,7 @@ export function mapWorkOrder(row: WorkOrderRow): WorkOrder {
     isRecurring: row.is_recurring,
     recurrenceFrequency: row.recurrence_frequency as WorkOrder["recurrenceFrequency"],
     automationId: row.automation_id ?? null,
+    completedAt: row.completed_at ?? null,
   };
 }
 
