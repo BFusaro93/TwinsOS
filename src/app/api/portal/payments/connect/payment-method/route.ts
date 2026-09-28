@@ -44,7 +44,8 @@ export async function DELETE() {
   const { error } = await serviceClient
     .from("clients")
     .update({ saved_payment_method_id: null, saved_payment_method_type: null, saved_payment_method_summary: null })
-    .eq("id", client.id);
+    .eq("id", client.id)
+    .eq("org_id", ctx.orgId);
   if (error) return NextResponse.json({ error: "Failed to remove payment method" }, { status: 500 });
 
   return NextResponse.json({ removed: true });

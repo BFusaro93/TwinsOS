@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Loader2, X, ZoomIn } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 
 interface ThumbnailUploadProps {
   imageUrl: string | null | undefined;
@@ -68,8 +69,9 @@ export function ThumbnailUpload({ imageUrl, alt, size = "md", onUpload }: Thumbn
     setIsUploading(true);
     try {
       const supabase = createClient();
+      const orgPrefix = await getStorageOrgPrefix(supabase);
       const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `thumbnails/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const path = `${orgPrefix}/thumbnails/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("thumbnails")

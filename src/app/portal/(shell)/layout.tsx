@@ -22,6 +22,7 @@ export default async function PortalShellLayout({ children }: { children: React.
       .from("clients")
       .select("display_name, first_name")
       .eq("id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
       .single(),
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

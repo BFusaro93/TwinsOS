@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
-import { assertPublicHttpsUrl } from "@/lib/net/ssrf-guard";
+import { postJsonToPublicUrl } from "@/lib/net/ssrf-guard";
 import type { TriggerType } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,29 +156,16 @@ export async function notifyZapierSubscribers(
     subscriptions.map(async (sub: { id: string; target_url: string }) => {
       try {
         // Re-validated at delivery time (not just at subscribe time in
-        // hooks/route.ts) — cheap insurance against a target that was safe
-        // when registered but has since been repointed at an internal
-        // address (DNS rebinding).
-        const safety = await assertPublicHttpsUrl(sub.target_url);
-        if (!safety.ok) {
-          log.warn("subscriber webhook target rejected", {
-            subscriptionId: sub.id,
-            triggerType,
-            reason: safety.error,
-          });
-          return;
-        }
-
-        const res = await fetch(sub.target_url as string, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        // hooks/route.ts), with the connection pinned to the validated
+        // address (DNS rebinding) and redirects NOT followed — a 3xx counts
+        // as a failed delivery so a redirect can't reach an internal host.
+        const res = await postJsonToPublicUrl(sub.target_url, payload);
         if (!res.ok) {
           log.warn("subscriber webhook rejected", {
             subscriptionId: sub.id,
             triggerType,
             status: res.status,
+            reason: res.error ?? (res.status >= 300 && res.status < 400 ? "redirect not followed" : undefined),
           });
         }
       } catch (err) {
