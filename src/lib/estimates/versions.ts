@@ -48,11 +48,37 @@ export function buildVersionSnapshot(est: Record<string, unknown>) {
 }
 
 async function nextVersionNumber(supabase: AnySupabase, estimateId: string): Promise<number> {
-  const { count } = await supabase
+  // max + 1, not count + 1: count drifts from the numbering if a version row
+  // is ever removed, and then collides with an existing number.
+  const { data } = await supabase
     .from("estimate_versions")
-    .select("*", { count: "exact", head: true })
-    .eq("estimate_id", estimateId);
-  return (count ?? 0) + 1;
+    .select("version_number")
+    .eq("estimate_id", estimateId)
+    .order("version_number", { ascending: false })
+    .limit(1);
+  const top = (data as { version_number: number }[] | null)?.[0]?.version_number ?? 0;
+  return top + 1;
+}
+
+/**
+ * Inserts the next estimate_versions row, numbering it max+1 and retrying on
+ * a unique-violation. (estimate_id, version_number) is unique
+ * (20260927120000); two sends racing used to both write the same "v3".
+ * Returns the version number written, or throws the last error.
+ */
+export async function insertEstimateVersion(
+  supabase: AnySupabase,
+  row: { org_id: unknown; estimate_id: string; sent_to_email: string | null; created_by: string | null; snapshot: unknown },
+): Promise<number> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const versionNumber = await nextVersionNumber(supabase, row.estimate_id);
+    const { error } = await supabase.from("estimate_versions").insert({ ...row, version_number: versionNumber });
+    if (!error) return versionNumber;
+    lastError = error;
+    if ((error as { code?: string }).code !== "23505") break;
+  }
+  throw lastError instanceof Error ? lastError : new Error((lastError as { message?: string } | null)?.message ?? "Failed to record estimate version");
 }
 
 /**
@@ -73,20 +99,18 @@ export async function publishSharedVersion(
   if (published && proposalFingerprint(published.content) === proposalFingerprint(live)) {
     return published.versionNumber;
   }
-  const versionNumber = await nextVersionNumber(supabase, estimateId);
-  const { error } = await supabase.from("estimate_versions").insert({
-    org_id: (est as Record<string, unknown>).org_id,
-    estimate_id: estimateId,
-    version_number: versionNumber,
-    sent_to_email: null,
-    created_by: userId,
-    snapshot: { ...buildVersionSnapshot(est as Record<string, unknown>), sharedVia: "link", proposal: live },
-  });
-  if (error) {
-    log.error("failed to publish shared version", { estimateId, error: error.message });
+  try {
+    return await insertEstimateVersion(supabase, {
+      org_id: (est as Record<string, unknown>).org_id,
+      estimate_id: estimateId,
+      sent_to_email: null,
+      created_by: userId,
+      snapshot: { ...buildVersionSnapshot(est as Record<string, unknown>), sharedVia: "link", proposal: live },
+    });
+  } catch (err) {
+    log.error("failed to publish shared version", { estimateId, error: err instanceof Error ? err.message : String(err) });
     return published?.versionNumber ?? null;
   }
-  return versionNumber;
 }
 
 /**
@@ -110,10 +134,9 @@ export async function recordAcceptedVersion(
       .single();
     if (error || !est) throw error ?? new Error("estimate not found");
 
-    const { error: insErr } = await supabase.from("estimate_versions").insert({
+    await insertEstimateVersion(supabase, {
       org_id: (est as Record<string, unknown>).org_id,
       estimate_id: estimateId,
-      version_number: await nextVersionNumber(supabase, estimateId),
       sent_to_email: null,
       created_by: null,
       snapshot: {
@@ -123,7 +146,6 @@ export async function recordAcceptedVersion(
         acceptedVia: via,
       },
     });
-    if (insErr) throw insErr;
 
     // Accepting answers any open change request — left open, it kept
     // flagging a done estimate as waiting on the office.

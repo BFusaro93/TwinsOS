@@ -34,9 +34,13 @@ interface NewProjectDialogProps {
   defaultClientId?: string;
   /** Called with the created project after a successful create (not fired on edit). */
   onCreated?: (project: Project) => void;
+  /** Pre-fills Contract Price on create (e.g. the accepted estimate's total when converting an estimate to a project job). */
+  defaultContractPriceCents?: number;
+  /** Pre-fills the project name on create. */
+  defaultName?: string;
 }
 
-export function NewProjectDialog({ open, onOpenChange, initialData, defaultClientId, onCreated }: NewProjectDialogProps) {
+export function NewProjectDialog({ open, onOpenChange, initialData, defaultClientId, onCreated, defaultContractPriceCents, defaultName }: NewProjectDialogProps) {
   const isEditing = !!initialData;
   const [name, setName] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -82,7 +86,13 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
       setState(client?.billingState ?? "");
       setZip(client?.billingZip ?? "");
     }
-  }, [open, initialData, defaultClientId, clients]);
+    if (open && !initialData) {
+      if (defaultContractPriceCents && defaultContractPriceCents > 0) {
+        setContractPrice((prev) => prev || (defaultContractPriceCents / 100).toFixed(2));
+      }
+      if (defaultName) setName((prev) => prev || defaultName);
+    }
+  }, [open, initialData, defaultClientId, clients, defaultContractPriceCents, defaultName]);
 
   const isValid = name.trim() !== "" && customerName.trim() !== "";
 

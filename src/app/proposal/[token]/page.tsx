@@ -464,16 +464,16 @@ export default function ProposalPage() {
 
   // Live subtotal from visible items (tier-filtered) or selected items (checkbox mode)
   const quoteItems = proposal?.lineItems.filter((li) => li.rowType !== "section") ?? [];
-  // Direct costs (materials/equipment/subcontract) are priced into the stored
-  // subtotal and the client cannot deselect them, so they belong in EVERY
-  // derived subtotal. Leaving them out meant unchecking any optional item
-  // silently dropped them from the price the client accepted.
-  const directCostsCents = (proposal?.directCosts ?? []).reduce((sum, d) => sum + d.totalCents, 0);
-  const selectedTotal =
-    (proposal?.tiersEnabled
-      ? visibleLineItems.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents, 0)
-      : quoteItems.filter((li) => selectedIds.has(li.id)).reduce((sum, li) => sum + li.totalCents, 0)) +
-    directCostsCents;
+  // A line's client-facing value: its total less its own line discount
+  // (floored at 0) plus its priced sub-items — the same per-line rule
+  // recalcEstimateTotals uses, so the derived subtotal equals the stored one
+  // when everything is selected. Direct costs (estimate_direct_costs) are
+  // internal cost, never part of the client's price, and are not sent here.
+  const lineNet = (li: ProposalLineItem) =>
+    Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (li.subitemTotalCents ?? 0);
+  const selectedTotal = proposal?.tiersEnabled
+    ? visibleLineItems.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + lineNet(li), 0)
+    : quoteItems.filter((li) => selectedIds.has(li.id)).reduce((sum, li) => sum + lineNet(li), 0);
 
   // Totals shown to the client. While the proposal is untouched (all items
   // selected, no tier choice) these are EXACTLY the estimate's stored
@@ -928,31 +928,6 @@ export default function ProposalPage() {
           </div>
         ))}
       </div>
-
-      {/* Materials and other direct costs. Rendered without checkboxes: they
-          are part of the price whatever optional items the client picks, and
-          they are already inside the totals below. Without this block the
-          client saw a total that did not match the visible lines. */}
-      {proposal.directCosts.length > 0 && (
-        <div className="mb-8 rounded-lg border bg-white p-4 shadow-sm">
-          <p className="mb-2 text-sm font-semibold text-slate-900">Materials &amp; Other Costs</p>
-          <div className="space-y-1.5">
-            {proposal.directCosts.map((d) => (
-              <div key={d.id} className="flex items-baseline justify-between gap-4 text-sm">
-                <span className="min-w-0 flex-1 text-slate-700">
-                  {d.description || "Materials"}
-                  {proposal.displaySettings.showQuantities && d.qty > 1 && (
-                    <span className="ml-1 text-xs text-slate-400">×{d.qty}</span>
-                  )}
-                </span>
-                {proposal.displaySettings.showLineTotals && (
-                  <span className="shrink-0 font-medium text-slate-800">{cents(d.totalCents)}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Totals — stored estimate figures (see `totals` above), never recomputed
           from line items while the selection is untouched. */}

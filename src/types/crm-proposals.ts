@@ -168,9 +168,6 @@ export interface ProposalData {
    * publishable key (see getScopedStripeJs). */
   orgLivemode: boolean;
   lineItems: ProposalLineItem[];
-  /** Materials/equipment/subcontract rows. Always part of the price — the
-   *  client cannot deselect them — and already included in subtotalCents. */
-  directCosts: ProposalDirectCost[];
   photos: ProposalPhoto[];
 }
 
@@ -191,14 +188,11 @@ export interface ProposalLineItem {
   rateCents: number;
   visits: number;
   totalCents: number;
+  /** The line's own discount (flat cents; a percent discount is stored
+   *  already resolved). Optional: versions sent before 2026-09-27 lack it. */
+  discountCents?: number;
+  /** Sum of the line's priced sub-items. Optional for the same reason. */
+  subitemTotalCents?: number;
   status: string;
   tier: string | null;
-}
-
-export interface ProposalDirectCost {
-  id: string;
-  description: string;
-  qty: number;
-  rateCents: number;
-  totalCents: number;
 }

@@ -27,13 +27,17 @@ export interface ProposalContent {
     rateCents: number;
     visits: number;
     totalCents: number;
+    /** The line's own discount in cents. Absent on versions sent before
+     *  2026-09-27 (see proposalFingerprint). */
+    discountCents?: number;
+    /** Sum of the line's priced sub-items. Absent on older versions too. */
+    subitemTotalCents?: number;
     status: string;
     tier: string | null;
     /** For the PDF, which prints the adjusted, complexity-scaled rate. */
     adjRateCents: number | null;
     complexityBps: number | null;
   }[];
-  directCosts: { id: string; description: string; qty: number; rateCents: number; totalCents: number }[];
   subtotalCents: number;
   taxRateBps: number;
   taxCents: number;
@@ -49,7 +53,11 @@ export interface ProposalContent {
 }
 
 /** Builds ProposalContent from an estimates row selected with
- *  `estimate_line_items(*)` and `estimate_direct_costs(...)`. */
+ *  PROPOSAL_ESTIMATE_SELECT (line items with their sub-items embedded).
+ *
+ *  estimate_direct_costs are INTERNAL cost (materials/equipment/subcontract
+ *  the company pays for) — they are not part of subtotal/total and are never
+ *  shown to, or priced to, the client. */
 export function buildProposalContent(est: Record<string, unknown>): ProposalContent {
   const lineItems = ((est.estimate_line_items ?? []) as Record<string, unknown>[])
     .filter((li) => !li.deleted_at && li.status === "quote")
@@ -65,6 +73,10 @@ export function buildProposalContent(est: Record<string, unknown>): ProposalCont
       rateCents: (li.rate_cents as number) ?? 0,
       visits: (li.visits as number) ?? 1,
       totalCents: (li.total_cents as number) ?? 0,
+      discountCents: (li.discount_cents as number | null) ?? 0,
+      subitemTotalCents: ((li.estimate_line_item_subitems ?? []) as Record<string, unknown>[])
+        .filter((si) => !si.deleted_at)
+        .reduce((sum, si) => sum + ((si.total_cents as number) ?? 0), 0),
       status: li.status as string,
       tier: (li.tier as string | null) ?? null,
       adjRateCents: (li.adj_rate_cents as number | null) ?? null,
@@ -76,18 +88,6 @@ export function buildProposalContent(est: Record<string, unknown>): ProposalCont
     validUntil: (est.valid_until_date as string | null) ?? null,
     notes: (est.notes as string | null) ?? null,
     lineItems,
-    // Materials/equipment/subcontract lines are priced into the totals, so the
-    // page has to show them or the client can't reconcile the total.
-    directCosts: ((est.estimate_direct_costs ?? []) as Record<string, unknown>[])
-      .slice()
-      .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0))
-      .map((d) => ({
-        id: d.id as string,
-        description: (d.description as string | null) ?? "",
-        qty: Number(d.qty ?? 0),
-        rateCents: (d.rate_cents as number) ?? 0,
-        totalCents: (d.total_cents as number) ?? 0,
-      })),
     subtotalCents: (est.subtotal_cents as number) ?? 0,
     taxRateBps: (est.tax_rate_bps as number) ?? 0,
     taxCents: (est.tax_cents as number) ?? 0,
@@ -104,7 +104,10 @@ export function buildProposalContent(est: Record<string, unknown>): ProposalCont
 }
 
 /** Stable comparison key. Keys are sorted recursively: the published side has
- *  round-tripped through jsonb, which does not preserve key order. */
+ *  round-tripped through jsonb, which does not preserve key order.
+ *
+ *  `directCosts` is always dropped: versions sent before 2026-09-27 carried
+ *  it (it is internal cost and no longer part of the content). */
 export function proposalFingerprint(content: ProposalContent): string {
   const canon = (v: unknown): unknown =>
     Array.isArray(v)
@@ -112,14 +115,43 @@ export function proposalFingerprint(content: ProposalContent): string {
       : v && typeof v === "object"
         ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, canon((v as Record<string, unknown>)[k])]))
         : v === undefined ? null : v;
-  return JSON.stringify(canon(content));
+  const rest: Record<string, unknown> = { ...content };
+  delete rest.directCosts;
+  return JSON.stringify(canon(rest));
+}
+
+/** Line-item keys added after some versions were already sent. When the
+ *  published version predates them they are dropped from the live side too,
+ *  so an estimate sent before the field existed is not reported "changed
+ *  since sent" (which would block acceptance until re-sent). Real price
+ *  changes still show up in subtotal/total. */
+const LATE_LINE_KEYS = ["discountCents", "subitemTotalCents"] as const;
+
+function alignToPublished(live: ProposalContent, published: ProposalContent): ProposalContent {
+  const sample = published.lineItems?.[0] as Record<string, unknown> | undefined;
+  if (!sample) return live;
+  const missing = LATE_LINE_KEYS.filter((k) => !(k in sample));
+  if (missing.length === 0) return live;
+  return {
+    ...live,
+    lineItems: live.lineItems.map((li) => {
+      const copy: Record<string, unknown> = { ...li };
+      for (const k of missing) delete copy[k];
+      return copy as ProposalContent["lineItems"][number];
+    }),
+  };
+}
+
+/** True when the live content matches what was published. */
+export function proposalMatchesPublished(live: ProposalContent, published: ProposalContent): boolean {
+  return proposalFingerprint(alignToPublished(live, published)) === proposalFingerprint(published);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = SupabaseClient<any>;
 
 export const PROPOSAL_ESTIMATE_SELECT =
-  "*, estimate_line_items(*), estimate_direct_costs(id, description, qty, rate_cents, total_cents, sort_order)";
+  "*, estimate_line_items(*, estimate_line_item_subitems(total_cents, deleted_at))";
 
 export async function loadLiveProposalContent(supabase: AnySupabase, estimateId: string): Promise<ProposalContent | null> {
   const { data } = await supabase.from("estimates").select(PROPOSAL_ESTIMATE_SELECT).eq("id", estimateId).maybeSingle();
@@ -150,5 +182,5 @@ export async function isChangedSinceSent(supabase: AnySupabase, estimateId: stri
   const published = await getPublishedProposal(supabase, estimateId);
   if (!published) return false;
   const live = await loadLiveProposalContent(supabase, estimateId);
-  return !!live && proposalFingerprint(live) !== proposalFingerprint(published.content);
+  return !!live && !proposalMatchesPublished(live, published.content);
 }

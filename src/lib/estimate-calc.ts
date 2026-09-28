@@ -408,6 +408,58 @@ export function computeInstallmentSchedule(
 }
 
 /**
+ * A line's own discount in cents, resolved against its CURRENT total.
+ *
+ * A percent line discount (discount_type 'percent', discount_value in bps) is
+ * a percentage of whatever the line totals NOW — the stored discount_cents is
+ * only a snapshot from when the discount was picked, and goes stale the
+ * moment qty/rate/complexity (or a bulk Rate Increase) changes the total.
+ * Every writer of total_cents re-derives it through here, and
+ * recalcEstimateTotals re-derives it as the backstop. Flat discounts are
+ * clamped to the total so a line can never contribute negative revenue.
+ */
+export function resolveLineDiscountCents(li: {
+  totalCents: number;
+  discountCents: number | null | undefined;
+  discountType: string | null | undefined;
+  discountValue: number | null | undefined;
+}): number {
+  const total = Math.max(0, li.totalCents ?? 0);
+  const raw = li.discountType === "percent"
+    ? Math.round(total * ((li.discountValue ?? 0) / 10000))
+    : (li.discountCents ?? 0);
+  return Math.max(0, Math.min(raw, total));
+}
+
+/**
+ * Which tier of a Good/Better/Best estimate its totals are based on.
+ *
+ * Once a tier is chosen (its lines won — public/portal acceptance, or the
+ * office "Accepted" action, which require a tier and mark the others lost)
+ * the totals are that tier's. Before a choice, the schema has no
+ * recommended/default tier, so the basis is the LOWEST-priced open tier: the
+ * "starting at" price, never the sum of mutually exclusive options (which is
+ * what every tier-enabled estimate used to total — a $3,200 "Better" proposal
+ * read $10,700 in the pipeline). Returns null when tiers are off or no tiered
+ * line is open (then every non-lost line counts).
+ */
+export function tierBasis(
+  tiersEnabled: boolean,
+  lines: { tier: string | null; status: string; netCents: number }[],
+): string | null {
+  if (!tiersEnabled) return null;
+  const open = lines.filter((l) => l.tier && l.status !== "lost");
+  if (open.length === 0) return null;
+  const wonTiers = new Set(open.filter((l) => l.status === "won").map((l) => l.tier as string));
+  if (wonTiers.size === 1) return [...wonTiers][0];
+  const byTier = new Map<string, number>();
+  for (const l of open) byTier.set(l.tier as string, (byTier.get(l.tier as string) ?? 0) + l.netCents);
+  const order = ["basic", "standard", "premium"];
+  return [...byTier.entries()]
+    .sort((a, b) => a[1] - b[1] || order.indexOf(a[0]) - order.indexOf(b[0]))[0][0];
+}
+
+/**
  * Recomputes the estimate's subtotal/tax/total/profit rollups from the
  * currently-committed line items and direct costs (read fresh from the DB,
  * not from a caller's in-memory/cached estimate, which can be a render
@@ -427,18 +479,55 @@ export function computeInstallmentSchedule(
 export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimateId: string) {
   const { data: est, error: estError } = await supabase
     .from("estimates")
-    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents, discount_type, discount_value")
+    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents, discount_type, discount_value, tiers_enabled")
     .eq("id", estimateId)
     .single();
   if (estError) throw estError;
 
-  const { data: lineItems, error: liError } = await supabase
+  const { data: rawLineItems, error: liError } = await supabase
     .from("estimate_line_items")
-    .select("total_cents, discount_cents, total_cost_cents, total_budgeted_hours")
+    .select("id, status, tier, total_cents, discount_cents, discount_type, discount_value, total_cost_cents, total_budgeted_hours")
     .eq("estimate_id", estimateId)
     .neq("status", "lost")
     .is("deleted_at", null);
   if (liError) throw liError;
+
+  // Re-derive percent line discounts against the line's current total (see
+  // resolveLineDiscountCents) and persist any that drifted, so the grid,
+  // the proposal and job conversion all read the same figure.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const li of (rawLineItems ?? []) as any[]) {
+    const resolved = resolveLineDiscountCents({
+      totalCents: li.total_cents,
+      discountCents: li.discount_cents,
+      discountType: li.discount_type,
+      discountValue: li.discount_value,
+    });
+    if (resolved !== (li.discount_cents ?? 0)) {
+      const { error: dErr } = await supabase
+        .from("estimate_line_items")
+        .update({ discount_cents: resolved })
+        .eq("id", li.id);
+      if (dErr) throw dErr;
+      li.discount_cents = resolved;
+    }
+  }
+
+  // Good/Better/Best: only one tier is ever bought, so only one tier counts
+  // (see tierBasis). Lines of the other open tiers — and their sub-items —
+  // are left out of every sum below.
+  const basis = tierBasis(
+    !!est.tiers_enabled,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((rawLineItems ?? []) as any[]).map((li) => ({
+      tier: li.tier ?? null,
+      status: li.status,
+      netCents: Math.max(0, li.total_cents - (li.discount_cents ?? 0)),
+    })),
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lineItems = ((rawLineItems ?? []) as any[]).filter((li) => !basis || !li.tier || li.tier === basis);
+  const countedLineIds = new Set(lineItems.map((li) => li.id as string));
 
   const { data: directCosts, error: dcError } = await supabase
     .from("estimate_direct_costs")
@@ -453,14 +542,16 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // item via an embedded filter. Excluded whenever the PARENT line item is
   // lost or soft-deleted, matching the line-item exclusion above; subitems
   // have no status of their own to filter on.
-  const { data: subitems, error: siError } = await supabase
+  const { data: rawSubitems, error: siError } = await supabase
     .from("estimate_line_item_subitems")
-    .select("total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
+    .select("line_item_id, total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
     .eq("estimate_line_items.estimate_id", estimateId)
     .neq("estimate_line_items.status", "lost")
     .is("estimate_line_items.deleted_at", null)
     .is("deleted_at", null);
   if (siError) throw siError;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subitems = ((rawSubitems ?? []) as any[]).filter((si) => countedLineIds.has(si.line_item_id));
 
   const { data: overheadRow } = await supabase
     .from("crm_overhead_settings")
@@ -480,14 +571,14 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // impossible for any future writer to drive the rollup negative, and it
   // mirrors the estimate-level clamp a few lines below.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lineItemSubtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + Math.max(0, li.total_cents - (li.discount_cents ?? 0)), 0);
+  const lineItemSubtotalCents = lineItems.reduce((s: number, li: any) => s + Math.max(0, li.total_cents - (li.discount_cents ?? 0)), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subitemRevenueCents = (subitems ?? []).reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
+  const subitemRevenueCents = subitems.reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subitemCostCents = (subitems ?? []).reduce((s: number, si: any) => s + Math.round((si.cost_cents ?? 0) * (si.qty ?? 1)), 0);
+  const subitemCostCents = subitems.reduce((s: number, si: any) => s + Math.round((si.cost_cents ?? 0) * (si.qty ?? 1)), 0);
   const subtotalCents = lineItemSubtotalCents + subitemRevenueCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0) + subitemCostCents;
+  const totalCostCents = lineItems.reduce((s: number, li: any) => s + li.total_cost_cents, 0) + subitemCostCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
   // A "percent" discount is a % of the subtotal at whatever it is NOW, not a
@@ -530,7 +621,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const grossProfitCents = revenueCents - totalCostCents - directTotal;
   const netProfitCents = grossProfitCents - overheadCostCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalBudgetedHours = (lineItems ?? []).reduce((s: number, li: any) => s + Number(li.total_budgeted_hours ?? 0), 0);
+  const totalBudgetedHours = lineItems.reduce((s: number, li: any) => s + Number(li.total_budgeted_hours ?? 0), 0);
 
   const { error: updError } = await supabase
     .from("estimates")
@@ -555,13 +646,17 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // Re-sync every still-pending percent milestone here so the snapshot
   // never drifts from the Payment Plan tab's live "% of total" display.
   // Invoiced milestones are left alone — their amount is a locked billing
-  // record once actually billed.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // record once actually billed. The basis is this estimate's total_cents,
+  // i.e. the selected (or basis) tier only. Milestones already carried onto
+  // a project are skipped: their basis is the project's contract_price
+  // (project-first, see 20260913193000), which change orders move — syncing
+  // them to the estimate total here would undo a change order.
   const { data: milestones } = await supabase
     .from("estimate_milestones")
     .select("id, milestone_type, milestone_value, amount_cents")
     .eq("estimate_id", estimateId)
     .eq("status", "pending")
+    .is("project_id", null)
     .is("deleted_at", null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -20,7 +20,7 @@ import {
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
-import { useCRMServices, useEstimateJobs } from "@/lib/hooks/use-crm-jobs";
+import { useCRMServices, useEstimateJobs, useEstimateConvertedLines } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
@@ -31,7 +31,7 @@ import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule } from "@/lib/estimate-calc";
+import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule, resolveLineDiscountCents } from "@/lib/estimate-calc";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
@@ -365,6 +365,17 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // Jobs already converted from this estimate — drives the header's
   // "Convert to Job" vs "View Job" action for accepted estimates.
   const { data: estimateJobs = [] } = useEstimateJobs(estimateId);
+  // Conversion is per line: a mixed estimate becomes several jobs (one-time
+  // lines, then recurring lines). Convert stays available while accepted
+  // lines remain unconverted.
+  const { data: convertedInfo } = useEstimateConvertedLines(estimateId);
+  const unconvertedLineCount = convertedInfo?.legacyConverted
+    ? 0
+    : (estimate?.lineItems ?? []).filter(
+        (li) => !li.deletedAt && li.rowType !== "section" && li.status !== "lost" &&
+          !(convertedInfo?.convertedLineIds.has(li.id))
+      ).length;
+  const canConvertMore = !!convertedInfo && unconvertedLineCount > 0;
   const { data: allTemplates } = useEstimateTemplates();
   // Same show_when filter the New Estimate dialog applies.
   const templates = (allTemplates ?? []).filter((t) => t.showWhen !== "jobs");
@@ -455,6 +466,20 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: clientProperties } = useClientProperties(effectiveClientId);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [wonLostDialog, setWonLostDialog] = useState<"accepted" | "lost" | null>(null);
+  // Tiers still open on a Good/Better/Best estimate. With more than one,
+  // marking it Accepted requires picking the tier the client bought.
+  const openTierKeys = estimate?.tiersEnabled
+    ? Array.from(new Set(
+        (estimate.lineItems ?? [])
+          .filter((li) => !li.deletedAt && li.status !== "lost" && li.tier)
+          .map((li) => li.tier as "basic" | "standard" | "premium")
+      ))
+    : [];
+  const acceptTierOptions = openTierKeys.length > 1
+    ? (["basic", "standard", "premium"] as const)
+        .filter((t) => openTierKeys.includes(t))
+        .map((t) => ({ value: t, label: estimate?.tierLabels?.[t] ?? t }))
+    : [];
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
@@ -530,13 +555,19 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     }
   }
 
-  async function handleStage(stage: EstimateStage, reason?: string) {
-    if (!estimate) return;
+  async function handleStage(
+    stage: EstimateStage,
+    reason?: string,
+    selectedTier?: "basic" | "standard" | "premium",
+  ): Promise<boolean> {
+    if (!estimate) return false;
     try {
-      await updateStage({ id: estimate.id, stage, reason });
+      await updateStage({ id: estimate.id, stage, reason, selectedTier });
       toast.success(`Marked as ${stageName(stage)}`);
-    } catch {
-      toast.error("Failed to update stage");
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update stage");
+      return false;
     }
   }
 
@@ -595,9 +626,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             // cell afterwards.
             complexityBps: li.complexityBps,
           }, breakevenRateCents);
-          // A flat line discount can't survive a rate DECREASE unclamped —
-          // same floor the grid applies on every other write path.
-          const clampedDiscountCents = Math.max(0, Math.min(li.discountCents ?? 0, updated.totalCents));
+          // A flat line discount can't survive a rate DECREASE unclamped, and a
+          // percent one has to follow the new total — same rule the grid
+          // applies on every other write path.
+          const clampedDiscountCents = resolveLineDiscountCents({
+            totalCents: updated.totalCents,
+            discountCents: li.discountCents,
+            discountType: li.discountType,
+            discountValue: li.discountValue,
+          });
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
@@ -831,20 +868,23 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               dialog — so an accepted estimate always exposes Convert to Job
               here. Opens the dialog directly: no stage re-save, no spurious
               "moved to accepted" activity. Once a job exists, link to it. */}
-          {effectiveStage === "accepted" && (
-            estimateJobs.length > 0 ? (
-              <Button variant="outline" size="sm" className="h-8 text-xs"
-                title="A job has already been created from this estimate"
-                onClick={() => router.push(`/crm/scheduling/jobs/${estimateJobs[0].id}`)}>
-                <Briefcase className="mr-1 h-3.5 w-3.5 text-green-600" />View Job
-              </Button>
-            ) : (
-              <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700"
-                title="Create a job from this accepted estimate"
-                onClick={() => setConvertDialogOpen(true)}>
-                <Briefcase className="mr-1 h-3.5 w-3.5" />Convert to Job
-              </Button>
-            )
+          {effectiveStage === "accepted" && estimateJobs.length > 0 && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              title={estimateJobs.length > 1 ? `${estimateJobs.length} jobs have been created from this estimate — opens the newest` : "A job has already been created from this estimate"}
+              onClick={() => router.push(`/crm/scheduling/jobs/${estimateJobs[0].id}`)}>
+              <Briefcase className="mr-1 h-3.5 w-3.5 text-green-600" />
+              {estimateJobs.length > 1 ? `View Jobs (${estimateJobs.length})` : "View Job"}
+            </Button>
+          )}
+          {effectiveStage === "accepted" && (estimateJobs.length === 0 || canConvertMore) && (
+            <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700"
+              title={estimateJobs.length > 0
+                ? `${unconvertedLineCount} accepted line${unconvertedLineCount !== 1 ? "s" : ""} not on a job yet`
+                : "Create a job from this accepted estimate"}
+              onClick={() => setConvertDialogOpen(true)}>
+              <Briefcase className="mr-1 h-3.5 w-3.5" />
+              {estimateJobs.length > 0 ? "Convert Remaining" : "Convert to Job"}
+            </Button>
           )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             title="Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"
@@ -1856,10 +1896,17 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         <WonLostReasonDialog
           stage={wonLostDialog}
           open={!!wonLostDialog}
-          onConfirm={(reason) => {
+          tierOptions={acceptTierOptions}
+          onConfirm={async (reason, selectedTier) => {
             const stage = wonLostDialog;
             setWonLostDialog(null);
-            handleStage(stage, reason);
+            const ok = await handleStage(stage, reason, selectedTier);
+            if (!ok) return;
+            // The tier choice rewrote line statuses; the convert dialog seeds
+            // its selection from them on mount, so wait for the fresh row.
+            if (selectedTier && estimate) {
+              await qc.refetchQueries({ queryKey: ["estimates", "detail", estimate.id] });
+            }
             // Only offer conversion when nothing has been created from this
             // estimate yet. Re-confirming "Accepted" — to correct a won reason,
             // say — used to reopen the convert dialog pre-populated even on an
@@ -1867,7 +1914,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             // job with a second set of visits and its own auto-invoice stream.
             // The header button already swaps to "View Job" in this case; this
             // was the path around it.
-            if (stage === "accepted" && estimateJobs.length === 0) setConvertDialogOpen(true);
+            if (stage === "accepted" && (estimateJobs.length === 0 || canConvertMore)) setConvertDialogOpen(true);
           }}
           onCancel={() => setWonLostDialog(null)}
         />

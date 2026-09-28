@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { alreadyBilledReason, billedInPeriod, planContractBilling } from "@/lib/contract-billing";
+import { alreadyBilledReason, billedInPeriod, planContractBilling, termSkipReason } from "@/lib/contract-billing";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import type {
@@ -404,11 +404,8 @@ export function useGenerateContractInvoices() {
     mutationFn: async (contractIds: string[]): Promise<GenerateInvoicesResult[]> => {
       const supabase = createClient();
       const now = new Date();
-      const todayDay = now.getDate();
 
       const results: GenerateInvoicesResult[] = [];
-
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(todayDay).padStart(2, "0")}`;
 
       for (const contractId of contractIds) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -432,21 +429,21 @@ export function useGenerateContractInvoices() {
           results.push({ contractId, status: "skipped", reason: `contract is ${contract.status}, not signed/active` });
           continue;
         }
-        if (contract.start_date && contract.start_date > todayStr) {
-          results.push({ contractId, status: "skipped", reason: "contract hasn't started yet" });
-          continue;
-        }
-        if (contract.end_date && contract.end_date < todayStr) {
-          results.push({ contractId, status: "skipped", reason: "contract has ended" });
-          continue;
-        }
-
         // billNow: true — a manual click bills on the day it's clicked, not
         // on billing_day_of_month (the cron owns that). Everything else —
         // the "bill month in advance" shift, the month key that indexes
         // monthly_amounts, and the period window — comes from the same
         // shared schedule math the daily cron uses, so the two can't drift.
         const plan = planContractBilling(contract, now, { billNow: true });
+
+        // The term is tested against the BILLED period (advance-shifted), not
+        // today — otherwise an advance-billed contract misses its first month
+        // and bills one past its end (see termSkipReason).
+        const termReason = termSkipReason(plan, contract);
+        if (termReason) {
+          results.push({ contractId, status: "skipped", reason: termReason });
+          continue;
+        }
 
         if (billedInPeriod(plan, contract.last_billed_date)) {
           results.push({ contractId, status: "skipped", reason: alreadyBilledReason(plan) });

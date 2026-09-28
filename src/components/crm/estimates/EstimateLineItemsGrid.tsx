@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
+import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
@@ -321,8 +321,12 @@ function LineItemRow({
   // line carrying a $500 flat discount, dropped to 50%, totalled $300 against a
   // $500 discount and subtracted $200 from the estimate. Shared by every path
   // here that rewrites totalCents.
+  //
+  // A PERCENT discount is also re-derived here against the new total: its
+  // discount_cents was a snapshot from when it was picked, so any qty/rate/
+  // complexity change left the line discounted by the old dollar amount.
   function clampDiscount(r: RowState): RowState {
-    return { ...r, discountCents: Math.max(0, Math.min(r.discountCents, r.totalCents)) };
+    return { ...r, discountCents: resolveLineDiscountCents(r) };
   }
 
   function update<K extends keyof RowState>(key: K, val: RowState[K]) {
