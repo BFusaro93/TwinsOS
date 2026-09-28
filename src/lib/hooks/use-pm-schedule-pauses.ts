@@ -19,7 +19,7 @@ export function usePMSchedulePauses(pmScheduleId: string) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("pm_schedule_pauses")
-        .select("id, pm_schedule_id, starts_on, resumes_on, recurs_yearly, reason, created_at")
+        .select("id, pm_schedule_id, starts_on, resumes_on, recurs_yearly, ended_on, reason, created_at")
         .eq("pm_schedule_id", pmScheduleId)
         .is("deleted_at", null)
         .order("starts_on", { ascending: false });
@@ -30,6 +30,7 @@ export function usePMSchedulePauses(pmScheduleId: string) {
         startsOn: r.starts_on,
         resumesOn: r.resumes_on,
         recursYearly: r.recurs_yearly,
+        endedOn: r.ended_on,
         reason: r.reason,
         createdAt: r.created_at,
       }));
@@ -67,7 +68,7 @@ export function usePausedPMSchedules() {
 export function useCreatePMSchedulePause() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Omit<PMSchedulePause, "id" | "createdAt">) => {
+    mutationFn: async (input: Omit<PMSchedulePause, "id" | "createdAt" | "endedOn">) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.from("pm_schedule_pauses").insert({
@@ -85,33 +86,22 @@ export function useCreatePMSchedulePause() {
 }
 
 /**
- * End a one-off pause today. A pause that starts today (or later) is removed
- * outright, since a window has to be at least a day long.
+ * End a pause today (end_pm_schedule_pause). A pause that has already
+ * started is never deleted — a one-off one resumes today and a seasonal one
+ * stops recurring from today — so the cycles it excused stay excused in PM
+ * compliance. Only a pause that hasn't started yet (starts today or later)
+ * is removed outright. A next due date left in the past by the pause moves to
+ * the next cycle on or after today.
  */
-export function useResumePMSchedule() {
+export function useEndPMSchedulePause() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ pause, today }: { pause: PMSchedulePause; today: string }) => {
+    mutationFn: async (pauseId: string) => {
       const supabase = createClient();
-      const { error } = pause.startsOn >= today
-        ? await supabase.from("pm_schedule_pauses").update({ deleted_at: new Date().toISOString() }).eq("id", pause.id)
-        : await supabase.from("pm_schedule_pauses").update({ resumes_on: today }).eq("id", pause.id);
+      const { data, error } = await supabase.rpc("end_pm_schedule_pause", { p_pause_id: pauseId });
       if (error) throw error;
-    },
-    onSuccess: () => invalidatePauseQueries(queryClient),
-  });
-}
-
-export function useDeletePMSchedulePause() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("pm_schedule_pauses")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+      const result = (data ?? {}) as { deleted?: boolean; next_due_date?: string | null };
+      return { deleted: !!result.deleted, nextDueDate: result.next_due_date ?? null };
     },
     onSuccess: () => invalidatePauseQueries(queryClient),
   });

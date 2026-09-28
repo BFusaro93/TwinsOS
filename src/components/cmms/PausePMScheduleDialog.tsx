@@ -49,7 +49,11 @@ export function PausePMScheduleDialog({ open, onOpenChange, pmScheduleId, schedu
     !untilResumed && !resumesOn ? "Pick a resume date, or choose “Until I resume it”." :
     !untilResumed && resumesOn <= startsOn ? "The resume date has to be after the start date." :
     recursYearly && !untilResumed && Date.parse(resumesOn) - Date.parse(startsOn) > 366 * 86400000
-      ? "A yearly pause can't be longer than a year." : null;
+      ? "A yearly pause can't be longer than a year." :
+    // Same month/day start and end would wrap to cover the whole year, every
+    // year (the database rejects it too).
+    recursYearly && !untilResumed && resumesOn.slice(5) === startsOn.slice(5)
+      ? "A yearly pause has to resume on a different day of the year than it starts." : null;
 
   function handleSave() {
     if (error) return;

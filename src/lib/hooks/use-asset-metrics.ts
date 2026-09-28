@@ -63,12 +63,32 @@ export function usePMOutcomes(fromDate: string) {
     queryKey: ["pm-outcomes", fromDate],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("v_pm_outcomes")
-        .select("source, program_id, program_name, work_order_id, work_order_number, asset_id, asset_name, due_date, due_on, completed_on, outcome")
-        .gte("due_on", fromDate)
-        .order("due_on", { ascending: false });
-      if (error) throw error;
+      // PostgREST caps a response at 1000 rows, which a year of weekly PMs
+      // across a fleet passes easily — the report silently lost the oldest
+      // units. Page through with a total order (due_on alone ties) until a
+      // short page comes back.
+      const PAGE = 1000;
+      const data: {
+        source: string | null; program_id: string | null; program_name: string | null;
+        work_order_id: string | null; work_order_number: string | null; asset_id: string | null;
+        asset_name: string | null; due_date: string | null; due_on: string | null;
+        completed_on: string | null; outcome: string | null;
+      }[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data: page, error } = await supabase
+          .from("v_pm_outcomes")
+          .select("source, program_id, program_name, work_order_id, work_order_number, asset_id, asset_name, due_date, due_on, completed_on, outcome")
+          .gte("due_on", fromDate)
+          .order("due_on", { ascending: false })
+          .order("source", { ascending: true })
+          .order("program_id", { ascending: true })
+          .order("asset_id", { ascending: true })
+          .order("work_order_id", { ascending: true, nullsFirst: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        data.push(...(page ?? []));
+        if (!page || page.length < PAGE) break;
+      }
       return (data ?? []).map((r): PMOutcomeRow => ({
         source: (r.source ?? "schedule") as PMOutcomeRow["source"],
         programId: r.program_id ?? "",
