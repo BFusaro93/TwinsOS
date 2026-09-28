@@ -47,6 +47,7 @@ import { PhoneInput } from "@/components/shared/PhoneInput";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
+import type { OrgUser } from "@/types";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
 
@@ -480,6 +481,8 @@ function UserSettingsTab({
   onChange,
   roles,
   linkedAccountRole,
+  users,
+  linkedUserIds,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: Record<string, any>;
@@ -488,7 +491,16 @@ function UserSettingsTab({
   roles: { id: string; name: string }[];
   /** The linked login's real platform role (org_users.role), or null if unlinked. */
   linkedAccountRole: string | null;
+  /** The org's login accounts, offered in the link picker. */
+  users: OrgUser[];
+  /** Login ids already linked to OTHER employees (user_id is unique). */
+  linkedUserIds: Set<string>;
 }) {
+  const linkedUser = form.user_id ? users.find((u) => u.id === form.user_id) : undefined;
+  const linkableUsers = users.filter(
+    (u) => u.status !== "inactive" && !linkedUserIds.has(u.id)
+  );
+
   return (
     <div className="rounded border">
       <SectionBar title="App Settings" />
@@ -626,7 +638,9 @@ function UserSettingsTab({
           {form.user_id ? (
             <div className="flex items-center gap-3">
               <div className="flex-1 rounded bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-700">
-                Linked to user account
+                {linkedUser
+                  ? <>Linked to <span className="font-medium">{linkedUser.name || linkedUser.email}</span>{linkedUser.name && <span className="text-green-600"> · {linkedUser.email}</span>}</>
+                  : "Linked to user account"}
               </div>
               <Button
                 variant="outline"
@@ -639,13 +653,19 @@ function UserSettingsTab({
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <FieldInput
-                placeholder="Paste user ID to link…"
-                className="flex-1"
-                onChange={(e) => {
-                  if (e.target.value) onChange("user_id", e.target.value);
-                }}
-              />
+              <Select value="" onValueChange={(v) => onChange("user_id", v)}>
+                <SelectTrigger className="h-8 flex-1 text-sm">
+                  <SelectValue placeholder={linkableUsers.length ? "Select a user to link…" : "No unlinked users"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {linkableUsers.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name || u.email}
+                      {u.name && <span className="text-slate-400"> · {u.email}</span>}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-slate-400 shrink-0">or invite via Settings → Users</p>
             </div>
           )}
@@ -816,7 +836,11 @@ function EmployeeDialog({
             )}
             {can("emp_view_user_settings") && (
               <TabsContent value="user_settings" className="mt-0">
-                <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []} linkedAccountRole={linkedAccountRole} />
+                <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []}
+                  linkedAccountRole={linkedAccountRole}
+                  users={orgUsers ?? []}
+                  linkedUserIds={new Set(otherEmployees.flatMap((e) => (e.userId ? [e.userId] : [])))}
+                />
               </TabsContent>
             )}
             {can("emp_view_resource_notes") && (
