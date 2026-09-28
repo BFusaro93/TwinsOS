@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -32,8 +32,34 @@ import type { WorkOrder, Part } from "@/types/cmms";
 
 // ─── Spend Tab ────────────────────────────────────────────────────────────────
 
-function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder[]; isLoading: boolean }) {
+type SpendRange = "6m" | "12m" | "all";
+
+const SPEND_RANGE_OPTIONS: { key: SpendRange; label: string }[] = [
+  { key: "6m", label: "Last 6 months" },
+  { key: "12m", label: "Last 12 months" },
+  { key: "all", label: "All time" },
+];
+
+function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder[]; isLoading: boolean }) {
   const { data: products = [] } = useProducts();
+  const [range, setRange] = useState<SpendRange>("12m");
+
+  // Canceled POs never delivered parts, so they don't count as spend. Range is by actual PO date.
+  const purchaseOrders = useMemo(() => {
+    const monthsBack = range === "6m" ? 6 : range === "12m" ? 12 : null;
+    const now = new Date();
+    const cutoff = monthsBack === null
+      ? null
+      : new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
+    const cutoffKey = cutoff
+      ? `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}`
+      : null;
+    return allPurchaseOrders.filter((po) => {
+      if (po.status === "canceled") return false;
+      if (cutoffKey === null) return true;
+      return (po.poDate ?? po.createdAt).slice(0, 7) >= cutoffKey;
+    });
+  }, [allPurchaseOrders, range]);
 
   // Build product category lookup — spend charts show maintenance_part only
   const productCategoryMap = useMemo(() => {
@@ -42,7 +68,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
     return map;
   }, [products]);
 
-  // Sum only maintenance_part line item costs across all non-canceled/draft POs
+  // Sum only maintenance_part line item costs across the non-canceled POs in range
   const totalSpend = useMemo(
     () => purchaseOrders.reduce((sum, po) => {
       return sum + po.lineItems
@@ -68,11 +94,24 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
       po.status === "approved"
   );
 
-  // Monthly parts spend — last 6 months (maintenance_part line items only)
+  // Monthly parts spend over the selected range (maintenance_part line items only)
   const monthlySpend = useMemo(() => {
     const today = new Date();
     const months: { label: string; key: string; spend: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
+    let monthCount = range === "6m" ? 6 : 12;
+    if (range === "all") {
+      const earliest = purchaseOrders.reduce<string | null>((min, po) => {
+        const k = (po.poDate ?? po.createdAt).slice(0, 7);
+        return min === null || k < min ? k : min;
+      }, null);
+      if (earliest) {
+        const [y, m] = earliest.split("-").map(Number);
+        monthCount = Math.max(6, (today.getFullYear() - y) * 12 + (today.getMonth() + 1 - m) + 1);
+      } else {
+        monthCount = 6;
+      }
+    }
+    for (let i = monthCount - 1; i >= 0; i--) {
       const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const label = d.toLocaleString("en-US", { month: "short", year: "2-digit" });
@@ -87,7 +126,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
         .forEach((li) => { bucket.spend += li.quantity * li.unitCost; });
     });
     return months.map((m) => ({ month: m.label, spend: m.spend / 100 }));
-  }, [purchaseOrders, productCategoryMap]);
+  }, [purchaseOrders, productCategoryMap, range]);
 
   // Spend by vendor — top 5 (maintenance_part only)
   const vendorSpend = useMemo(() => {
@@ -115,12 +154,25 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
     );
   }
 
+  const rangeLabel = SPEND_RANGE_OPTIONS.find((o) => o.key === range)?.label ?? "";
+
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-slate-400">Excludes canceled POs</p>
+        <select
+          value={range}
+          onChange={(e) => setRange(e.target.value as SpendRange)}
+          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+          aria-label="Date range"
+        >
+          {SPEND_RANGE_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
+      </div>
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} sub="All time, all POs" />
-        <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} sub="All time" />
+        <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} sub={rangeLabel} />
+        <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} sub={rangeLabel} />
         <StatCard label="Total POs" value={purchaseOrders.length} />
         <StatCard label="Open POs" value={openPOs.length} />
       </div>
@@ -128,7 +180,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
       {/* Monthly spend trend */}
       <div className="rounded-lg border bg-white shadow-sm p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
-          Parts Spend Trend (Last 6 Months)
+          Parts Spend Trend ({rangeLabel})
         </p>
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={monthlySpend} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
@@ -167,7 +219,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
       {/* Spend by vendor */}
       <div className="rounded-lg border bg-white shadow-sm p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
-          Top 5 Vendors by Parts Spend
+          Top 5 Vendors by Parts Spend ({rangeLabel})
         </p>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart
