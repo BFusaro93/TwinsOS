@@ -3,7 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { analysisConfigSchema } from "@/types/crm-reports";
 import { runAnalysis } from "@/lib/reports/engine";
-import { getCrewRunnableScope, isCrewCaller } from "@/lib/reports/crew-dashboard-access";
+import {
+  crewMayRunAnalysis,
+  getCrewRunnableScope,
+  isCrewCaller,
+} from "@/lib/reports/crew-dashboard-access";
 import { DATASET_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
 
 /**
@@ -25,11 +29,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Crew logins have no Report Center permission; they may query only the
-  // datasets used by panels of a dashboard flagged visible_to_crew (the
-  // dashboard viewer adds tab date/rep filters on top of the saved panel
-  // config, so matching the exact config isn't practical — the dataset is
-  // the meaningful boundary). See crew-dashboard-access.ts.
+  // Crew logins have no Report Center permission; they may run only the
+  // exact analysis configs of panels on a dashboard flagged visible_to_crew
+  // (plus the tab date-range / sales-rep filters the viewer appends). See
+  // crewMayRunAnalysis in crew-dashboard-access.ts.
   const isCrew = await isCrewCaller(supabase, user.id);
   if (!isCrew) {
     // Mirrors the client-side gate in ReportsHub.tsx/ReportCatalog.tsx, but
@@ -59,26 +62,27 @@ export async function POST(request: Request) {
   }
 
   if (isCrew) {
-    const { datasets } = await getCrewRunnableScope(supabase);
-    if (!datasets.has(parsed.data.dataset)) {
+    const { visuals } = await getCrewRunnableScope(supabase);
+    if (!crewMayRunAnalysis(parsed.data, visuals)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-  } else {
-    // Sensitive datasets need one of their mapped report permissions on top
-    // of view_report_center (admins pass inside has_settings_permission).
-    // Crew logins never hold these keys — their scope is decided above.
-    const datasetKeys = DATASET_PERMISSION_KEYS[parsed.data.dataset];
-    if (datasetKeys) {
-      const checks = await Promise.all(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        datasetKeys.map((key) => (supabase.rpc as any)("has_settings_permission", { p_key: key }))
+  }
+
+  // Sensitive datasets need one of their mapped report permissions on top
+  // of view_report_center (admins pass inside has_settings_permission).
+  // This applies to crew logins too: a crew-visible dashboard can't be used
+  // to launder payroll/invoice/audit data to a shared field account.
+  const datasetKeys = DATASET_PERMISSION_KEYS[parsed.data.dataset];
+  if (datasetKeys) {
+    const checks = await Promise.all(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      datasetKeys.map((key) => (supabase.rpc as any)("has_settings_permission", { p_key: key }))
+    );
+    if (!checks.some((r) => r.data === true)) {
+      return NextResponse.json(
+        { error: "You don't have permission to query this dataset" },
+        { status: 403 }
       );
-      if (!checks.some((r) => r.data === true)) {
-        return NextResponse.json(
-          { error: "You don't have permission to query this dataset" },
-          { status: 403 }
-        );
-      }
     }
   }
 

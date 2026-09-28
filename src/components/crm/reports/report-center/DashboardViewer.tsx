@@ -175,12 +175,13 @@ function DashboardVisualPanelView({
   // Client-side mirror of the analysis/run route's per-dataset gate: a role
   // denied every report over a sensitive dataset (payroll, invoicing, ...)
   // gets a quiet notice instead of firing a request that 403s into an error
-  // alert. Crew logins never hold report keys — their scope is decided by
-  // the server (crew-visible dashboards), so they're not gated here.
+  // alert. The server applies the same per-dataset gate to crew logins too
+  // (on top of their crew-visible-dashboard scope), so they're gated here as
+  // well.
   const { can, isLoading: permissionsLoading } = usePermissions();
-  const { isCrewOnly, isLoading: crewLoading } = useIsCrewOnly();
+  const { isLoading: crewLoading } = useIsCrewOnly();
   const permissionsReady = !permissionsLoading && !crewLoading;
-  const denied = permissionsReady && !isCrewOnly && !canQueryDataset(panel.visual.config.dataset, can);
+  const denied = permissionsReady && !canQueryDataset(panel.visual.config.dataset, can);
 
   const { data, isFetching, error } = useRunVisualQuery(
     permissionsReady && !denied ? panel.visual : undefined,
