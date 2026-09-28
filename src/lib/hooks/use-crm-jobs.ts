@@ -15,7 +15,7 @@ import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
-import { PAUSE_PRUNE_STATUSES, pruneUntouchedFutureVisits } from "@/lib/visits/prune";
+import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 
 const log = logger.child("use-crm-jobs");
 
@@ -425,13 +425,14 @@ export function useUpdateJobStatus() {
       // Never mark multi-visit job types as completed via a direct status update —
       // only their individual visits complete. Keep job at scheduled.
       let resolvedStatus = status;
+      // The previous status and job type decide what happens to the visits
+      // (src/lib/visits/job-status-visits.ts).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: jobRow } = await (supabase as any).from("crm_jobs").select("job_type, status").eq("id", id).single();
+      const prior = jobRow as { job_type: string | null; status: string | null } | null;
       if (status === "completed") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: jobRow } = await (supabase as any).from("crm_jobs").select("job_type").eq("id", id).single();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const multiVisitTypes = ["recurring", "waiting_list", "package", "snow", "project"];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (jobRow && multiVisitTypes.includes((jobRow as any).job_type)) {
+        if (prior?.job_type && multiVisitTypes.includes(prior.job_type)) {
           resolvedStatus = "scheduled";
         }
       }
@@ -443,17 +444,25 @@ export function useUpdateJobStatus() {
         .eq("id", id);
       if (error) throw error;
 
-      // Putting a job on hold pauses it, and cancelling ends it — clear out
-      // its untouched future visits (scheduled or dispatched, never clocked
-      // in, not invoiced) so it stops showing on the dispatch board, crew app
-      // and route optimizer. "Today" is the ORG's calendar day, not the
-      // browser's. Pruned visits release their occurrence, so a job resumed
-      // from hold regenerates them (src/lib/visits/prune.ts).
-      if (resolvedStatus === "hold" || resolvedStatus === "cancelled") {
-        await pruneUntouchedFutureVisits(supabase, id, {
-          fromDate: todayInZone(orgTimeZone),
-          statuses: PAUSE_PRUNE_STATUSES,
-        });
+      // Hold / cancel of a recurring or package job prunes its untouched
+      // future visits (released occurrences); resuming it regenerates the
+      // season. Other job types keep their visits: hold leaves them, cancel
+      // marks the untouched ones cancelled. "Today" is the ORG's calendar day.
+      // See src/lib/visits/job-status-visits.ts.
+      const effect = await applyJobStatusToVisits(supabase, {
+        jobId: id,
+        jobType: prior?.job_type ?? null,
+        previousStatus: prior?.status ?? null,
+        newStatus: resolvedStatus,
+        today: todayInZone(orgTimeZone),
+      });
+      if (effect.regenerate) {
+        try {
+          await resumeJobVisits(id);
+        } catch (e) {
+          log.error("visit regeneration after resume failed", { jobId: id, error: e instanceof Error ? e.message : String(e) });
+          toast.error("Job resumed, but its visits could not be regenerated — use Generate Visits");
+        }
       }
 
       // Log to client activity timeline — naming the job ("Job cancelled:
@@ -492,7 +501,7 @@ export function useUpdateJobStatus() {
       // Every job list, not just the dispatch board's day — invalidating only
       // ["crm-jobs", "date", ...] left the client's Jobs card (keyed
       // ["crm-jobs", "client", id]) showing a cancelled job until a reload.
-      // Visits too: "hold" / "cancelled" soft-delete the job's untouched future visits.
+      // Visits too: hold / cancel / resume prune, cancel or regenerate them.
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
@@ -2101,8 +2110,7 @@ export function useCreateJobsFromEstimate() {
       // shows on the dispatch board immediately with the right MEN count
       // rather than relying on JobDetail's one_time-only auto-create effect.
       if (scheduledDate) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("crm_job_visits").insert({
+        const firstVisit = (jobServiceId: string | null, occurrence: boolean) => ({
           job_id: jobId,
           client_id: clientId,
           scheduled_date: scheduledDate,
@@ -2110,11 +2118,22 @@ export function useCreateJobsFromEstimate() {
           crew_id: crewId,
           men_count: jobManCount,
           notes_to_crew: notesToCrew,
-          // Link it to the service when there's exactly one, like the visits
-          // generate-visits creates — an unlinked first visit sat apart from
-          // the rest of a recurring season.
-          job_service_id: insertedServiceIds.length === 1 ? insertedServiceIds[0] : null,
+          job_service_id: jobServiceId,
+          ...(occurrence ? { occurrence_date: scheduledDate } : {}),
         });
+        // Recurring: one first visit PER SERVICE, linked and carrying its
+        // occurrence_date — exactly what generate-visits creates. A single
+        // unlinked first visit on a multi-service job made the generator
+        // skip that date for every service while no service's max_visits
+        // counted it, so the client was billed one extra visit per service.
+        // Other types keep one visit (linked when there's a single service):
+        // that one visit does the whole job.
+        const rows = jobType === "recurring" && insertedServiceIds.length > 0
+          ? insertedServiceIds.map((sid) => firstVisit(sid, true))
+          : [firstVisit(insertedServiceIds.length === 1 ? insertedServiceIds[0] : null, false)];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: visitErr } = await (supabase as any).from("crm_job_visits").insert(rows);
+        if (visitErr) log.error("first visit insert failed", { jobId, error: visitErr.message });
       }
 
       // Recurring jobs: generate the season's visits now, the same as a
