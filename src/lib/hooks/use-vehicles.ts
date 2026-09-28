@@ -82,6 +82,10 @@ export function useCreateVehicle() {
         next_oil_change_due: input.nextOilChangeDue,
         next_oil_change_mileage: input.nextOilChangeMileage,
         next_inspection_sticker_due: input.nextInspectionStickerDue,
+        warranty_start_date: input.warrantyStartDate,
+        warranty_term_months: input.warrantyTermMonths,
+        warranty_end_date: input.warrantyEndDate,
+        warranty_notes: input.warrantyNotes,
       }).select().single();
       if (error) throw error;
       return mapVehicle(data);
@@ -130,6 +134,10 @@ export function useUpdateVehicle() {
         ...(input.photoUrl !== undefined && { photo_url: input.photoUrl }),
         ...(input.barcode !== undefined && { barcode: input.barcode }),
         ...(input.samsaraVehicleId !== undefined && { samsara_vehicle_id: input.samsaraVehicleId }),
+        ...(input.warrantyStartDate !== undefined && { warranty_start_date: input.warrantyStartDate }),
+        ...(input.warrantyTermMonths !== undefined && { warranty_term_months: input.warrantyTermMonths }),
+        ...(input.warrantyEndDate !== undefined && { warranty_end_date: input.warrantyEndDate }),
+        ...(input.warrantyNotes !== undefined && { warranty_notes: input.warrantyNotes }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapVehicle(data);
@@ -151,6 +159,8 @@ export function useUpdateVehicle() {
     onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["vehicles", id] });
+      // Status changes move uptime.
+      queryClient.invalidateQueries({ queryKey: ["asset-metrics"] });
     },
   });
 }
@@ -176,6 +186,8 @@ export function useUpdateVehicleStatus() {
     onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["vehicles", id] });
+      // Status changes move uptime.
+      queryClient.invalidateQueries({ queryKey: ["asset-metrics"] });
     },
   });
 }

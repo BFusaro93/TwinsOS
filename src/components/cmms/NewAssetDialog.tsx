@@ -27,6 +27,13 @@ import { useAssets, useCreateAsset, useUpdateAsset } from "@/lib/hooks/use-asset
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { WarrantyFields } from "@/components/cmms/WarrantyFields";
+import {
+  EMPTY_WARRANTY_FORM,
+  resolveWarrantyForm,
+  warrantyFormFromRecord,
+  type WarrantyFormValue,
+} from "@/lib/utils/warranty";
 
 interface NewAssetDialogProps {
   open: boolean;
@@ -77,6 +84,10 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
   const [purchasePrice, setPurchasePrice] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
 
+  // Warranty
+  const [warranty, setWarranty] = useState<WarrantyFormValue>(EMPTY_WARRANTY_FORM);
+  const resolvedWarranty = resolveWarrantyForm(warranty, purchaseDate || null);
+
   // Notes
   const [notes, setNotes] = useState("");
 
@@ -107,6 +118,8 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
       setPurchaseDate(isDuplicate ? "" : (initialData.purchaseDate ?? ""));
       setPurchasePrice(isDuplicate ? "" : (initialData.purchasePrice ? (initialData.purchasePrice / 100).toFixed(2) : ""));
       setPaymentMethod(isDuplicate ? "" : (initialData.paymentMethod ?? ""));
+      // A copy is a different unit with its own purchase, so its own warranty.
+      setWarranty(isDuplicate ? EMPTY_WARRANTY_FORM : warrantyFormFromRecord(initialData));
       setNotes(initialData.notes ?? "");
     } else if (open && !initialData && presetParentId) {
       // Blank form for a new sub-asset — just pre-select the parent
@@ -133,6 +146,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
     assetTag.trim() !== "" &&
     assetType.trim() !== "" &&
     !assetTagError &&
+    !resolvedWarranty.error &&
     (!rf.isRequired("location") || (location !== "" && location !== "none")) &&
     (!rf.isRequired("serial_number") || serialNumber.trim() !== "") &&
     (!rf.isRequired("year") || year.trim() !== "") &&
@@ -160,6 +174,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
     setPurchaseDate("");
     setPurchasePrice("");
     setPaymentMethod("");
+    setWarranty(EMPTY_WARRANTY_FORM);
     setNotes("");
   }
 
@@ -197,6 +212,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
       financeInstitution: null,
       photoUrl: isEditing ? (initialData?.photoUrl ?? null) : null,
       notes: notes || null,
+      ...resolvedWarranty.fields,
     };
     if (isEditing && initialData) {
       updateAsset.mutate({ id: initialData.id, ...payload }, { onSuccess: () => handleClose() });
@@ -527,6 +543,19 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
                 </Select>
               </div>
             </div>
+
+            {/* Warranty */}
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Warranty
+            </p>
+
+            <WarrantyFields
+              idPrefix="asset"
+              value={warranty}
+              onChange={setWarranty}
+              purchaseDate={purchaseDate}
+              resolved={resolvedWarranty}
+            />
 
             {/* Notes */}
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">

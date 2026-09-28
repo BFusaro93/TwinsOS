@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Check, ChevronDown, Droplets, FileCheck, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { AssetMetricsCards } from "@/components/cmms/AssetMetricsCards";
+import { WarrantyInfo } from "@/components/cmms/WarrantyInfo";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -300,6 +302,14 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
 
   return (
     <div className="flex flex-col gap-5 p-6">
+      <AssetMetricsCards
+        assetId={vehicle.id}
+        warrantyEndDate={vehicle.warrantyEndDate}
+        purchasePrice={vehicle.purchasePrice}
+      />
+
+      <Separator />
+
       {/* Service Reminders */}
       <div>
         <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -429,6 +439,9 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
           <MetaRow label="Finance Institution" value={vehicle.financeInstitution} />
         </dl>
       </div>
+
+      <Separator />
+      <WarrantyInfo record={vehicle} />
 
       <Separator />
       <div>

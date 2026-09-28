@@ -8,6 +8,8 @@ import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("crm-processor");
 
@@ -63,6 +65,13 @@ async function executeAction(
       p_org_id_override: orgId,
     });
     if (woNumErr || !workOrderNumber) return { skipReason: `failed to generate WO number: ${woNumErr?.message ?? "unknown"}` };
+    // A meter rule is preventive maintenance by definition (an oil change at
+    // N hours), and counts toward PM compliance as due 7 days after the meter
+    // trips — see v_pm_outcomes.
+    const isMeterPM = auto.trigger_type === "meter_threshold";
+    const meterDueDate = isMeterPM
+      ? shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), 7)
+      : null;
     const { data: wo, error: woErr } = await adminClient
       .from("work_orders")
       .insert({
@@ -76,6 +85,7 @@ async function executeAction(
         work_order_number: workOrderNumber,
         automation_id: auto.id,
         is_recurring: false,
+        ...(isMeterPM && { wo_type: "preventive", due_date: meterDueDate }),
       })
       .select("id, work_order_number")
       .single();
@@ -250,9 +260,16 @@ async function evaluatePmDue(adminClient: AdminClient, orgId: string, daysAhead:
     .eq("org_id", orgId)
     .eq("is_active", true)
     .is("deleted_at", null)
-    .lte("next_due_date", cutoff.toISOString().slice(0, 10))
-    .limit(1);
-  return (data ?? []).length > 0;
+    .lte("next_due_date", cutoff.toISOString().slice(0, 10));
+  if (!data || data.length === 0) return false;
+  // Paused (off-season) schedules owe nothing.
+  const { data: paused } = await adminClient
+    .from("v_pm_schedule_pause_state")
+    .select("pm_schedule_id")
+    .eq("org_id", orgId)
+    .eq("paused_today", true);
+  const pausedIds = new Set((paused ?? []).map((p: { pm_schedule_id: string }) => p.pm_schedule_id));
+  return data.some((s: { id: string }) => !pausedIds.has(s.id));
 }
 
 /** True if any open work order's due date is more than daysOverdue days in the past. */

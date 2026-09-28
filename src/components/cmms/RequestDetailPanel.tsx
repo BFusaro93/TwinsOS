@@ -27,6 +27,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useUpdateRequestStatus, useDeleteRequest, useConvertRequestToWO } from "@/lib/hooks/use-requests";
 import { useCreateWorkOrder, useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd } from "@/lib/time/zone";
 import { useCMMSStore } from "@/stores";
 import { WorkOrderDetailPanel } from "./WorkOrderDetailPanel";
 import type { MaintenanceRequest, MaintenanceRequestStatus } from "@/types";
@@ -198,6 +200,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const { mutate: createWorkOrder, isPending: converting } = useCreateWorkOrder();
   const { mutate: convertToWO } = useConvertRequestToWO();
   const { setSelectedRequestId } = useCMMSStore();
+  const { toISODate } = useOrgDates();
 
   function handleStatusChange(s: MaintenanceRequestStatus) {
     setStatus(s);
@@ -205,13 +208,17 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   }
 
   function handleConvertToWO() {
+    // Requests raised by an automation are meter-triggered PMs (an oil change
+    // at N hours): preventive, and due 7 days after the meter tripped — the
+    // same rule PM compliance scores them by (v_pm_outcomes).
+    const fromAutomation = !!request.automationId;
     createWorkOrder(
       {
         title: request.title,
         description: request.description ?? null,
         status: "open",
         priority: request.priority,
-        woType: "reactive",
+        woType: fromAutomation ? "preventive" : "reactive",
         assetId: request.assetId ?? null,
         assetName: request.assetName ?? null,
         linkedEntityType: request.assetId
@@ -222,7 +229,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         assignedToIds: [],
         assignedToNames: [],
         startDate: null,
-        dueDate: null,
+        dueDate: fromAutomation ? shiftYmd(toISODate(new Date(request.createdAt)), 7) : null,
         category: null,
         categories: [],
         parentWorkOrderId: null,

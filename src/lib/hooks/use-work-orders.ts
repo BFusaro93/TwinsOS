@@ -55,7 +55,7 @@ export function useWorkOrder(id: string) {
 export function useCreateWorkOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Omit<WorkOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "workOrderNumber"> & { workOrderNumber?: string }) => {
+    mutationFn: async (input: Omit<WorkOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "workOrderNumber" | "completedAt"> & { workOrderNumber?: string }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       // Atomic per-org/year counter, not Date.now() — two concurrent creates

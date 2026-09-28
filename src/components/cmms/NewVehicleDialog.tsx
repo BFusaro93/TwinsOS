@@ -27,6 +27,13 @@ import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles, useCreateVehicle, useUpdateVehicle } from "@/lib/hooks/use-vehicles";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { WarrantyFields } from "@/components/cmms/WarrantyFields";
+import {
+  EMPTY_WARRANTY_FORM,
+  resolveWarrantyForm,
+  warrantyFormFromRecord,
+  type WarrantyFormValue,
+} from "@/lib/utils/warranty";
 
 interface NewVehicleDialogProps {
   open: boolean;
@@ -88,6 +95,10 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
   const [nextOilChangeMileage, setNextOilChangeMileage] = useState("");
   const [nextInspectionStickerDue, setNextInspectionStickerDue] = useState("");
 
+  // Warranty
+  const [warranty, setWarranty] = useState<WarrantyFormValue>(EMPTY_WARRANTY_FORM);
+  const resolvedWarranty = resolveWarrantyForm(warranty, purchaseDate || null);
+
   // Notes
   const [notes, setNotes] = useState("");
 
@@ -116,6 +127,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       setPurchaseDate(initialData.purchaseDate ?? "");
       setPurchasePrice(initialData.purchasePrice ? (initialData.purchasePrice / 100).toFixed(2) : "");
       setPaymentMethod(initialData.paymentMethod ?? "");
+      setWarranty(warrantyFormFromRecord(initialData));
       setNotes(initialData.notes ?? "");
       setLicensePlate(initialData.licensePlate ?? "");
       setVin(initialData.vin ?? "");
@@ -146,6 +158,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
     assetTag.trim() !== "" &&
     assetType.trim() !== "" &&
     !assetTagError &&
+    !resolvedWarranty.error &&
     (!rf.isRequired("license_plate") || licensePlate.trim() !== "") &&
     (!rf.isRequired("year") || year.trim() !== "") &&
     (!rf.isRequired("make") || make.trim() !== "") &&
@@ -179,6 +192,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
     setPurchaseDate("");
     setPurchasePrice("");
     setPaymentMethod("");
+    setWarranty(EMPTY_WARRANTY_FORM);
     setNotes("");
   }
 
@@ -222,6 +236,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       sparkPlugPartNumber: sparkPlugPartNumber || null,
       engineModel: engineModel || null,
       manufacturer: null,
+      ...resolvedWarranty.fields,
     };
     if (isEditing && initialData) {
       updateVehicle.mutate({ id: initialData.id, ...payload }, { onSuccess: () => handleClose() });
@@ -647,6 +662,19 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
                 />
               </div>
             </div>
+
+            {/* Warranty */}
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Warranty
+            </p>
+
+            <WarrantyFields
+              idPrefix="vehicle"
+              value={warranty}
+              onChange={setWarranty}
+              purchaseDate={purchaseDate}
+              resolved={resolvedWarranty}
+            />
 
             {/* Notes */}
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">

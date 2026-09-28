@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { todayInZone } from "@/lib/time/zone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import { setWOPartStock } from "@/lib/inventory/part-stock";
 import { logger } from "@/lib/logger";
 
@@ -155,6 +155,22 @@ export async function POST(
     return NextResponse.json({ error: "PM schedule not found" }, { status: 404 });
   }
 
+  const today = todayInZone(await getOrgTimeZone(userClient, profile.org_id as string));
+
+  // ── 1b. Paused schedules don't generate ───────────────────────────────────
+  // A paused cycle isn't due (and isn't scored — see pm_schedule_pauses), so
+  // generating one would create a PM nobody owes.
+  const { data: pausedToday, error: pausedErr } = await adminClient.rpc("pm_schedule_paused_on", {
+    p_schedule_id: scheduleId,
+    p_on: today,
+  });
+  if (pausedErr) {
+    return NextResponse.json({ error: `Couldn't check whether the schedule is paused: ${pausedErr.message}` }, { status: 500 });
+  }
+  if (pausedToday) {
+    return NextResponse.json({ error: "This PM schedule is paused. Resume it to generate work orders." }, { status: 409 });
+  }
+
   // ── 2. Duplicate guard — block if any open WOs from this schedule exist ─────
   // Checks across all dates, not just today, so generating a new batch while
   // the previous week's is still open is prevented.
@@ -228,6 +244,21 @@ export async function POST(
   const dateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const isSingleAsset = scheduleAssets.length === 1;
 
+  // Each generated WO is due on the date the schedule said this PM was due,
+  // which is what PM compliance (on time vs late) is measured against —
+  // skipping forward past any cycles inside a pause, so a schedule resumed
+  // after winter isn't generated "due" on a December date. A schedule with no
+  // next due date is due the day it's generated.
+  let pmDueDate: string = schedule.next_due_date ?? today;
+  if (schedule.next_due_date) {
+    const { data: firstUnpaused } = await adminClient.rpc("pm_schedule_next_cycle", {
+      p_schedule_id: scheduleId,
+      p_anchor: schedule.next_due_date,
+      p_after: shiftYmd(schedule.next_due_date, -1),
+    });
+    if (firstUnpaused) pmDueDate = firstUnpaused as string;
+  }
+
   let primaryWOId: string;
 
   if (isSingleAsset) {
@@ -250,6 +281,7 @@ export async function POST(
         asset_name: sa.asset_name,
         pm_schedule_id: scheduleId,
         work_order_number: baseNumber,
+        due_date: pmDueDate,
         assigned_to_id: schedule.assigned_to_id ?? null,
         assigned_to_name: schedule.assigned_to_name ?? null,
         assigned_to_ids: assigneeIds,
@@ -305,6 +337,7 @@ export async function POST(
         wo_type: "preventive",
         pm_schedule_id: scheduleId,
         work_order_number: baseNumber,
+        due_date: pmDueDate,
         assigned_to_id: schedule.assigned_to_id ?? null,
         assigned_to_name: schedule.assigned_to_name ?? null,
         assigned_to_ids: assigneeIds,
@@ -343,6 +376,7 @@ export async function POST(
           pm_schedule_id: scheduleId,
           parent_work_order_id: parentWO.id,
           work_order_number: `${baseNumber}-${i + 1}`,
+          due_date: pmDueDate,
           assigned_to_id: schedule.assigned_to_id ?? null,
           assigned_to_name: schedule.assigned_to_name ?? null,
           assigned_to_ids: assigneeIds,
@@ -385,10 +419,23 @@ export async function POST(
   }
 
   // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
-  // Advance from today (actual generation date) so that generating early
-  // doesn't push the next due date further out than one interval from now.
-  const today = todayInZone(await getOrgTimeZone(userClient, profile.org_id as string));
-  const nextDue = advanceDate(today, schedule.frequency);
+  // The next cycle on the schedule's own cadence after this batch's due date
+  // (and on or after today, when this batch was generated late), skipping paused
+  // cycles. Stepping along the cadence rather than from today keeps a
+  // Tuesday schedule on Tuesdays: last week's batch generated late on Sunday
+  // leaves next due on this Tuesday, not next Sunday. Generating early still
+  // moves exactly one cycle, since the step is from the due date. A late
+  // batch generated on the day the next cycle is due leaves that cycle due
+  // today rather than skipping it.
+  const yesterday = shiftYmd(today, -1);
+  const { data: nextCycle } = await adminClient.rpc("pm_schedule_next_cycle", {
+    p_schedule_id: scheduleId,
+    p_anchor: pmDueDate,
+    p_after: pmDueDate > yesterday ? pmDueDate : yesterday,
+  });
+  // Null only when every future cycle is paused (an open-ended pause starting
+  // after this batch); fall back to one interval from today.
+  const nextDue = (nextCycle as string | null) ?? advanceDate(today, schedule.frequency);
   const { error: advanceErr } = await adminClient
     .from("pm_schedules")
     .update({

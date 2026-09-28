@@ -210,7 +210,14 @@ export function usePMDueAlerts(throughIso: string, enabled: boolean) {
         .lte("next_due_date", throughIso)
         .is("deleted_at", null);
       if (error) throw error;
-      return data.map((pm) => ({
+      // A paused schedule (off-season) owes nothing, so it doesn't nag.
+      const { data: paused, error: pausedErr } = await supabase
+        .from("v_pm_schedule_pause_state")
+        .select("pm_schedule_id")
+        .eq("paused_today", true);
+      if (pausedErr) throw pausedErr;
+      const pausedIds = new Set((paused ?? []).map((p) => p.pm_schedule_id));
+      return data.filter((pm) => !pausedIds.has(pm.id)).map((pm) => ({
         id: pm.id,
         title: pm.title,
         assetName: pm.asset_name,

@@ -45,6 +45,8 @@ export interface WorkOrder extends BaseRecord {
   recurrenceFrequency: "daily" | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | null;
   /** Set when this WO was created by an automation rule. Used to advance the threshold on completion. */
   automationId: string | null;
+  /** When the WO last moved to done (DB trigger); null while not done. */
+  completedAt: string | null;
 }
 
 export type PaymentMethod = "outright" | "loan" | "lease" | "rental";
@@ -82,6 +84,13 @@ export interface Asset extends BaseRecord {
   notes: string | null;
   /** Optional license plate for assets that are registered vehicles or tagged equipment. */
   licensePlate: string | null;
+  /** YYYY-MM-DD — when warranty coverage began (defaults to the purchase date in the form). */
+  warrantyStartDate: string | null;
+  /** Set when the warranty was entered as a period; the end date is derived from start + term. */
+  warrantyTermMonths: number | null;
+  /** YYYY-MM-DD — the date coverage ends. Source of truth for every warranty report. */
+  warrantyEndDate: string | null;
+  warrantyNotes: string | null;
 }
 
 export interface AssetPart extends BaseRecord {
@@ -245,4 +254,85 @@ export interface MaintenanceRequest extends BaseRecord {
   repairCategory: string | null;
   /** Whether the submitter placed a repair tag on the item */
   hasRepairTag: boolean | null;
+}
+
+/** One row of cmms_asset_metrics(): reliability + cost figures for an asset or vehicle. */
+export interface AssetMetrics {
+  entityType: "asset" | "vehicle";
+  assetId: string;
+  name: string;
+  assetTag: string;
+  assetType: string;
+  status: AssetStatus;
+  location: string | null;
+  purchasePrice: number | null; // cents
+  warrantyEndDate: string | null;
+  windowDays: number;
+  /** Active time ÷ (active + in-shop + out-of-service time); null with no in-service time in the window. */
+  uptimePct: number | null;
+  inServiceHours: number;
+  downtimeHours: number;
+  downtimeEvents: number;
+  /** Mean time to repair: average length of down periods that started and ended in the window. */
+  mttrHours: number | null;
+  /** Set while the asset is currently in the shop / out of service. */
+  downSince: string | null;
+  woCount: number;
+  openWoCount: number;
+  cost12moCents: number;
+  pmCost12moCents: number;
+  costLifetimeCents: number;
+  pmCostLifetimeCents: number;
+  pmDue: number;
+  pmCompleted: number;
+  pmOnTime: number;
+  pmLate: number;
+  pmSkipped: number;
+  pmOverdue: number;
+  /** Cycles whose due date passed without a work order being generated. */
+  pmNotGenerated: number;
+}
+
+export type PMOutcome = "on_time" | "late" | "completed" | "skipped" | "overdue" | "not_generated" | "pending";
+
+/**
+ * One row of v_pm_outcomes: a scheduled or meter-triggered PM on one asset and
+ * how it counts toward compliance. A cycle that was never generated has no
+ * work order (outcome "not_generated").
+ */
+export interface PMOutcomeRow {
+  source: "schedule" | "meter";
+  /** The PM schedule, or the meter automation, this PM belongs to. */
+  programId: string;
+  programName: string | null;
+  workOrderId: string | null;
+  workOrderNumber: string | null;
+  assetId: string | null;
+  assetName: string | null;
+  dueDate: string | null;
+  /** The due date, or the day it was generated when it has none. */
+  dueOn: string;
+  completedOn: string | null;
+  outcome: PMOutcome;
+}
+
+/** A window when a PM schedule doesn't run (winter for mowers). Cycles due inside it aren't generated or scored. */
+export interface PMSchedulePause {
+  id: string;
+  pmScheduleId: string;
+  startsOn: string;
+  /** First day the schedule runs again; null = paused until someone resumes it. */
+  resumesOn: string | null;
+  /** Repeat the same month/day window every year (needs resumesOn). */
+  recursYearly: boolean;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface PMSchedulePauseState {
+  pmScheduleId: string;
+  currentPauseId: string | null;
+  recursYearly: boolean | null;
+  /** When the current pause ends; null while paused with no end date. */
+  pausedUntil: string | null;
 }
