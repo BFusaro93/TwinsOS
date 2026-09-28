@@ -9,6 +9,7 @@ import {
   CalendarClock,
   Container,
   Gauge,
+  Activity,
   Users,
   HardHat,
   Calculator,
@@ -81,6 +82,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "Preventive Maintenance Schedules",
     description: "Calendar-based recurring service, from one schedule covering a whole fleet down to per-asset parts.",
     icon: CalendarClock,
+  },
+  {
+    slug: "asset-performance-guide",
+    kicker: "Equipt (CMMS)",
+    title: "Asset Performance, Warranties & Reliability Reports",
+    description: "Warranty tracking, the performance cards on every asset, and how uptime, maintenance cost and PM compliance are actually calculated.",
+    icon: Activity,
   },
   {
     slug: "parts-inventory-guide",

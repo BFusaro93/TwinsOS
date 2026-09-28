@@ -401,7 +401,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Frequency options",
             detail:
-              "Schedules can repeat daily, weekly, monthly, quarterly, or annually. Set the start date and the system calculates the next due date automatically.",
+              "Schedules can repeat daily, weekly, monthly, quarterly, or annually. The Next Due Date you set is the schedule's calendar — a weekly schedule first due on a Wednesday stays due every Wednesday.",
           },
           {
             step: "One schedule can cover multiple assets",
@@ -419,9 +419,23 @@ export const DOC_SECTIONS: DocSection[] = [
               "PM schedules due within 7 days appear in the Notifications bell as 'PM Due' alerts. The PM Due Reminder automation template can also create a work order automatically before the due date.",
           },
           {
-            step: "Mark as complete",
+            step: "Generating work orders",
             detail:
-              "When a PM is completed (usually via the linked work order), mark the schedule complete. The next due date advances by one recurrence period.",
+              "Click Generate WOs on the schedule. Each work order is due on the schedule's Next Due Date, and Next Due moves to the next date on the cadence. Generating late doesn't shift the calendar: last Wednesday's batch generated on Sunday leaves Next Due on this Wednesday. Only one batch can be open at a time — finish or skip it before generating the next.",
+          },
+          {
+            step: "Pausing for the off-season",
+            detail:
+              "Click Pause to stop a schedule between two dates, until you resume it, or every year (e.g. Dec 1 → Apr 1 for mowers). Paused cycles aren't due: nothing is generated, alerted on, or counted against PM compliance. Pause windows are listed on the Details tab.",
+            href: "/settings/support/pm-schedules-guide#pausing",
+            linkLabel: "How pausing works",
+          },
+          {
+            step: "PM compliance",
+            detail:
+              "PMs are scored against the schedule's calendar, so a week nobody generated counts as missed — once per asset on the schedule. Skipped and overdue PMs count as missed too; late ones count as done. See each asset's Performance cards or Equipt > Reports > PM Compliance.",
+            href: "/settings/support/asset-performance-guide#pm-compliance",
+            linkLabel: "How PM compliance is scored",
           },
           {
             step: "Full guide",
@@ -462,6 +476,28 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Vehicle service reminders",
             detail:
               "Set oil change due date and mileage, registration expiry, and inspection due on each vehicle. The reminder card changes color: green (current), amber (due soon — within 30 days / 500 miles), red (overdue).",
+          },
+          {
+            step: "Warranties",
+            detail:
+              "Edit an asset or vehicle and fill in the Warranty section — either the end date, or a coverage period (e.g. 3 years) from a start date (blank = purchase date). Add notes like 'powertrain 5 yr / 2,000 hrs'. The Details tab shows a countdown; 90 days or less reads 'Expiring soon'. Equipt > Reports > Warranties lists everything expiring.",
+          },
+          {
+            step: "Performance cards",
+            detail:
+              "The top of every asset's Details tab shows uptime, 12-month and lifetime maintenance cost (with lifetime as a % of purchase price), PM compliance, average repair time, and warranty status. Pick 30 days, 90 days or 12 months for the time-based cards.",
+          },
+          {
+            step: "Keep status current for uptime",
+            detail:
+              "Uptime is measured from the asset's status: In Shop and Out of Service are down, Active is up, and Inactive (parked) or Disposed time is left out. Set a machine to In Shop when it goes down and back to Active when it's fixed.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "Exactly how uptime, maintenance cost and PM compliance are calculated, with worked examples, and what the PM Compliance, Uptime and Warranties reports show.",
+            href: "/settings/support/asset-performance-guide",
+            linkLabel: "Open the Asset Performance guide",
           },
         ],
       },
@@ -1574,6 +1610,30 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I set up a preventive maintenance schedule?",
         a: "Go to CMMS > PM Schedules and click '+ New PM Schedule'. Select the asset, set the frequency, add instructions, and save. Upcoming and overdue PMs surface in the Notifications bell.",
+      },
+      {
+        q: "How do I stop a PM schedule over the winter?",
+        a: "Open the schedule and click Pause. Pick a start date and either a resume date, 'Until I resume it', or 'Repeat every year' (e.g. Dec 1 → Apr 1). Paused cycles aren't due, can't be generated, don't trigger PM Due alerts, and don't count against PM compliance.",
+      },
+      {
+        q: "We forgot to generate last week's PM. What happens if we generate it now?",
+        a: "Generate it as usual. The batch is due on the date it was actually due, so once it's done it counts as late — not missed. Next Due moves to the next date on the schedule's cadence (e.g. this Wednesday), not a week from today. Finish that batch before generating the next one; a schedule can only have one open batch at a time.",
+      },
+      {
+        q: "Why does PM compliance show a missed PM when no work order exists?",
+        a: "Compliance is scored against the schedule's calendar. If a due date passes and nobody generates the work orders, that cycle counts as 'Not generated' (missed) for each asset on the schedule. Generating it turns it into an overdue PM, and completing it into a late one. If the equipment really wasn't running, pause the schedule for that period instead.",
+      },
+      {
+        q: "How is asset uptime calculated?",
+        a: "From the asset's status history: time Active ÷ time Active + In Shop + Out of Service, over the window you pick. Inactive and Disposed time is left out entirely, so a mower parked for the winter isn't counted as down. Average repair time is the average length of an In Shop / Out of Service stretch.",
+      },
+      {
+        q: "What counts toward an asset's maintenance cost?",
+        a: "Parts, labor and vendor charges on the asset's work orders (the lines on each work order's Costs tab), dated by when the work order was completed — or created, while it's still open. Skipped work orders don't count. PM is anything typed Preventive or generated from a PM schedule or meter automation; the rest is Repair.",
+      },
+      {
+        q: "Do meter-based oil changes count toward PM compliance?",
+        a: "Yes. A work order from a Meter Threshold automation — created directly or converted from its request — is due 7 days after the meter tripped. Done within 7 days is on time; a request still unconverted after 7 days counts as a missed PM.",
       },
       {
         q: "What happens when a part falls below minimum stock?",
