@@ -27,35 +27,22 @@ import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useProducts } from "@/lib/hooks/use-products";
 import { formatCurrency } from "@/lib/utils";
+import { SPEND_RANGE_OPTIONS, rangeCutoffKey, rangeMonths, type SpendRange } from "@/lib/utils/spend-range";
+import { RepairCostReport } from "@/components/cmms/reports/RepairCostReport";
 import type { PurchaseOrder } from "@/types";
 import type { WorkOrder, Part } from "@/types/cmms";
 
 // ─── Spend Tab ────────────────────────────────────────────────────────────────
 
-type SpendRange = "6m" | "12m" | "all";
-
-const SPEND_RANGE_OPTIONS: { key: SpendRange; label: string }[] = [
-  { key: "6m", label: "Last 6 months" },
-  { key: "12m", label: "Last 12 months" },
-  { key: "all", label: "All time" },
-];
-
 function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder[]; isLoading: boolean }) {
   const { data: products = [] } = useProducts();
   const [range, setRange] = useState<SpendRange>("12m");
 
-  // Canceled POs never delivered parts, so they don't count as spend. Range is by actual PO date.
+  // Canceled and rejected POs never delivered parts, so they don't count as spend. Range is by actual PO date.
   const purchaseOrders = useMemo(() => {
-    const monthsBack = range === "6m" ? 6 : range === "12m" ? 12 : null;
-    const now = new Date();
-    const cutoff = monthsBack === null
-      ? null
-      : new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
-    const cutoffKey = cutoff
-      ? `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}`
-      : null;
+    const cutoffKey = rangeCutoffKey(range);
     return allPurchaseOrders.filter((po) => {
-      if (po.status === "canceled") return false;
+      if (po.status === "canceled" || po.status === "rejected") return false;
       if (cutoffKey === null) return true;
       return (po.poDate ?? po.createdAt).slice(0, 7) >= cutoffKey;
     });
@@ -96,27 +83,11 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
 
   // Monthly parts spend over the selected range (maintenance_part line items only)
   const monthlySpend = useMemo(() => {
-    const today = new Date();
-    const months: { label: string; key: string; spend: number }[] = [];
-    let monthCount = range === "6m" ? 6 : 12;
-    if (range === "all") {
-      const earliest = purchaseOrders.reduce<string | null>((min, po) => {
-        const k = (po.poDate ?? po.createdAt).slice(0, 7);
-        return min === null || k < min ? k : min;
-      }, null);
-      if (earliest) {
-        const [y, m] = earliest.split("-").map(Number);
-        monthCount = Math.max(6, (today.getFullYear() - y) * 12 + (today.getMonth() + 1 - m) + 1);
-      } else {
-        monthCount = 6;
-      }
-    }
-    for (let i = monthCount - 1; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const label = d.toLocaleString("en-US", { month: "short", year: "2-digit" });
-      months.push({ label, key, spend: 0 });
-    }
+    const earliest = purchaseOrders.reduce<string | null>((min, po) => {
+      const k = (po.poDate ?? po.createdAt).slice(0, 7);
+      return min === null || k < min ? k : min;
+    }, null);
+    const months = rangeMonths(range, earliest).map((m) => ({ ...m, spend: 0 }));
     purchaseOrders.forEach((po) => {
       const poKey = (po.poDate ?? po.createdAt).slice(0, 7); // use actual PO date, not record creation date
       const bucket = months.find((m) => m.key === poKey);
@@ -159,7 +130,7 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-400">Excludes canceled POs</p>
+        <p className="text-xs text-slate-400">Excludes canceled and rejected POs</p>
         <select
           value={range}
           onChange={(e) => setRange(e.target.value as SpendRange)}
@@ -521,7 +492,8 @@ export function ReportsPage() {
         {/* Six tabs don't fit a phone; let the bar scroll sideways. */}
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <TabsList>
-            <TabsTrigger value="spend">Spend</TabsTrigger>
+            <TabsTrigger value="spend">Parts Spend</TabsTrigger>
+            <TabsTrigger value="repair-cost">Repair Cost</TabsTrigger>
             <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
             <TabsTrigger value="pm-compliance">PM Compliance</TabsTrigger>
@@ -532,6 +504,10 @@ export function ReportsPage() {
 
         <TabsContent value="spend" className="mt-6">
           <SpendTab purchaseOrders={purchaseOrders} isLoading={loadingPOs} />
+        </TabsContent>
+
+        <TabsContent value="repair-cost" className="mt-6">
+          <RepairCostReport />
         </TabsContent>
 
         <TabsContent value="maintenance" className="mt-6">
