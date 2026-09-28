@@ -59,9 +59,11 @@ async function issueTokenPair(
   }
 
   if (args.replacesRefreshTokenId) {
+    // The old refresh token was already revoked atomically by the caller
+    // (the claim step in the refresh_token grant); just record the lineage.
     await db
       .from("oauth_tokens")
-      .update({ revoked_at: new Date().toISOString(), replaced_by: refreshRow.id })
+      .update({ replaced_by: refreshRow.id })
       .eq("id", args.replacesRefreshTokenId);
   }
 
@@ -159,12 +161,29 @@ export async function POST(request: Request) {
       .eq("token_type", "refresh")
       .maybeSingle();
 
-    if (
-      !existing ||
-      existing.revoked_at ||
-      existing.client_id !== clientId ||
-      new Date(existing.expires_at).getTime() < Date.now()
-    ) {
+    if (!existing || existing.client_id !== clientId) {
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
+    }
+    if (existing.revoked_at) {
+      // Refresh-token reuse (RFC 6819 §5.2.2.3 / OAuth 2.1 rotation): a
+      // rotated-out token being presented again means it was copied — either
+      // the attacker or the legitimate client now holds a stale copy. Revoke
+      // every live token for this client+user so whichever party holds the
+      // newer pair loses it too and must re-authorize.
+      const { error: familyErr } = await db
+        .from("oauth_tokens")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("client_id", existing.client_id)
+        .eq("user_id", existing.user_id)
+        .is("revoked_at", null);
+      if (familyErr) log.error("failed to revoke token family on refresh reuse", { err: familyErr });
+      log.warn("revoked refresh token reused — token family revoked", {
+        clientId: existing.client_id,
+        userId: existing.user_id,
+      });
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
+    }
+    if (new Date(existing.expires_at).getTime() < Date.now()) {
       return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
     }
 
@@ -192,6 +211,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "invalid_grant", error_description: "No scopes remain valid for this user's current role" }, { status: 400 });
     }
 
+    // Claim (revoke) the presented refresh token atomically BEFORE minting a
+    // new pair: of two concurrent refreshes with the same token, exactly one
+    // gets the row back; the other is refused instead of both receiving a
+    // valid pair.
+    const { data: claimedRefresh } = await db
+      .from("oauth_tokens")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .is("revoked_at", null)
+      .select("id")
+      .maybeSingle();
+    if (!claimedRefresh) {
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
+    }
+
     const tokens = await issueTokenPair(db, {
       clientId,
       userId: existing.user_id,
@@ -199,7 +233,16 @@ export async function POST(request: Request) {
       scopes: cappedScopes,
       replacesRefreshTokenId: existing.id,
     });
-    if (!tokens) return NextResponse.json({ error: "server_error" }, { status: 500 });
+    if (!tokens) {
+      // Nothing was issued — un-claim so the client can retry with the same
+      // refresh token instead of being forced to re-authorize.
+      await db
+        .from("oauth_tokens")
+        .update({ revoked_at: null })
+        .eq("id", existing.id)
+        .is("replaced_by", null);
+      return NextResponse.json({ error: "server_error" }, { status: 500 });
+    }
     return tokenResponse(tokens);
   }
 

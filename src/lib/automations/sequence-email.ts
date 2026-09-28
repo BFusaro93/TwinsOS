@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
+import { escapeHtml } from "@/lib/utils/escape-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -187,10 +188,16 @@ export async function resolveEmailStepContent(
     mergeTags["[creditcardending]"] = params.cardExpiryContext.last4;
     mergeTags["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
-  const resolve = (template: string) =>
+  // Merge values are raw DB text — the client's display name in particular
+  // can come from an anonymous public form — so they are HTML-escaped when
+  // substituted into the body. The subject is a plain-text header and gets
+  // the raw values. The body template is converted to HTML *before*
+  // substitution so a value containing markup can't flip plainTextToHtml
+  // into its "already HTML" pass-through branch.
+  const resolve = (template: string, escapeValues: boolean) =>
     template.replace(/\[(\w+)\]/gi, (match) => {
       const key = match.toLowerCase();
-      if (key in mergeTags) return mergeTags[key];
+      if (key in mergeTags) return escapeValues ? escapeHtml(mergeTags[key]) : mergeTags[key];
       // Same reasoning as the shared resolveMergeTags helper: a recognized
       // Documents tag this narrower automation resolver doesn't know how to
       // fill in degrades to blank instead of shipping literal "[tag]" text
@@ -204,8 +211,8 @@ export async function resolveEmailStepContent(
     toName: clientDisplayName,
     fromAddress,
     replyTo,
-    subject: resolve(params.subjectTemplate || "(no subject)"),
-    bodyHtml: plainTextToHtml(resolve(params.bodyTemplate || "")),
+    subject: resolve(params.subjectTemplate || "(no subject)", false),
+    bodyHtml: resolve(plainTextToHtml(params.bodyTemplate || ""), true),
   };
 }
 

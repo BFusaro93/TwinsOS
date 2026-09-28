@@ -32,11 +32,28 @@ export function isBulkImportResult(value: unknown): value is BulkImportResult {
   );
 }
 
-/** Escape a single cell value for CSV output */
-function escapeCell(val: unknown): string {
+// Leading characters a spreadsheet (Excel, Sheets, LibreOffice) treats as the
+// start of a formula / DDE command. Tab and CR are included because some
+// apps strip them and then evaluate what follows.
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+// Plain numbers ("-12.50", "+3") are left alone so negative amounts still
+// export as numbers — a bare numeric literal can't carry a formula.
+const PLAIN_NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+
+/**
+ * Escape a single cell value for CSV output (EXPORT only — import parsing is
+ * untouched). Neutralizes CSV/formula injection per OWASP by prefixing a
+ * single quote to text that starts with = + - @ TAB or CR, so a client name
+ * like `=HYPERLINK(...)` submitted through a public form can't execute when
+ * staff open the export in a spreadsheet.
+ */
+export function escapeCsvCell(val: unknown): string {
   if (val === null || val === undefined) return "";
-  const str = String(val);
-  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+  let str = String(val);
+  if (typeof val !== "number" && FORMULA_TRIGGER.test(str) && !PLAIN_NUMBER.test(str)) {
+    str = `'${str}`;
+  }
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -52,8 +69,8 @@ export function downloadCSV(
   rows: unknown[][],
 ): void {
   const lines = [
-    headers.map(escapeCell).join(","),
-    ...rows.map((row) => row.map(escapeCell).join(",")),
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((row) => row.map(escapeCsvCell).join(",")),
   ];
   const csv = "\uFEFF" + lines.join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -74,8 +91,8 @@ export function downloadCSV(
 export function exportCSV(data: Record<string, unknown>[], filename: string): void {
   if (!data.length) return;
   const headers = Object.keys(data[0]);
-  const rows = data.map((row) => headers.map((h) => escapeCell(row[h])).join(","));
-  const csv = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+  const rows = data.map((row) => headers.map((h) => escapeCsvCell(row[h])).join(","));
+  const csv = "\uFEFF" + [headers.map(escapeCsvCell).join(","), ...rows].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

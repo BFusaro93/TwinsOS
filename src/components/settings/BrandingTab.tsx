@@ -23,8 +23,10 @@ export function BrandingTab() {
     try {
       const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
+      const { getStorageOrgPrefix } = await import("@/lib/supabase/storage-org-prefix");
+      const orgPrefix = await getStorageOrgPrefix(supabase);
       const ext = file.name.split(".").pop() ?? "png";
-      const path = `logos/company-logo-${Date.now()}.${ext}`;
+      const path = `${orgPrefix}/logos/company-logo-${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("thumbnails")
         .upload(path, file, { upsert: true });

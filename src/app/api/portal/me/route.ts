@@ -14,6 +14,7 @@ export async function GET() {
       .from("clients")
       .select("id, display_name, first_name, last_name, primary_email, primary_phone, balance_outstanding_cents, balance_credits_cents")
       .eq("id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
       .single(),
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

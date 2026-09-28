@@ -1,3 +1,5 @@
+import { escapeHtml } from "@/lib/utils/escape-html";
+
 /**
  * Converts a blank-line-separated plain-text email body into paragraph HTML.
  *
@@ -14,7 +16,9 @@
  */
 export function plainTextToHtml(text: string): string {
   if (/<[a-z][\s\S]*>/i.test(text)) return text;
-  return text
+  // Plain text: escape it so stray `&`/`<` render literally instead of being
+  // parsed as markup.
+  return escapeHtml(text)
     .split(/\n{2,}/)
     .map((para) => `<p style="margin:0 0 12px 0">${para.replace(/\n/g, "<br>")}</p>`)
     .join("");

@@ -1,5 +1,7 @@
 "use client";
 
+import { escapeHtml } from "@/lib/utils/escape-html";
+import { SandboxedHtmlPreview } from "@/components/shared/SandboxedHtmlPreview";
 import { useState, useEffect, useRef } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -129,22 +131,22 @@ export function InvoiceEmailDialog({
   // Simple preview: replace merge tags with placeholder values for display
   function previewResolve(text: string) {
     return text
-      .replace(/\[clientfirstname\]/gi, clientName?.split(" ")[0] ?? "Client")
-      .replace(/\[clientlastname\]/gi,  clientName?.split(" ").slice(1).join(" ") ?? "")
-      .replace(/\[clientfullname\]/gi,  clientName ?? "Client")
-      .replace(/\[companyname\]/gi,     "Your Company")
-      .replace(/\[invoicenumber\]/gi,   invoiceNumber != null ? String(invoiceNumber) : "—")
-      .replace(/\[invoicedate\]/gi,     new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
-      .replace(/\[duedate\]/gi,         fmtDate(dueDate))
-      .replace(/\[invoiceduedate\]/gi,  fmtDate(dueDate))
-      .replace(/\[invoicetotal\]/gi,    formatCurrency(totalCents))
-      .replace(/\[balancedue\]/gi,      formatCurrency(balanceCents))
-      .replace(/\[invoicebalance\]/gi,  formatCurrency(balanceCents))
-      .replace(/\[invoicesubtotal\]/gi, formatCurrency(totalCents))
-      .replace(/\[invoicetax\]/gi,      formatCurrency(0))
-      .replace(/\[paymentlink\]/gi,     "#")
-      .replace(/\[salesrepname\]/gi,    "Your Rep")
-      .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
+      .replace(/\[clientfirstname\]/gi, () => escapeHtml(clientName?.split(" ")[0] ?? "Client"))
+      .replace(/\[clientlastname\]/gi,  () => escapeHtml(clientName?.split(" ").slice(1).join(" ") ?? ""))
+      .replace(/\[clientfullname\]/gi,  () => escapeHtml(clientName ?? "Client"))
+      .replace(/\[companyname\]/gi,     () => escapeHtml("Your Company"))
+      .replace(/\[invoicenumber\]/gi,   () => escapeHtml(invoiceNumber != null ? String(invoiceNumber) : "—"))
+      .replace(/\[invoicedate\]/gi,     () => escapeHtml(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })))
+      .replace(/\[duedate\]/gi,         () => escapeHtml(fmtDate(dueDate)))
+      .replace(/\[invoiceduedate\]/gi,  () => escapeHtml(fmtDate(dueDate)))
+      .replace(/\[invoicetotal\]/gi,    () => escapeHtml(formatCurrency(totalCents)))
+      .replace(/\[balancedue\]/gi,      () => escapeHtml(formatCurrency(balanceCents)))
+      .replace(/\[invoicebalance\]/gi,  () => escapeHtml(formatCurrency(balanceCents)))
+      .replace(/\[invoicesubtotal\]/gi, () => escapeHtml(formatCurrency(totalCents)))
+      .replace(/\[invoicetax\]/gi,      () => escapeHtml(formatCurrency(0)))
+      .replace(/\[paymentlink\]/gi,     () => escapeHtml("#"))
+      .replace(/\[salesrepname\]/gi,    () => escapeHtml("Your Rep"))
+      .replace(/\[companyphonenumber\]/gi, () => escapeHtml("(555) 000-0000"));
   }
 
   async function handleSend() {
@@ -272,10 +274,9 @@ export function InvoiceEmailDialog({
             </TabsContent>
 
             <TabsContent value="preview" className="mt-2">
-              <div
-                className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto"
-                dangerouslySetInnerHTML={{ __html: previewResolve(bodyHtml) }}
-              />
+              <div className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto">
+                <SandboxedHtmlPreview html={previewResolve(bodyHtml)} minHeight={208} />
+              </div>
             </TabsContent>
           </Tabs>
 

@@ -26,13 +26,13 @@ export default async function SelectOrgPage() {
       .from("client_portal_settings")
       .select("org_id, company_name, logo_url")
       .in("org_id", orgIds) as Promise<{ data: { org_id: string; company_name: string | null; logo_url: string | null }[] | null }>,
-    supabase.from("clients").select("id, display_name").in("id", clientIds),
+    supabase.from("clients").select("id, org_id, display_name").in("id", clientIds).in("org_id", orgIds),
   ]);
 
   const options = choices.map((c) => {
     const org = orgs?.find((o) => o.id === c.org_id);
     const settings = (settingsRes.data ?? []).find((s) => s.org_id === c.org_id);
-    const client = clients?.find((cl) => cl.id === c.client_id);
+    const client = clients?.find((cl) => cl.id === c.client_id && cl.org_id === c.org_id);
     return {
       orgId: c.org_id,
       companyName: settings?.company_name ?? org?.name ?? "Unknown Company",

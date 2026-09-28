@@ -668,10 +668,34 @@ export function useBulkImportClients() {
             .single();
 
           if (error?.code === "23505" && row.account_number) {
-            // Duplicate account_number — update the existing record instead of failing the row.
-            const { error: updateError } = await supabase.from("clients").update({
-              display_name: row.display_name,
-              account_type: row.account_type,
+            // Duplicate account_number. Only treat it as an update of the
+            // existing client when the row clearly refers to that same
+            // client (same display name). A different name means the CSV's
+            // account number collides with someone else's — report it
+            // instead of silently overwriting another client's record.
+            const { data: existing, error: lookupError } = await supabase
+              .from("clients")
+              .select("id, display_name, primary_phone, primary_email, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip, source")
+              .eq("account_number", row.account_number)
+              .is("deleted_at", null)
+              .maybeSingle();
+            if (lookupError || !existing) {
+              failed.push({ row: rowNum, error: `"${displayName}": account number ${row.account_number} is already in use — skipped` });
+              continue;
+            }
+            const sameClient =
+              existing.display_name.trim().toLowerCase() === displayName.toLowerCase();
+            if (!sameClient) {
+              failed.push({
+                row: rowNum,
+                error: `"${displayName}": account number ${row.account_number} already belongs to "${existing.display_name}" — skipped (not overwritten)`,
+              });
+              continue;
+            }
+
+            // Fill in only the columns the CSV actually provided — a blank
+            // cell never nulls out data already on the client.
+            const candidate = {
               primary_phone: row.primary_phone,
               primary_email: row.primary_email,
               billing_address: row.billing_address,
@@ -683,10 +707,38 @@ export function useBulkImportClients() {
               service_state: row.service_state,
               service_zip: row.service_zip,
               source: row.source,
-            }).eq("account_number", row.account_number).is("deleted_at", null);
-            if (updateError) {
-              failed.push({ row: rowNum, error: `"${displayName}": ${updateError.message}` });
-              continue;
+            } as const;
+            const patch: import("@/types/supabase").Database["public"]["Tables"]["clients"]["Update"] = {};
+            for (const [key, value] of Object.entries(candidate) as [keyof typeof candidate, string | null][]) {
+              if (value) patch[key] = value;
+            }
+            if (r.accountType?.trim()) patch.account_type = row.account_type;
+
+            const ADDRESS_KEYS = [
+              "billing_address", "billing_city", "billing_state", "billing_zip",
+              "service_address", "service_city", "service_state", "service_zip",
+            ] as const;
+            const addressChanged = ADDRESS_KEYS.some(
+              (k) => k in patch && (patch[k] ?? "") !== (existing[k] ?? "")
+            );
+            if (addressChanged) {
+              // Stale coordinates/verdict would keep routing to the old
+              // address — clear them so geocoding + verification rerun.
+              patch.lat = null;
+              patch.lng = null;
+              patch.address_verdict = null;
+              patch.address_verified_at = null;
+            }
+
+            if (Object.keys(patch).length > 0) {
+              const { error: updateError } = await supabase
+                .from("clients")
+                .update(patch)
+                .eq("id", existing.id);
+              if (updateError) {
+                failed.push({ row: rowNum, error: `"${displayName}": ${updateError.message}` });
+                continue;
+              }
             }
           } else if (error) {
             failed.push({ row: rowNum, error: `"${displayName}": ${error.message}` });
@@ -862,16 +914,100 @@ export function useUpdateClient() {
   });
 }
 
+/** Open work / money that should stop a client from being silently deleted. */
+export interface ClientDeletionBlockers {
+  openRecurringJobs: { id: string; jobNumber: number | null; status: string }[];
+  unpaidInvoices: { id: string; invoiceNumber: number | null; status: string; balanceCents: number }[];
+}
+
+/**
+ * Thrown by useDeleteClient when the client still has open recurring jobs or
+ * unpaid invoices and the caller hasn't confirmed. Callers should show a
+ * confirm listing `blockers`, then retry with `{ confirmed: true }`.
+ */
+export class ClientDeletionBlockedError extends Error {
+  constructor(public readonly blockers: ClientDeletionBlockers) {
+    const parts: string[] = [];
+    if (blockers.openRecurringJobs.length) {
+      parts.push(`${blockers.openRecurringJobs.length} open recurring job(s): ${blockers.openRecurringJobs.map((j) => `#${j.jobNumber ?? "?"}`).join(", ")}`);
+    }
+    if (blockers.unpaidInvoices.length) {
+      parts.push(`${blockers.unpaidInvoices.length} unpaid invoice(s): ${blockers.unpaidInvoices.map((i) => `#${i.invoiceNumber ?? "?"}`).join(", ")}`);
+    }
+    super(`This client still has ${parts.join(" and ")}. Confirm to delete anyway.`);
+    this.name = "ClientDeletionBlockedError";
+  }
+}
+
+export async function fetchClientDeletionBlockers(clientId: string): Promise<ClientDeletionBlockers> {
+  const supabase = createClient();
+  const [jobsRes, invoicesRes] = await Promise.all([
+    supabase
+      .from("crm_jobs")
+      .select("id, job_number, status")
+      .eq("client_id", clientId)
+      .eq("job_type", "recurring")
+      .in("status", ["scheduled", "in_progress", "hold"])
+      .is("deleted_at", null),
+    supabase
+      .from("crm_invoices")
+      .select("id, invoice_number, status, balance_cents")
+      .eq("client_id", clientId)
+      .not("status", "in", "(paid,void)")
+      .gt("balance_cents", 0)
+      .is("deleted_at", null),
+  ]);
+  if (jobsRes.error) throw jobsRes.error;
+  if (invoicesRes.error) throw invoicesRes.error;
+  return {
+    openRecurringJobs: (jobsRes.data ?? []).map((j) => ({
+      id: j.id,
+      jobNumber: (j.job_number as number | null) ?? null,
+      status: j.status as string,
+    })),
+    unpaidInvoices: (invoicesRes.data ?? []).map((i) => ({
+      id: i.id,
+      invoiceNumber: (i.invoice_number as number | null) ?? null,
+      status: i.status as string,
+      balanceCents: (i.balance_cents as number | null) ?? 0,
+    })),
+  };
+}
+
+/**
+ * Soft-deletes a client. Deleting also revokes what the client could still
+ * trigger on its own: autopay is switched off (so no card gets charged for a
+ * deleted account) and the client's portal logins are soft-deleted
+ * (getPortalContext additionally rejects deleted clients). Refuses with a
+ * ClientDeletionBlockedError while open recurring jobs / unpaid invoices exist
+ * unless `confirmed` is set.
+ */
 export function useDeleteClient() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (input: string | { id: string; confirmed?: boolean }) => {
+      const { id, confirmed = false } = typeof input === "string" ? { id: input } : input;
+      if (!confirmed) {
+        const blockers = await fetchClientDeletionBlockers(id);
+        if (blockers.openRecurringJobs.length || blockers.unpaidInvoices.length) {
+          throw new ClientDeletionBlockedError(blockers);
+        }
+      }
       const supabase = createClient();
+      const nowIso = new Date().toISOString();
       const { error } = await supabase
         .from("clients")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: nowIso, autopay_enabled: false })
         .eq("id", id);
       if (error) throw error;
+      // Portal access: revoke the client's logins. Best-effort — the portal
+      // context lookup also rejects soft-deleted clients, so a failure here
+      // doesn't leave access open.
+      await supabase
+        .from("client_portal_users")
+        .update({ deleted_at: nowIso })
+        .eq("client_id", id)
+        .is("deleted_at", null);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });

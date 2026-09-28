@@ -68,10 +68,9 @@ export default function PortalRegisterPage() {
     }
 
     if (data.linkedExisting) {
-      // This email already has a portal account (from a different company) —
-      // the password just typed here was never set on it. Send them to sign
-      // in with that account's existing password instead of attempting a
-      // sign-in that would fail.
+      // Linked to the account this browser is already signed in to (the
+      // server only links an existing account for its own session) — the
+      // password just typed here was never set on it, so no auto sign-in.
       setStep("linked");
       return;
     }
@@ -114,11 +113,11 @@ export default function PortalRegisterPage() {
           <CheckCircle2 className="h-10 w-10 text-brand-500 mx-auto mb-3" />
           <h2 className="text-lg font-semibold text-slate-900 mb-1">This Company Was Added</h2>
           <p className="text-sm text-slate-500">
-            You already have a portal account with {email} — we&apos;ve added this company to it.
-            Sign in with your existing password, then pick which company to view.
+            We&apos;ve added this company to your existing portal account ({email}).
+            Open the portal and pick which company to view.
           </p>
-          <a href="/portal/login" className="mt-4 inline-block text-sm text-brand-600 hover:underline">
-            Go to login
+          <a href="/portal/select-org" className="mt-4 inline-block text-sm text-brand-600 hover:underline">
+            Go to portal
           </a>
         </div>
       </div>
