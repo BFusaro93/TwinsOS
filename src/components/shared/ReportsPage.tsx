@@ -119,8 +119,8 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
     <div className="flex flex-col gap-6">
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} />
-        <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} />
+        <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} sub="All time, all POs" />
+        <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} sub="All time" />
         <StatCard label="Total POs" value={purchaseOrders.length} />
         <StatCard label="Open POs" value={openPOs.length} />
       </div>
