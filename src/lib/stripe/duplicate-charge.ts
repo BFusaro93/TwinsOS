@@ -1,5 +1,9 @@
 import type Stripe from "stripe";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
+import { getOrCreateStripeCustomer } from "@/lib/stripe/saved-payment-methods";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("stripe duplicate charge");
 
 /** How far back to look for an already-in-flight/succeeded PaymentIntent
  * covering the same invoice.
@@ -109,4 +113,190 @@ export function duplicateChargeMessage(duplicate: Stripe.PaymentIntent, plural =
   return plural
     ? "A charge was already just submitted for one or more of these invoices. Please wait a moment or check Payment History before retrying."
     : "A charge was already just submitted for this invoice. Please wait a moment or check Payment History before retrying.";
+}
+
+export interface InFlightMarkerLookup {
+  stripe: Stripe;
+  connectedAccountId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any;
+  /** The invoice(s) about to be charged. */
+  invoiceIds: string[];
+}
+
+/**
+ * Returns a still-live PaymentIntent recorded in any of these invoices'
+ * `pending_payment_intent_id` marker, or null.
+ *
+ * findDuplicateChargeIntent() can only list intents by CUSTOMER, and the
+ * browser-confirmed routes (public pay link, portal, staff create-intent) used
+ * to create intents with no customer at all — so an ACH debit started from the
+ * portal was invisible to it, and staff could debit the same invoice again
+ * from the "ACH To Charge" queue while the first debit was still settling.
+ *
+ * The marker is written for EVERY path (synchronously by the autopay routes,
+ * and by the Connect webhook's payment_intent.processing handler for
+ * browser-confirmed intents), so it is the customer-independent signal. It is
+ * only a pointer, though: the intent's live status at Stripe decides. A marker
+ * for an intent that has since died, or succeeded AND been recorded, does not
+ * block (and is a leftover of a missed clear).
+ *
+ * Throws if Stripe can't be asked — callers must fail CLOSED on that for a
+ * marked invoice: a double debit is worse than asking the user to retry.
+ */
+export async function findInFlightMarkedIntent({
+  stripe,
+  connectedAccountId,
+  db,
+  invoiceIds,
+}: InFlightMarkerLookup): Promise<Stripe.PaymentIntent | null> {
+  if (invoiceIds.length === 0) return null;
+  // pending_payment_* aren't in the generated Supabase types yet.
+  const { data: rows, error } = await db
+    .from("crm_invoices")
+    .select("id, pending_payment_intent_id")
+    .in("id", invoiceIds)
+    .not("pending_payment_intent_id", "is", null);
+  if (error) throw error;
+
+  const intentIds = [
+    ...new Set(
+      ((rows ?? []) as { pending_payment_intent_id: string | null }[])
+        .map((r) => r.pending_payment_intent_id)
+        .filter((v): v is string => Boolean(v))
+    ),
+  ];
+
+  for (const intentId of intentIds) {
+    const pi = await stripe.paymentIntents.retrieve(intentId, undefined, { stripeAccount: connectedAccountId });
+    if (!BLOCKING_PAYMENT_INTENT_STATUSES.has(pi.status)) continue;
+    if (pi.status === "succeeded") {
+      // Succeeded and already in the ledger → the balance we're about to
+      // charge already reflects it; the marker is just stale.
+      const { data: recorded } = await db
+        .from("crm_payments")
+        .select("id")
+        .eq("stripe_payment_intent_id", pi.id)
+        .maybeSingle();
+      if (recorded) continue;
+    }
+    return pi;
+  }
+  return null;
+}
+
+/** Shared refusal for a create/charge route that found an in-flight intent. */
+export function inFlightChargeMessage(duplicate: Stripe.PaymentIntent, plural = false): string {
+  if (duplicate.status === "succeeded") {
+    return plural
+      ? "A payment covering one or more of these invoices just went through and is still being recorded. Refresh in a moment before charging again."
+      : "A payment for this invoice just went through and is still being recorded. Refresh in a moment before charging again.";
+  }
+  return duplicateChargeMessage(duplicate, plural);
+}
+
+export interface ChargeRefusal {
+  body: { error: string; code: "duplicate_charge" | "in_flight_check_failed"; inFlight: boolean };
+  status: number;
+}
+
+/**
+ * The one guard every create-intent / charge route runs before creating a
+ * PaymentIntent for an invoice (or several):
+ *
+ *  1. the invoices' own in-flight marker, verified live at Stripe — works for
+ *     every path, with or without a Stripe customer. Fails CLOSED if Stripe
+ *     can't be asked (503): an ACH double debit is worse than a retry.
+ *  2. when a customer is known, the recent-intents lookup by customer
+ *     (findDuplicateChargeIntent) — catches an in-flight intent whose marker
+ *     never got written. Fails OPEN, as it always has.
+ *
+ * Returns null when it's safe to charge.
+ */
+export async function refuseIfChargeInFlight(args: {
+  stripe: Stripe;
+  connectedAccountId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any;
+  invoiceIds: string[];
+  customerId: string | null;
+  isAch: boolean;
+  plural?: boolean;
+}): Promise<ChargeRefusal | null> {
+  const { stripe, connectedAccountId, db, invoiceIds, customerId, isAch, plural = false } = args;
+
+  try {
+    const marked = await findInFlightMarkedIntent({ stripe, connectedAccountId, db, invoiceIds });
+    if (marked) {
+      return {
+        body: { error: inFlightChargeMessage(marked, plural), code: "duplicate_charge", inFlight: marked.status === "processing" },
+        status: 409,
+      };
+    }
+  } catch (err) {
+    log.error("failed to verify an invoice's in-flight payment marker", { error: err, invoiceIds });
+    return {
+      body: {
+        error: "Couldn't confirm whether a payment for this invoice is already in progress. Please try again in a moment.",
+        code: "in_flight_check_failed",
+        inFlight: false,
+      },
+      status: 503,
+    };
+  }
+
+  if (customerId) {
+    try {
+      const duplicate = await findDuplicateChargeIntent({ stripe, connectedAccountId, customerId, invoiceIds, isAch });
+      if (duplicate) {
+        return {
+          body: { error: duplicateChargeMessage(duplicate, plural), code: "duplicate_charge", inFlight: duplicate.status === "processing" },
+          status: 409,
+        };
+      }
+    } catch (err) {
+      // Fail open on the lookup itself (a Stripe API hiccup shouldn't block a
+      // legitimate charge) — the idempotency key still catches an
+      // exact-duplicate retry, and the marker check above already ran.
+      log.error("failed to check for a recent duplicate charge", { error: err, invoiceIds });
+    }
+  }
+
+  return null;
+}
+
+/**
+ * The client's Stripe Customer on the connected account, creating (and
+ * saving) one if needed, so every CRM invoice PaymentIntent carries a
+ * `customer` and is visible to findDuplicateChargeIntent(). Best-effort:
+ * returns null on any failure — the marker check doesn't depend on it.
+ */
+export async function ensureIntentCustomer(args: {
+  stripe: Stripe;
+  connectedAccountId: string;
+  /** Service-role client (writes clients.stripe_customer_id). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  serviceDb: any;
+  orgId: string;
+  clientId: string;
+}): Promise<string | null> {
+  const { stripe, connectedAccountId, serviceDb, orgId, clientId } = args;
+  try {
+    const { data: client, error } = await serviceDb
+      .from("clients")
+      .select("id, display_name, primary_email, stripe_customer_id")
+      .eq("id", clientId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (error || !client) return null;
+    const customerId = await getOrCreateStripeCustomer(stripe, connectedAccountId, client.stripe_customer_id, client);
+    if (customerId !== client.stripe_customer_id) {
+      const { error: saveErr } = await serviceDb.from("clients").update({ stripe_customer_id: customerId }).eq("id", clientId);
+      if (saveErr) log.error("failed to save stripe customer id", { error: saveErr, clientId });
+    }
+    return customerId;
+  } catch (err) {
+    log.error("failed to resolve a stripe customer for a payment intent", { error: err, clientId });
+    return null;
+  }
 }

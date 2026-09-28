@@ -15,6 +15,7 @@ import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
+import { PAUSE_PRUNE_STATUSES, pruneUntouchedFutureVisits } from "@/lib/visits/prune";
 
 const log = logger.child("use-crm-jobs");
 
@@ -304,6 +305,8 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           crm_job_visits(id, deleted_at, job_service_id, status)
         `)
         .in("job_type", ["waiting_list", "package"])
+        // Cancelled and on-hold jobs are not waiting to be dispatched.
+        .not("status", "in", '("cancelled","hold")')
         .is("deleted_at", null)
         .order("waiting_list_start", { ascending: true });
 
@@ -404,6 +407,7 @@ export function useCRMCrews() {
 
 export function useUpdateJobStatus() {
   const qc = useQueryClient();
+  const orgTimeZone = useOrgTimeZone();
   return useMutation({
     mutationFn: async ({
       id,
@@ -439,23 +443,17 @@ export function useUpdateJobStatus() {
         .eq("id", id);
       if (error) throw error;
 
-      // Putting a job on hold pauses it — clear out already-generated future
-      // visits so it stops showing on the dispatch board, crew app, and route
-      // optimizer without needing a job-status join at every read site.
-      if (resolvedStatus === "hold") {
-        // Local calendar date, not UTC — .toISOString() rolls to tomorrow's
-        // UTC date in the evening for any timezone west of UTC, which would
-        // leave today's still-scheduled visit behind instead of clearing it.
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from("crm_job_visits")
-          .update({ deleted_at: new Date().toISOString() })
-          .eq("job_id", id)
-          .eq("status", "scheduled")
-          .gte("scheduled_date", todayStr)
-          .is("deleted_at", null);
+      // Putting a job on hold pauses it, and cancelling ends it — clear out
+      // its untouched future visits (scheduled or dispatched, never clocked
+      // in, not invoiced) so it stops showing on the dispatch board, crew app
+      // and route optimizer. "Today" is the ORG's calendar day, not the
+      // browser's. Pruned visits release their occurrence, so a job resumed
+      // from hold regenerates them (src/lib/visits/prune.ts).
+      if (resolvedStatus === "hold" || resolvedStatus === "cancelled") {
+        await pruneUntouchedFutureVisits(supabase, id, {
+          fromDate: todayInZone(orgTimeZone),
+          statuses: PAUSE_PRUNE_STATUSES,
+        });
       }
 
       // Log to client activity timeline — naming the job ("Job cancelled:
@@ -494,7 +492,7 @@ export function useUpdateJobStatus() {
       // Every job list, not just the dispatch board's day — invalidating only
       // ["crm-jobs", "date", ...] left the client's Jobs card (keyed
       // ["crm-jobs", "client", id]) showing a cancelled job until a reload.
-      // Visits too: "hold" soft-deletes the job's future visits.
+      // Visits too: "hold" / "cancelled" soft-delete the job's untouched future visits.
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
@@ -1154,11 +1152,16 @@ export function useUpdateVisit() {
       // dispatcher actions that previously left no trace on the client:
       // rescheduling a visit and dispatching it.
       const activityRows: { client_id: string; subject: string; ref_id: string }[] = [];
-      let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string } | null = null;
-      if (updates.scheduled_date !== undefined || (updates.status && updates.status !== 'completed')) {
+      let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string; crew_id: string | null; notes_to_crew: string | null } | null = null;
+      if (
+        updates.scheduled_date !== undefined ||
+        (updates.status && updates.status !== 'completed') ||
+        updates.crew_id !== undefined ||
+        updates.notes_to_crew !== undefined
+      ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data } = await (supabase as any)
-          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status').eq('id', id).single();
+          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status, crew_id, notes_to_crew').eq('id', id).single();
         before = data ?? null;
       }
       if (updates.scheduled_date !== undefined) {
@@ -1264,14 +1267,17 @@ export function useUpdateVisit() {
       // through a server route rather than sending directly from here: the
       // Expo push API call needs the service-role client to read
       // crew_push_tokens, which this client-side mutation doesn't have).
-      if (updates.crew_id) {
+      // Only on an actual change: the visit sheet saves every field (crew_id
+      // included) on each Save, which used to re-send "assigned" to the same
+      // crew every time anything on the visit was edited.
+      if (updates.crew_id && updates.crew_id !== (before?.crew_id ?? null)) {
         fetch(`/api/crm/visits/${id}/notify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ kind: 'assigned' }),
         }).catch(() => {});
       }
-      if (updates.notes_to_crew) {
+      if (updates.notes_to_crew && updates.notes_to_crew !== (before?.notes_to_crew ?? null)) {
         fetch(`/api/crm/visits/${id}/notify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1825,6 +1831,46 @@ export function useEstimateJobs(estimateId: string | null | undefined) {
   });
 }
 
+/**
+ * Which of an estimate's lines are already on a live job. Conversion is per
+ * line (crm_job_services.estimate_line_item_id, unique where set — see
+ * 20260927120000): a mixed estimate converts its one-time lines into one job
+ * and its recurring lines into another, and no line can convert twice.
+ *
+ * `legacyConverted` is true when a live job from this estimate predates line
+ * tracking (none of its services is linked to a line and the backfill found
+ * no match): the whole estimate is then treated as converted, since there is
+ * no way to tell which lines that job covers.
+ */
+export function useEstimateConvertedLines(estimateId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['crm-jobs', 'by-estimate', estimateId, 'converted-lines'],
+    enabled: !!estimateId,
+    queryFn: async () => fetchEstimateConvertedLines(createClient(), estimateId as string),
+  });
+}
+
+async function fetchEstimateConvertedLines(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  estimateId: string,
+): Promise<{ convertedLineIds: Set<string>; legacyConverted: boolean }> {
+  const { data, error } = await supabase
+    .from('crm_jobs')
+    .select('id, crm_job_services(estimate_line_item_id)')
+    .eq('estimate_id', estimateId)
+    .is('deleted_at', null);
+  if (error) throw error;
+  const convertedLineIds = new Set<string>();
+  let legacyConverted = false;
+  for (const job of (data ?? []) as { id: string; crm_job_services: { estimate_line_item_id: string | null }[] | null }[]) {
+    const linked = (job.crm_job_services ?? []).map((s) => s.estimate_line_item_id).filter((x): x is string => !!x);
+    if (linked.length === 0) legacyConverted = true;
+    for (const id of linked) convertedLineIds.add(id);
+  }
+  return { convertedLineIds, legacyConverted };
+}
+
 export function useCreateJobsFromEstimate() {
   // Date Sold is the org's calendar day for the acceptance instant.
   const orgTimeZone = useOrgTimeZone();
@@ -1867,8 +1913,26 @@ export function useCreateJobsFromEstimate() {
        * crm_job_services.is_taxable and is what the visit-completion
        * auto-invoice bills tax on (D-12).
        */
-      services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string; isTaxable?: boolean }[];
-      materials?: { productItemId: string; productName: string; qty: number; unitPriceCents: number | null }[];
+      services: {
+        serviceName: string;
+        serviceId: string | null;
+        qty: number;
+        rateCents: number | null;
+        totalCents: number;
+        budgetedHours?: number;
+        budgetMethod?: string;
+        isTaxable?: boolean;
+        /** Estimate line this service converts. Unique on crm_job_services:
+         *  the DB refuses a second conversion of the same line. */
+        estimateLineItemId?: string | null;
+        /** Recurring only: the estimate line's visit count — the service's
+         *  rate is priced per visit over exactly this many (max_visits). */
+        maxVisits?: number | null;
+      }[];
+      /** Estimate direct costs (materials). INTERNAL cost, never billed:
+       *  recorded on the job as non-billable usage (status used_no_invoice,
+       *  unit price 0) carrying the cost for job costing. */
+      materials?: { productItemId: string; productName: string; qty: number; unitCostCents: number | null }[];
       /** Only meaningful when jobType === "project" — links the job to a Projects (PO cost-tracking) row. */
       projectId?: string | null;
       /** Estimate's all-in cost (revenue - net profit) — seeds the linked project's EAC if it's still unset. */
@@ -1882,22 +1946,20 @@ export function useCreateJobsFromEstimate() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
-      // One estimate, one job. The UI hides the convert entry points once a
-      // job exists, but that was the only thing preventing a second
-      // conversion — and it was bypassable by re-confirming the "Accepted"
-      // stage, which reopened the dialog pre-populated. A second job means a
-      // second set of visits, each completing into its own invoice, so the
-      // client is billed the estimate twice. Checked here so every caller is
-      // covered, not just the one dialog.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existingJobs } = await (supabase as any)
-        .from("crm_jobs")
-        .select("id")
-        .eq("estimate_id", estimateId)
-        .is("deleted_at", null)
-        .limit(1);
-      if (existingJobs && existingJobs.length > 0) {
-        throw new Error("This estimate has already been converted to a job.");
+      // One LINE, one job. An estimate that mixes one-time and recurring
+      // lines converts in passes (one job per pass), so the old "estimate
+      // already has a job" refusal is gone; what must never happen is the
+      // same line converting twice — a second set of visits, each completing
+      // into its own invoice, bills the client for it twice. This pre-check
+      // gives a readable error; the partial unique index on
+      // crm_job_services.estimate_line_item_id is the real guard (two tabs).
+      const { convertedLineIds, legacyConverted } = await fetchEstimateConvertedLines(supabase, estimateId);
+      if (legacyConverted) {
+        throw new Error("This estimate was converted to a job before line-by-line conversion existed — add further services on that job instead.");
+      }
+      const alreadyConverted = services.filter((sv) => sv.estimateLineItemId && convertedLineIds.has(sv.estimateLineItemId));
+      if (alreadyConverted.length > 0) {
+        throw new Error(`Already converted to a job: ${alreadyConverted.map((sv) => sv.serviceName).join(", ")}`);
       }
 
       const jobManCount = Math.max(1, Math.round(manCount ?? 1));
@@ -1973,18 +2035,6 @@ export function useCreateJobsFromEstimate() {
 
       const jobId = (data as { id: string }).id;
 
-      // Same timeline row useCreateClientJob writes, so a job converted from
-      // an estimate shows up in the client's Activity like any other job.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("client_activity").insert({
-        client_id: clientId,
-        activity_type: "job",
-        subject: `Job created: ${jobActivityLabel({ jobType, serviceNames: services.map((sv) => sv.serviceName) })}`,
-        ref_id: jobId,
-        ref_table: "crm_jobs",
-        created_by: user?.id ?? null,
-      });
-
       let insertedServiceIds: string[] = [];
       if (services.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2016,12 +2066,36 @@ export function useCreateJobsFromEstimate() {
               team_size: jobManCount,
               days_count: 1,
               is_taxable: s.isTaxable ?? estimateIsTaxed,
+              estimate_line_item_id: s.estimateLineItemId ?? null,
+              max_visits: jobType === "recurring" && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
             }))
           )
           .select("id");
-        if (svcError) throw svcError;
+        if (svcError) {
+          // Nothing hangs off the job yet (no services, visits or activity),
+          // so withdraw it rather than leave an empty job behind.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("crm_jobs").update({ deleted_at: new Date().toISOString() }).eq("id", jobId);
+          if ((svcError as { code?: string }).code === "23505") {
+            throw new Error("One or more of these lines were just converted to a job (another tab or user?). Reopen the estimate to see what is left.");
+          }
+          throw svcError;
+        }
         insertedServiceIds = ((insertedServices ?? []) as { id: string }[]).map((r) => r.id);
       }
+
+      // Same timeline row useCreateClientJob writes, so a job converted from
+      // an estimate shows up in the client's Activity like any other job.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        client_id: clientId,
+        activity_type: "job",
+        subject: `Job created: ${jobActivityLabel({ jobType, serviceNames: services.map((sv) => sv.serviceName) })}`,
+        ref_id: jobId,
+        ref_table: "crm_jobs",
+        created_by: user?.id ?? null,
+      });
+
 
       // A dated job gets its first visit here (with the crew size), so it
       // shows on the dispatch board immediately with the right MEN count
@@ -2062,13 +2136,20 @@ export function useCreateJobsFromEstimate() {
         const { error: matError } = await (supabase as any)
           .from("crm_job_products")
           .insert(
+            // Direct costs are the company's own cost of the job, not a price
+            // the client agreed to (they are not in the estimate's subtotal).
+            // Billing them — the old unit_price_cents = direct-cost rate on a
+            // 'pending' row — put the internal cost on the client's invoice on
+            // top of the price they signed. 'used_no_invoice' is the
+            // non-billable status: invoice sweeps read only pending/used.
             materials.map((m) => ({
               job_id: jobId,
               product_id: m.productItemId,
               product_name: m.productName,
               qty: m.qty,
-              unit_price_cents: m.unitPriceCents ?? 0,
-              unit_cost_cents: null,
+              unit_price_cents: 0,
+              unit_cost_cents: m.unitCostCents ?? null,
+              status: "used_no_invoice",
             }))
           );
         if (matError) throw matError;
@@ -2133,6 +2214,31 @@ export function useCreateJobsFromEstimate() {
         .update({ stage: "accepted" } as any)
         .eq("id", estimateId)
         .neq("stage", "accepted");
+
+      // Seed the linked project's contract price from the accepted estimate —
+      // only while it is still unset, so a PM's figure is never clobbered.
+      // original_contract_price is what the project stores;
+      // contract_price is derived from it plus approved change orders
+      // (trg_projects_sync_contract_price). Without this a project created
+      // during conversion sat at a $0 contract and every percent milestone
+      // on it resolved to $0.
+      if (projectId && jobType === "project") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: estTotals } = await (supabase as any)
+          .from("estimates")
+          .select("total_cents")
+          .eq("id", estimateId)
+          .maybeSingle();
+        const contractCents = (estTotals as { total_cents: number | null } | null)?.total_cents ?? 0;
+        if (contractCents > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from("projects")
+            .update({ original_contract_price: contractCents })
+            .eq("id", projectId)
+            .eq("original_contract_price", 0);
+        }
+      }
 
       // Seed the linked project's EAC (estimated cost at completion) from this
       // estimate — but only if it's still unset (0), so we never clobber a PM's

@@ -4,6 +4,12 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import { formatMonthDay } from "@/lib/utils";
+import {
+  INVOICED_VISIT_LOCKED_CODE,
+  INVOICED_VISIT_LOCKED_MESSAGE,
+  findInvoicedLockedVisits,
+  overrideInvoicedVisit,
+} from "@/lib/visits/invoiced-guard";
 
 const BulkUpdateSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
@@ -14,6 +20,8 @@ const BulkUpdateSchema = z.object({
     priority: z.number().int().optional(),
     skip_reason: z.string().max(500).nullable().optional(),
   }),
+  /** Admin-only: also move / reopen completed visits that are already invoiced. */
+  override_invoiced: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -33,7 +41,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { ids, updates } = parsed.data;
+  const { updates, override_invoiced: overrideInvoiced } = parsed.data;
+  const ids = [...new Set(parsed.data.ids)];
 
   // A dispatch-board drag can reschedule a package-sequenced visit closer to
   // its predecessor's actual completion than that service's min_days allows —
@@ -48,6 +57,23 @@ export async function POST(request: Request) {
     .in("id", ids);
   const before = (beforeRows ?? []) as { id: string; client_id: string; job_id: string; scheduled_date: string; status: string }[];
 
+  // Completed + invoiced visits are locked against moves and status changes
+  // (DB trigger trg_crm_job_visits_guard_invoiced is the floor). Block the
+  // whole batch with a clear message unless an admin explicitly overrides.
+  const change = { status: updates.status, scheduled_date: updates.scheduled_date };
+  const locked = await findInvoicedLockedVisits(supabase, before, change);
+  if (locked.size > 0) {
+    if (!overrideInvoiced) {
+      return NextResponse.json({
+        error: locked.size === 1
+          ? INVOICED_VISIT_LOCKED_MESSAGE
+          : `${locked.size} of the selected visits are completed and already invoiced — void or edit their invoices first, or ask an admin to override.`,
+        code: INVOICED_VISIT_LOCKED_CODE,
+        lockedIds: [...locked],
+      }, { status: 409 });
+    }
+  }
+
   if (updates.scheduled_date) {
     for (const row of before) {
       if (row.scheduled_date === updates.scheduled_date) continue;
@@ -58,13 +84,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // Admin override: apply the status/date change to each locked visit via the
+  // override RPC first; the plain update below then sees no change for them.
+  for (const id of locked) {
+    const res = await overrideInvoicedVisit(supabase, id, change);
+    if (res.error) return NextResponse.json({ error: res.error }, { status: res.forbidden ? 403 : 500 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
     .from("crm_job_visits")
     .update({ ...updates, updated_at: new Date().toISOString() })
     .in("id", ids);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const isLocked = (error as { hint?: string }).hint === INVOICED_VISIT_LOCKED_CODE;
+    return NextResponse.json(
+      { error: error.message, ...(isLocked ? { code: INVOICED_VISIT_LOCKED_CODE } : {}) },
+      { status: isLocked ? 409 : 500 }
+    );
+  }
 
   // One lightweight client-timeline row per moved / newly-dispatched visit
   // ("Visit moved 9/7 → 9/8"). No notifications; best-effort.

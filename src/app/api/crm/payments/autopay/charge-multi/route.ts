@@ -9,7 +9,7 @@ import {
 } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
-import { findDuplicateChargeIntent, duplicateChargeMessage } from "@/lib/stripe/duplicate-charge";
+import { refuseIfChargeInFlight } from "@/lib/stripe/duplicate-charge";
 import { recordStripeCharge } from "@/lib/stripe/record-charge";
 import { markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { logger } from "@/lib/logger";
@@ -18,7 +18,11 @@ const log = logger.child("stripe multi-invoice charge");
 
 const ChargeSchema = z.object({
   clientId: z.string().uuid(),
-  allocations: z.array(z.object({ invoiceId: z.string().uuid(), amountCents: z.number().int().positive() })).min(1),
+  allocations: z
+    .array(z.object({ invoiceId: z.string().uuid(), amountCents: z.number().int().positive() }))
+    .min(1)
+    // A repeated invoice id would be charged twice against one balance.
+    .refine((a) => new Set(a.map((x) => x.invoiceId)).size === a.length, "Each invoice can only appear once"),
 });
 
 
@@ -73,13 +77,16 @@ export async function POST(request: Request) {
   const invoiceIds = allocations.map((a) => a.invoiceId);
   const { data: invoices } = await supabase
     .from("crm_invoices")
-    .select("id, balance_cents")
+    .select("id, balance_cents, status")
     .in("id", invoiceIds)
     .eq("client_id", clientId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null);
   if (!invoices || invoices.length !== invoiceIds.length) {
     return NextResponse.json({ error: "One or more invoices were not found for this client" }, { status: 404 });
+  }
+  if (invoices.some((i) => i.status === "draft" || i.status === "void")) {
+    return NextResponse.json({ error: "Draft and voided invoices can't be charged — remove them from this payment" }, { status: 400 });
   }
   const balanceByInvoice = new Map(invoices.map((i) => [i.id, i.balance_cents]));
   for (const a of allocations) {
@@ -137,28 +144,21 @@ export async function POST(request: Request) {
   // separate, real charges. Ask Stripe directly whether a PaymentIntent
   // covering any of these same invoices already exists from the last few
   // minutes and hasn't definitively failed, and refuse to charge again if so.
-  try {
-    const duplicate = await findDuplicateChargeIntent({
-      stripe,
-      connectedAccountId: org.stripe_connect_account_id,
-      customerId: client.stripe_customer_id,
-      invoiceIds,
-      isAch: paymentMethod === "us_bank_account",
-    });
-    if (duplicate) {
-      return NextResponse.json(
-        // The caller distinguishes this from a real failure: a bulk run over
-        // the ACH queue legitimately hits it for every debit still settling.
-        { error: duplicateChargeMessage(duplicate, true), code: "duplicate_charge", inFlight: duplicate.status === "processing" },
-        { status: 409 }
-      );
-    }
-  } catch (err) {
-    // Fail open on the lookup itself (a Stripe API hiccup shouldn't block a
-    // legitimate charge) — chargeIdempotencyKey's 10-second window still
-    // catches an exact-duplicate retry; this is the belt-and-suspenders
-    // layer for a slower double-submit.
-    log.error("failed to check for a recent duplicate charge", { error: err, clientId });
+  const refusal = await refuseIfChargeInFlight({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    // Service role: the in-flight marker columns are read regardless of the
+    // caller's RLS, and a stale marker's payment lookup must see every row.
+    db: createServiceClient(),
+    invoiceIds,
+    customerId: client.stripe_customer_id,
+    isAch: paymentMethod === "us_bank_account",
+    plural: true,
+  });
+  if (refusal) {
+    // The caller distinguishes this from a real failure: a bulk run over the
+    // ACH queue legitimately hits it for every debit still settling.
+    return NextResponse.json(refusal.body, { status: refusal.status });
   }
 
   try {

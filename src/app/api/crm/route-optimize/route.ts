@@ -29,8 +29,14 @@ const UNREACHABLE = 999999;
  */
 const BLOCK = 10;
 
+/** Upper bound on stops per optimize call (Distance Matrix cost grows n²). */
+const MAX_STOPS = 60;
+
 const BodySchema = z.object({
-  visitIds: z.array(z.string().uuid()).min(2).max(60),
+  visitIds: z
+    .array(z.string().uuid())
+    .min(2, "Need at least 2 visits to optimize a route.")
+    .max(MAX_STOPS, `Route optimization supports up to ${MAX_STOPS} stops at a time — select fewer visits (e.g. one crew) and optimize in batches.`),
   /**
    * nearest_first — leave the shop and take the closest stop each time.
    * furthest_first — drive out to the far end first and work back in, so the
@@ -160,7 +166,9 @@ export async function POST(request: Request) {
   const parsed = BodySchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Need at least 2 visits to optimize" },
+      // Surface the actual problem — a 61-stop request used to be told it
+      // needed "at least 2 visits".
+      { error: parsed.error.issues[0]?.message ?? "Invalid route optimization request" },
       { status: 400 }
     );
   }

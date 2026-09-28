@@ -5,6 +5,12 @@ import { z } from "zod";
 import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-notify";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import { formatMonthDay } from "@/lib/utils";
+import {
+  INVOICED_VISIT_LOCKED_CODE,
+  INVOICED_VISIT_LOCKED_MESSAGE,
+  findInvoicedLockedVisits,
+  overrideInvoicedVisit,
+} from "@/lib/visits/invoiced-guard";
 
 const PatchSchema = z.object({
   scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -15,6 +21,8 @@ const PatchSchema = z.object({
   invoice_description: z.string().nullable().optional(),
   /** Why a visit was skipped/cancelled (dispatch board reason prompt). */
   skip_reason: z.string().max(500).nullable().optional(),
+  /** Admin-only: move / reopen a completed visit that is already invoiced. */
+  override_invoiced: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -50,27 +58,51 @@ export async function PATCH(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: before } = await (supabase as any)
     .from("crm_job_visits")
-    .select("client_id, job_id, scheduled_date, status")
+    .select("client_id, job_id, scheduled_date, status, crew_id")
     .eq("id", visitId)
     .maybeSingle();
-  const prev = before as { client_id: string; job_id: string; scheduled_date: string; status: string } | null;
+  const prev = before as { client_id: string; job_id: string; scheduled_date: string; status: string; crew_id: string | null } | null;
+  const { override_invoiced: overrideInvoiced, ...patch } = parsed.data;
 
-  if (parsed.data.scheduled_date && parsed.data.scheduled_date !== prev?.scheduled_date) {
-    const violation = await checkPackageMinDaysViolation(supabase, visitId, parsed.data.scheduled_date);
+  // Completed + invoiced visits are locked against moves and status changes
+  // (the DB trigger is the floor; this answers with a clear message first).
+  const change = { status: patch.status, scheduled_date: patch.scheduled_date };
+  const needsOverride = prev
+    ? (await findInvoicedLockedVisits(supabase, [{ id: visitId, status: prev.status, scheduled_date: prev.scheduled_date }], change)).has(visitId)
+    : false;
+  if (needsOverride && !overrideInvoiced) {
+    return NextResponse.json({ error: INVOICED_VISIT_LOCKED_MESSAGE, code: INVOICED_VISIT_LOCKED_CODE }, { status: 409 });
+  }
+
+  if (patch.scheduled_date && patch.scheduled_date !== prev?.scheduled_date) {
+    const violation = await checkPackageMinDaysViolation(supabase, visitId, patch.scheduled_date);
     if (violation) {
       return NextResponse.json({ error: violation }, { status: 409 });
     }
   }
 
+  // Admin override: the status/date change goes through the override RPC;
+  // the plain update below then sees no change for those two columns.
+  if (needsOverride) {
+    const res = await overrideInvoicedVisit(supabase, visitId, change);
+    if (res.error) return NextResponse.json({ error: res.error }, { status: res.forbidden ? 403 : 500 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_visits")
-    .update({ ...parsed.data, updated_at: new Date().toISOString() })
+    .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", visitId)
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const locked = (error as { hint?: string }).hint === INVOICED_VISIT_LOCKED_CODE;
+    return NextResponse.json(
+      { error: error.message, ...(locked ? { code: INVOICED_VISIT_LOCKED_CODE } : {}) },
+      { status: locked ? 409 : 500 }
+    );
+  }
 
   // Lightweight client-timeline rows (no notifications) for a reschedule
   // and for the transition into "dispatched" — the dispatch board's bulk
@@ -108,7 +140,9 @@ export async function PATCH(
   // that would leak this org's client name/schedule to another org's crew
   // member. Re-check the crew via the RLS-scoped `supabase` client (not the
   // admin client) so a cross-org id resolves to nothing before notifying.
-  if (parsed.data.crew_id) {
+  // Only when the crew actually changed — re-saving a visit with the same
+  // crew must not re-send "assigned".
+  if (parsed.data.crew_id && parsed.data.crew_id !== (prev?.crew_id ?? null)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: crew } = await (supabase as any)
       .from("crm_crews")

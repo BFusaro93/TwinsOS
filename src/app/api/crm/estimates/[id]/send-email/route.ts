@@ -17,17 +17,9 @@ import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
 import { loadLiveProposalContent } from "@/lib/estimates/proposal-content";
+import { insertEstimateVersion } from "@/lib/estimates/versions";
 
 const log = logger.child("send-estimate");
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getNextVersionNumber(supabase: any, estimateId: string): Promise<number> {
-  const { count } = await supabase
-    .from("estimate_versions")
-    .select("*", { count: "exact", head: true })
-    .eq("estimate_id", estimateId);
-  return (count ?? 0) + 1;
-}
 
 function fmtCents(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -445,15 +437,13 @@ export async function POST(
     return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 
-  // Snapshot estimate state at time of (successful) send
-  const versionNumber = await getNextVersionNumber(supabase, estimateId);
+  // Snapshot estimate state at time of (successful) send. Numbered max+1
+  // with retry on the (estimate_id, version_number) unique index.
   // What the proposal link will show from now on (see proposal-content.ts).
   const proposalContent = await loadLiveProposalContent(supabase, estimateId);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("estimate_versions").insert({
+  await insertEstimateVersion(supabase, {
     org_id: est.org_id,
     estimate_id: estimateId,
-    version_number: versionNumber,
     sent_to_email: toEmailsJoined,
     created_by: user.id,
     snapshot: {
@@ -486,6 +476,9 @@ export async function POST(
       })),
       proposal: proposalContent,
     },
+  }).catch((err: unknown) => {
+    log.error("failed to record sent version", { estimateId, error: err instanceof Error ? err.message : String(err) });
+    return null;
   });
 
   // Log the email

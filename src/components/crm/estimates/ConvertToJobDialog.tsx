@@ -24,12 +24,12 @@ import { CalendarDays, Briefcase, Plus, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, roundHours, todayLocalISODate } from "@/lib/utils";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
-import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
+import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules, useEstimateConvertedLines } from "@/lib/hooks/use-crm-jobs";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
-import { useEstimateShareTokens } from "@/lib/hooks/use-estimates";
+import { useEstimateShareTokens, useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
-import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
+import { budgetedHoursFromLineItem, tierBasis } from "@/lib/estimate-calc";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
@@ -43,82 +43,84 @@ const JOB_TYPES = [
 ];
 
 /**
- * Net revenue per selected line after the line's own discount and its share
- * of the estimate-level discount. Mirrors recalcEstimateTotals: a "percent"
- * header discount is a % of the (line-discounted) subtotal; a flat one is a
- * fixed amount clamped to the subtotal, of which the selected lines carry
- * their proportional share. Cents are distributed largest-remainder so the
- * allocated discount sums exactly.
+ * What the client agreed to pay for each line: its total less its own
+ * discount (floored at 0), plus its priced sub-items (folded into the parent
+ * — crm_job_services has no sub-item concept, and recalcEstimateTotals counts
+ * them as revenue), less its share of the estimate-level (header) discount.
+ *
+ * The header discount is computed exactly as recalcEstimateTotals computes it
+ * — a percent of the counted subtotal, or a flat amount clamped to it — over
+ * the lines the estimate's total is actually made of (`countedLines`: not
+ * lost, and only the chosen tier of a Good/Better/Best estimate). It is then
+ * split across those lines largest-remainder, ONCE, independent of what is
+ * selected: an estimate converted in several passes (one-time lines, then
+ * recurring lines) sums to exactly the discounted subtotal, and lost lines or
+ * other tiers never absorb (or dilute) any of it. A line outside the counted
+ * set (a lost line converted anyway) carries no header discount.
  */
-function allocateHeaderDiscount(
+function netByLine(
   estimate: Estimate,
-  allLines: EstimateLineItem[],
-  selectedLines: EstimateLineItem[],
+  lines: EstimateLineItem[],
+  countedLines: EstimateLineItem[],
+  subitemTotals: Record<string, number>,
 ): Map<string, number> {
-  const lineNet = (li: EstimateLineItem) => Math.max(0, li.totalCents - li.discountCents);
-  const fullSubtotal = allLines.reduce((s, li) => s + lineNet(li), 0);
-  const selectedSubtotal = selectedLines.reduce((s, li) => s + lineNet(li), 0);
+  const lineNet = (li: EstimateLineItem) =>
+    Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (subitemTotals[li.id] ?? 0);
+  const countedSubtotal = countedLines.reduce((s, li) => s + lineNet(li), 0);
 
-  let headerDiscount = 0;
-  if (estimate.discountType === "percent") {
-    headerDiscount = Math.round(selectedSubtotal * ((estimate.discountValue ?? 0) / 10000));
-  } else if ((estimate.discountCents ?? 0) > 0 && fullSubtotal > 0) {
-    const clamped = Math.min(estimate.discountCents, fullSubtotal);
-    headerDiscount = Math.round(clamped * (selectedSubtotal / fullSubtotal));
+  const rawHeader = estimate.discountType === "percent"
+    ? Math.round(countedSubtotal * ((estimate.discountValue ?? 0) / 10000))
+    : (estimate.discountCents ?? 0);
+  const headerDiscount = Math.max(0, Math.min(rawHeader, countedSubtotal));
+
+  const share = new Map<string, number>();
+  if (headerDiscount > 0 && countedSubtotal > 0) {
+    const parts = countedLines.map((li) => {
+      const exact = (headerDiscount * lineNet(li)) / countedSubtotal;
+      return { id: li.id, floor: Math.floor(exact), frac: exact - Math.floor(exact) };
+    });
+    let remainder = headerDiscount - parts.reduce((s, x) => s + x.floor, 0);
+    for (const x of [...parts].sort((a, b) => b.frac - a.frac || a.id.localeCompare(b.id))) {
+      if (remainder <= 0) break;
+      x.floor += 1;
+      remainder -= 1;
+    }
+    for (const x of parts) share.set(x.id, x.floor);
   }
-  headerDiscount = Math.max(0, Math.min(headerDiscount, selectedSubtotal));
 
   const result = new Map<string, number>();
-  if (headerDiscount === 0 || selectedSubtotal === 0) {
-    for (const li of selectedLines) result.set(li.id, lineNet(li));
-    return result;
-  }
-
-  const shares = selectedLines.map((li) => {
-    const exact = (headerDiscount * lineNet(li)) / selectedSubtotal;
-    return { id: li.id, floor: Math.floor(exact), frac: exact - Math.floor(exact) };
-  });
-  let remainder = headerDiscount - shares.reduce((s, x) => s + x.floor, 0);
-  for (const x of [...shares].sort((a, b) => b.frac - a.frac)) {
-    if (remainder <= 0) break;
-    x.floor += 1;
-    remainder -= 1;
-  }
-  const discountById = new Map(shares.map((x) => [x.id, x.floor]));
-  for (const li of selectedLines) {
-    result.set(li.id, Math.max(0, lineNet(li) - (discountById.get(li.id) ?? 0)));
-  }
+  for (const li of lines) result.set(li.id, Math.max(0, lineNet(li) - (share.get(li.id) ?? 0)));
   return result;
 }
 
 /**
- * The (qty, per-visit unit rate) pair a job service must carry so that
- * qty x rate_cents x visits reproduces `net`, the amount the client actually
- * accepted for that line.
- *
- * Holds for both calc types: a per-unit line's total is qty x rate x visits,
- * and a fixed-total line's total IS the rate (estimate-calc.ts), so a fixed
- * line with qty > 1 also needs the qty divided back out or the invoice bills
- * it qty times over.
+ * The (qty, per-visit unit rate) pair a job service must carry so that the
+ * job bills exactly `net`, the amount the client accepted for that line.
  *
  * crm_job_services stores only qty and an integer rate_cents — there is no
- * total column — and the visit-completion auto-invoice bills qty x rate_cents.
- * So whenever `net` isn't exactly divisible by the unit count, NO integer rate
- * can reproduce it against the estimate's qty, and rounding to the nearest cent
- * gets multiplied by the qty: a 5,000 sq ft line accepted at $690.00 rounded
- * 13.8c up to 14c and billed 5,000 x 14c = $700.00. The client signed $690.
+ * total column — and the visit-completion auto-invoice bills qty x rate_cents
+ * on EVERY completed visit. So:
  *
- * The signed amount is the thing that must not move, so when the qty can't
- * carry the rate exactly the service falls back to a single-unit
- * representation (qty 1 at the whole per-visit price), which always can. The
- * measured quantity is only descriptive on a job service — it stays on the
- * estimate line, which is the priced document — whereas rate_cents is what
- * gets billed.
+ *   * On a RECURRING job the line's visits are the job's visits: the rate is
+ *     net / (qty x visits), and the service carries max_visits = visits so
+ *     the generator stops where the client's price stops.
+ *   * On a one-time (or project / waiting-list) job there is ONE visit that
+ *     does the whole line, so the rate is net / qty. Dividing by the line's
+ *     visit count there billed a 3-visit line at a third of its price.
+ *
+ * A fixed-total line's total IS its rate (estimate-calc.ts), so a fixed line
+ * with qty > 1 also needs qty divided back out.
+ *
+ * Whenever `net` isn't exactly divisible by the unit count, no integer rate
+ * reproduces it against the estimate's qty — rounding a 13.8c rate up to 14c
+ * over 5,000 sq ft billed $700 for a $690 line — so the service falls back to
+ * a single unit at the whole per-visit price, which always can. The measured
+ * quantity stays on the estimate line, the priced document.
  */
-function jobServicePricing(li: EstimateLineItem, net: number): { qty: number; rateCents: number } {
-  const visits = Math.max(1, li.visits || 1);
+function jobServicePricing(li: EstimateLineItem, net: number, recurring: boolean): { qty: number; rateCents: number } {
+  const visits = recurring ? Math.max(1, li.visits || 1) : 1;
   const units = (li.qty || 0) * visits;
-  if (units <= 0) return { qty: li.qty, rateCents: li.adjRateCents ?? li.rateCents };
+  if (units <= 0) return { qty: 1, rateCents: Math.round(net / visits) };
   const exactRate = net / units;
   if (Number.isInteger(exactRate)) return { qty: li.qty, rateCents: exactRate };
   return { qty: 1, rateCents: Math.round(net / visits) };
@@ -134,37 +136,55 @@ interface Props {
 export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Props) {
   // Date Sold is the org's calendar day for the acceptance instant.
   const orgTimeZone = useOrgTimeZone();
-  const lineItems = (estimate.lineItems ?? []).filter((li) => !li.deletedAt);
-  // Only catalog-linked product/material direct costs feed forward into job-level
-  // demand (crm_job_products) — free-text costs have nothing to link an order to.
+  // Section header rows aren't services.
+  const lineItems = (estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.rowType !== "section");
+  // Direct costs are internal cost (never in the client's price). Catalog-
+  // linked product/material rows are still recorded on the job — as
+  // NON-billable usage carrying the cost — so job costing sees them.
   const materialItems = (estimate.directCosts ?? []).filter(
     (dc) => dc.costType === "product_material" && !!dc.productItemId
   );
+  const { data: subitemTotals = {} } = useEstimateSubitemTotals(estimate.id);
+  const { data: convertedInfo } = useEstimateConvertedLines(estimate.id);
+  const convertedLineIds = convertedInfo?.convertedLineIds ?? new Set<string>();
+  const legacyConverted = !!convertedInfo?.legacyConverted;
+  const isConverted = (li: EstimateLineItem) => legacyConverted || convertedLineIds.has(li.id);
 
   // Default to items the client actually accepted — items marked "lost" on a per-item
   // acceptance (portal or public proposal) are left unchecked, but still selectable.
   // $0 lines (net of their own discount) are also left unchecked: they'd otherwise
-  // convert into billable $0 services on the job.
+  // convert into billable $0 services on the job. Lines already converted to a
+  // job are shown but can't be selected again.
   //
   // Tiered (Good/Better/Best) proposals: a tier is chosen by marking the other
-  // tiers' lines lost (portal/public acceptance does this). An estimate marked
-  // Accepted from the office still has every tier open, and pre-selecting all
-  // of them converted a $3,200 "Better" proposal into a $10,700 job. When more
-  // than one tier is still open, tiered lines start unchecked and the user
-  // picks the tier the client chose; untiered lines still default in.
+  // tiers' lines lost (portal/public acceptance and the office Accepted action
+  // do this). An estimate accepted before that still has every tier open —
+  // then tiered lines start unchecked and the user picks the tier the client
+  // chose; untiered lines still default in.
   const tierOf = (li: EstimateLineItem) => (estimate.tiersEnabled ? li.tier : null);
   const openTiers = new Set(
     lineItems.filter((li) => li.status !== "lost").map(tierOf).filter((t): t is NonNullable<typeof t> => !!t)
   );
   const tierUndecided = openTiers.size > 1;
+  const isDefaultSelected = (li: EstimateLineItem) =>
+    li.status !== "lost" &&
+    Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (subitemTotals[li.id] ?? 0) > 0 &&
+    !(tierUndecided && tierOf(li));
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(
-      lineItems
-        .filter((li) => li.status !== "lost" && Math.max(0, li.totalCents - (li.discountCents ?? 0)) > 0)
-        .filter((li) => !(tierUndecided && tierOf(li)))
-        .map((li) => li.id)
-    )
+    () => new Set(lineItems.filter(isDefaultSelected).map((li) => li.id))
   );
+  // Converted lines drop out of the selection as soon as they're known
+  // (the converted-lines query resolves after mount, and after each pass).
+  const convertedKey = legacyConverted ? "*" : [...convertedLineIds].sort().join(",");
+  useEffect(() => {
+    if (!convertedKey) return;
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((id) => !legacyConverted && !convertedLineIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    // convertedKey captures the set's contents
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convertedKey]);
   const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(
     () => new Set(materialItems.map((dc) => dc.id))
   );
@@ -216,8 +236,20 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   // if it's still unset. See rpt_projects_wip / the WIP report this feeds.
   const eacHintCents = estimate.revenueCents - estimate.netProfitCents;
 
+  const convertibleLines = lineItems.filter((li) => !isConverted(li));
+
   function toggleAll(checked: boolean) {
-    setSelected(checked ? new Set(lineItems.map((li) => li.id)) : new Set());
+    setSelected(checked ? new Set(convertibleLines.map((li) => li.id)) : new Set());
+  }
+
+  /** Quick picks for a mixed estimate: its one-time lines (1 visit) go on one
+   *  job, its multi-visit lines on a recurring one. Also sets the job type. */
+  function selectByVisits(kind: "single" | "multi") {
+    const pick = convertibleLines.filter(
+      (li) => li.status !== "lost" && (kind === "single" ? (li.visits || 1) <= 1 : (li.visits || 1) > 1)
+    );
+    setSelected(new Set(pick.map((li) => li.id)));
+    setJobType(kind === "single" ? "one_time" : "recurring");
   }
 
   function toggleItem(id: string) {
@@ -238,15 +270,25 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     });
   }
 
-  const selectedItems = lineItems.filter((li) => selected.has(li.id));
-  // Net of each line's own discount AND its share of the estimate-level
-  // (header) discount — this is what the client actually agreed to pay, and
-  // what feeds the new job's rate_cents snapshot below. Before the header
-  // discount was included here, a 10%-off estimate produced a job (and thus
-  // an invoice) priced at the undiscounted subtotal.
-  const netByLineId = allocateHeaderDiscount(estimate, lineItems, selectedItems);
+  const selectedItems = lineItems.filter((li) => selected.has(li.id) && !isConverted(li));
+  // The lines the estimate's total is made of: not lost, and one tier only —
+  // the chosen tier, or, while still undecided, the tier being converted
+  // (falling back to the estimate's own basis tier, see tierBasis).
+  const selectedTier = selectedItems.map(tierOf).find((t) => !!t) ?? null;
+  const basisTier = estimate.tiersEnabled
+    ? (selectedTier ?? tierBasis(true, lineItems.map((li) => ({
+        tier: li.tier,
+        status: li.status,
+        netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)),
+      }))))
+    : null;
+  const countedLines = lineItems.filter(
+    (li) => li.status !== "lost" && (!basisTier || !tierOf(li) || tierOf(li) === basisTier)
+  );
+  const netByLineId = netByLine(estimate, lineItems, countedLines, subitemTotals);
   const totalCents = selectedItems.reduce((s, li) => s + (netByLineId.get(li.id) ?? 0), 0);
   const selectedMaterialItems = materialItems.filter((dc) => selectedMaterials.has(dc.id));
+  const recurring = jobType === "recurring";
 
   async function handleCreate() {
     if (selectedItems.length === 0) {
@@ -292,55 +334,53 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         salesRepId,
         dateSold: dateSold || null,
         services: selectedItems.map((li) => {
-          const pricing = jobServicePricing(li, netByLineId.get(li.id) ?? 0);
+          const net = netByLineId.get(li.id) ?? 0;
+          // Priced from the net the client accepted (line discount, header
+          // discount share and sub-items all in) — see jobServicePricing.
+          // Deriving from the net rather than the raw rate also carries the
+          // Adj Rate column and complexity the estimate total was built on.
+          const pricing = jobServicePricing(li, net, recurring);
           return {
-          serviceName:   li.serviceName ?? "Service",
-          serviceId:     li.serviceId ?? null,
-          qty:           pricing.qty,
-          // The estimate's own total is priced off adjRateCents when the
-          // estimator used the Adj Rate column (estimate-calc.ts uses
-          // `adjRateCents ?? rateCents`) -- sending the un-adjusted rate
-          // here left qty x rateCents != totalCents on the created job's
-          // service, so anything re-deriving a price from qty x rate
-          // (job value rollups, invoice line items) billed a different
-          // number than the client actually accepted.
-          // crm_job_services.rate_cents is a PER-VISIT unit rate: the
-          // visit-completion auto-invoice bills qty x rate_cents on every
-          // completed visit (complete-visit-side-effects.ts). The estimate
-          // line's net, by contrast, covers the whole engagement --
-          // totalCents is qty x rate x visits for a per-unit line
-          // (estimate-calc.ts) -- so the rate has to be divided back out by
-          // BOTH qty and visits.
-          //
-          // Dividing by qty alone left rate_cents holding rate x visits, and
-          // every single visit then billed the entire multi-visit contract:
-          // a 30-visit mow at $60 with any header discount produced
-          // rate_cents = $1,620, i.e. $48,600 billed instead of $1,620.
-          //
-          // Always deriving from the net (rather than only when a header
-          // discount is detected) also fixes the other half of that branch:
-          // the equality check treated "no header discount" as "use the raw
-          // rate", which silently dropped any LINE-level discount. With no
-          // discount at all, net = qty x rate x visits, so this reduces to
-          // the raw rate exactly.
-          rateCents:     pricing.rateCents,
-          totalCents:    netByLineId.get(li.id) ?? 0,
-          // budgetedHoursFromLineItem applies the line's complexity: the stored
-          // budgeted_hours is the unscaled base (estimate-calc.ts), but the job
-          // is budgeted — and later measured — in the hours the crew will
-          // actually spend.
-          budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
-          budgetMethod:  li.budgetMethod,
-        };
+            serviceName:   li.serviceName ?? "Service",
+            serviceId:     li.serviceId ?? null,
+            qty:           pricing.qty,
+            rateCents:     pricing.rateCents,
+            totalCents:    net,
+            // budgetedHoursFromLineItem applies the line's complexity: the stored
+            // budgeted_hours is the unscaled base (estimate-calc.ts), but the job
+            // is budgeted — and later measured — in the hours the crew will
+            // actually spend.
+            budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
+            budgetMethod:  li.budgetMethod,
+            estimateLineItemId: li.id,
+            maxVisits:     recurring ? Math.max(1, li.visits || 1) : null,
+          };
         }),
         materials: selectedMaterialItems.map((dc) => ({
           productItemId:  dc.productItemId as string,
           productName:    dc.description,
           qty:            materialQty[dc.id] ?? dc.qty,
-          unitPriceCents: dc.rateCents,
+          unitCostCents:  dc.rateCents,
         })),
       });
 
+      // Mixed estimates convert in passes. Keep the dialog open while lines
+      // remain, so the next group (e.g. the recurring lines) can be scheduled
+      // as its own job; lines just converted drop out once the converted-lines
+      // query refreshes. Materials go on the first job only.
+      const remaining = convertibleLines.filter(
+        (li) =>
+          !selected.has(li.id) &&
+          li.status !== "lost" &&
+          (netByLineId.get(li.id) ?? 0) > 0 &&
+          !(basisTier && tierOf(li) && tierOf(li) !== basisTier)
+      );
+      if (remaining.length > 0) {
+        toast.success(`Job created — ${remaining.length} line${remaining.length !== 1 ? "s" : ""} left to schedule`);
+        setSelected(new Set());
+        setSelectedMaterials(new Set());
+        return;
+      }
       toast.success("Job created from estimate");
       onConverted(jobId);
       onClose();
@@ -352,7 +392,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     }
   }
 
-  const allSelected = lineItems.length > 0 && selected.size === lineItems.length;
+  const allSelected = convertibleLines.length > 0 && convertibleLines.every((li) => selected.has(li.id));
+  const hasSingle = convertibleLines.some((li) => li.status !== "lost" && (li.visits || 1) <= 1);
+  const hasMulti = convertibleLines.some((li) => li.status !== "lost" && (li.visits || 1) > 1);
 
   return (
     <>
@@ -393,6 +435,22 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               Select all
             </label>
           </div>
+          {hasSingle && hasMulti && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <span>This estimate mixes one-time and multi-visit lines — convert each group as its own job:</span>
+              <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => selectByVisits("single")}>
+                One-time lines
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => selectByVisits("multi")}>
+                Recurring lines
+              </Button>
+            </div>
+          )}
+          {legacyConverted && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              This estimate was converted to a job before line-by-line conversion. Add further services on that job instead.
+            </p>
+          )}
           {tierUndecided && (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               This is a tiered proposal and no tier has been chosen yet. Check the lines for the tier the client picked.
@@ -422,8 +480,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                     key={li.id}
                     li={li}
                     tierLabel={tierOf(li) ? estimate.tierLabels[tierOf(li)!] : null}
-                    checked={selected.has(li.id)}
-                    onToggle={() => toggleItem(li.id)}
+                    checked={selected.has(li.id) && !isConverted(li)}
+                    converted={isConverted(li)}
+                    netCents={netByLineId.get(li.id) ?? 0}
+                    onToggle={() => { if (!isConverted(li)) toggleItem(li.id); }}
                   />
                 ))}
               </tbody>
@@ -473,7 +533,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               </table>
             </div>
             <p className="text-[11px] text-slate-400">
-              Selected materials are added to the job&apos;s Products section so upcoming demand shows on the Materials Needed report.
+              Materials are internal cost, not part of the client&apos;s price: selected ones are recorded on the job&apos;s Products as non-billable usage (at cost) for job costing, and are never invoiced.
             </p>
           </div>
         )}
@@ -640,6 +700,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         open={newProjectOpen}
         onOpenChange={setNewProjectOpen}
         defaultClientId={estimate.clientId}
+        defaultContractPriceCents={estimate.totalCents}
+        defaultName={estimate.description ?? undefined}
         onCreated={(project) => setProjectId(project.id)}
       />
     )}
@@ -651,36 +713,44 @@ function ServiceRow({
   li,
   tierLabel,
   checked,
+  converted,
+  netCents,
   onToggle,
 }: {
   li: EstimateLineItem;
   tierLabel: string | null;
   checked: boolean;
+  /** Already on a job — shown for reference, can't be converted again. */
+  converted: boolean;
+  /** What the job will bill for this line (discounts and sub-items in). */
+  netCents: number;
   onToggle: () => void;
 }) {
   return (
     <tr
-      className={`border-b last:border-0 cursor-pointer transition-colors ${
-        checked ? "bg-green-50" : "hover:bg-slate-50"
+      className={`border-b last:border-0 transition-colors ${
+        converted ? "opacity-60" : checked ? "bg-green-50 cursor-pointer" : "hover:bg-slate-50 cursor-pointer"
       }`}
       onClick={onToggle}
     >
       <td className="px-3 py-2.5 text-center">
-        <Checkbox checked={checked} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} />
+        <Checkbox checked={checked} disabled={converted} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} />
       </td>
       <td className="px-3 py-2.5 font-medium text-slate-800">
         {li.serviceName ?? "—"}
         {tierLabel && (
           <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-normal text-slate-500">{tierLabel}</span>
         )}
-        {li.status && li.status !== "quote" && (
+        {converted ? (
+          <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-normal uppercase text-green-700">Converted</span>
+        ) : li.status && li.status !== "quote" && (
           <span className="ml-2 text-[10px] text-slate-400 font-normal uppercase">{li.status}</span>
         )}
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{li.visits}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{li.qty}</td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium">
-        {formatCurrency(li.totalCents)}
+        {formatCurrency(netCents)}
       </td>
     </tr>
   );

@@ -15,6 +15,7 @@ import { decodeAllocations } from "@/lib/stripe/crm-payments";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { notifyStaffOfFailedDeposit } from "@/lib/estimate-deposit-notify";
+import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect webhook");
@@ -359,42 +360,44 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, event.account))) break;
 
-      const alreadyRecordedCents = payment.refunded_amount_cents ?? 0;
       // Stripe refunds the GROSS it charged; crm_payments.amount_cents is the
       // net the client was credited, with any card processing fee held
       // separately in processing_fee_cents. A full refund of a fee-bearing
       // charge therefore reports more than the payment is worth — $2,058
-      // against a $2,000 payment — and refund_payment() raises
-      // "Refund amount exceeds remaining refundable balance". That threw out
-      // of the try below into a 500, which meant processed_at was never
-      // stamped, so Stripe retried the same event forever while the client sat
-      // on a credit they'd already been refunded.
+      // against a $2,000 payment. reconcile_stripe_payment_reversal() clamps
+      // the target to amount_cents (the fee has no customer-money counterpart
+      // to reverse — it was never credited), so the old "exceeds refundable
+      // balance" 500-and-retry-forever can't recur.
       //
-      // Clamp to what the ledger can actually reverse. The fee portion has no
-      // customer-money counterpart to reverse — it was never credited — so
-      // dropping it is correct, not a rounding fudge.
-      const refundableCents = Math.max(0, (payment.amount_cents ?? 0) - alreadyRecordedCents);
-      const rawDeltaCents = charge.amount_refunded - alreadyRecordedCents;
-      const deltaCents = Math.min(rawDeltaCents, refundableCents);
-      if (rawDeltaCents > refundableCents) {
-        log.info("clamped a gross Stripe refund to the payment's refundable amount", {
-          paymentIntentId,
-          chargeRefundedCents: charge.amount_refunded,
-          paymentAmountCents: payment.amount_cents,
-          processingFeeCents: payment.processing_fee_cents,
-          appliedCents: deltaCents,
+      // TARGET, not delta: the RPC brings refunded_amount_cents up to Stripe's
+      // own amount_refunded under the payment row lock. The staff refund route
+      // does the same, so whichever of the two lands first applies it and the
+      // other is a no-op — they converge instead of each adding a delta.
+      let deltaCents = 0;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
+          p_payment_id: payment.id,
+          p_target_reversed_cents: charge.amount_refunded,
         });
+        if (reconcileErr) throw reconcileErr;
+        deltaCents = typeof applied === "number" ? applied : 0;
+        if (charge.amount_refunded > (payment.amount_cents ?? 0)) {
+          log.info("clamped a gross Stripe refund to the payment's refundable amount", {
+            paymentIntentId,
+            chargeRefundedCents: charge.amount_refunded,
+            paymentAmountCents: payment.amount_cents,
+            processingFeeCents: payment.processing_fee_cents,
+            appliedCents: deltaCents,
+          });
+        }
+      } catch (err) {
+        log.error("failed to reconcile charge.refunded", { error: err, paymentId: payment.id });
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
       }
       if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: refundErr } = await (db.rpc as any)("refund_payment", {
-          p_payment_id: payment.id,
-          p_refund_amount_cents: deltaCents,
-        });
-        if (refundErr) throw refundErr;
-
         // refund_payment() reverses the invoice side itself — it walks the
         // allocation rows, reduces or deletes each one, and calls
         // apply_payment_to_invoice(-share) per invoice, falling back to
@@ -429,7 +432,27 @@ export async function POST(request: Request) {
           triggerType: "credit_card_charge_failed",
         });
       } catch (err) {
-        log.error("failed to reconcile charge.refunded", { error: err, paymentId: payment.id });
+        // The reversal itself is already committed (and a retry would be a
+        // no-op for it), so a failed follow-up must not 500 the event.
+        log.error("reversed a refunded payment but a follow-up step failed", { error: err, paymentId: payment.id });
+      }
+      break;
+    }
+
+    // Chargebacks. Stripe debits the disputed amount (plus a dispute fee) from
+    // the connected account's balance at funds_withdrawn and returns it at
+    // funds_reinstated if the dispute is won. Previously none of these events
+    // were handled: a disputed payment kept showing as good money on a paid
+    // invoice, and nobody at the org was told a response deadline was running.
+    case "charge.dispute.created":
+    case "charge.dispute.updated":
+    case "charge.dispute.closed":
+    case "charge.dispute.funds_withdrawn":
+    case "charge.dispute.funds_reinstated": {
+      const dispute = event.data.object as Stripe.Dispute;
+      if (!event.account) break;
+      const result = await handleDisputeEvent(db, supabase, event.type, dispute, event.account);
+      if (result === "error") {
         return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
       }
       break;
@@ -496,4 +519,151 @@ async function applyCrmInvoiceMultiPayment(
   }
   const result = await recordStripeCharge({ db, supabase, paymentIntent, connectedAccountId: event.account });
   return result === "already_recorded" ? "skipped" : result;
+}
+
+/**
+ * charge.dispute.* for a CRM invoice payment.
+ *
+ * - every event: mirror the dispute's id/status onto the payment
+ *   (crm_payments.stripe_dispute_id / dispute_status / disputed_at, added by
+ *   20260927100200). Best-effort — a failed marker write is logged, never a 500.
+ * - created: in-app notification to the org's admins/managers (the same
+ *   default audience as the other broadcast notifications) + a client
+ *   activity entry, since a dispute has a response deadline.
+ * - funds_withdrawn: reverse it like a refund. The target passed to
+ *   reconcile_stripe_payment_reversal() is Stripe's amount_refunded plus the
+ *   disputed amount, so a retried delivery is a no-op and it converges with
+ *   any refund already recorded.
+ * - funds_reinstated / won: NOT automatically re-applied — re-crediting an
+ *   invoice after a won dispute is left to staff (notified here), since the
+ *   reversal may already have been followed by a re-charge or write-off.
+ */
+async function handleDisputeEvent(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  eventType: string,
+  dispute: Stripe.Dispute,
+  eventAccount: string
+): Promise<"ok" | "error"> {
+  const paymentIntentId =
+    typeof dispute.payment_intent === "string" ? dispute.payment_intent : dispute.payment_intent?.id ?? null;
+  if (!paymentIntentId) return "ok";
+
+  const { data: payment } = await db
+    .from("crm_payments")
+    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents")
+    .eq("stripe_payment_intent_id", paymentIntentId)
+    .maybeSingle();
+  if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, eventAccount))) return "ok";
+
+  const { error: markErr } = await db
+    .from("crm_payments")
+    .update({
+      stripe_dispute_id: dispute.id,
+      dispute_status: dispute.status,
+      disputed_at: new Date(dispute.created * 1000).toISOString(),
+    })
+    .eq("id", payment.id);
+  if (markErr) log.error("failed to mark payment as disputed", { error: markErr, paymentId: payment.id, disputeId: dispute.id });
+
+  const amount = `$${(dispute.amount / 100).toFixed(2)}`;
+
+  if (eventType === "charge.dispute.funds_withdrawn") {
+    const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+    let refundedAtStripe = 0;
+    if (chargeId) {
+      try {
+        const { data: org } = await db
+          .from("organizations")
+          .select("stripe_connect_livemode")
+          .eq("id", payment.org_id)
+          .single();
+        const orgStripe = getStripeForOrg(org?.stripe_connect_livemode ?? null);
+        const charge = await orgStripe.charges.retrieve(chargeId, undefined, { stripeAccount: eventAccount });
+        refundedAtStripe = charge.amount_refunded ?? 0;
+      } catch (err) {
+        log.error("failed to load the disputed charge", { error: err, chargeId, disputeId: dispute.id });
+        return "error"; // retry — the reversal target needs Stripe's refunded amount
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
+      p_payment_id: payment.id,
+      p_target_reversed_cents: refundedAtStripe + dispute.amount,
+    });
+    if (reconcileErr) {
+      log.error("failed to reverse a disputed payment", { error: reconcileErr, paymentId: payment.id, disputeId: dispute.id });
+      return "error";
+    }
+    const deltaCents = typeof applied === "number" ? applied : 0;
+    if (deltaCents > 0) {
+      try {
+        await db.rpc("sync_client_balance", { p_client_id: payment.client_id });
+        await db.from("client_activity").insert({
+          org_id: payment.org_id,
+          client_id: payment.client_id,
+          activity_type: "payment",
+          subject: `Payment reversed: $${(deltaCents / 100).toFixed(2)} (chargeback — funds withdrawn by Stripe)`,
+          ref_id: payment.id,
+          ref_table: "crm_payments",
+          amount_cents: -deltaCents,
+        });
+      } catch (err) {
+        log.error("reversed a disputed payment but a follow-up step failed", { error: err, paymentId: payment.id });
+      }
+    }
+  }
+
+  const notify =
+    eventType === "charge.dispute.created"
+      ? {
+          title: `Payment disputed — ${amount}`,
+          message: `A client disputed a ${amount} online payment (reason: ${dispute.reason.replace(/_/g, " ")}). Respond in your Stripe dashboard${
+            dispute.evidence_details?.due_by
+              ? ` by ${new Date(dispute.evidence_details.due_by * 1000).toLocaleDateString("en-US")}`
+              : ""
+          } or the funds will be withdrawn.`,
+        }
+      : eventType === "charge.dispute.funds_withdrawn"
+        ? { title: `Chargeback — ${amount} withdrawn`, message: `Stripe withdrew ${amount} for a disputed payment. The payment has been reversed and the invoice balance reopened.` }
+        : eventType === "charge.dispute.closed" && dispute.status === "won"
+          ? { title: `Dispute won — ${amount}`, message: `A ${amount} payment dispute was closed in your favor. If the payment was reversed, re-record it against the invoice.` }
+          : null;
+
+  if (notify) {
+    try {
+      const recipients = await resolveBroadcastRecipients(supabase, payment.org_id, "paymentDisputeRecipientIds");
+      if (recipients.length) {
+        await db.from("notifications").insert(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          recipients.map((p: any) => ({
+            org_id: payment.org_id,
+            user_id: p.id,
+            type: "payment_disputed",
+            title: notify.title,
+            message: notify.message,
+            entity_id: payment.invoice_id ?? payment.client_id,
+            entity_type: payment.invoice_id ? "invoice" : "client",
+          }))
+        );
+      }
+      if (eventType === "charge.dispute.created") {
+        await db.from("client_activity").insert({
+          org_id: payment.org_id,
+          client_id: payment.client_id,
+          activity_type: "payment",
+          subject: `Payment disputed: ${amount} (${dispute.reason.replace(/_/g, " ")})`,
+          ref_id: payment.id,
+          ref_table: "crm_payments",
+        });
+      }
+    } catch (err) {
+      log.error("failed to notify staff of a payment dispute", { error: err, paymentId: payment.id, disputeId: dispute.id });
+    }
+  }
+
+  return "ok";
 }

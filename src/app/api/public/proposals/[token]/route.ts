@@ -53,8 +53,7 @@ export async function GET(
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
       client_properties(address, city, state, zip),
-      estimate_line_items(*),
-      estimate_direct_costs(id, description, qty, rate_cents, total_cents, sort_order)
+      estimate_line_items(*, estimate_line_item_subitems(total_cents, deleted_at))
     `)
     .eq("id", shareToken.estimate_id)
     .single();
@@ -133,14 +132,10 @@ export async function GET(
     orgLogoUrl: (customizations.logoDataUrl as string) ?? null,
 
     // Stored totals are authoritative — the page displays these as-is and only
-    // re-derives (with the same discount rule as recalcEstimateTotals) when
-    // the client deselects items or picks a tier.
-    // Materials/equipment/subcontract lines. They are priced into
-    // subtotal_cents and total_cents, so a proposal that renders only
-    // estimate_line_items shows a total the client cannot reconcile — and,
-    // worse, deselecting any optional item re-derived the price from line
-    // items alone and silently dropped these from what the client accepted.
-    directCosts: content.directCosts,
+    // re-derives (with the same per-line and discount rules as
+    // recalcEstimateTotals) when the client deselects items or picks a tier.
+    // estimate_direct_costs are internal cost — not in these totals, and
+    // never sent to the client.
     subtotalCents: content.subtotalCents,
     taxRateBps: content.taxRateBps,
     taxCents: content.taxCents,

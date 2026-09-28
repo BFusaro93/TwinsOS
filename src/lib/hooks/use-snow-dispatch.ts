@@ -407,13 +407,27 @@ export function useAddJobsToStormEvent() {
       const alreadyAdded = new Set((existing ?? []).map((r: { job_id: string }) => r.job_id));
       const newJobs = jobs.filter((j) => !alreadyAdded.has(j.jobId));
 
+      // Append after the event's existing stops — each batch used to restart
+      // at 0, interleaving a second batch with the first route's order.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: maxRow } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("order_num")
+        .eq("storm_event_id", stormEventId)
+        .is("deleted_at", null)
+        .not("order_num", "is", null)
+        .order("order_num", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const startOrder = maxRow?.order_num != null ? Number(maxRow.order_num) + 1 : 0;
+
       const rows = newJobs.map((j, i) => ({
         job_id: j.jobId,
         client_id: j.clientId,
         scheduled_date: date,
         crew_id: j.crewId ?? null,
         storm_event_id: stormEventId,
-        order_num: i,
+        order_num: startOrder + i,
         status: "scheduled",
       }));
       if (rows.length === 0) return 0;

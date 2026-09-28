@@ -105,7 +105,7 @@ export async function GET(request: Request) {
       acknowledged_notes_at, notes_to_crew_updated_at, completed_at, created_at, updated_at,
       clients(display_name, primary_phone, service_address, service_city, service_state, service_zip,
         billing_address, billing_city, billing_state, billing_zip),
-      crm_jobs(job_type, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
+      crm_jobs(job_type, status, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
         notes_to_crew, notes_to_crew_updated_at,
         client_properties(address, city, state, zip),
         crm_job_services(id, service_name, budgeted_hours, team_size, sort_order))
@@ -119,7 +119,15 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const rows = data as Record<string, unknown>[];
+  // A cancelled or on-hold job's leftover visits must not show on the crew's
+  // day — except one the crew is clocked into right now, which they still
+  // need to clock out of. Filtered here rather than with an !inner join so a
+  // visit whose job row RLS hides from the crew still shows, as before.
+  const rows = (data as Record<string, unknown>[]).filter((row) => {
+    const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
+    if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
+    return !!row.clocked_in_at && !row.clocked_out_at;
+  });
 
   const visits = rows.map((row) => {
     const client = row.clients as Record<string, unknown> | null;

@@ -6,6 +6,7 @@ import {
   billedInPeriod,
   isBillingDueOn,
   planContractBilling,
+  termSkipReason,
 } from "@/lib/contract-billing";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
@@ -121,9 +122,9 @@ export async function GET(request: Request) {
   const dueTodayContracts: any[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of ((contracts ?? []) as any[])) {
-    const { str: todayStr, date: todayDate } = await orgToday(c.org_id);
-    if (c.start_date && c.start_date > todayStr) continue;
-    if (c.end_date && c.end_date < todayStr) continue;
+    const { date: todayDate } = await orgToday(c.org_id);
+    // Term vs the BILLED period (advance-shifted), not today — see termSkipReason.
+    if (termSkipReason(planContractBilling(c, todayDate, { billNow: false }), c)) continue;
     if (isBillingDueOn(c, todayDate)) dueTodayContracts.push(c);
   }
 
@@ -213,17 +214,17 @@ export async function GET(request: Request) {
       .single();
 
     if (invErr) {
-      // 23505 = unique_violation on crm_invoices_one_per_contract_month — a
-      // concurrent run (manual "Create Invoices" click, or an overlapping
-      // cron invocation) already inserted this month's invoice between the
+      // 23505 = unique_violation on crm_invoices_one_per_contract_date
+      // (contract_id, invoice_date) WHERE deleted_at IS NULL — a concurrent
+      // run (manual "Create Invoices" click, or an overlapping cron
+      // invocation) already inserted this billing date's invoice between the
       // SELECT check above and this INSERT; report it the same as the
       // pre-existing skip path rather than a raw error.
       //
-      // That index is keyed on (contract_id, year, month), so it is ALSO
-      // what a weekly/biweekly contract hits on its second invoice of a
-      // calendar month. Until the index is re-keyed on
-      // (contract_id, invoice_date), sub-monthly cadences are capped at one
-      // invoice per month — an under-bill, not an over-bill.
+      // The backstop is per billing DATE, not per month: sub-monthly
+      // cadences (weekly/biweekly) can legitimately have several invoices in
+      // one calendar month, and it's the period-window SELECT above that
+      // keeps a period from being billed twice.
       if (invErr.code === "23505") {
         results.push({ contractId: contract.id, status: "skipped", reason: alreadyBilledReason(plan) });
         continue;

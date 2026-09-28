@@ -2,6 +2,9 @@ import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("visits/complete");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -59,9 +62,14 @@ export async function completeVisit(
 
   // A visit already marked completed re-runs the side effects rather than
   // short-circuiting — see the single-visit route for why (repairs a visit
-  // whose first completion attempt died part-way through).
+  // whose first completion attempt died part-way through). Only once that
+  // completion is clearly no longer in flight, though: a double click / a
+  // second tab / bulk + single overlapping would otherwise run a "repair"
+  // concurrently with the first call's own side effects.
+  const REPAIR_MIN_AGE_MS = 2 * 60 * 1000;
   if (priorStatus === "completed") {
-    if (!orgId) {
+    const completedAgo = priorCompletedAt ? Date.now() - new Date(priorCompletedAt).getTime() : Number.POSITIVE_INFINITY;
+    if (!orgId || completedAgo < REPAIR_MIN_AGE_MS) {
       return { ok: true, jobId: v.job_id, clientId: v.client_id, alreadyCompleted: true };
     }
     const repair = await applyVisitCompletionSideEffects({
@@ -82,12 +90,20 @@ export async function completeVisit(
     };
   }
 
-  const { error: vErr } = await supabase
+  // Conditional flip: only the call that actually moves the row out of a
+  // non-completed status runs the side effects. Two concurrent completions
+  // both read a non-completed status above; exactly one of them wins here.
+  const { data: flipped, error: vErr } = await supabase
     .from("crm_job_visits")
     .update({ status: "completed", completed_at: new Date().toISOString() })
-    .eq("id", visitId);
+    .eq("id", visitId)
+    .neq("status", "completed")
+    .select("id");
 
   if (vErr) return { ok: false, status: 500, error: vErr.message };
+  if (!flipped || (flipped as unknown[]).length === 0) {
+    return { ok: true, jobId: v.job_id, clientId: v.client_id, alreadyCompleted: true };
+  }
 
   // Non-fatal — a failure here shouldn't block the rest of completion.
   try {
@@ -97,7 +113,7 @@ export async function completeVisit(
       todayInZone(await getOrgTimeZone(supabase, v.org_id))
     );
   } catch (err) {
-    console.error("[visits/complete] package min_days recalc failed:", err);
+    log.error("package min_days recalc failed", { visitId, error: err instanceof Error ? err.message : String(err) });
   }
 
   if (!orgId) {
@@ -110,7 +126,8 @@ export async function completeVisit(
     await supabase
       .from("crm_job_visits")
       .update({ status: priorStatus, completed_at: priorCompletedAt })
-      .eq("id", visitId);
+      .eq("id", visitId)
+      .eq("status", "completed");
     return { ok: false, status: 500, error: sideEffects.error };
   }
 

@@ -97,7 +97,7 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
  * history or estimate pricing via an ad-hoc analysis even when their role is
  * denied every prebuilt report over that data. Datasets with no entry here
  * (clients, jobs, visits, services, products, vendors, contracts, chemicals,
- * WIP, sales-rep month, contract usage) are gated only by view_report_center.
+ * WIP, sales-rep month, contract usage, ...) are gated only by view_report_center.
  * Every key must exist in src/types/crm-roles.ts.
  */
 const ACCOUNTING_DATASET_KEYS = [
@@ -121,6 +121,10 @@ export const DATASET_PERMISSION_KEYS: Record<string, string[]> = {
   rpt_payments: ["acct_rpt_payment_audit_summary", ...ACCOUNTING_DATASET_KEYS],
   rpt_estimates: ESTIMATE_DATASET_KEYS,
   rpt_estimate_line_items: ESTIMATE_DATASET_KEYS,
+  // Audit rows narrate every change in the org — pay rates, payment amounts,
+  // permission edits — so the raw dataset needs the same admin-level keys as
+  // the prebuilt Audit Log / Security Audit reports (REPORT_PERMISSION_KEYS).
+  rpt_audit_log: ["admin_rpt_audit_log", "admin_rpt_security_audit"],
 };
 
 /** True when the given permission set (from usePermissions()) allows querying

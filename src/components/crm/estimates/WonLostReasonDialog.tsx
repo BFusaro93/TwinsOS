@@ -24,15 +24,23 @@ import {
   resolveOutcomeReasons,
 } from "@/lib/estimates/outcome-reasons";
 
+export type EstimateTier = "basic" | "standard" | "premium";
+
 interface Props {
   stage: "accepted" | "lost";
   open: boolean;
-  onConfirm: (reason: string) => void;
+  /** Good/Better/Best estimate with more than one tier still open: accepting
+   *  requires choosing the tier the client bought (the others are marked
+   *  lost, same as the public/portal accept). Omit or pass [] otherwise. */
+  tierOptions?: { value: EstimateTier; label: string }[];
+  onConfirm: (reason: string, selectedTier?: EstimateTier) => void;
   onCancel: () => void;
 }
 
-export function WonLostReasonDialog({ stage, open, onConfirm, onCancel }: Props) {
+export function WonLostReasonDialog({ stage, open, tierOptions = [], onConfirm, onCancel }: Props) {
   const [reason, setReason] = useState("");
+  const [tier, setTier] = useState<EstimateTier | "">("");
+  const needsTier = stage === "accepted" && tierOptions.length > 0;
   // Won and Lost each read their own org-configured list; an unconfigured
   // list falls back to a default set so the dropdown is never empty or, worse,
   // offers "Client accepted proposal" as the only reason a quote was LOST.
@@ -41,12 +49,15 @@ export function WonLostReasonDialog({ stage, open, onConfirm, onCancel }: Props)
 
   function handleConfirm() {
     if (!reason) return;
-    onConfirm(reason);
+    if (needsTier && !tier) return;
+    onConfirm(reason, needsTier && tier ? tier : undefined);
     setReason("");
+    setTier("");
   }
 
   function handleCancel() {
     setReason("");
+    setTier("");
     onCancel();
   }
 
@@ -61,6 +72,22 @@ export function WonLostReasonDialog({ stage, open, onConfirm, onCancel }: Props)
         </DialogHeader>
 
         <div className="space-y-3 py-2">
+          {needsTier && (
+            <div className="space-y-1.5">
+              <Label htmlFor="tier-select">Tier the client accepted <span className="text-red-500">*</span></Label>
+              <Select value={tier} onValueChange={(v) => setTier(v as EstimateTier)}>
+                <SelectTrigger id="tier-select">
+                  <SelectValue placeholder="Select a tier…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tierOptions.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500">The other tiers&apos; lines are marked lost.</p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="reason-select">Reason <span className="text-red-500">*</span></Label>
             <Select value={reason} onValueChange={setReason}>
@@ -87,7 +114,7 @@ export function WonLostReasonDialog({ stage, open, onConfirm, onCancel }: Props)
         <DialogFooter>
           <Button variant="outline" onClick={handleCancel}>Cancel</Button>
           <Button
-            disabled={!reason}
+            disabled={!reason || (needsTier && !tier)}
             className={colorClass + " text-white"}
             onClick={handleConfirm}
           >

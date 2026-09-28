@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe create intent");
@@ -42,12 +43,21 @@ export async function POST(request: Request) {
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
-    .select("id, org_id, client_id, invoice_number, balance_cents")
+    .select("id, org_id, client_id, invoice_number, balance_cents, status")
     .eq("id", invoiceId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
     .single();
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  // Same rule as the allocation guard: money only lands on issued invoices.
+  // A charge against a draft/void one could never be applied — it would
+  // silently turn into client credit instead of paying the invoice.
+  if (invoice.status === "draft" || invoice.status === "void") {
+    return NextResponse.json(
+      { error: invoice.status === "void" ? "This invoice has been voided" : "Issue this invoice before taking payment on it" },
+      { status: 400 }
+    );
+  }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
   }
@@ -100,6 +110,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // Carry the client's Stripe customer so the duplicate lookup can see this
+  // intent, and refuse while a payment for this invoice is still in flight.
+  const service = createServiceClient();
+  const customerId = await ensureIntentCustomer({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    serviceDb: service,
+    orgId: invoice.org_id,
+    clientId: invoice.client_id,
+  });
+  const refusal = await refuseIfChargeInFlight({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    db: service,
+    invoiceIds: [invoice.id],
+    customerId,
+    isAch: paymentMethod === "us_bank_account",
+  });
+  if (refusal) return NextResponse.json(refusal.body, { status: refusal.status });
+
   // Created directly on the org's connected account (a "direct charge") so the
   // funds land in their own Stripe balance/payouts, never the platform's.
   const paymentIntent = await stripe.paymentIntents.create(
@@ -107,6 +137,7 @@ export async function POST(request: Request) {
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
         org_id: invoice.org_id,

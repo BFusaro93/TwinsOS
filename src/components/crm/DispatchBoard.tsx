@@ -107,6 +107,7 @@ import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
@@ -118,6 +119,48 @@ const EMPTY_MEMBER_TIMES: CrewMemberTime[] = [];
 // Same stable-empty-array reasoning as EMPTY_MEMBER_TIMES, for per-day crew
 // headcount overrides.
 const EMPTY_DAILY_OVERRIDES: { id: string; member_id: string; crew_id: string }[] = [];
+
+type ConfirmFn = ReturnType<typeof useConfirm>[0];
+
+/**
+ * POST /api/crm/visits/bulk-update. Completed visits that are already
+ * invoiced are locked against moves and status changes (409,
+ * code "invoiced_visit_locked"); an admin is offered an explicit override,
+ * everyone else gets the reason. Resolves to the final Response, or null when
+ * the admin declined the override. Throws with the server's message on any
+ * other failure.
+ */
+async function postBulkVisitUpdate(
+  body: { ids: string[]; updates: Record<string, unknown> },
+  opts: { isAdmin: boolean; confirm: ConfirmFn }
+): Promise<Response | null> {
+  const send = (override: boolean) =>
+    fetch("/api/crm/visits/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(override ? { ...body, override_invoiced: true } : body),
+    });
+  let res = await send(false);
+  if (res.status === 409) {
+    const err = await res.clone().json().catch(() => ({})) as { error?: string; code?: string };
+    if (err.code === "invoiced_visit_locked") {
+      if (!opts.isAdmin) throw new Error(err.error ?? "This visit is completed and already invoiced.");
+      const ok = await opts.confirm({
+        title: "Change an invoiced visit?",
+        description: `${err.error ?? "This visit is completed and already invoiced."} As an admin you can override — the invoice itself is NOT changed, so review it afterwards.`,
+        confirmLabel: "Override",
+        destructive: true,
+      });
+      if (!ok) return null;
+      res = await send(true);
+    }
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string | object };
+    throw new Error(typeof err.error === "string" ? err.error : `Update failed (HTTP ${res.status})`);
+  }
+  return res;
+}
 
 // Formats a "HH:MM" / "HH:MM:SS" 24h time string (the shape a native
 // <input type="time"> value/DB `time` column uses) into "3:00 PM" for
@@ -549,7 +592,8 @@ function JobDetailSheet({
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
   const { data: existingInvoice } = useInvoiceForVisit(visit.id);
   const { currentUser } = useCurrentUserStore();
-  const { can } = usePermissions();
+  const { can, isAdmin } = usePermissions();
+  const [confirm, confirmDialog] = useConfirm();
   // The visit row carries the client's name only — the email address and SMS
   // consent that the More menu needs live on the client record.
   const { data: visitClient } = useClient(visit.clientId ?? "");
@@ -813,16 +857,22 @@ function JobDetailSheet({
     try {
       // Reschedule through the same endpoint as Actions → Move to Day, so the
       // package min-days rule (409) and its other side effects apply here too.
-      if (dateChanged) {
-        const r = await fetch("/api/crm/visits/bulk-update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: [visit.id], updates: { scheduled_date: scheduledDate } }),
-        });
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          throw new Error((body as { error?: string }).error ?? `Failed to reschedule (HTTP ${r.status})`);
-        }
+      // Reopening a completed visit goes the same way: a completed visit
+      // that's already invoiced is locked (admin override only), and the
+      // route answers with the reason instead of a raw DB error.
+      const reopening = visit.status === "completed" && status !== "completed";
+      if (dateChanged || reopening) {
+        const r = await postBulkVisitUpdate(
+          {
+            ids: [visit.id],
+            updates: {
+              ...(dateChanged ? { scheduled_date: scheduledDate } : {}),
+              ...(reopening ? { status } : {}),
+            },
+          },
+          { isAdmin, confirm }
+        );
+        if (!r) return;
       }
       await updateVisit({ id: visit.id, updates, jobId: visit.jobId, jobType: visit.job?.jobType });
       toast.success(dateChanged ? `Saved — moved to ${scheduledDate}` : "Saved");
@@ -922,6 +972,7 @@ function JobDetailSheet({
 
   return (
     <>
+    {confirmDialog}
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
@@ -3388,7 +3439,8 @@ function parseISODateParam(raw: string | null): string | null {
 }
 
 export function DispatchBoard() {
-  const { can, isLoading: permissionsLoading } = usePermissions();
+  const { can, isAdmin, isLoading: permissionsLoading } = usePermissions();
+  const [confirm, confirmDialog] = useConfirm();
   // Selected day lives in the URL (?date=YYYY-MM-DD) so browser Back from a
   // client link, refresh, and shared links all land on the same day. Today is
   // the default when the param is absent or malformed.
@@ -3576,20 +3628,16 @@ export function DispatchBoard() {
       } else {
         const updates: Record<string, unknown> = { status };
         if (status === "skipped" || status === "cancelled") updates.skip_reason = reason?.trim() || null;
-        const res = await fetch("/api/crm/visits/bulk-update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids, updates }),
-        });
-        if (!res.ok) throw new Error("One or more updates failed");
+        const res = await postBulkVisitUpdate({ ids, updates }, { isAdmin, confirm });
+        if (!res) return;
       }
       await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["clients"] });
       setSelectedIds(new Set());
       toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${label}`);
-    } catch {
-      toast.error("Failed to update one or more visits");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update one or more visits");
     }
   }
   const createVisit = useCreateVisit();
@@ -4204,6 +4252,7 @@ export function DispatchBoard() {
 
   return (
     <div className="flex h-full flex-col gap-4">
+      {confirmDialog}
       {/* Page header */}
       <PageHeader
         title="Dispatch Board"
@@ -5096,18 +5145,13 @@ export function DispatchBoard() {
                     return;
                   }
                   try {
-                    const r = await fetch("/api/crm/visits/bulk-update", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ ids, updates: { scheduled_date: moveDayDate } }),
-                    });
-                    if (!r.ok) {
-                      const body = await r.json().catch(() => ({}));
-                      const msg = (body as { error?: string }).error ?? `HTTP ${r.status}`;
-                      // 409 = package min-days rule ("Step 2 must be at least
-                      // N days after Step 1 (earliest MM/DD)") — show it as-is.
-                      throw new Error(r.status === 409 ? msg : `Failed to move visits: ${msg}`);
-                    }
+                    // 409s (package min-days rule, invoiced-visit lock) come
+                    // back as the server's own message — shown as-is.
+                    const r = await postBulkVisitUpdate(
+                      { ids, updates: { scheduled_date: moveDayDate } },
+                      { isAdmin, confirm }
+                    );
+                    if (!r) return;
                     await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                     await qc.invalidateQueries({ queryKey: ["clients"] });
                     setSelectedIds(new Set());

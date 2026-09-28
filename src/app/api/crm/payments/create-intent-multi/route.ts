@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import {
@@ -10,13 +10,19 @@ import {
 } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe create intent (multi)");
 
 const CreateIntentSchema = z.object({
   clientId: z.string().uuid(),
-  allocations: z.array(z.object({ invoiceId: z.string().uuid(), amountCents: z.number().int().positive() })).min(1),
+  allocations: z
+    .array(z.object({ invoiceId: z.string().uuid(), amountCents: z.number().int().positive() }))
+    .min(1)
+    // A repeated invoice id would be charged (and, before the atomic
+    // recorder, applied) twice against one balance.
+    .refine((a) => new Set(a.map((x) => x.invoiceId)).size === a.length, "Each invoice can only appear once"),
   waiveFee: z.boolean().optional(),
   overrideFeeCents: z.number().int().min(0).optional(),
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
@@ -57,13 +63,16 @@ export async function POST(request: Request) {
   const invoiceIds = allocations.map((a) => a.invoiceId);
   const { data: invoices } = await supabase
     .from("crm_invoices")
-    .select("id, balance_cents")
+    .select("id, balance_cents, status")
     .in("id", invoiceIds)
     .eq("client_id", clientId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null);
   if (!invoices || invoices.length !== invoiceIds.length) {
     return NextResponse.json({ error: "One or more invoices were not found for this client" }, { status: 404 });
+  }
+  if (invoices.some((i) => i.status === "draft" || i.status === "void")) {
+    return NextResponse.json({ error: "Draft and voided invoices can't be paid — remove them from this payment" }, { status: 400 });
   }
   const balanceByInvoice = new Map(invoices.map((i) => [i.id, i.balance_cents]));
   for (const a of allocations) {
@@ -121,12 +130,34 @@ export async function POST(request: Request) {
         )
       : { feeCents: 0, totalChargeCents: balanceCents };
 
+  // Carry the client's Stripe customer so the duplicate lookup can see this
+  // intent, and refuse while a payment for any of these invoices is in flight.
+  const service = createServiceClient();
+  const customerId = await ensureIntentCustomer({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    serviceDb: service,
+    orgId: profile.org_id,
+    clientId,
+  });
+  const refusal = await refuseIfChargeInFlight({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    db: service,
+    invoiceIds,
+    customerId,
+    isAch: paymentMethod === "us_bank_account",
+    plural: true,
+  });
+  if (refusal) return NextResponse.json(refusal.body, { status: refusal.status });
+
   try {
   const paymentIntent = await stripe.paymentIntents.create(
     {
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice_multi",
         org_id: profile.org_id,

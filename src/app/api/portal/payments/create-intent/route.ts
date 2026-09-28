@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
-    .select("id, org_id, client_id, invoice_number, balance_cents")
+    .select("id, org_id, client_id, invoice_number, balance_cents, status")
     .eq("id", invoiceId)
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
@@ -40,6 +41,9 @@ export async function POST(request: Request) {
     .is("deleted_at", null)
     .single();
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  if (invoice.status === "void") {
+    return NextResponse.json({ error: "This invoice has been voided" }, { status: 400 });
+  }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
   }
@@ -81,6 +85,28 @@ export async function POST(request: Request) {
     }
   }
 
+  // Always carry the client's Stripe customer (so the duplicate lookup can
+  // see this intent), and refuse while a payment for this invoice is still in
+  // flight — a bank debit takes days to settle and the balance doesn't move
+  // until it does.
+  const service = createServiceClient();
+  const customerId = await ensureIntentCustomer({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    serviceDb: service,
+    orgId: invoice.org_id,
+    clientId: invoice.client_id,
+  });
+  const refusal = await refuseIfChargeInFlight({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    db: service,
+    invoiceIds: [invoice.id],
+    customerId,
+    isAch: paymentMethod === "us_bank_account",
+  });
+  if (refusal) return NextResponse.json({ error: refusal.body.error, code: refusal.body.code }, { status: refusal.status });
+
   // Direct charge on the org's connected account — see create-intent/route.ts
   // (CRM staff-facing version) for the same pattern.
   const paymentIntent = await stripe.paymentIntents.create(
@@ -88,6 +114,7 @@ export async function POST(request: Request) {
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
         org_id: invoice.org_id,

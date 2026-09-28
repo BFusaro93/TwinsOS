@@ -348,3 +348,26 @@ export function alreadyBilledReason(plan: BillingPlan): string {
       return "already billed for this month";
   }
 }
+
+/**
+ * Why a plan falls outside the contract's term, or null when it may bill.
+ *
+ * The term has to be tested against the period being BILLED, not today. With
+ * "bill month in advance" on, the run in September bills October: a contract
+ * starting Oct 1 was skipped in September ("hasn't started") and its first
+ * month was never invoiced, while one ending Dec 31 still billed in December —
+ * for January, a month after it ended. The billed window overlapping the term
+ * is the rule: it bills a contract's first period and stops after its last.
+ *
+ * `one_time` has no period window, so its single invoice date stands in.
+ */
+export function termSkipReason(
+  plan: BillingPlan,
+  contract: { start_date?: string | null; end_date?: string | null },
+): string | null {
+  const windowStart = plan.periodStart ?? plan.invoiceDate;
+  const windowEnd = plan.periodEnd ?? plan.invoiceDate;
+  if (contract.start_date && contract.start_date > windowEnd) return "contract hasn't started yet";
+  if (contract.end_date && contract.end_date < windowStart) return "contract has ended";
+  return null;
+}

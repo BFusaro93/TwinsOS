@@ -25,12 +25,13 @@ const log = logger.child("stripe record charge");
  * (and remains the *only* applier for browser-confirmed intents from
  * create-intent / create-intent-multi, and for ACH, which settles days later).
  *
- * IDEMPOTENCY: keyed on the Stripe PaymentIntent id via the unique partial
- * index `crm_payments_stripe_payment_intent_id_idx`. Both writers race the
- * same INSERT; the loser gets a 23505 unique violation and returns
- * "already_recorded" without touching invoice balances. This is enforced by
- * the database, not by a read-then-write check, so it is safe under genuine
- * concurrency (webhook and route landing at the same instant).
+ * IDEMPOTENCY + ATOMICITY: the whole ledger write is one transaction in the
+ * record_stripe_invoice_payment() RPC, keyed on the Stripe PaymentIntent id
+ * (advisory lock + existence check, with the unique partial index
+ * `crm_payments_stripe_payment_intent_id_idx` as the backstop). Both writers
+ * call it; the second gets "already_recorded" with no side effects. Because
+ * nothing is committed unless everything is, a failed attempt leaves no
+ * half-recorded payment for a retry to trip over.
  */
 export type RecordStripeChargeResult = "applied" | "already_recorded" | "skipped" | "error";
 
@@ -164,106 +165,121 @@ async function recordSingleInvoiceCharge({
   // `balanceCents` is the balance the intent was created against, captured at
   // create-intent time — if a second PaymentIntent for the same invoice was
   // created before the first settled (e.g. the customer opened the pay link
-  // on two devices), both can genuinely succeed as real charges, each
-  // quoting the FULL balance owed at creation time. Re-check the invoice's
-  // actual remaining balance right before applying this payment and clamp to
-  // it, crediting any excess as unused/prepayment credit.
-  const { data: invoiceBefore, error: invoiceBeforeErr } = await db
-    .from("crm_invoices")
-    .select("total_cents, amount_paid_cents, status")
-    .eq("id", invoiceId)
-    .eq("org_id", orgId)
-    .single();
-  if (invoiceBeforeErr) {
-    log.error("failed to load invoice before applying payment", {
-      error: invoiceBeforeErr,
-      paymentIntentId: paymentIntent.id,
-    });
+  // on two devices), both can genuinely succeed as real charges, each quoting
+  // the FULL balance owed at creation time. record_stripe_invoice_payment()
+  // clamps to the invoice's live remaining balance under a row lock and
+  // credits any excess to the client as unused credit.
+  return applyViaRpc({
+    db,
+    supabase,
+    paymentIntent,
+    orgId,
+    clientId,
+    allocations: [{ invoiceId, amountCents: balanceCents }],
+    feeCents,
+    method,
+    isAch,
+  });
+}
+
+interface ApplyViaRpcArgs {
+  db: Db;
+  supabase: AnySupabase;
+  paymentIntent: Stripe.PaymentIntent;
+  orgId: string;
+  clientId: string;
+  allocations: { invoiceId: string; amountCents: number }[];
+  feeCents: number;
+  method: string;
+  isAch: boolean;
+}
+
+/**
+ * The ledger write itself: ONE transaction in record_stripe_invoice_payment()
+ * (20260927100100). It used to be five separately-committed steps here —
+ * unlocked read → clamp → insert payment → apply_payment_to_invoice →
+ * insert allocation — and when the last step failed, amount_paid had already
+ * risen, the webhook 500'd, and Stripe's retry hit the unique index and
+ * returned "already_recorded": the money was lost from the client's credit and
+ * the invoice showed paid > total. Now a failure writes nothing, so a retry
+ * starts clean; a repeat of an already-recorded intent is a no-op in the DB.
+ *
+ * The RPC also refuses to apply to draft/void/deleted invoices (their share
+ * becomes client credit — a payment never un-voids an invoice) and merges
+ * duplicate invoice ids in the split.
+ */
+async function applyViaRpc({
+  db,
+  supabase,
+  paymentIntent,
+  orgId,
+  clientId,
+  allocations,
+  feeCents,
+  method,
+  isAch,
+}: ApplyViaRpcArgs): Promise<RecordStripeChargeResult> {
+  const { data, error } = await db.rpc("record_stripe_invoice_payment", {
+    p_org_id: orgId,
+    p_client_id: clientId,
+    p_payment_intent_id: paymentIntent.id,
+    p_allocations: allocations.map((a) => ({ invoice_id: a.invoiceId, amount_cents: a.amountCents })),
+    p_fee_cents: feeCents,
+    p_method: method,
+    p_payment_date: todayInZone(await getOrgTimeZone(db, orgId)),
+    p_channel_label: isAch ? "bank transfer" : "card",
+  });
+
+  if (error) {
+    // Unique violation = the other writer (synchronous route vs webhook)
+    // committed first despite the advisory lock (e.g. a pre-migration row).
+    if (error.code === "23505") return "already_recorded";
+    log.error("failed to record stripe payment", { error, paymentIntentId: paymentIntent.id });
     return "error";
   }
 
-  const currentBalanceCents = Math.max(0, invoiceBefore.total_cents - invoiceBefore.amount_paid_cents);
-  const appliedCents = Math.min(balanceCents, currentBalanceCents);
-  const overpaidCents = balanceCents - appliedCents;
-
-  const { data: inserted, error: insertErr } = await db
-    .from("crm_payments")
-    .insert({
-      org_id: orgId,
-      invoice_id: invoiceId,
-      client_id: clientId,
-      amount_cents: balanceCents,
-      unused_amount_cents: overpaidCents,
-      payment_date: todayInZone(await getOrgTimeZone(db, orgId)),
-      method,
-      memo:
-        overpaidCents > 0
-          ? `Paid online via ${isAch ? "bank transfer" : "card"} (exceeds invoice balance — excess credited to account)`
-          : `Paid online via ${isAch ? "bank transfer" : "card"}`,
-      is_prepayment: false,
-      processing_fee_cents: feeCents,
-      stripe_payment_intent_id: paymentIntent.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      // This PaymentIntent is already recorded — either the synchronous charge
-      // route beat the webhook to it, or Stripe retried the delivery. The
-      // unique index on stripe_payment_intent_id is what makes the two writers
-      // safe to run concurrently: the loser lands here and touches nothing.
-      return "already_recorded";
-    }
-    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    log.error("record_stripe_invoice_payment returned no row", { paymentIntentId: paymentIntent.id });
     return "error";
   }
+  if (row.result === "already_recorded") return "already_recorded";
 
+  const paymentId: string = row.payment_id;
+  const unusedCents: number = row.unused_cents ?? 0;
+  const amountCents: number = row.amount_cents ?? 0;
+  const newlyPaidInvoiceIds: string[] = row.newly_paid_invoice_ids ?? [];
+
+  // Everything below is best-effort follow-up: the money is already
+  // recorded atomically, so none of it may turn this into an "error" (that
+  // would make the webhook 500 and Stripe retry a no-op forever).
   try {
-    // Row-locked (SELECT ... FOR UPDATE inside the RPC) so a concurrent
-    // recording/edit/refund against this same invoice can't read the same
-    // stale amount_paid_cents and clobber this write.
-    const { data: rpcResult, error: rpcErr } = await db.rpc("apply_payment_to_invoice", {
-      p_invoice_id: invoiceId,
-      p_delta_cents: appliedCents,
-    });
-    if (rpcErr) throw rpcErr;
-    const wasNewlyPaid = !!rpcResult?.[0]?.was_newly_paid;
-
-    if (wasNewlyPaid) {
+    for (const invoiceId of newlyPaidInvoiceIds) {
       await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
     }
 
-    if (appliedCents > 0) {
-      const { error: allocErr } = await db
-        .from("crm_payment_allocations")
-        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: appliedCents });
-      if (allocErr) throw allocErr;
-    }
-
-    await db.rpc("sync_client_balance", { p_client_id: clientId });
-
+    const invoiceCount = new Set(allocations.map((a) => a.invoiceId)).size;
     await db.from("client_activity").insert({
       org_id: orgId,
       client_id: clientId,
       activity_type: "payment",
-      subject: `Payment received: ${method} (online)${overpaidCents > 0 ? " — partly credited to account" : ""}`,
-      amount_cents: balanceCents,
-      ref_id: inserted.id,
+      subject: `Payment received: ${method} (online)${invoiceCount > 1 ? ` — ${invoiceCount} invoices` : ""}${
+        unusedCents > 0 ? `${invoiceCount > 1 ? "," : " —"} partly credited to account` : ""
+      }`,
+      amount_cents: amountCents,
+      ref_id: paymentId,
       ref_table: "crm_payments",
     });
   } catch (err) {
-    log.error("recorded payment but failed to apply it", { error: err, paymentId: inserted.id });
-    return "error";
+    log.error("recorded payment but a follow-up step failed", { error: err, paymentId });
   }
 
   return "applied";
 }
 
-/** One charge split across several invoices for the same client — mirrors the
- * single-invoice path but loops the invoice update + allocation insert under a
- * single crm_payments row, the same way a manually-recorded multi-invoice
- * payment is split via crm_payment_allocations. */
+/** One charge split across several invoices for the same client — one
+ * crm_payments row with one crm_payment_allocations row per invoice, the same
+ * way a manually-recorded multi-invoice payment is split. */
 async function recordMultiInvoiceCharge({
   db,
   supabase,
@@ -292,118 +308,35 @@ async function recordMultiInvoiceCharge({
     return "error";
   }
 
-  const allocations = decodeAllocations(encodedAllocations);
-  const totalCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
+  let allocations: { invoiceId: string; amountCents: number }[];
+  try {
+    allocations = decodeAllocations(encodedAllocations);
+  } catch (err) {
+    log.error("could not decode allocations on multi-invoice payment intent", { error: err, paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+  if (allocations.length === 0 || allocations.some((a) => !a.invoiceId || !Number.isFinite(a.amountCents) || a.amountCents <= 0)) {
+    log.error("multi-invoice payment intent has no valid allocations", { paymentIntentId: paymentIntent.id });
+    return "error";
+  }
 
   const { method, isAch } = await resolveMethod(db, orgId, paymentIntent, connectedAccountId);
 
-  // Re-check each allocated invoice's actual remaining balance right before
-  // applying this payment and clamp each allocation to it, crediting any
-  // excess as unused/prepayment credit — same race and same fix as the
-  // single-invoice path above.
-  const clampedAllocations: { invoiceId: string; amountCents: number }[] = [];
-  let overpaidCents = 0;
-  for (const alloc of allocations) {
-    // Scoped by client_id as well as org_id/id: metadata.client_id and the encoded
-    // allocation list are two independently-editable metadata keys on a PaymentIntent
-    // a connected account's own owner can forge — this stops a same-org mismatch
-    // between the two from applying one client's charge to another client's invoice.
-    const { data: invoice, error: invoiceErr } = await db
-      .from("crm_invoices")
-      .select("total_cents, amount_paid_cents")
-      .eq("id", alloc.invoiceId)
-      .eq("org_id", orgId)
-      .eq("client_id", clientId)
-      .single();
-    if (invoiceErr) {
-      log.error("failed to load invoice before applying multi-invoice payment", {
-        error: invoiceErr,
-        paymentIntentId: paymentIntent.id,
-      });
-      return "error";
-    }
-
-    const currentBalanceCents = Math.max(0, invoice.total_cents - invoice.amount_paid_cents);
-    const appliedCents = Math.min(alloc.amountCents, currentBalanceCents);
-    clampedAllocations.push({ invoiceId: alloc.invoiceId, amountCents: appliedCents });
-    overpaidCents += alloc.amountCents - appliedCents;
-  }
-
-  const { data: inserted, error: insertErr } = await db
-    .from("crm_payments")
-    .insert({
-      org_id: orgId,
-      invoice_id: allocations.length === 1 ? allocations[0].invoiceId : null,
-      client_id: clientId,
-      amount_cents: totalCents,
-      unused_amount_cents: overpaidCents,
-      payment_date: todayInZone(await getOrgTimeZone(db, orgId)),
-      method,
-      memo:
-        overpaidCents > 0
-          ? `Paid online via ${isAch ? "bank transfer" : "card"} (exceeds invoice balance — excess credited to account)`
-          : `Paid online via ${isAch ? "bank transfer" : "card"}`,
-      is_prepayment: false,
-      processing_fee_cents: feeCents,
-      stripe_payment_intent_id: paymentIntent.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      // Already recorded (synchronous route beat the webhook, or a retried
-      // delivery). Nothing below has run yet, so no allocation or invoice
-      // balance has been touched — a clean no-op.
-      return "already_recorded";
-    }
-    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
-    return "error";
-  }
-
-  try {
-    const newlyPaidInvoiceIds: string[] = [];
-
-    for (const alloc of clampedAllocations) {
-      // Row-locked via apply_payment_to_invoice() instead of a manual
-      // read-then-write — two concurrent payments landing on the same invoice
-      // must serialize, not race on a stale amount_paid_cents read.
-      const { data: rpcResult, error: rpcErr } = await db.rpc("apply_payment_to_invoice", {
-        p_invoice_id: alloc.invoiceId,
-        p_delta_cents: alloc.amountCents,
-      });
-      if (rpcErr) throw rpcErr;
-      const wasNewlyPaid = !!rpcResult?.[0]?.was_newly_paid;
-
-      if (wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
-
-      if (alloc.amountCents > 0) {
-        const { error: allocErr } = await db
-          .from("crm_payment_allocations")
-          .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: alloc.invoiceId, amount_cents: alloc.amountCents });
-        if (allocErr) throw allocErr;
-      }
-    }
-
-    for (const invoiceId of newlyPaidInvoiceIds) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
-    }
-
-    await db.rpc("sync_client_balance", { p_client_id: clientId });
-
-    await db.from("client_activity").insert({
-      org_id: orgId,
-      client_id: clientId,
-      activity_type: "payment",
-      subject: `Payment received: ${method} (online) — ${allocations.length} invoices${overpaidCents > 0 ? ", partly credited to account" : ""}`,
-      amount_cents: totalCents,
-      ref_id: inserted.id,
-      ref_table: "crm_payments",
-    });
-  } catch (err) {
-    log.error("recorded multi-invoice payment but failed to apply it", { error: err, paymentId: inserted.id });
-    return "error";
-  }
-
-  return "applied";
+  // Each allocation is clamped to its invoice's live balance inside the RPC —
+  // same race and same fix as the single-invoice path. The RPC also scopes
+  // every invoice to metadata.client_id (or its child sub-accounts): the
+  // client id and the encoded allocation list are two independently-editable
+  // metadata keys a connected account's own owner can forge, so a mismatch
+  // between them must not apply one client's charge to another's invoice.
+  return applyViaRpc({
+    db,
+    supabase,
+    paymentIntent,
+    orgId,
+    clientId,
+    allocations,
+    feeCents,
+    method,
+    isAch,
+  });
 }

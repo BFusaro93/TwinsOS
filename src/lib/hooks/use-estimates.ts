@@ -392,14 +392,70 @@ export function useUpdateEstimate() {
 export function useUpdateEstimateStage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, stage, clientId, reason }: { id: string; stage: string; clientId?: string; reason?: string }) => {
+    mutationFn: async ({ id, stage, clientId, reason, selectedTier }: {
+      id: string;
+      stage: string;
+      clientId?: string;
+      reason?: string;
+      /** Required to accept a Good/Better/Best estimate that still has more
+       *  than one tier open — see below. */
+      selectedTier?: "basic" | "standard" | "premium";
+    }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: existing } = await (supabase as any)
         .from("estimates")
-        .select("client_id, description, sales_rep_id")
+        .select("client_id, description, sales_rep_id, tiers_enabled")
         .eq("id", id)
         .single();
+
+      // Accepting a tiered estimate from the office must pick ONE tier, the
+      // same as the public proposal / portal accept: the chosen tier's (and
+      // untiered) open lines are won, every other tier's lines are lost, and
+      // the totals are recomputed to that tier. Marking it Accepted with all
+      // tiers still open left the estimate totalling every option at once
+      // (PROD #26 is accepted with all three tiers still 'quote').
+      if (stage === "accepted" && existing?.tiers_enabled) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: tierRows, error: tierErr } = await (supabase as any)
+          .from("estimate_line_items")
+          .select("tier")
+          .eq("estimate_id", id)
+          .neq("status", "lost")
+          .is("deleted_at", null)
+          .not("tier", "is", null);
+        if (tierErr) throw tierErr;
+        const openTiers = new Set(((tierRows ?? []) as { tier: string }[]).map((r) => r.tier));
+        if (selectedTier && !openTiers.has(selectedTier)) {
+          throw new Error("That tier has no open lines on this estimate");
+        }
+        const tier = selectedTier ?? (openTiers.size === 1 ? [...openTiers][0] : null);
+        if (openTiers.size > 1 && !tier) {
+          throw new Error("Choose the tier the client accepted");
+        }
+        if (tier) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: wonErr } = await (supabase as any)
+            .from("estimate_line_items")
+            .update({ status: "won" })
+            .eq("estimate_id", id)
+            .eq("status", "quote")
+            .is("deleted_at", null)
+            .or(`tier.is.null,tier.eq.${tier}`);
+          if (wonErr) throw wonErr;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: lostErr } = await (supabase as any)
+            .from("estimate_line_items")
+            .update({ status: "lost" })
+            .eq("estimate_id", id)
+            .neq("status", "lost")
+            .is("deleted_at", null)
+            .not("tier", "is", null)
+            .neq("tier", tier);
+          if (lostErr) throw lostErr;
+          await recalcEstimateTotalsShared(supabase, id);
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patch: Record<string, unknown> = { stage };
       if (reason !== undefined) patch.reason = reason;
@@ -744,6 +800,34 @@ export interface EstimateVersion {
       sectionName: string | null;
     }[];
   };
+}
+
+/**
+ * Sum of each line's priced sub-items (estimate_line_item_subitems), keyed by
+ * line id. Sub-items are real revenue — recalcEstimateTotals adds them to the
+ * subtotal — so anything that prices a line off the estimate (job
+ * conversion) has to fold them into that line.
+ */
+export function useEstimateSubitemTotals(estimateId: string) {
+  return useQuery({
+    queryKey: ["estimates", "subitem-totals", estimateId],
+    enabled: !!estimateId,
+    queryFn: async (): Promise<Record<string, number>> => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("estimate_line_item_subitems")
+        .select("line_item_id, total_cents, estimate_line_items!inner(estimate_id)")
+        .eq("estimate_line_items.estimate_id", estimateId)
+        .is("deleted_at", null);
+      if (error) throw error;
+      const totals: Record<string, number> = {};
+      for (const r of (data ?? []) as { line_item_id: string; total_cents: number | null }[]) {
+        totals[r.line_item_id] = (totals[r.line_item_id] ?? 0) + (r.total_cents ?? 0);
+      }
+      return totals;
+    },
+  });
 }
 
 export function useEstimateVersions(estimateId: string) {

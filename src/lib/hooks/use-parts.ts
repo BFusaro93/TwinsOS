@@ -7,6 +7,30 @@ import { useSettingsStore } from "@/stores/settings-store";
 import type { BulkImportResult } from "@/lib/csv";
 import type { Part } from "@/types/cmms";
 
+/**
+ * Sets a part's quantity_on_hand through adjust_part_quantity_manual — the
+ * one audited path for non-purchasing quantity changes. The RPC rejects
+ * negatives and keeps cost_layers in step (increase → new layer at the
+ * part's current unit cost, decrease → FIFO consume).
+ */
+async function adjustPartQuantity(
+  supabase: ReturnType<typeof createClient>,
+  partId: string,
+  newQty: number,
+  reason: string
+): Promise<void> {
+  if (!Number.isInteger(newQty) || newQty < 0) {
+    throw new Error("Quantity on hand must be a whole number of 0 or more");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.rpc as any)("adjust_part_quantity_manual", {
+    p_part_id: partId,
+    p_new_qty: newQty,
+    p_reason: reason,
+  });
+  if (error) throw error;
+}
+
 export function useParts() {
   return useQuery({
     queryKey: ["parts"],
@@ -144,7 +168,7 @@ export function useUpdatePart() {
           ...(input.partNumber !== undefined && { part_number: input.partNumber }),
           ...(input.description !== undefined && { description: input.description }),
           ...(input.categories !== undefined && { categories: input.categories, category: input.categories[0] ?? "" }),
-          ...(input.quantityOnHand !== undefined && { quantity_on_hand: input.quantityOnHand }),
+          // quantity_on_hand is deliberately NOT written here — see the RPC call below.
           ...(input.minimumStock !== undefined && { minimum_stock: input.minimumStock }),
           ...(input.unitCost !== undefined && { unit_cost: input.unitCost }),
           ...(input.vendorId !== undefined && { vendor_id: input.vendorId }),
@@ -160,8 +184,23 @@ export function useUpdatePart() {
         .single();
       if (error) throw error;
 
+      // Quantity changes go through the audited RPC, which also keeps
+      // cost_layers in step (append at current unit cost / FIFO consume).
+      // A raw update here left layers out of sync with quantity_on_hand.
+      let row = data;
+      if (input.quantityOnHand !== undefined && input.quantityOnHand !== data.quantity_on_hand) {
+        await adjustPartQuantity(supabase, id, input.quantityOnHand, "Edited via part form");
+        const { data: refreshed, error: refreshErr } = await supabase
+          .from("parts")
+          .select()
+          .eq("id", id)
+          .single();
+        if (refreshErr) throw refreshErr;
+        row = refreshed;
+      }
+
       // Sync changed fields to the linked product_items record
-      if (data.product_item_id) {
+      if (row.product_item_id) {
         const productSync: Record<string, unknown> = {};
         if (input.name !== undefined) productSync.name = input.name;
         if (input.partNumber !== undefined) productSync.part_number = input.partNumber;
@@ -178,11 +217,11 @@ export function useUpdatePart() {
             .from("product_items")
             // `as never`: postgrest rejects excess properties on a dynamically-built patch.
             .update(productSync as never)
-            .eq("id", data.product_item_id);
+            .eq("id", row.product_item_id);
         }
       }
 
-      return mapPart(data);
+      return mapPart(row);
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
@@ -210,13 +249,7 @@ export function useAdjustPartQuantityManual() {
         .single();
       if (fetchErr) throw fetchErr;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.rpc as any)("adjust_part_quantity_manual", {
-        p_part_id: input.id,
-        p_new_qty: input.quantityOnHand,
-        p_reason: input.reason,
-      });
-      if (error) throw error;
+      await adjustPartQuantity(supabase, input.id, input.quantityOnHand, input.reason);
 
       if (part.product_item_id) {
         await supabase
@@ -356,7 +389,14 @@ export function useBulkImportParts() {
             unitCostCents = parsed;
           }
 
-          const qoh = parseInt(r.quantityOnHand) || 0;
+          // Whole, non-negative numbers only: parseInt accepted "-5" (and
+          // "3.7" as 3), and a negative went straight past the RPC's guard.
+          const qohRaw = r.quantityOnHand?.trim() ?? "";
+          if (qohRaw !== "" && !/^\d+$/.test(qohRaw)) {
+            failed.push({ row: rowNum, error: `"${name}": invalid quantity on hand ("${r.quantityOnHand}") — must be a whole number of 0 or more` });
+            continue;
+          }
+          const qoh = qohRaw === "" ? 0 : parseInt(qohRaw, 10);
           const minStock = parseInt(r.minimumStock) || 0;
           const row = {
             name,
@@ -382,22 +422,37 @@ export function useBulkImportParts() {
             .select("id, product_item_id")
             .single();
           if (error?.code === "23505") {
-            // Duplicate — update existing record by part_number
-            const { error: updateError } = await supabase.from("parts").update({
+            // Duplicate — update existing record by part_number. Quantity is
+            // not written directly: it goes through the audited RPC so the
+            // cost layers follow (and only when the CSV actually has a value).
+            const { data: updated, error: updateError } = await supabase.from("parts").update({
               name: row.name,
               description: row.description,
               category: row.category,
               categories: row.categories as string[],
               unit_cost: row.unit_cost,
-              quantity_on_hand: row.quantity_on_hand,
               minimum_stock: row.minimum_stock,
               vendor_name: row.vendor_name,
               location: row.location,
               is_inventory: row.is_inventory,
-            }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+            }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
+              .select("id, quantity_on_hand");
             if (updateError) {
               failed.push({ row: rowNum, error: `"${name}": ${updateError.message}` });
               continue;
+            }
+            if (qohRaw !== "") {
+              try {
+                for (const existing of updated ?? []) {
+                  if (existing.quantity_on_hand !== qoh) {
+                    await adjustPartQuantity(supabase, existing.id, qoh, "CSV import");
+                  }
+                }
+              } catch (qtyErr) {
+                const msg = (qtyErr as { message?: string } | null)?.message ?? "quantity update failed";
+                failed.push({ row: rowNum, error: `"${name}": ${msg}` });
+                continue;
+              }
             }
           } else if (error) {
             failed.push({ row: rowNum, error: `"${name}": ${error.message}` });
