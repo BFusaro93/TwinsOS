@@ -90,10 +90,29 @@ export function SnowInvoicing() {
     return [...groups.entries()];
   }, [rows]);
 
+  // Visit ids per billing group. A per-event group's price is split across
+  // its visits, and once ANY member is invoiced the whole group leaves the
+  // queue (see useUninvoicedSnowVisits) — so billing only some of a group's
+  // visits would charge a fraction of the event price and strand the rest
+  // forever. Selection therefore always covers whole groups.
+  const groupMemberIds = useMemo(() => {
+    const byKey = new Map<string, string[]>();
+    for (const v of visits) {
+      const key = billingGroupKey(v);
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push(v.id);
+    }
+    const byVisitId = new Map<string, string[]>();
+    for (const ids of byKey.values()) for (const id of ids) byVisitId.set(id, ids);
+    return byVisitId;
+  }, [visits]);
+
   function toggle(id: string) {
+    const members = groupMemberIds.get(id) ?? [id];
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) members.forEach((m) => next.delete(m));
+      else members.forEach((m) => next.add(m));
       return next;
     });
   }
@@ -106,12 +125,15 @@ export function SnowInvoicing() {
   const selectedTotal = rows.filter((r) => selectedIds.has(r.visit.id)).reduce((s, r) => s + r.amountCents, 0);
 
   async function handleGenerate() {
+    // Defensive: expand any partial selection to whole billing groups.
+    const effectiveSelected = new Set<string>();
+    for (const id of selectedIds) for (const m of groupMemberIds.get(id) ?? [id]) effectiveSelected.add(m);
     const groups = byClient
       .map(([clientId, g]) => ({
         clientId,
         description: "Snow Service",
         visits: g.rows
-          .filter((r) => selectedIds.has(r.visit.id))
+          .filter((r) => effectiveSelected.has(r.visit.id))
           .map((r) => ({
             visitId: r.visit.id,
             jobId: r.visit.jobId,
@@ -125,7 +147,7 @@ export function SnowInvoicing() {
     if (groups.length === 0) { toast.error("No visits selected"); return; }
 
     const flagged = rows.filter(
-      (r) => selectedIds.has(r.visit.id) && (r.visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber !== undefined
+      (r) => effectiveSelected.has(r.visit.id) && (r.visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber !== undefined
     );
     if (flagged.length > 0) {
       const nums = [...new Set(flagged.map((r) => (r.visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber))]

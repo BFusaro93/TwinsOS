@@ -504,17 +504,35 @@ export async function applyVisitCompletionSideEffects(
               .single();
             if (invErr) throw invErr;
             const newInvoiceId = (newInvoice as { id: string }).id;
+            let newInvoiceCreated = true;
 
             if (lineItems.length > 0) {
               const { data: insertedLines, error: lineErr } = await supabase
                 .from("crm_invoice_line_items")
                 .insert(toLineRows(newInvoiceId, 0))
                 .select("id");
-              if (lineErr) throw lineErr;
-              await linkProductLines(insertedLines as { id: string }[] | null);
+              if (lineErr) {
+                // Header and lines are two statements — don't leave a
+                // line-less draft (with full totals) behind when the lines
+                // fail, e.g. a concurrent completion already claimed this
+                // visit's line via crm_invoice_line_items_visit_id_unique.
+                // Soft delete: no number was assigned yet, nothing refers to it.
+                await supabase
+                  .from("crm_invoices")
+                  .update({ deleted_at: new Date().toISOString() })
+                  .eq("id", newInvoiceId);
+                if ((lineErr as { code?: string }).code === "23505") {
+                  result.invoiceSkipReason = "already_invoiced";
+                  newInvoiceCreated = false;
+                } else {
+                  throw lineErr;
+                }
+              } else {
+                await linkProductLines(insertedLines as { id: string }[] | null);
+              }
             }
 
-            if (j.client_id) {
+            if (newInvoiceCreated && j.client_id) {
               // Auto-created invoices skip the manual "assign on save" flow, so
               // assign the number here or it stays null indefinitely.
               const { data: invoiceNumber, error: assignErr } = await supabase.rpc(
@@ -541,8 +559,10 @@ export async function applyVisitCompletionSideEffects(
                 });
               }
             }
-            result.invoiced = true;
-            result.invoiceId = newInvoiceId;
+            if (newInvoiceCreated) {
+              result.invoiced = true;
+              result.invoiceId = newInvoiceId;
+            }
           }
         }
       }

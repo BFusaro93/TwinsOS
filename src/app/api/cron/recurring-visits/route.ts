@@ -2,193 +2,37 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { DEFAULT_TIME_ZONE, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
+import { todayInZone } from "@/lib/time/zone";
+import { logger } from "@/lib/logger";
+import {
+  GENERATOR_JOB_COLUMNS,
+  NON_GENERATING_JOB_STATUSES,
+  generateVisitsForJobs,
+  type GeneratorJob,
+} from "@/lib/visits/generate";
+
+const log = logger.child("cron/recurring-visits");
 
 /**
- * GET /api/cron/recurring-visits — called daily by Vercel Cron at 06:00 UTC
+ * GET /api/cron/recurring-visits — called daily by Vercel Cron at 06:00 UTC.
  *
- * For every active recurring job, look ahead LOOKAHEAD_DAYS (default 14) and
- * create crm_job_visits rows for any occurrence dates that don't already have
- * one.  Idempotent — safe to re-run.
- *
- * Schedule string format (from SCHEDULE_OPTIONS in JobsList):
- *   "Weekly - Thursday"
- *   "Bi-weekly - Monday - Even Weeks"
- *   "Bi-weekly - Monday - Odd Weeks"
- *   "Custom"  ← falls back to schedule_days array + weekly frequency
- *
- * For package jobs (job_type = 'package') the same logic applies but the
- * total number of visits is capped by crm_jobs.package_total_steps.
+ * Tops up every active recurring / package job's visits LOOKAHEAD_DAYS ahead
+ * of ITS org's today, using the same generator as /api/crm/jobs/generate-visits
+ * (src/lib/visits/generate.ts): crm_schedules-driven recurrence (anchor,
+ * interval weeks, weekday, season window), one visit per job service, and
+ * occurrence identity so moved/deleted visits are never re-created.
+ * Idempotent — safe to re-run.
  *
  * Security: Vercel passes Authorization: Bearer {CRON_SECRET}.
  */
 
 const LOOKAHEAD_DAYS = 14;
 
-// Day-name → JS Date.getDay() index (0 = Sunday)
-const DAY_INDEX: Record<string, number> = {
-  sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
-  thursday: 4, friday: 5, saturday: 6,
-  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
-};
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** ISO week number (1-based) — used for even/odd bi-weekly logic */
-function isoWeekNumber(d: Date): number {
-  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = tmp.getUTCDay() || 7;
-  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
-  return Math.ceil((((tmp.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-}
-
-interface OccurrenceRule {
-  frequency: "weekly" | "biweekly";
-  dayIndex: number;         // 0-6
-  biweeklyParity?: "even" | "odd";  // for biweekly only
-}
-
-/**
- * Parse the human-readable schedule string into a structured rule.
- * Falls back to schedule_days when schedule is "Custom" or unparseable.
- */
-function parseSchedule(schedule: string | null, scheduleDays: string[]): OccurrenceRule[] {
-  if (!schedule || schedule === "Custom") {
-    // Use schedule_days as weekly on each named day
-    return scheduleDays
-      .map((d) => DAY_INDEX[d.toLowerCase()])
-      .filter((idx) => idx !== undefined)
-      .map((dayIndex) => ({ frequency: "weekly" as const, dayIndex }));
-  }
-
-  const lower = schedule.toLowerCase();
-
-  // "weekly - thursday" etc.
-  const weeklyMatch = lower.match(/^weekly\s*-\s*(\w+)$/);
-  if (weeklyMatch) {
-    const dayIndex = DAY_INDEX[weeklyMatch[1]];
-    if (dayIndex !== undefined) return [{ frequency: "weekly", dayIndex }];
-  }
-
-  // "bi-weekly - monday - even weeks" or "bi-weekly - monday - odd weeks"
-  const biMatch = lower.match(/^bi-?weekly\s*-\s*(\w+)\s*-\s*(even|odd)\s+weeks?$/);
-  if (biMatch) {
-    const dayIndex = DAY_INDEX[biMatch[1]];
-    const parity = biMatch[2] as "even" | "odd";
-    if (dayIndex !== undefined) return [{ frequency: "biweekly", dayIndex, biweeklyParity: parity }];
-  }
-
-  // Generic biweekly without parity — treat as even
-  const biGeneric = lower.match(/^bi-?weekly\s*-\s*(\w+)$/);
-  if (biGeneric) {
-    const dayIndex = DAY_INDEX[biGeneric[1]];
-    if (dayIndex !== undefined) return [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
-  }
-
-  return [];
-}
-
-const WEEK_OF_MONTH_ORDINAL: Record<string, number> = {
-  first: 1, second: 2, third: 3, fourth: 4, last: -1,
-};
-
-/** The Nth (or last, ordinal=-1) occurrence of `weekdayIndex` (0=Sun..6=Sat) in the given month. */
-function nthWeekdayOfMonth(year: number, month: number, weekdayIndex: number, ordinal: number): Date {
-  if (ordinal === -1) {
-    const lastDay = new Date(year, month + 1, 0);
-    const diff = (lastDay.getDay() - weekdayIndex + 7) % 7;
-    lastDay.setDate(lastDay.getDate() - diff);
-    return lastDay;
-  }
-  const firstDay = new Date(year, month, 1);
-  const diff = (weekdayIndex - firstDay.getDay() + 7) % 7;
-  return new Date(year, month, 1 + diff + (ordinal - 1) * 7);
-}
-
-/**
- * True calendar-month recurrence — "1st Monday of every month" etc. Optional
- * season window (MM-DD) narrows which months' occurrences are included.
- */
-function monthlyOccurrencesInRange(
-  dayIndex: number,
-  weekOfMonth: string,
-  from: Date,
-  to: Date,
-  season?: { start: string; end: string } | null
-): Date[] {
-  const ordinal = WEEK_OF_MONTH_ORDINAL[weekOfMonth] ?? 1;
-  const dates: Date[] = [];
-  let year = from.getFullYear();
-  let month = from.getMonth();
-  while (true) {
-    const d = nthWeekdayOfMonth(year, month, dayIndex, ordinal);
-    if (d > to) break;
-    if (d >= from) {
-      if (!season) {
-        dates.push(d);
-      } else {
-        const mmdd = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        const inSeason = season.start <= season.end
-          ? mmdd >= season.start && mmdd <= season.end
-          : mmdd >= season.start || mmdd <= season.end;
-        if (inSeason) dates.push(d);
-      }
-    }
-    month++;
-    if (month > 11) { month = 0; year++; }
-  }
-  return dates;
-}
-
-/**
- * Return all occurrence dates in [fromDate, toDate] that match the rule.
- */
-function occurrencesInRange(rule: OccurrenceRule, from: Date, to: Date): Date[] {
-  const dates: Date[] = [];
-  const cursor = new Date(from);
-
-  // Advance to the first matching day-of-week on or after `from`
-  while (cursor.getDay() !== rule.dayIndex) {
-    cursor.setDate(cursor.getDate() + 1);
-    if (cursor > to) return dates;
-  }
-
-  while (cursor <= to) {
-    if (rule.frequency === "weekly") {
-      dates.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 7);
-    } else {
-      // biweekly: check week number parity
-      const weekNum = isoWeekNumber(cursor);
-      const isEven = weekNum % 2 === 0;
-      const matches =
-        rule.biweeklyParity === "even" ? isEven :
-        rule.biweeklyParity === "odd"  ? !isEven :
-        true;
-      if (matches) dates.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 7);
-    }
-  }
-
-  return dates;
-}
-
 export async function GET(request: Request) {
-  // ── auth ──────────────────────────────────────────────────────────────────
   const authHeader = request.headers.get("authorization");
   const isCron =
     process.env.CRON_SECRET &&
     authHeader === `Bearer ${process.env.CRON_SECRET}`;
-
   if (!isCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -198,223 +42,50 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Each job's generation window starts on ITS OWN org's today.
-  const orgTodayCache = new Map<string, Date>();
-  async function orgTodayFor(orgId: string): Promise<Date> {
-    let hit = orgTodayCache.get(orgId);
-    if (!hit) {
-      hit = todayInZoneAsLocalMidnight(await getOrgTimeZone(supabase, orgId));
-      orgTodayCache.set(orgId, hit);
-    }
-    return hit;
-  }
-
-  // ── fetch active recurring and package jobs ───────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: jobs, error: jobsErr } = await (supabase as any)
     .from("crm_jobs")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .select("id, org_id, client_id, crew_id, schedule, schedule_days, recurrence_end, package_total_steps, priority, notes_to_crew, man_count" as any)
+    .select(GENERATOR_JOB_COLUMNS)
     .in("job_type", ["recurring", "package"])
-    .not("status", "in", '("cancelled","completed","hold")')
+    .not("status", "in", `(${NON_GENERATING_JOB_STATUSES.map((s) => `"${s}"`).join(",")})`)
     .is("deleted_at", null);
 
   if (jobsErr) {
-    console.error("[recurring-visits] fetch error:", jobsErr);
+    log.error("job fetch failed", { error: jobsErr.message });
     return NextResponse.json({ error: jobsErr.message }, { status: 500 });
   }
-
   if (!jobs || jobs.length === 0) {
     return NextResponse.json({ generated: 0, message: "No recurring jobs found." });
   }
 
-  // ── load named schedules for monthly ("1st Monday") resolution ────────────
-  // Weekly/bi-weekly jobs keep using the regex-based parseSchedule() below —
-  // this lookup only covers monthly, which parseSchedule can't express.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: scheduleRows } = await (supabase as any)
-    .from("crm_schedules")
-    .select("name, frequency, day_of_week, week_of_month, season_start, season_end")
-    .eq("frequency", "monthly")
-    .is("deleted_at", null);
-  const monthlySchedulesByName = new Map<string, { dayIndex: number; weekOfMonth: string; season: { start: string; end: string } | null }>();
-  for (const sr of (scheduleRows ?? []) as { name: string; day_of_week: string; week_of_month: string | null; season_start: string | null; season_end: string | null }[]) {
-    const dayIndex = DAY_INDEX[sr.day_of_week.toLowerCase()];
-    if (dayIndex === undefined) continue;
-    monthlySchedulesByName.set(sr.name, {
-      dayIndex,
-      weekOfMonth: sr.week_of_month ?? "first",
-      season: sr.season_start && sr.season_end ? { start: sr.season_start, end: sr.season_end } : null,
-    });
-  }
-
-  // ── for each job, load existing visits in the window (idempotency) ────────
-  // The prefetch has to be ONE query covering every org's window, but those
-  // windows no longer share a start date. Rather than padding a single
-  // reference day by a guessed margin — which needs an argument about how far
-  // apart two zones can be, and silently re-inserts existing visits if that
-  // argument is ever wrong — resolve the orgs actually involved and take the
-  // true min/max. Jobs are already fetched by this point, so this costs
-  // nothing extra.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orgIds = [...new Set((jobs as any[]).map((j) => j.org_id as string | null).filter((x): x is string => !!x))];
-  const orgWindows = await Promise.all(
-    orgIds.map(async (id) => {
-      const t = await orgTodayFor(id);
-      return { from: toISODate(t), to: toISODate(addDays(t, LOOKAHEAD_DAYS)) };
-    })
-  );
-  // A job with no org_id resolves to the platform default zone (getOrgTimeZone
-  // coalesces), and that day can fall OUTSIDE the min/max of the real orgs —
-  // e.g. every real org on Pacific time while the default is Eastern. Include
-  // the default window too whenever such a job exists, or its visits would
-  // fall outside the prefetch and be re-inserted.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hasOrglessJob = (jobs as any[]).some((j) => !j.org_id);
-  if (hasOrglessJob || orgWindows.length === 0) {
-    const t = todayInZoneAsLocalMidnight(DEFAULT_TIME_ZONE);
-    orgWindows.push({ from: toISODate(t), to: toISODate(addDays(t, LOOKAHEAD_DAYS)) });
-  }
-  const fromStr = orgWindows.reduce((m, w) => (w.from < m ? w.from : m), orgWindows[0].from);
-  const toStr   = orgWindows.reduce((m, w) => (w.to   > m ? w.to   : m), orgWindows[0].to);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jobIds = (jobs as any[]).map((j) => j.id as string);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existingVisits } = await (supabase as any)
-    .from("crm_job_visits")
-    .select("job_id, scheduled_date")
-    .in("job_id", jobIds)
-    .gte("scheduled_date", fromStr)
-    .lte("scheduled_date", toStr)
-    .is("deleted_at", null);
-
-  // Build a Set of "jobId|date" strings for O(1) lookup
-  const existingSet = new Set<string>(
-    (existingVisits ?? []).map(
-      (v: { job_id: string; scheduled_date: string }) => `${v.job_id}|${v.scheduled_date}`
-    )
-  );
-
-  // ── package visit cap: count ALL-TIME (not just window) non-deleted visits
-  // per package job so we can stop generating once package_total_steps is hit,
-  // even if recurrence_end is null/far in the future. ────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const packageJobIds = (jobs as any[])
-    .filter((j) => j.package_total_steps != null)
-    .map((j) => j.id as string);
-
-  const visitCountByJob = new Map<string, number>();
-  if (packageJobIds.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: pkgVisits } = await (supabase as any)
-      .from("crm_job_visits")
-      .select("job_id")
-      .in("job_id", packageJobIds)
-      .is("deleted_at", null);
-    for (const v of (pkgVisits ?? []) as { job_id: string }[]) {
-      visitCountByJob.set(v.job_id, (visitCountByJob.get(v.job_id) ?? 0) + 1);
-    }
-  }
-
-  const toInsert: {
-    org_id: string;
-    job_id: string;
-    client_id: string;
-    crew_id: string | null;
-    scheduled_date: string;
-    priority: number;
-    notes_to_crew: string | null;
-    men_count: number;
-  }[] = [];
-
-  let skippedPastEnd = 0;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const job of (jobs as unknown) as {
-    id: string; org_id: string; client_id: string; crew_id: string | null;
-    schedule: string | null; schedule_days: string[];
-    recurrence_end: string | null; package_total_steps: number | null;
-    priority: number; notes_to_crew: string | null; man_count: number | null;
-  }[]) {
-
-    const today = await orgTodayFor(job.org_id);
-    const windowEnd = addDays(today, LOOKAHEAD_DAYS);
-
-    // Respect recurrence_end if set
-    const effectiveEnd = job.recurrence_end
-      ? new Date(Math.min(windowEnd.getTime(), new Date(job.recurrence_end).getTime()))
-      : windowEnd;
-
-    if (effectiveEnd < today) {
-      skippedPastEnd++;
-      continue;
-    }
-
-    const monthlySchedule = job.schedule ? monthlySchedulesByName.get(job.schedule) : undefined;
-    const dates: Date[] = monthlySchedule
-      ? monthlyOccurrencesInRange(monthlySchedule.dayIndex, monthlySchedule.weekOfMonth, today, effectiveEnd, monthlySchedule.season)
-      : parseSchedule(job.schedule, job.schedule_days ?? []).flatMap((rule) => occurrencesInRange(rule, today, effectiveEnd));
-
-    // Package visit cap: stop generating once package_total_steps has been
-    // reached, regardless of recurrence_end. visitsSoFar starts at the
-    // all-time count of existing (non-deleted) visits for this job and is
-    // incremented as new ones are queued below.
-    const packageCap = job.package_total_steps;
-    let visitsSoFar = packageCap != null ? (visitCountByJob.get(job.id) ?? 0) : null;
-
-    for (const d of dates) {
-      if (visitsSoFar != null && packageCap != null && visitsSoFar >= packageCap) break;
-
-      const dateStr = toISODate(d);
-      const key = `${job.id}|${dateStr}`;
-      if (!existingSet.has(key)) {
-        toInsert.push({
-          org_id:         job.org_id,
-          job_id:         job.id,
-          client_id:      job.client_id,
-          crew_id:        job.crew_id ?? null,
-          scheduled_date: dateStr,
-          priority:       job.priority ?? 1,
-          notes_to_crew:  job.notes_to_crew ?? null,
-          men_count:      Math.max(1, Number(job.man_count ?? 1) || 1),
-        });
-        // Mark as pending so parallel rules on the same job don't duplicate
-        existingSet.add(key);
-        if (visitsSoFar != null) visitsSoFar++;
+  const orgToday = new Map<string, string>();
+  const result = await generateVisitsForJobs(supabase, jobs as GeneratorJob[], {
+    horizonDays: LOOKAHEAD_DAYS,
+    packageWindowOnly: true,
+    todayFor: async (orgId) => {
+      const k = orgId ?? "";
+      let hit = orgToday.get(k);
+      if (!hit) {
+        hit = todayInZone(await getOrgTimeZone(supabase, orgId));
+        orgToday.set(k, hit);
       }
-    }
+      return hit;
+    },
+  });
+
+  if (result.errors.length > 0) {
+    log.error("visit generation errors", { errors: result.errors.slice(0, 10), count: result.errors.length });
   }
+  log.info("recurring visits generated", {
+    jobs: jobs.length,
+    orgCalendars: orgToday.size,
+    planned: result.planned,
+    inserted: result.inserted,
+  });
 
-  if (toInsert.length === 0) {
-    return NextResponse.json({
-      generated: 0,
-      skippedPastEnd,
-      message: "All visits already exist in the lookahead window.",
-    });
-  }
-
-  // Batch insert in chunks of 100
-  let totalInserted = 0;
-  for (let i = 0; i < toInsert.length; i += 100) {
-    const chunk = toInsert.slice(i, i + 100);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertErr } = await (supabase as any)
-      .from("crm_job_visits")
-      .insert(chunk);
-    if (insertErr) {
-      console.error("[recurring-visits] insert error:", insertErr);
-    } else {
-      totalInserted += chunk.length;
-    }
-  }
-
-  console.info(
-    `[recurring-visits] ${new Date().toISOString()} — prefetch ${fromStr}→${toStr}, ` +
-    `${orgTodayCache.size} org calendar(s): ` +
-    `${totalInserted} visits created, ${skippedPastEnd} jobs past recurrence_end`
-  );
-
-  return NextResponse.json({ generated: totalInserted, skippedPastEnd, window: { from: fromStr, to: toStr } });
+  return NextResponse.json({
+    generated: result.inserted,
+    planned: result.planned,
+    errors: result.errors.length,
+  }, { status: result.errors.length > 0 && result.inserted === 0 ? 500 : 200 });
 }

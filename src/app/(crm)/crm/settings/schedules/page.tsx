@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Pencil, Trash2, CalendarDays } from "lucide-react";
+import { ruleFromScheduleRow, scheduleOccurrences } from "@/lib/visits/recurrence";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -54,38 +55,13 @@ const FREQUENCY_LABELS: Record<CRMSchedule['frequency'], string> = {
   monthly:       'Monthly',
 };
 
-const FREQUENCY_DAYS: Record<CRMSchedule['frequency'], number> = {
-  weekly: 7, bi_weekly: 14, every_3_weeks: 21, every_4_weeks: 28, monthly: 30,
-};
-
 const DAY_OPTIONS: CRMSchedule['dayOfWeek'][] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DAY_JS: Record<CRMSchedule['dayOfWeek'], number> = {
-  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
-};
 
 type WeekOfMonth = NonNullable<CRMSchedule['weekOfMonth']>;
 const WEEK_OF_MONTH_OPTIONS: WeekOfMonth[] = ['first', 'second', 'third', 'fourth', 'last'];
 const WEEK_OF_MONTH_LABELS: Record<WeekOfMonth, string> = {
   first: '1st', second: '2nd', third: '3rd', fourth: '4th', last: 'Last',
 };
-const WEEK_OF_MONTH_ORDINAL: Record<WeekOfMonth, number> = {
-  first: 1, second: 2, third: 3, fourth: 4, last: -1,
-};
-
-/** The Nth (or last) occurrence of `weekdayIndex` (0=Sun..6=Sat) in the given month. */
-function nthWeekdayOfMonth(year: number, month: number, weekdayIndex: number, ordinal: number): Date {
-  if (ordinal === -1) {
-    const lastDay = new Date(year, month + 1, 0);
-    const diff = (lastDay.getDay() - weekdayIndex + 7) % 7;
-    lastDay.setDate(lastDay.getDate() - diff);
-    return lastDay;
-  }
-  const firstDay = new Date(year, month, 1);
-  const diff = (weekdayIndex - firstDay.getDay() + 7) % 7;
-  const day = 1 + diff + (ordinal - 1) * 7;
-  return new Date(year, month, day);
-}
-
 const MONTHS = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December',
@@ -93,118 +69,27 @@ const MONTHS = [
 
 // ── schedule date calculator ──────────────────────────────────────────────────
 
-function inSeasonWindow(d: Date, seasonStart: string | null, seasonEnd: string | null): boolean {
-  if (!seasonStart && !seasonEnd) return true;
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const md = `${mm}-${dd}`;
-  const start = seasonStart ?? '01-01';
-  const end = seasonEnd ?? '12-31';
-  return start <= end ? (md >= start && md <= end) : (md >= start || md <= end);
-}
-
 /**
- * True calendar-month recurrence — "1st Monday of every month" etc.
- * Distinct from the interval-based frequencies below because a fixed N-day
- * step (e.g. 30 days) drifts across weekdays since it isn't a multiple of 7.
+ * Upcoming dates for a schedule — the SAME function the visit generators use
+ * (src/lib/visits/recurrence.ts), so what this preview shows is what the
+ * cron / "Generate Visits" will actually schedule. Returned as local-midnight
+ * Dates for display only.
  */
-function computeMonthlyDates(sched: CRMSchedule, count: number): Date[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const targetDay = DAY_JS[sched.dayOfWeek];
-  const ordinal = WEEK_OF_MONTH_ORDINAL[sched.weekOfMonth ?? 'first'];
-
-  const results: Date[] = [];
-  let year = today.getFullYear();
-  let month = today.getMonth();
-  const maxTries = count * 6;
-  let tries = 0;
-
-  while (results.length < count && tries < maxTries) {
-    tries++;
-    const d = nthWeekdayOfMonth(year, month, targetDay, ordinal);
-    if (d >= today && inSeasonWindow(d, sched.seasonStart, sched.seasonEnd)) {
-      results.push(d);
-    }
-    month++;
-    if (month > 11) { month = 0; year++; }
-  }
-
-  return results;
-}
-
 function computeUpcomingDates(sched: CRMSchedule, count = 20): Date[] {
-  if (sched.frequency === 'monthly') return computeMonthlyDates(sched, count);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const targetDay = DAY_JS[sched.dayOfWeek];
-  const intervalDays = FREQUENCY_DAYS[sched.frequency];
-
-  // Find first occurrence of target weekday at or after today
-  const cursor = new Date(today);
-  while (cursor.getDay() !== targetDay) {
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  // For bi_weekly with a week pattern, determine parity using a stable anchor.
-  // If no anchor is set, use the first candidate date as the "even" reference week
-  // so the algorithm is deterministic and doesn't depend on today's calendar week.
-  let biWeeklyAnchor: Date | null = null;
-  if (sched.frequency === 'bi_weekly' && sched.weekPattern && sched.weekPattern !== 'any') {
-    if (sched.anchorDate) {
-      // Use the stored anchor; find that weekday's Monday to align to week boundaries
-      biWeeklyAnchor = new Date(sched.anchorDate + 'T00:00:00');
-    } else {
-      // Anchor = first candidate weekday. That week is "even" (week 0).
-      biWeeklyAnchor = new Date(cursor);
-    }
-  }
-
-  const results: Date[] = [];
-  const maxTries = count * 120;
-  let tries = 0;
-
-  while (results.length < count && tries < maxTries) {
-    tries++;
-    const d = new Date(cursor);
-
-    // Week pattern filter for bi_weekly — advance by 7 (not 14) when wrong parity
-    // so we probe the adjacent week without overshooting the whole cycle.
-    if (biWeeklyAnchor && sched.weekPattern && sched.weekPattern !== 'any') {
-      const diffDays = Math.round((d.getTime() - biWeeklyAnchor.getTime()) / 86_400_000);
-      // Use absolute week index so negative diffs still produce consistent parity
-      const weekNum = Math.floor(Math.abs(diffDays) / 7) * (diffDays < 0 ? -1 : 1);
-      const isEvenWeek = Math.abs(weekNum) % 2 === 0;
-      const wantEven = sched.weekPattern === 'even';
-      if (wantEven !== isEvenWeek) {
-        // Wrong parity — jump 7 days to the other week of this bi-weekly cycle
-        cursor.setDate(cursor.getDate() + 7);
-        continue;
-      }
-    }
-
-    // Season filter
-    if (sched.seasonStart || sched.seasonEnd) {
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd2 = String(d.getDate()).padStart(2, '0');
-      const md = `${mm}-${dd2}`;
-      const start = sched.seasonStart ?? '01-01';
-      const end = sched.seasonEnd ?? '12-31';
-      const inSeason = start <= end
-        ? md >= start && md <= end
-        : md >= start || md <= end; // wraps year (e.g. Nov–Feb)
-      if (!inSeason) {
-        cursor.setDate(cursor.getDate() + intervalDays);
-        continue;
-      }
-    }
-
-    results.push(d);
-    cursor.setDate(cursor.getDate() + intervalDays);
-  }
-
-  return results;
+  const rule = ruleFromScheduleRow({
+    name: sched.name,
+    frequency: sched.frequency,
+    day_of_week: sched.dayOfWeek,
+    week_pattern: sched.weekPattern ?? null,
+    anchor_date: sched.anchorDate ?? null,
+    week_of_month: sched.weekOfMonth ?? null,
+    season_start: sched.seasonStart ?? null,
+    season_end: sched.seasonEnd ?? null,
+  });
+  if (!rule) return [];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return scheduleOccurrences(rule, today, null, { limit: count }).map((d) => new Date(`${d}T00:00:00`));
 }
 
 function formatDate(d: Date) {

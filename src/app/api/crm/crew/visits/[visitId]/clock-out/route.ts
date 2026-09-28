@@ -6,7 +6,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { isoInZone, todayInZone } from "@/lib/time/zone";
+import { isoInZone } from "@/lib/time/zone";
 
 const log = logger.child("crew/clock-out");
 
@@ -42,7 +42,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_out_at, org_id, crew_id")
+    .select("clocked_out_at, org_id, crew_id, status")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -58,32 +58,51 @@ export async function POST(
   // start_time/end_time (or clocked_in_at/out) x men_count via the
   // crm_recompute_job_actual_hours trigger, so it's correctly multiplied
   // by crew size instead of reflecting only the raw clock duration.
+  // Clock-out fields first, guarded on clocked_out_at so a racing retry
+  // can't overwrite them.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data: clockedOut, error } = await (supabase as any)
     .from("crm_job_visits")
     .update({
       clocked_out_at:   now,
       end_time:         localTime ? `${localTime}:00` : undefined,
-      completed_at:     now,
-      status:           "completed",
       completion_notes: notes ?? null,
       updated_at:       now,
     })
     .eq("id", visitId)
     .is("clocked_out_at", null)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!clockedOut) return NextResponse.json({ error: "Already clocked out" }, { status: 409 });
+
+  // Then the completion flip, conditional on the visit not already being
+  // completed (e.g. the office marked it complete from the dispatch board
+  // while the crew was still on site). Only the call that actually completes
+  // the visit runs the completion side effects below — otherwise the visit
+  // would be billed / timeline-logged / automation-triggered a second time.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: completedRow } = await (supabase as any)
+    .from("crm_job_visits")
+    .update({ status: "completed", completed_at: now })
+    .eq("id", visitId)
+    .neq("status", "completed")
+    .select()
+    .maybeSingle();
+  const transitioned = !!completedRow;
+  const data = completedRow ?? clockedOut;
 
   // Push the next package-sequenced visit's date out if this one completed later
   // than its static schedule assumed. Non-fatal — a failure here shouldn't block
   // the clock-out response.
-  try {
-    await recalcNextPackageVisitDate(supabase, data?.job_service_id as string | null,
-      isoInZone(new Date(now), await getOrgTimeZone(supabase, existing.org_id as string)));
-  } catch (err) {
-    console.error("[crew/clock-out] package min_days recalc failed:", err);
+  if (transitioned) {
+    try {
+      await recalcNextPackageVisitDate(supabase, data?.job_service_id as string | null,
+        isoInZone(new Date(now), await getOrgTimeZone(supabase, existing.org_id as string)));
+    } catch (err) {
+      log.error("package min_days recalc failed", { visitId, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   // Compute actual labor cost from crew member times × individual burden rates
@@ -150,18 +169,20 @@ export async function POST(
   // client, pinned to the visit's org; ownership of the visit was already
   // proven by assertCallerOwnsVisit above. Non-fatal — the clock-out itself
   // has already been recorded.
-  try {
-    const sideEffects = await applyVisitCompletionSideEffects({
-      supabase: createServiceClient(),
-      orgId: existing.org_id as string,
-      visitId,
-      userId: user.id,
-    });
-    if (!sideEffects.ok) {
-      log.error("completion side effects failed", { visitId, error: sideEffects.error });
+  if (transitioned) {
+    try {
+      const sideEffects = await applyVisitCompletionSideEffects({
+        supabase: createServiceClient(),
+        orgId: existing.org_id as string,
+        visitId,
+        userId: user.id,
+      });
+      if (!sideEffects.ok) {
+        log.error("completion side effects failed", { visitId, error: sideEffects.error });
+      }
+    } catch (err) {
+      log.error("completion side effects threw", { visitId, error: err instanceof Error ? err.message : String(err) });
     }
-  } catch (err) {
-    log.error("completion side effects threw", { visitId, error: err instanceof Error ? err.message : String(err) });
   }
 
   return NextResponse.json(data);

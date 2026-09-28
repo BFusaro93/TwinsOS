@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { createClient } from "@/lib/supabase/client";
+import { PAUSE_PRUNE_STATUSES, pruneUntouchedFutureVisits } from "@/lib/visits/prune";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -169,6 +171,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const { can } = usePermissions();
+  const { today: orgToday } = useOrgDates();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
   const { data: linkedProject } = useProject(job?.projectId ?? "");
@@ -263,9 +266,73 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
   async function handleSave() {
     if (!job || Object.keys(edits).length === 0) return;
+
+    // A recurring job's schedule / end-date edit replaces its untouched future
+    // visits (status 'scheduled', never clocked in, not invoiced, org-today
+    // onward) with ones on the new schedule. Show how many first.
+    const scheduleChanged = job.jobType === "recurring" &&
+      ["schedule", "schedule_days", "recurrence_rule", "recurrence_start"].some((k) => k in edits);
+    const endChanged = job.jobType === "recurring" && "recurrence_end" in edits;
+    const reschedule = scheduleChanged || endChanged;
+    if (reschedule) {
+      try {
+        const res = await fetch("/api/crm/jobs/generate-visits", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: job.id,
+            action: "preview_reschedule",
+            scheduleChanged,
+            recurrenceEnd: endChanged ? ((edits.recurrence_end as string | null) ?? null) : undefined,
+          }),
+        });
+        const preview = await res.json() as { removeCount?: number; error?: string };
+        if (!res.ok) throw new Error(preview.error ?? "Failed to check existing visits");
+        const n = preview.removeCount ?? 0;
+        if (n > 0) {
+          const ok = await confirm({
+            title: `Replace ${n} upcoming visit${n !== 1 ? "s" : ""}?`,
+            description: scheduleChanged
+              ? `${n} upcoming visit${n !== 1 ? "s" : ""} on the old schedule that haven't been dispatched, started or invoiced will be removed and new visits generated on the new schedule. Dispatched, started, completed and invoiced visits are kept.`
+              : `${n} upcoming visit${n !== 1 ? "s" : ""} after the new end date that haven't been dispatched, started or invoiced will be removed.`,
+            confirmLabel: "Save and replace",
+            destructive: true,
+          });
+          if (!ok) return;
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to check existing visits");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await updateJob.mutateAsync({ id: job.id, patch: edits });
+
+      if (reschedule) {
+        const res = await fetch("/api/crm/jobs/generate-visits", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId: job.id, action: "reschedule", scheduleChanged, lookaheadDays: 365 }),
+        });
+        const out = await res.json().catch(() => ({})) as { removed?: number; generated?: number; error?: string };
+        if (!res.ok) toast.error(out.error ?? "Job saved, but its visits could not be rescheduled — use Generate Visits");
+        else if ((out.removed ?? 0) > 0 || (out.generated ?? 0) > 0) {
+          toast.success(`Visits updated: ${out.removed ?? 0} removed, ${out.generated ?? 0} scheduled`);
+        }
+        await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      }
+
+      // Hold / cancel from this form (not useUpdateJobStatus): clear the
+      // job's untouched future visits the same way.
+      if (edits.status === "hold" || edits.status === "cancelled") {
+        await pruneUntouchedFutureVisits(createClient(), job.id, {
+          fromDate: orgToday(),
+          statuses: PAUSE_PRUNE_STATUSES,
+        });
+        await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      }
 
       // Propagate crew change to all future scheduled visits
       if ("crew_id" in edits) {
