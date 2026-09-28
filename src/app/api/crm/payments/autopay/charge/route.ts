@@ -5,7 +5,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
-import { findDuplicateChargeIntent, duplicateChargeMessage } from "@/lib/stripe/duplicate-charge";
+import { refuseIfChargeInFlight } from "@/lib/stripe/duplicate-charge";
 import { recordStripeCharge } from "@/lib/stripe/record-charge";
 import { markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { logger } from "@/lib/logger";
@@ -61,12 +61,20 @@ export async function POST(request: Request) {
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
-    .select("id, org_id, client_id, invoice_number, balance_cents")
+    .select("id, org_id, client_id, invoice_number, balance_cents, status")
     .eq("id", invoiceId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
     .single();
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  // Money only lands on issued invoices (the allocation guard's rule) — a
+  // charge against a draft/void would just become client credit.
+  if (invoice.status === "draft" || invoice.status === "void") {
+    return NextResponse.json(
+      { error: invoice.status === "void" ? "This invoice has been voided" : "Issue this invoice before charging it" },
+      { status: 400 }
+    );
+  }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
   }
@@ -123,28 +131,20 @@ export async function POST(request: Request) {
   // refuse to charge again if so — see findDuplicateChargeIntent for why the
   // ACH window is days rather than minutes.
   const isAch = paymentMethod === "us_bank_account";
-  try {
-    const duplicate = await findDuplicateChargeIntent({
-      stripe,
-      connectedAccountId: org.stripe_connect_account_id,
-      customerId: client.stripe_customer_id,
-      invoiceIds: [invoice.id],
-      isAch,
-    });
-    if (duplicate) {
-      return NextResponse.json(
-        // The caller distinguishes this from a real failure: a bulk run over
-        // the ACH queue legitimately hits it for every debit still settling.
-        { error: duplicateChargeMessage(duplicate), code: "duplicate_charge", inFlight: duplicate.status === "processing" },
-        { status: 409 }
-      );
-    }
-  } catch (err) {
-    // Fail open on the lookup itself (a Stripe API hiccup shouldn't block a
-    // legitimate charge) — chargeIdempotencyKey's 10-second window still
-    // catches an exact-duplicate retry; this is the belt-and-suspenders
-    // layer for a slower double-submit.
-    log.error("failed to check for a recent duplicate charge", { error: err, invoiceId });
+  const refusal = await refuseIfChargeInFlight({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    // Service role: the in-flight marker columns are read regardless of the
+    // caller's RLS, and a stale marker's payment lookup must see every row.
+    db: createServiceClient(),
+    invoiceIds: [invoice.id],
+    customerId: client.stripe_customer_id,
+    isAch,
+  });
+  if (refusal) {
+    // The caller distinguishes this from a real failure: a bulk run over the
+    // ACH queue legitimately hits it for every debit still settling.
+    return NextResponse.json(refusal.body, { status: refusal.status });
   }
 
   try {

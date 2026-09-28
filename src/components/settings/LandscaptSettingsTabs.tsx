@@ -2262,7 +2262,15 @@ function ImportExportTab() {
               { label: "Leads",     icon: <UserPlus className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportLeads(r),      templateColumns: ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source"], required: ["displayName"] },
               { label: "Estimates", icon: <FileText className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportEstimates(r),  templateColumns: ["clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage"], required: ["clientName", "description"] },
               { label: "Invoices",  icon: <Receipt className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportInvoices(r),   templateColumns: ["clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"], required: ["clientName", "description", "amount"] },
-              { label: "Payments",  icon: <DollarSign className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPayments(r),   templateColumns: ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"], required: ["clientName", "amount"] },
+              { label: "Payments",  icon: <DollarSign className="h-6 w-6" />,  onImport: async (r: Record<string, string>[]) => {
+                const { failures } = await bulkImportPayments(r);
+                if (failures.length > 0) {
+                  toast.warning(`${failures.length} payment row${failures.length !== 1 ? "s" : ""} need attention`, {
+                    description: failures.slice(0, 5).map((f) => `Row ${f.row}: ${f.reason}`).join("\n") + (failures.length > 5 ? `\n…and ${failures.length - 5} more` : ""),
+                    duration: 15000,
+                  });
+                }
+              },   templateColumns: ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"], required: ["clientName", "amount"] },
               { label: "Tickets",   icon: <TicketIcon className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportTickets(r),    templateColumns: ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"], required: ["subject"] },
               { label: "Services",  icon: <Wrench className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportServices(r),   templateColumns: ["name", "code", "category", "unit", "defaultRate", "productionRate", "isActive"], required: ["name"] },
               { label: "Schedules", icon: <CalendarDays className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportSchedules(r), templateColumns: ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth"], required: ["name", "frequency", "dayOfWeek"] },

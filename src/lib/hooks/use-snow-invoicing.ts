@@ -151,6 +151,83 @@ export interface SnowInvoiceVisitInput {
   serviceDate: string | null;
 }
 
+interface SnowTaxContext {
+  /** Jobs with at least one taxable service. */
+  taxableJobIds: Set<string>;
+  /** Accepted-estimate tax rate per job (only jobs converted from an estimate with a rate). */
+  estimateRateByJobId: Map<string, number>;
+  clientDefaultRateById: Map<string, number>;
+}
+
+async function loadSnowTaxContext(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  jobIds: string[],
+  clientIds: string[]
+): Promise<SnowTaxContext> {
+  const ctx: SnowTaxContext = {
+    taxableJobIds: new Set(),
+    estimateRateByJobId: new Map(),
+    clientDefaultRateById: new Map(),
+  };
+  if (jobIds.length > 0) {
+    const { data: jobs, error } = await supabase
+      .from("crm_jobs")
+      .select("id, estimate_id, crm_job_services(is_taxable, crm_services(is_taxable))")
+      .in("id", jobIds);
+    if (error) throw error;
+    const estimateIdByJob = new Map<string, string>();
+    for (const j of (jobs ?? []) as {
+      id: string;
+      estimate_id: string | null;
+      crm_job_services: { is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
+    }[]) {
+      // Snapshot flag first, catalog flag for rows predating it — same
+      // precedence as complete-visit-side-effects.
+      if ((j.crm_job_services ?? []).some((s) => s.is_taxable ?? s.crm_services?.is_taxable ?? false)) {
+        ctx.taxableJobIds.add(j.id);
+      }
+      if (j.estimate_id) estimateIdByJob.set(j.id, j.estimate_id);
+    }
+    const estimateIds = [...new Set(estimateIdByJob.values())];
+    if (estimateIds.length > 0) {
+      const { data: ests, error: estErr } = await supabase
+        .from("estimates")
+        .select("id, tax_rate_bps")
+        .in("id", estimateIds);
+      if (estErr) throw estErr;
+      const rateByEstimate = new Map(
+        ((ests ?? []) as { id: string; tax_rate_bps: number | null }[]).map((e) => [e.id, e.tax_rate_bps ?? 0])
+      );
+      for (const [jobId, estimateId] of estimateIdByJob) {
+        const rate = rateByEstimate.get(estimateId) ?? 0;
+        if (rate > 0) ctx.estimateRateByJobId.set(jobId, rate);
+      }
+    }
+  }
+  if (clientIds.length > 0) {
+    const { data: clients, error } = await supabase
+      .from("clients")
+      .select("id, default_tax_rate_bps")
+      .in("id", clientIds);
+    if (error) throw error;
+    for (const c of (clients ?? []) as { id: string; default_tax_rate_bps: number | null }[]) {
+      ctx.clientDefaultRateById.set(c.id, c.default_tax_rate_bps ?? 0);
+    }
+  }
+  return ctx;
+}
+
+/** One rate per invoice: the first of its jobs' accepted-estimate rates, else
+ *  the client's default rate. */
+function snowTaxRateBps(ctx: SnowTaxContext, jobIds: string[], clientId: string): number {
+  for (const jobId of jobIds) {
+    const rate = ctx.estimateRateByJobId.get(jobId);
+    if (rate && rate > 0) return rate;
+  }
+  return ctx.clientDefaultRateById.get(clientId) ?? 0;
+}
+
 export function useGenerateSnowInvoices() {
   // Falls back to the org's day when a group somehow has no service date.
   const orgTimeZone = useOrgTimeZone();
@@ -165,6 +242,12 @@ export function useGenerateSnowInvoices() {
       let skippedZeroAmountGroups = 0;
       let excludedZeroAmountVisits = 0;
       let skippedRaceConditionGroups = 0;
+
+      const tax = await loadSnowTaxContext(
+        supabase,
+        [...new Set(groups.flatMap((g) => g.visits.map((v) => v.jobId)))],
+        [...new Set(groups.map((g) => g.clientId))]
+      );
 
       for (const group of groups) {
         const subtotal = group.visits.reduce((s, v) => s + v.amountCents, 0);
@@ -188,6 +271,17 @@ export function useGenerateSnowInvoices() {
         const singleJobId = distinctJobIds.size === 1 ? [...distinctJobIds][0] : null;
         const invoiceDate = billableVisits[0]?.serviceDate ?? todayInZone(orgTimeZone);
 
+        // Same tax rules as every other job → invoice path
+        // (complete-visit-side-effects / useCreateInvoiceFromJob): a line is
+        // taxable when its job's services are, and the rate is the accepted
+        // estimate's when the job came from one, else the client's default.
+        // This used to hard-code tax_rate_bps 0 — snow invoices were never taxed.
+        const taxRateBps = snowTaxRateBps(tax, billableVisits.map((v) => v.jobId), group.clientId);
+        const lineTaxable = billableVisits.map((v) => tax.taxableJobIds.has(v.jobId));
+        const taxableSubtotal = billableVisits.reduce((s, v, i) => s + (lineTaxable[i] ? v.amountCents : 0), 0);
+        const taxCents = Math.round((taxableSubtotal * taxRateBps) / 10000);
+        const totalCents = subtotal + taxCents;
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: newInvoice, error: invErr } = await (supabase as any)
           .from("crm_invoices")
@@ -198,10 +292,10 @@ export function useGenerateSnowInvoices() {
             invoice_date: invoiceDate,
             status: "draft",
             subtotal_cents: subtotal,
-            tax_rate_bps: 0,
-            tax_cents: 0,
-            total_cents: subtotal,
-            balance_cents: subtotal,
+            tax_rate_bps: taxRateBps,
+            tax_cents: taxCents,
+            total_cents: totalCents,
+            balance_cents: totalCents,
             amount_paid_cents: 0,
           })
           .select("id, invoice_number")
@@ -219,12 +313,20 @@ export function useGenerateSnowInvoices() {
             total_cents: v.amountCents,
             service_date: v.serviceDate,
             visit_id: v.visitId,
+            is_taxable: lineTaxable[i],
             sort_order: i,
           }))
         );
         if (liErr) {
+          // Soft delete (never hard delete): the half-built draft drops out of
+          // every list and balance, and its visits stay in the queue since the
+          // uninvoiced check ignores deleted invoices.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("crm_invoices").delete().eq("id", (newInvoice as { id: string }).id);
+          const { error: discardErr } = await (supabase as any)
+            .from("crm_invoices")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", (newInvoice as { id: string }).id);
+          if (discardErr) throw discardErr;
           if ((liErr as { code?: string }).code === "23505") {
             // crm_invoice_line_items_visit_id_unique — one of this group's
             // visits was already invoiced by a concurrent generate call (the
@@ -254,7 +356,7 @@ export function useGenerateSnowInvoices() {
           client_id: group.clientId,
           activity_type: "invoice",
           subject: `Invoice #${invoiceNumber}`,
-          amount_cents: subtotal,
+          amount_cents: totalCents,
           ref_id: (newInvoice as { id: string }).id,
           ref_table: "crm_invoices",
         });

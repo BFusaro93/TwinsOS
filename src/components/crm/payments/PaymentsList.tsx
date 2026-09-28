@@ -1077,8 +1077,15 @@ export function PaymentsList({ clientId }: Props) {
                   )
                 }
                 onImport={async (rows) => {
-                  const { created, skipped } = await bulkImportPayments(rows);
-                  if (skipped > 0) {
+                  const { created, skipped, failures } = await bulkImportPayments(rows);
+                  if (failures.length > 0) {
+                    const shown = failures.slice(0, 5).map((f) => `Row ${f.row}: ${f.reason}`).join("\n");
+                    const more = failures.length > 5 ? `\n…and ${failures.length - 5} more` : "";
+                    toast.warning(
+                      `Imported ${created} payment${created !== 1 ? "s" : ""}${skipped > 0 ? `, ${skipped} skipped` : ""}. ${failures.length} row${failures.length !== 1 ? "s" : ""} need attention:`,
+                      { description: shown + more, duration: 15000 }
+                    );
+                  } else if (skipped > 0) {
                     toast.warning(`Imported ${created} payment${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched client or missing amount).`);
                   } else {
                     toast.success(`Successfully imported ${created} payment${created !== 1 ? "s" : ""}.`);

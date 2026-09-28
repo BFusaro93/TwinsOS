@@ -4,10 +4,14 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
 
-const MergeSchema = z.object({
-  parentId: z.string().uuid(),
-  childIds: z.array(z.string().uuid()).min(1),
-});
+const MergeSchema = z
+  .object({
+    parentId: z.string().uuid(),
+    childIds: z.array(z.string().uuid()).min(1),
+  })
+  .refine((v) => new Set(v.childIds).size === v.childIds.length && !v.childIds.includes(v.parentId), {
+    message: "Each invoice can only be merged once, and not into itself",
+  });
 
 export async function POST(request: Request) {
   const cookieStore = await cookies();
@@ -81,37 +85,6 @@ export async function POST(request: Request) {
 
   if (itemsFetchErr) return NextResponse.json({ error: `Line item fetch failed: ${itemsFetchErr.message}` }, { status: 500 });
 
-  // Reassign all line items from child invoices to the parent
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: liErr } = await (supabase as any)
-    .from("crm_invoice_line_items")
-    .update({ invoice_id: parentId })
-    .in("invoice_id", childIds)
-    .eq("org_id", orgId);
-
-  if (liErr) return NextResponse.json({ error: liErr.message }, { status: 500 });
-
-  // Reassign payment records pointed at a child invoice to the parent too —
-  // otherwise a child's already-collected payment stays "on" a
-  // soft-deleted/voided invoice and is lost from the merged balance below.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: allocErr } = await (supabase as any)
-    .from("crm_payment_allocations")
-    .update({ invoice_id: parentId })
-    .in("invoice_id", childIds)
-    .eq("org_id", orgId);
-  if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
-
-  // Legacy payments predating crm_payment_allocations link directly via
-  // crm_payments.invoice_id — reassign those too.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: legacyPmtErr } = await (supabase as any)
-    .from("crm_payments")
-    .update({ invoice_id: parentId })
-    .in("invoice_id", childIds)
-    .eq("org_id", orgId);
-  if (legacyPmtErr) return NextResponse.json({ error: legacyPmtErr.message }, { status: 500 });
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items = (allItems ?? []) as { total_cents: number; discount_cents: number | null; is_taxable: boolean }[];
   const parentInv = inv.find((i) => i.id === parentId);
@@ -129,39 +102,36 @@ export async function POST(request: Request) {
     discountCents: combinedDiscountCents,
     taxCents,
     totalCents: total,
-    amountPaidCents: alreadyPaid,
-    balanceCents: newBalance,
   } = computeMergedInvoiceTotals(
     items.map((li) => ({ totalCents: li.total_cents, discountCents: li.discount_cents, isTaxable: li.is_taxable })),
     inv.map((i) => ({ discountCents: i.discount_cents, amountPaidCents: i.amount_paid_cents })),
     taxRateBps
   );
 
+  // Every write — line items, parent totals, allocations, legacy payment
+  // links, zeroing and voiding the children, the parent's paid/balance/status
+  // — happens in ONE transaction (crm_merge_invoices, 20260927100300). This
+  // used to be six separate writes, and the last one (voiding the children)
+  // was rejected by crm_invoice_block_void_with_payments for any child with a
+  // payment, because only its allocations had been moved and not its
+  // amount_paid_cents — leaving line items and money on the parent and the
+  // children still live: a half-merge. The RPC runs as the caller (RLS
+  // applies), re-validates everything under row locks, and rolls back whole
+  // on any failure.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: parentErr } = await (supabase as any)
-    .from("crm_invoices")
-    .update({
-      subtotal_cents: subtotal,
-      discount_cents: combinedDiscountCents,
-      tax_cents: taxCents,
-      total_cents: total,
-      balance_cents: newBalance,
-      amount_paid_cents: alreadyPaid,
-    })
-    .eq("id", parentId)
-    .eq("org_id", orgId);
-
-  if (parentErr) return NextResponse.json({ error: parentErr.message }, { status: 500 });
-
-  // Soft-delete the child invoices
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: deleteErr } = await (supabase as any)
-    .from("crm_invoices")
-    .update({ deleted_at: new Date().toISOString(), status: "void" })
-    .in("id", childIds)
-    .eq("org_id", orgId);
-
-  if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+  const { error: mergeErr } = await (supabase as any).rpc("crm_merge_invoices", {
+    p_parent_id: parentId,
+    p_child_ids: childIds,
+    p_subtotal_cents: subtotal,
+    p_discount_cents: combinedDiscountCents,
+    p_tax_cents: taxCents,
+    p_total_cents: total,
+  });
+  if (mergeErr) {
+    // Validation failures raised by the RPC (paid more than the merged total,
+    // payments on a draft parent, ...) are user-facing; nothing was written.
+    return NextResponse.json({ error: mergeErr.message ?? "Merge failed" }, { status: 422 });
+  }
 
   // Update the parent invoice's client_activity entry with the real post-merge total
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

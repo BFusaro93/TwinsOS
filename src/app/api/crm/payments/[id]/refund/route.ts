@@ -83,6 +83,7 @@ export async function POST(
     return NextResponse.json({ error: "Refund amount exceeds remaining refundable balance" }, { status: 400 });
   }
 
+  let appliedCents = 0;
   if (payment.stripe_payment_intent_id) {
     if (!isStripeConfigured() && !isStripeTestConfigured()) {
       return NextResponse.json({ error: "Card payments are not configured" }, { status: 400 });
@@ -97,9 +98,13 @@ export async function POST(
       return NextResponse.json({ error: "Organization has no connected Stripe account" }, { status: 400 });
     }
 
+    // Stripe first: the books must never say "refunded" unless Stripe
+    // actually moved the money.
+    let stripeRefundedCents: number;
+    let stripeRefundId: string;
     try {
       const stripe = getStripeForOrg(org.stripe_connect_livemode);
-      await stripe.refunds.create(
+      const refund = await stripe.refunds.create(
         {
           payment_intent: payment.stripe_payment_intent_id,
           amount: refundAmountCents,
@@ -109,24 +114,57 @@ export async function POST(
           idempotencyKey: chargeIdempotencyKey(["refund", paymentId, refundAmountCents]),
         }
       );
+      stripeRefundId = refund.id;
+      // Reconcile to Stripe's own running total rather than applying
+      // refundAmountCents as a fresh delta. A retry inside the
+      // idempotency-key window gets this SAME refund back from Stripe; applying
+      // the delta again double-reversed the invoice and the client's credit.
+      // And the charge.refunded webhook reconciles to the same number, so
+      // whichever writer lands first applies it and the other no-ops.
+      const chargeId = typeof refund.charge === "string" ? refund.charge : refund.charge?.id;
+      if (!chargeId) throw new Error("Stripe refund has no charge");
+      const charge = await stripe.charges.retrieve(chargeId, undefined, { stripeAccount: org.stripe_connect_account_id });
+      stripeRefundedCents = charge.amount_refunded;
     } catch (err) {
       log.error("stripe refund failed", { error: err, paymentId });
       const message = err instanceof Error ? err.message : "Stripe refund failed";
-      // Nothing in the DB has been touched yet — fail closed so the books
-      // never say "refunded" unless Stripe actually moved the money.
+      // Nothing in the DB has been touched yet — fail closed. (If the refund
+      // itself went through and only the charge read failed, the
+      // charge.refunded webhook still records it.)
       return NextResponse.json({ error: message }, { status: 502 });
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
+      p_payment_id: paymentId,
+      p_target_reversed_cents: stripeRefundedCents,
+    });
+    if (reconcileErr) {
+      log.error("refund reconcile failed after Stripe refund succeeded — the charge.refunded webhook will retry it", {
+        error: reconcileErr,
+        paymentId,
+        stripeRefundId,
+      });
+      return NextResponse.json({ error: "Refund processed with Stripe but failed to record — contact support" }, { status: 500 });
+    }
+    appliedCents = typeof applied === "number" ? applied : 0;
+    log.info("stripe refund recorded", { paymentId, stripeRefundId, stripeRefundedCents, appliedCents });
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: refundErr } = await (db.rpc as any)("refund_payment", {
+      p_payment_id: paymentId,
+      p_refund_amount_cents: refundAmountCents,
+    });
+    if (refundErr) {
+      log.error("refund_payment RPC failed", { error: refundErr, paymentId });
+      return NextResponse.json({ error: "Failed to record the refund" }, { status: 500 });
+    }
+    appliedCents = refundAmountCents;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: refundErr } = await (db.rpc as any)("refund_payment", {
-    p_payment_id: paymentId,
-    p_refund_amount_cents: refundAmountCents,
-  });
-  if (refundErr) {
-    log.error("refund_payment RPC failed after Stripe refund succeeded — manual reconciliation needed", { error: refundErr, paymentId });
-    return NextResponse.json({ error: "Refund processed with Stripe but failed to record — contact support" }, { status: 500 });
-  }
+  // Nothing new to record — a retried request, or the webhook got here first
+  // (and wrote its own activity entry).
+  if (appliedCents <= 0) return NextResponse.json({ ok: true });
 
   // The refund reversal — refunded_amount_cents, the allocation rows, and each
   // invoice's amount_paid/balance — all happens inside refund_payment() as one
@@ -146,10 +184,10 @@ export async function POST(
     org_id: profile.org_id,
     client_id: payment.client_id,
     activity_type: "payment",
-    subject: `Refund issued: $${(refundAmountCents / 100).toFixed(2)}`,
+    subject: `Refund issued: $${(appliedCents / 100).toFixed(2)}`,
     ref_id: paymentId,
     ref_table: "crm_payments",
-    amount_cents: -refundAmountCents,
+    amount_cents: -appliedCents,
   });
 
   return NextResponse.json({ ok: true });

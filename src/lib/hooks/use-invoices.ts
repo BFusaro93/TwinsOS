@@ -684,12 +684,34 @@ export function useUpdateInvoiceStatus() {
         }
         return;
       }
+      // Voiding zeroed balance_cents; taking an invoice back out of void
+      // (to sent/draft from the status menu) must restore it, or the invoice
+      // reopens with $0 due and drops out of AR, autopay and the charge
+      // queues. (20260927100300 adds the same rule as a DB trigger; this keeps
+      // it correct from the client too.)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: current, error: currentErr } = await (supabase as any)
+        .from("crm_invoices")
+        .select("status, total_cents, amount_paid_cents, client_id")
+        .eq("id", id)
+        .single();
+      if (currentErr) throw currentErr;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const patch: Record<string, any> = { status };
+      const leavingVoid = current?.status === "void";
+      if (leavingVoid) {
+        patch.balance_cents = Math.max(0, (current.total_cents ?? 0) - (current.amount_paid_cents ?? 0));
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_invoices")
-        .update({ status })
+        .update(patch)
         .eq("id", id);
       if (error) throw error;
+      if (leavingVoid && current?.client_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.rpc as any)("sync_client_balance", { p_client_id: current.client_id });
+      }
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -951,6 +973,25 @@ export function useUpdatePayment() {
     }) => {
       const supabase = createClient();
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: current, error: currentErr } = await (supabase as any)
+        .from("crm_payments")
+        .select("invoice_id, amount_cents, refunded_amount_cents, unused_amount_cents, stripe_payment_intent_id")
+        .eq("id", id)
+        .single();
+      if (currentErr) throw currentErr;
+      const refundedCents: number = current.refunded_amount_cents ?? 0;
+
+      // A Stripe-backed payment's amount is what Stripe actually moved — the
+      // books can't say otherwise. Memo/date/method/split edits only; a
+      // different amount is a refund (or a new payment), not an edit.
+      if (current.stripe_payment_intent_id && amountCents !== current.amount_cents) {
+        throw new Error("This payment was made online — its amount can't be changed. Issue a refund instead.");
+      }
+      if (amountCents < refundedCents) {
+        throw new Error("The payment amount can't be less than what has already been refunded");
+      }
+
       // Validate + cap the NEW split up front, before anything is reversed,
       // so a rejected edit leaves the payment exactly as it was.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -967,8 +1008,13 @@ export function useUpdatePayment() {
       const activeAllocations = await resolveAllocations(supabase as any, allocations, priorByInvoiceId);
       const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
       const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
-      if (allocatedCents > amountCents) {
-        throw new Error("Allocated amount exceeds the payment amount");
+      // Refunded money is gone — it can't also be applied to an invoice.
+      if (allocatedCents > amountCents - refundedCents) {
+        throw new Error(
+          refundedCents > 0
+            ? "Allocated amount exceeds what's left of this payment after refunds"
+            : "Allocated amount exceeds the payment amount"
+        );
       }
 
       // Reverse the ORIGINAL allocations, not a guess. Historical payments
@@ -989,17 +1035,14 @@ export function useUpdatePayment() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await applyPaymentToInvoice(supabase as any, a.invoice_id, -a.amount_cents);
         }
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: old, error: oldErr } = await (supabase as any)
-          .from("crm_payments")
-          .select("invoice_id, amount_cents")
-          .eq("id", id)
-          .single();
-        if (oldErr) throw oldErr;
-        if (old.invoice_id) {
+      } else if (current.invoice_id) {
+        // What a legacy (allocation-less) payment still has applied: its
+        // amount, less refunds (refund_payment reversed those from the invoice
+        // already) and whatever sits unused on it.
+        const legacyAppliedCents = Math.max(0, current.amount_cents - refundedCents - (current.unused_amount_cents ?? 0));
+        if (legacyAppliedCents > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await applyPaymentToInvoice(supabase as any, old.invoice_id, -old.amount_cents);
+          await applyPaymentToInvoice(supabase as any, current.invoice_id, -legacyAppliedCents);
         }
       }
 
@@ -1009,7 +1052,10 @@ export function useUpdatePayment() {
       const { error } = await (supabase as any).from("crm_payments").update({
         invoice_id: primaryInvoiceId,
         amount_cents: amountCents,
-        unused_amount_cents: amountCents - allocatedCents,
+        // Net of refunds: unused = amount − refunded − allocated. Ignoring
+        // refunded_amount_cents here minted phantom client credit for money
+        // that had already gone back to the client.
+        unused_amount_cents: Math.max(0, amountCents - refundedCents - allocatedCents),
         payment_date: paymentDate,
         method,
         reference: reference ?? null,
@@ -1142,6 +1188,25 @@ export function useUpsertInvoiceLineItem() {
   });
 }
 
+/**
+ * After an invoice's total changes, brings its payments back in line — in one
+ * transaction (crm_reconcile_invoice_payments, 20260927100300):
+ *   - total dropped below what's been paid → the excess allocations move back
+ *     onto the paying payments as unused client credit; status stays paid
+ *   - total rose above what's been paid → status becomes partial (or back to
+ *     sent if nothing is paid) with the real balance due
+ * The editors used to just write balance = max(0, total − paid), leaving a
+ * "paid" invoice with money due, or amount_paid > total with the excess
+ * credited nowhere.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function reconcileInvoicePayments(supabase: any, invoiceId: string): Promise<{ wasNewlyPaid: boolean }> {
+  const { data, error } = await supabase.rpc("crm_reconcile_invoice_payments", { p_invoice_id: invoiceId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return { wasNewlyPaid: !!row?.was_newly_paid };
+}
+
 // Shared by useDeleteInvoiceLineItem and useSetJobProductStatus (removing a
 // job product from an invoice deletes its line item the same way).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1186,19 +1251,19 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
   const paid = inv?.amount_paid_cents ?? 0;
   const balanceCents = Math.max(0, totalCents - paid);
 
-  await supabase.from("crm_invoices").update({
+  const { error: updateErr } = await supabase.from("crm_invoices").update({
     subtotal_cents: subtotalCents,
     tax_cents: taxCents,
     total_cents: totalCents,
     balance_cents: balanceCents,
   }).eq("id", invoiceId);
+  if (updateErr) throwIfLockedInvoiceError(updateErr);
 
-  // Sync client's outstanding balance
-  if (inv?.client_id) {
-    await supabase.rpc("sync_client_balance", { p_client_id: inv.client_id });
-  }
+  // Status/allocations/credit for the new total (also re-syncs the client's
+  // balances).
+  const { wasNewlyPaid } = await reconcileInvoicePayments(supabase, invoiceId);
 
-  return { invoiceId, clientId: inv?.client_id as string | undefined };
+  return { invoiceId, clientId: inv?.client_id as string | undefined, wasNewlyPaid };
 }
 
 export function useDeleteInvoiceLineItem() {
@@ -1278,16 +1343,20 @@ export function useUpdateInvoiceFinancials() {
       const { error } = await (supabase as any).from("crm_invoices").update(patch).eq("id", id);
       if (error) throwIfLockedInvoiceError(error);
 
-      // Sync client's outstanding balance
-      if (inv?.client_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.client_id });
-      }
+      // Status/allocations/credit for the new total (also re-syncs the
+      // client's balances).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { wasNewlyPaid } = await reconcileInvoicePayments(supabase as any, id);
+      return { wasNewlyPaid, clientId: (inv?.client_id as string | undefined) ?? null };
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      if (data?.wasNewlyPaid && data.clientId) {
+        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: data.clientId, invoiceId: vars.id });
+      }
     },
   });
 }
@@ -1349,43 +1418,92 @@ export function useBulkImportPayments() {
 
       let created = 0;
       let skipped = 0;
+      /** Rows that were imported but couldn't be (fully) applied to their
+       * invoice, or that failed outright — 1-based CSV data row numbers. */
+      const failures: { row: number; reason: string }[] = [];
+      const touchedClientIds = new Set<string>();
 
-      for (const r of rows) {
+      for (const [index, r] of rows.entries()) {
+        const rowNumber = index + 1;
         const clientId = byName.get(r.clientName?.trim().toLowerCase() ?? "");
         const amountCents = Math.round(parseFloat(r.amount || "0") * 100);
-        if (!clientId || !amountCents) { skipped++; continue; }
+        if (!clientId || !amountCents || amountCents < 0) { skipped++; continue; }
 
         const method = PAYMENT_METHODS.find((m) => m.toLowerCase() === r.method?.trim().toLowerCase()) ?? "Check";
         const invoiceNumber = r.invoiceNumber ? parseInt(r.invoiceNumber, 10) : null;
         const invoiceId = invoiceNumber ? invoiceByNumberAndClient.get(`${clientId}:${invoiceNumber}`) ?? null : null;
+        if (invoiceNumber && !invoiceId) {
+          failures.push({ row: rowNumber, reason: `Invoice #${invoiceNumber} not found for this client — recorded as account credit` });
+        }
 
+        // Inserted as unapplied credit first; the application below goes
+        // through crm_apply_credit_to_invoice(), which in ONE transaction
+        // clamps to the invoice's open balance, refuses draft/void invoices,
+        // writes the allocation and moves unused → applied. Anything it
+        // doesn't apply simply stays on the payment as client credit. This
+        // used to insert an allocation for the FULL amount (ignoring its
+        // error) and then blindly add +amount to the invoice — an overpaid,
+        // draft or void invoice ended up with amount_paid > total and no
+        // matching allocation.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: payment, error } = await (supabase as any).from("crm_payments").insert({
           created_by: user?.id ?? null,
           client_id: clientId,
-          invoice_id: invoiceId,
+          invoice_id: null,
           amount_cents: amountCents,
-          unused_amount_cents: invoiceId ? 0 : amountCents,
+          unused_amount_cents: amountCents,
           payment_date: r.paymentDate?.trim() || todayInZone(orgTimeZone),
           method,
           reference: r.reference?.trim() || null,
           memo: r.memo?.trim() || null,
         }).select("id").single();
-        if (error) throw error;
+        if (error) {
+          failures.push({ row: rowNumber, reason: `Not imported: ${error.message ?? "insert failed"}` });
+          continue;
+        }
+        created++;
+        touchedClientIds.add(clientId);
 
         if (invoiceId) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("crm_payment_allocations").insert({
-            payment_id: payment.id,
-            invoice_id: invoiceId,
-            amount_cents: amountCents,
+          const { data: appliedCents, error: applyErr } = await (supabase.rpc as any)("crm_apply_credit_to_invoice", {
+            p_payment_id: payment.id,
+            p_invoice_id: invoiceId,
+            p_amount_cents: amountCents,
           });
-          await applyPaymentToInvoice(supabase, invoiceId, amountCents);
+          if (applyErr) {
+            failures.push({
+              row: rowNumber,
+              reason: `Invoice #${invoiceNumber}: ${applyErr.message ?? "could not apply"} — recorded as account credit`,
+            });
+            continue;
+          }
+          const applied = typeof appliedCents === "number" ? appliedCents : 0;
+          if (applied > 0) {
+            // Single-invoice payment: point it at its invoice like a manually
+            // recorded one (its allocation row is what carries the amount).
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: linkErr } = await (supabase as any)
+              .from("crm_payments")
+              .update({ invoice_id: invoiceId })
+              .eq("id", payment.id);
+            if (linkErr) failures.push({ row: rowNumber, reason: `Applied, but linking to invoice #${invoiceNumber} failed: ${linkErr.message}` });
+          }
+          if (applied < amountCents) {
+            failures.push({
+              row: rowNumber,
+              reason: `Invoice #${invoiceNumber} only had ${formatCents(applied)} open — ${formatCents(amountCents - applied)} recorded as account credit`,
+            });
+          }
         }
-        created++;
       }
 
-      return { created, skipped };
+      for (const clientId of touchedClientIds) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
+      }
+
+      return { created, skipped, failures };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-payments"] });

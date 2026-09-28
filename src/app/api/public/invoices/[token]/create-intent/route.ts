@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 
 // Public, unauthenticated "pay without logging in" endpoint. Mirrors the
 // authenticated /api/crm/payments/create-intent exactly — same metadata
@@ -54,6 +55,11 @@ export async function POST(
   if (invoice.status === "void") {
     return NextResponse.json({ error: "This invoice has been voided" }, { status: 400 });
   }
+  // A draft isn't issued yet — the payment could never be applied to it
+  // (the allocation guard rejects drafts), so it would only become credit.
+  if (invoice.status === "draft") {
+    return NextResponse.json({ error: "This invoice isn't ready for payment yet" }, { status: 400 });
+  }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
   }
@@ -84,6 +90,27 @@ export async function POST(
   );
 
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
+
+  // Always attach the client's Stripe customer so the intent is visible to
+  // the duplicate-charge lookup, then refuse if a payment for this invoice is
+  // already in flight (e.g. an ACH debit from the portal still settling).
+  const customerId = await ensureIntentCustomer({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    serviceDb: supabase,
+    orgId: invoice.org_id,
+    clientId: invoice.client_id,
+  });
+  const refusal = await refuseIfChargeInFlight({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    db: supabase,
+    invoiceIds: [invoice.id],
+    customerId,
+    isAch: false,
+  });
+  if (refusal) return NextResponse.json({ error: refusal.body.error, code: refusal.body.code }, { status: refusal.status });
+
   // Created directly on the org's connected account (a "direct charge") so the
   // funds land in their own Stripe balance/payouts, never the platform's —
   // same as every other crm_invoice payment entry point (see create-intent.ts).
@@ -92,6 +119,7 @@ export async function POST(
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: ["card"],
+      ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
         org_id: invoice.org_id,
