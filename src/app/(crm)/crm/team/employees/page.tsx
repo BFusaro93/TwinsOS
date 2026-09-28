@@ -31,7 +31,13 @@ export default function EmployeesPage() {
   const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: employees } = useEmployees(false);
   const { mutateAsync: bulkImportEmployees } = useBulkImportEmployees();
-  const [selected, setSelected] = useState<CRMEmployee | null>(null);
+  const [selectedSnapshot, setSelected] = useState<CRMEmployee | null>(null);
+  // Re-read the selected employee from the live list so the detail panel and
+  // the edit dialog see saved changes (e.g. a newly linked user) instead of
+  // the stale object captured at click time.
+  const selected = selectedSnapshot
+    ? employees?.find((e) => e.id === selectedSnapshot.id) ?? selectedSnapshot
+    : null;
   const [editEmployee, setEditEmployee] = useState<CRMEmployee | "new" | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
 
