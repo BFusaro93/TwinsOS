@@ -36,6 +36,17 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
       dashboard_access: {
         label: "Dashboard Access",
         permissions: {
+          // Which built-in dashboards this role sees (sidebar, overview and
+          // direct URL — see DASHBOARDS_NAV). Admins and logins with no
+          // Landscapt role are unaffected. Twins-only legacy dashboards stay
+          // on the internal-org check and aren't listed here.
+          view_dashboard_equipt: "View Equipt Dashboard",
+          view_dashboard_myday: "View Landscapt My Day",
+          view_dashboard_reports: "View Reports Dashboard",
+          view_dashboard_kpis: "View KPI Scorecard",
+          view_dashboard_driver_safety: "View Driver Safety Scores",
+          view_dashboard_company_report: "View Company Report",
+          view_dashboard_social_media: "View Social Media",
           // Admins and Managers can always edit; this lets a lesser role
           // (e.g. a social media manager) log weeks and edit goals/platforms.
           // Enforced in the DB by can_edit_social_media().

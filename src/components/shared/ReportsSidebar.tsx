@@ -23,6 +23,7 @@ import { BrandMark } from "./BrandMark";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
 import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useDashboards } from "@/lib/hooks/use-report-center";
 import type { PlatformModule } from "@/lib/stripe/plans";
 import type { LucideIcon } from "lucide-react";
@@ -38,22 +39,41 @@ interface ReportsNavItem {
   adminOnly?: boolean;
   requiresDrivingScore?: boolean;
   requiresModule?: PlatformModule;
+  /** crm_roles permission key required to see this dashboard. Only applies
+   *  to logins that have a Landscapt role — admins and role-less logins
+   *  (e.g. managers without a linked employee) keep seeing it. */
+  permission?: string;
 }
 
 export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Overview",            href: "/dashboards",                 icon: LayoutDashboard },
-  { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt",    hideFromCrew: true, description: "Work orders, purchasing & asset management" },
-  { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt", hideFromCrew: true, description: "Your daily schedule and tasks" },
-  { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt", hideFromCrew: true, description: "Landscapt's built-in reporting dashboard" },
-  { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Gauge,       requiresModule: "landscapt", hideFromCrew: true, description: "Customizable KPIs computed live from Landscapt data" },
+  { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt",    hideFromCrew: true, permission: "view_dashboard_equipt", description: "Work orders, purchasing & asset management" },
+  { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt", hideFromCrew: true, permission: "view_dashboard_myday", description: "Your daily schedule and tasks" },
+  { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt", hideFromCrew: true, permission: "view_dashboard_reports", description: "Landscapt's built-in reporting dashboard" },
+  { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Gauge,       requiresModule: "landscapt", hideFromCrew: true, permission: "view_dashboard_kpis", description: "Customizable KPIs computed live from Landscapt data" },
   { label: "Twins KPI Scorecard", href: "/dashboards/twins-kpis",      icon: Target,      hideFromCrew: true, internalOnly: true, description: "Legacy scorecard (AvB, QBO, Samsara sources)" },
   { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true, adminOnly: true, description: "Revenue, expenses & margin" },
   { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true, description: "Budget vs. actual labor hours" },
-  { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck, requiresDrivingScore: true, description: "Samsara driver safety scoring" },
-  { label: "Company Report",      href: "/dashboards/crm",             icon: FileText,    requiresModule: "landscapt", hideFromCrew: true, description: "Sales, operations, and A/R computed live from Landscapt data" },
+  { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck, requiresDrivingScore: true, permission: "view_dashboard_driver_safety", description: "Samsara driver safety scoring" },
+  { label: "Company Report",      href: "/dashboards/crm",             icon: FileText,    requiresModule: "landscapt", hideFromCrew: true, permission: "view_dashboard_company_report", description: "Sales, operations, and A/R computed live from Landscapt data" },
   { label: "Twins CRM Report",     href: "/dashboards/twins-crm-report", icon: FileText,   hideFromCrew: true, internalOnly: true, description: "Legacy Service Autopilot summary" },
-  { label: "Social Media",        href: "/dashboards/social-media",    icon: Share2,      hideFromCrew: true, description: "Weekly reach, engagement, followers & leads by platform" },
+  { label: "Social Media",        href: "/dashboards/social-media",    icon: Share2,      hideFromCrew: true, permission: "view_dashboard_social_media", description: "Weekly reach, engagement, followers & leads by platform" },
 ];
+
+/** Role-permission check for a dashboard's `permission` key. Admins always
+ *  pass; a login with no Landscapt role passes too (unchanged access for
+ *  role-less managers). While permissions load, gated items are hidden. */
+export function useDashboardPermission(): {
+  canViewDashboard: (permission?: string) => boolean;
+  isLoading: boolean;
+} {
+  const { can, isAdmin, roleId, isLoading } = usePermissions();
+  return {
+    canViewDashboard: (permission) =>
+      !permission || (!isLoading && (isAdmin || !roleId || can(permission))),
+    isLoading,
+  };
+}
 
 /** DASHBOARDS_NAV filtered to what the current user may see. The sidebar and
  *  the /dashboards overview both render from this so they can't drift apart. */
@@ -65,6 +85,7 @@ export function useVisibleDashboardsNav(): ReportsNavItem[] {
   const { allowed: hasDrivingScoreAccess } = useHasDrivingScoreAccess();
   const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
+  const { canViewDashboard } = useDashboardPermission();
 
   return DASHBOARDS_NAV.filter(
     (item) =>
@@ -72,7 +93,8 @@ export function useVisibleDashboardsNav(): ReportsNavItem[] {
       (!item.hideFromCrew || !isCrew) &&
       (!item.internalOnly || isInternalOrg) &&
       (!item.requiresDrivingScore || hasDrivingScoreAccess) &&
-      (!item.requiresModule || (item.requiresModule === "equipt" ? hasEquipt : hasLandscapt))
+      (!item.requiresModule || (item.requiresModule === "equipt" ? hasEquipt : hasLandscapt)) &&
+      canViewDashboard(item.permission)
   );
 }
 
