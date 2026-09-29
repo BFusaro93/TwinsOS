@@ -86,18 +86,31 @@ export function dashboardRouteGate(pathname: string): { permission: string; crew
  *  fail CLOSED: no linked employee, no role, a soft-deleted role, or a
  *  permissions query that failed all mean "no". (PR #173 let role-less
  *  logins through; that left every gated dashboard open to them.) While
- *  permissions load, gated items are hidden. */
+ *  permissions load, gated items are hidden.
+ *
+ *  Exception: the keys only mean something for someone who HAS a Landscapt
+ *  role. An Equipt-only login with no role (e.g. a shop mechanic) keeps the
+ *  Equipt-side dashboards by app role, as before #173. */
 export function useDashboardPermission(): {
   canViewDashboard: (permission?: string) => boolean;
   isLoading: boolean;
 } {
   const { can, isAdmin, roleId, isLoading } = usePermissions();
+  const { currentUser } = useCurrentUserStore();
   return {
-    canViewDashboard: (permission) =>
-      !permission || (!isLoading && (isAdmin || (!!roleId && can(permission)))),
+    canViewDashboard: (permission) => {
+      if (!permission) return true;
+      if (isLoading) return false;
+      if (isAdmin) return true;
+      if (roleId) return can(permission);
+      return EQUIPT_SIDE_DASHBOARD_KEYS.has(permission) && currentUser.role !== "crew";
+    },
     isLoading,
   };
 }
+
+/** Dashboards that belong to Equipt rather than Landscapt — see useDashboardPermission. */
+const EQUIPT_SIDE_DASHBOARD_KEYS = new Set(["view_dashboard_equipt", "view_dashboard_driver_safety"]);
 
 /** DASHBOARDS_NAV filtered to what the current user may see. The sidebar and
  *  the /dashboards overview both render from this so they can't drift apart. */
