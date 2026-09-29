@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { WarrantyReport } from "@/components/cmms/reports/WarrantyReport";
 import { PMComplianceReport } from "@/components/cmms/reports/PMComplianceReport";
 import { UptimeReport } from "@/components/cmms/reports/UptimeReport";
+import { SpendDetailDialog, type SpendDetail, type SpendDetailRow } from "@/components/shared/SpendDetailDialog";
 import { ReportStatCard as StatCard, ReportSkeletonCard as SkeletonCard } from "@/components/shared/ReportStatCard";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
@@ -37,6 +38,7 @@ import type { WorkOrder, Part } from "@/types/cmms";
 function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder[]; isLoading: boolean }) {
   const { data: products = [] } = useProducts();
   const [range, setRange] = useState<SpendRange>("12m");
+  const [detailKind, setDetailKind] = useState<"spend" | "avg" | "pos" | "open" | null>(null);
 
   // Canceled and rejected POs never delivered parts, so they don't count as spend. Range is by actual PO date.
   const purchaseOrders = useMemo(() => {
@@ -114,6 +116,51 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
       .slice(0, 5);
   }, [purchaseOrders, productCategoryMap]);
 
+  // Rows behind the stat cards. Built on demand, only while a card's dialog is open.
+  const detail = useMemo<SpendDetail | null>(() => {
+    if (!detailKind) return null;
+    const rangeText = SPEND_RANGE_OPTIONS.find((o) => o.key === range)?.label ?? "";
+    const poDate = (po: PurchaseOrder) => po.poDate ?? po.createdAt;
+    const isPart = (li: PurchaseOrder["lineItems"][number]) => productCategoryMap.get(li.productItemId) === "maintenance_part";
+    const partsCents = (po: PurchaseOrder) => po.lineItems.filter(isPart).reduce((s, li) => s + li.quantity * li.unitCost, 0);
+    const byDateDesc = (a: SpendDetailRow, b: SpendDetailRow) => b.date.localeCompare(a.date) || b.cents - a.cents;
+    const poRow = (po: PurchaseOrder, cents: number): SpendDetailRow => ({
+      key: po.id, date: poDate(po), poId: po.id, poNumber: po.poNumber, vendor: po.vendorName, status: po.status, cents,
+    });
+
+    if (detailKind === "spend") {
+      const rows = purchaseOrders.flatMap((po) =>
+        po.lineItems.filter(isPart).map<SpendDetailRow>((li) => ({
+          key: `${po.id}-${li.id}`,
+          date: poDate(po),
+          poId: po.id,
+          poNumber: po.poNumber,
+          vendor: po.vendorName,
+          item: li.productItemName,
+          partNumber: li.partNumber,
+          basis: `${li.quantity} × ${formatCurrency(li.unitCost)}`,
+          cents: li.quantity * li.unitCost,
+        }))
+      ).sort(byDateDesc);
+      return { title: "Total Parts Spend — line items", description: `${rangeText} · ${rows.length} lines · ${formatCurrency(totalSpend)}`, rows };
+    }
+    if (detailKind === "avg") {
+      const rows = purchaseOrders.map((po) => poRow(po, partsCents(po))).filter((r) => r.cents > 0).sort(byDateDesc);
+      return {
+        title: "Avg Parts PO Value — parts POs",
+        description: `${rangeText} · ${rows.length} POs · ${formatCurrency(totalSpend)} ÷ ${rows.length} = ${formatCurrency(avgPOValue)}. Amounts are parts lines only.`,
+        rows,
+      };
+    }
+    const list = detailKind === "open" ? openPOs : purchaseOrders;
+    const rows = list.map((po) => poRow(po, po.grandTotal)).sort(byDateDesc);
+    return {
+      title: detailKind === "open" ? "Open POs" : "Total POs",
+      description: `${rangeText} · ${rows.length} POs · amounts are PO grand totals`,
+      rows,
+    };
+  }, [detailKind, range, purchaseOrders, productCategoryMap, totalSpend, avgPOValue, openPOs]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-6">
@@ -142,11 +189,12 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
       </div>
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} sub={rangeLabel} />
-        <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} sub={rangeLabel} />
-        <StatCard label="Total POs" value={purchaseOrders.length} />
-        <StatCard label="Open POs" value={openPOs.length} />
+        <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} sub={rangeLabel} onClick={() => setDetailKind("spend")} />
+        <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} sub={rangeLabel} onClick={() => setDetailKind("avg")} />
+        <StatCard label="Total POs" value={purchaseOrders.length} onClick={() => setDetailKind("pos")} />
+        <StatCard label="Open POs" value={openPOs.length} onClick={() => setDetailKind("open")} />
       </div>
+      <SpendDetailDialog detail={detail} onClose={() => setDetailKind(null)} />
 
       {/* Monthly spend trend */}
       <div className="rounded-lg border bg-white shadow-sm p-6">
