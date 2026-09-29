@@ -13,8 +13,8 @@ const STAFF_ROLES: [string, string][] = [
   ["Admin", "Full access to everything — all modules, all records, settings, approval flows, and user management."],
   ["Manager", "Full operational access across purchasing and maintenance — everything except organization settings and user management."],
   ["Purchaser", "Manages the full procurement lifecycle from requisition to receiving. Read-only on work orders."],
-  ["Technician", "Executes maintenance work — creates and manages work orders (not limited to ones assigned to them), and can initiate procurement for parts."],
-  ["Viewer", "Read-only across both modules. No create, edit, delete, or approve access."],
+  ["Staff", "Standard Equipt access — creates and manages work orders (not limited to ones assigned to them), and can initiate procurement for parts."],
+  ["Viewer", "Read-only in Equipt. No create, edit, delete, or approve access there. Landscapt access follows their Landscapt role."],
   ["Requestor", "Submits maintenance requests and draft purchase requisitions only — can't approve, edit, or delete, and has no access to assets, vendors, or inventory."],
   ["Crew", "A shared login for a field crew team (e.g. MAINT1, ENHANCE1), not an individual person — confined to the crew field surface, not the full dashboard."],
 ];
@@ -23,8 +23,8 @@ const MATRIX_ROWS: [string, string, string, string, string, string, string][] = 
   ["Admin",      "Yes", "Yes", "Yes", "Full", "Full (bypasses CRM role permissions entirely)", "Automatic"],
   ["Manager",    "No",  "Yes (within limit)", "No", "Full", "None by default — needs a CRM role assigned separately", "N/A"],
   ["Purchaser",  "No",  "No", "No", "Requisitions/POs/receiving/vendors full; work orders read-only", "None by default", "N/A"],
-  ["Technician", "No",  "No", "No", "Work orders, PM, parts, meters full; can create requisitions/POs for parts", "None by default", "N/A"],
-  ["Viewer",     "No",  "No", "No", "Read-only, all records", "None by default", "N/A"],
+  ["Staff",      "No",  "No", "No", "Work orders, PM, parts, meters full; can create requisitions/POs for parts", "None by default", "N/A"],
+  ["Viewer",     "No",  "No", "No", "Read-only", "None by default", "N/A"],
   ["Requestor",  "No",  "No", "No", "Maintenance requests + draft requisitions only", "None by default", "N/A"],
   ["Crew",       "No",  "No", "No", "None — confined to crew field surface", "None — confined to /crm/crew", "N/A"],
 ];
@@ -48,7 +48,7 @@ export function UsersRolesGuide() {
           <TOCLink href="#matrix">Role permission matrix</TOCLink>
           <TOCLink href="#crm-roles">Landscapt/CRM custom roles</TOCLink>
           <TOCLink href="#inviting">Inviting a new user</TOCLink>
-          <TOCLink href="#worked-example">Worked example: inviting a Technician</TOCLink>
+          <TOCLink href="#worked-example">Worked example: inviting a Staff member</TOCLink>
           <TOCLink href="#crew-portal">Crew accounts and the client portal</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
         </div>
@@ -63,7 +63,7 @@ export function UsersRolesGuide() {
           <li>
             <strong>The organization role</strong> — a single value on every user&apos;s profile
             (<code>profiles.role</code>): <code>admin</code>, <code>manager</code>,{" "}
-            <code>purchaser</code>, <code>technician</code>, <code>viewer</code>,{" "}
+            <code>purchaser</code>, <code>technician</code> (shown as Staff), <code>viewer</code>,{" "}
             <code>requestor</code>, or <code>crew</code>. This is the role you pick when inviting
             someone from Settings → Users, and it&apos;s what gates Equipt (CMMS) and PO access.
           </li>
@@ -76,7 +76,7 @@ export function UsersRolesGuide() {
           </li>
         </ul>
         <Callout>
-          <strong>These don&apos;t sync.</strong> Being a Manager or Technician (organization role)
+          <strong>These don&apos;t sync.</strong> Being a Manager or Staff (organization role)
           gives you access to Equipt/PO. It gives you <em>no</em> access to Landscapt/CRM on its own
           — CRM access requires a separate <code>crm_employees</code> link with a CRM role assigned.
           Only Admin is an exception: Admins bypass CRM permission checks entirely and get full CRM
@@ -103,7 +103,7 @@ export function UsersRolesGuide() {
           </tbody>
         </Table>
         <Callout>
-          <strong>Purchaser, Technician, and Requestor only appear if your plan includes Equipt.</strong>{" "}
+          <strong>Purchaser, Staff, and Requestor only appear if your plan includes Equipt.</strong>{" "}
           A Landscapt-only org has no purchase orders, work orders, or assets for those roles to act
           on, so the invite and role dropdowns hide them until Equipt is on the plan.
         </Callout>
@@ -247,9 +247,9 @@ export function UsersRolesGuide() {
         </p>
       </Section>
 
-      <Section id="worked-example" title="Worked example: inviting a Technician">
+      <Section id="worked-example" title="Worked example: inviting a Staff member">
         <p>
-          An Admin invites <code>maria@greenlawn.com</code> as a <strong>Technician</strong>. What
+          An Admin invites <code>maria@greenlawn.com</code> as <strong>Staff</strong>. What
           happens immediately, and what doesn&apos;t:
         </p>
         <ul className="list-disc space-y-2 pl-5">
@@ -259,10 +259,10 @@ export function UsersRolesGuide() {
             just ones assigned to her), log labor and meter readings, submit maintenance requests,
             and create purchase requisitions and POs for maintenance parts.
           </li>
-          <li>She <strong>cannot</strong> approve any requisition or PO — Technician isn&apos;t an eligible approver role.</li>
+          <li>She <strong>cannot</strong> approve any requisition or PO — Staff isn&apos;t an eligible approver role.</li>
           <li>She <strong>cannot</strong> open Settings, invite other users, or change anyone&apos;s role.</li>
           <li>
-            She <strong>cannot</strong> open Landscapt/CRM at all yet — inviting her as Technician
+            She <strong>cannot</strong> open Landscapt/CRM at all yet — inviting her as Staff
             only set her organization role. If she also needs CRM access (say, to see client jobs
             tied to a work order), an admin has to separately create a <code>crm_employees</code>{" "}
             record for her at CRM Settings → Employees and assign one of the org&apos;s CRM roles.
@@ -319,7 +319,7 @@ export function UsersRolesGuide() {
           </li>
           <li>
             <strong>Changing someone&apos;s organization role never touches their CRM role.</strong>{" "}
-            Moving a user from Technician to Manager doesn&apos;t grant or revoke any CRM
+            Moving a user from Staff to Manager doesn&apos;t grant or revoke any CRM
             permissions — those two systems are independent, so check both when adjusting access.
           </li>
           <li>
@@ -336,7 +336,7 @@ export function UsersRolesGuide() {
           <li>
             <strong>The employee record has a third, unrelated &quot;User Role&quot; field — it grants nothing.</strong>{" "}
             CRM Settings → Employees → an employee&apos;s User Settings tab shows a{" "}
-            <strong>User Role</strong> field with options like Admin, Manager, Technician, Purchaser,
+            <strong>User Role</strong> field with options like Admin, Manager, Staff, Purchaser,
             and Viewer — the same familiar names as the organization role. It is purely a display
             label on <code>crm_employees.user_role</code> and has no effect on access anywhere in the
             app. Once the employee is linked to a login, it&apos;s auto-populated from that login&apos;s

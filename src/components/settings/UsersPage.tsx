@@ -56,7 +56,7 @@ function avatarColor(id: string): string {
 
 // These roles only make sense for orgs with the Equipt (CMMS) module on
 // their plan — an org that only subscribes to Landscapt has no purchase
-// orders, work orders, or assets for a Purchaser/Technician/Requestor to
+// orders, work orders, or assets for a Purchaser/Staff/Requestor to
 // act on, and offering them here just confuses which role to pick.
 const CMMS_ONLY_ROLES = new Set<OrgUser["role"]>(["purchaser", "technician", "requestor"]);
 
@@ -64,7 +64,7 @@ const ROLE_LABELS: Record<OrgUser["role"], string> = {
   admin: "Admin",
   manager: "Manager",
   purchaser: "Purchaser",
-  technician: "Technician",
+  technician: "Staff",
   viewer: "Viewer",
   requestor: "Requestor",
   crew: "Crew",
@@ -126,6 +126,20 @@ const ROLES: {
     ],
   },
   {
+    name: "Staff",
+    key: "technician",
+    description: "Standard Equipt access — creates and manages work orders and can start purchasing for parts. Can't approve.",
+    permissions: [
+      { text: "Create and manage work orders (not limited to assigned)" },
+      { text: "Log labor and parts on work orders" },
+      { text: "Submit maintenance requests" },
+      { text: "Create and submit purchase requisitions for parts" },
+      { text: "Create purchase orders for maintenance parts" },
+      { text: "View asset and vehicle details" },
+      { text: "Log meter readings" },
+    ],
+  },
+  {
     name: "Purchaser",
     key: "purchaser",
     description: "Manages the full procurement lifecycle from requisition to receiving.",
@@ -139,30 +153,16 @@ const ROLES: {
     ],
   },
   {
-    name: "Technician",
-    key: "technician",
-    description: "Executes maintenance work, creates and manages work orders, and can initiate procurement for parts.",
-    permissions: [
-      { text: "Create and manage work orders (not limited to assigned)" },
-      { text: "Log labor and parts on work orders" },
-      { text: "Submit maintenance requests" },
-      { text: "Create and submit purchase requisitions for parts" },
-      { text: "Create purchase orders for maintenance parts" },
-      { text: "View asset and vehicle details" },
-      { text: "Log meter readings" },
-    ],
-  },
-  {
     name: "Viewer",
     key: "viewer",
-    description: "Read-only access to view records across both modules without making any changes.",
+    description: "Read-only access to Equipt records. Landscapt access follows their Landscapt role.",
     descriptionCmmsOnly: "Read-only access to view records without making any changes.",
-    descriptionCrmOnly: "Read-only access to view records without making any changes.",
+    descriptionCrmOnly: "Landscapt access follows the Landscapt role assigned to them under Employees.",
     permissions: [
       { text: "View purchase orders, work orders, and assets", module: "cmms" },
-      { text: "View clients, estimates, jobs, and invoices", module: "crm" },
-      { text: "No create, edit, or delete access" },
-      { text: "Cannot approve or reject records" },
+      { text: "No create, edit, or delete access in Equipt", module: "cmms" },
+      { text: "Cannot approve or reject requisitions or POs", module: "cmms" },
+      { text: "Landscapt access follows their Landscapt role", module: "crm" },
     ],
   },
   {
@@ -303,10 +303,10 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, sh
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="manager">Manager</SelectItem>
+                {showCmmsRoles && <SelectItem value="technician">Staff</SelectItem>}
                 {showCmmsRoles && <SelectItem value="purchaser">Purchaser</SelectItem>}
-                {showCmmsRoles && <SelectItem value="technician">Technician</SelectItem>}
-                <SelectItem value="viewer">Viewer</SelectItem>
                 {showCmmsRoles && <SelectItem value="requestor">Requestor</SelectItem>}
+                <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="crew">Crew</SelectItem>
               </SelectContent>
             </Select>
@@ -624,7 +624,7 @@ export function UsersPage() {
   const { mutate: updatePhotoAccess } = useUpdatePhotoModuleAccess();
   const [resendingId, setResendingId] = useState<string | null>(null);
   // Avoid a flash of hidden roles while the org's plan is still loading —
-  // only hide Purchaser/Technician/Requestor once we're sure Equipt isn't on it.
+  // only hide Purchaser/Staff/Requestor once we're sure Equipt isn't on it.
   const { allowed: equiptAllowed, isLoading: equiptLoading } = useModuleAccess("equipt");
   const { allowed: landscaptAllowed, isLoading: landscaptLoading } = useModuleAccess("landscapt");
   const showCmmsRoles = equiptLoading || equiptAllowed;
@@ -798,11 +798,11 @@ export function UsersPage() {
                         <SelectContent>
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="manager">Manager</SelectItem>
+                          {showCmmsRoles && <SelectItem value="technician">Staff</SelectItem>}
                           {showCmmsRoles && <SelectItem value="purchaser">Purchaser</SelectItem>}
-                          {showCmmsRoles && <SelectItem value="technician">Technician</SelectItem>}
-                          <SelectItem value="crew">Crew</SelectItem>
-                          <SelectItem value="viewer">Viewer</SelectItem>
                           {showCmmsRoles && <SelectItem value="requestor">Requestor</SelectItem>}
+                          <SelectItem value="viewer">Viewer</SelectItem>
+                          <SelectItem value="crew">Crew</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>

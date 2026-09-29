@@ -12,7 +12,7 @@ const ROLE_PERMISSIONS: [string, string, string, string, string][] = [
   ["Admin",              "Yes", "Yes", "Yes", "Yes"],
   ["Manager (“Sales”)", "Only with the access flag", "Yes", "Yes", "Yes"],
   ["Crew",               "Yes — auto-granted", "Yes", "No", "No"],
-  ["Technician",         "Only with the access flag", "Yes", "No", "No"],
+  ["Staff",              "Only with the access flag", "Yes", "No", "No"],
   ["Viewer / Purchaser",  "Only with the access flag", "No", "No", "No"],
 ];
 
@@ -89,7 +89,7 @@ export function JobPhotosGuide() {
           <code>usePhotoAccess()</code>.
           Admins and Crew accounts always have access; everyone else needs an explicit{" "}
           <code>photo_module_access</code> flag on their profile. This is <em>not</em> a crew-only
-          tool — managers, admins, and technicians can all be granted access, and in practice the
+          tool — managers, admins, and staff can all be granted access, and in practice the
           full gallery/detail view (edit, archive, delete, project/client linking) is only shown to
           non-crew roles, while crew gets a simplified mobile-first view.
         </p>

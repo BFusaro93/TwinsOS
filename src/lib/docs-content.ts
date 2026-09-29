@@ -137,9 +137,9 @@ export const DOC_SECTIONS: DocSection[] = [
               "Focused on the PO module — can create and manage requisitions, purchase orders, receiving, vendors, and products. Read-only on CMMS.",
           },
           {
-            step: "Technician",
+            step: "Staff",
             detail:
-              "Focused on CMMS — can create and update work orders, record meter readings, view PM schedules and parts. Cannot approve requisitions or modify settings.",
+              "Standard Equipt access — can create and update work orders, record meter readings, view PM schedules and parts, and start requisitions and POs. Cannot approve requisitions or modify settings.",
           },
           {
             step: "Requestor",
@@ -368,7 +368,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "What is a Maintenance Request?",
             detail:
-              "A Maintenance Request is a lower-friction way for technicians or requestors to flag an issue. It goes through an approval flow before becoming a Work Order, giving managers a triage step.",
+              "A Maintenance Request is a lower-friction way for staff or requestors to flag an issue. It goes through an approval flow before becoming a Work Order, giving managers a triage step.",
           },
           {
             step: "Submitting a request",
@@ -1601,7 +1601,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     items: [
       {
         q: "What's the difference between a Work Order and a Maintenance Request?",
-        a: "A Work Order is a direct maintenance task — created by Managers, Technicians, or Admins and immediately actionable. A Maintenance Request goes through an approval flow before becoming a Work Order. Requestors can only submit requests.",
+        a: "A Work Order is a direct maintenance task — created by Staff, Managers, or Admins and immediately actionable. A Maintenance Request goes through an approval flow before becoming a Work Order. Requestors can only submit requests.",
       },
       {
         q: "Can a work order automatically create a requisition for parts?",
@@ -1703,7 +1703,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     items: [
       {
         q: "How do I add or remove users from my organization?",
-        a: "Go to Settings > Users. Admins can invite new users by email and assign a role (Admin, Manager, Purchaser, Technician, Requestor, or Viewer). Users receive an email invitation and set their own password on first login.",
+        a: "Go to Settings > Users. Admins can invite new users by email and assign a role (Admin, Manager, Staff, Purchaser, Requestor, or Viewer). Users receive an email invitation and set their own password on first login.",
       },
       {
         q: "Can I customize which fields are required?",

@@ -663,7 +663,7 @@ export function AutomationDialog({
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="technician">Technician</SelectItem>
+                        <SelectItem value="technician">Staff</SelectItem>
                         <SelectItem value="purchaser">Purchaser</SelectItem>
                         <SelectItem value="all">All</SelectItem>
                       </SelectContent>

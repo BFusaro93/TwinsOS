@@ -38,7 +38,7 @@ import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   manager: "Manager",
-  technician: "Technician",
+  technician: "Staff",
   purchaser: "Purchaser",
   viewer: "Viewer",
   requestor: "Requestor",
