@@ -15,6 +15,7 @@ import { ReportSkeletonCard, ReportStatCard } from "@/components/shared/ReportSt
 import { useWOCostSummary } from "@/lib/hooks/use-wo-cost-summary";
 import { SPEND_RANGE_OPTIONS, rangeCutoffKey, rangeMonths, type SpendRange } from "@/lib/utils/spend-range";
 import { formatCurrency } from "@/lib/utils";
+import { RepairCostDetailDialog, type RepairCostDetailKind } from "./RepairCostDetailDialog";
 
 const COLORS = { parts: "#3b82f6", labor: "#22c55e", vendor: "#f59e0b" };
 
@@ -27,6 +28,7 @@ const pct = (part: number, total: number) => (total > 0 ? `${Math.round((part / 
 export function RepairCostReport() {
   const { data: allWOs = [], isLoading } = useWOCostSummary();
   const [range, setRange] = useState<SpendRange>("12m");
+  const [detailKind, setDetailKind] = useState<RepairCostDetailKind | null>(null);
 
   const wos = useMemo(() => {
     const cutoffKey = rangeCutoffKey(range);
@@ -120,10 +122,11 @@ export function RepairCostReport() {
           label="Total Repair Spend"
           value={formatCurrency(totals.total)}
           sub={`${rangeLabel} · ${totals.withCost} work ${totals.withCost === 1 ? "order" : "orders"}`}
+          onClick={() => setDetailKind("all")}
         />
-        <ReportStatCard label="Parts" value={formatCurrency(totals.parts)} sub={pct(totals.parts, totals.total)} />
-        <ReportStatCard label="Labor" value={formatCurrency(totals.labor)} sub={pct(totals.labor, totals.total)} />
-        <ReportStatCard label="Vendors / Subs" value={formatCurrency(totals.vendor)} sub={pct(totals.vendor, totals.total)} />
+        <ReportStatCard label="Parts" value={formatCurrency(totals.parts)} sub={pct(totals.parts, totals.total)} onClick={() => setDetailKind("parts")} />
+        <ReportStatCard label="Labor" value={formatCurrency(totals.labor)} sub={pct(totals.labor, totals.total)} onClick={() => setDetailKind("labor")} />
+        <ReportStatCard label="Vendors / Subs" value={formatCurrency(totals.vendor)} sub={pct(totals.vendor, totals.total)} onClick={() => setDetailKind("vendor")} />
       </div>
       <p className="-mt-3 text-xs text-slate-500">
         Preventive maintenance: {formatCurrency(preventive)} · Reactive: {formatCurrency(totals.total - preventive)}
@@ -189,6 +192,13 @@ export function RepairCostReport() {
           </ResponsiveContainer>
         )}
       </div>
+
+      <RepairCostDetailDialog
+        kind={detailKind}
+        workOrders={wos}
+        rangeLabel={rangeLabel}
+        onClose={() => setDetailKind(null)}
+      />
     </div>
   );
 }
