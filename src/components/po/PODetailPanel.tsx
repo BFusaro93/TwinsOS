@@ -43,6 +43,7 @@ import { ProjectDetailSheet } from "./ProjectDetailSheet";
 import { VendorDetailSheet } from "@/components/shared/VendorDetailSheet";
 import { printPO } from "@/lib/print";
 import { useComments } from "@/lib/hooks/use-comments";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { Download } from "lucide-react";
 import type { PurchaseOrder, LineItem, POStatus } from "@/types";
 import { computeSalesTax } from "@/lib/utils/po-tax";
@@ -99,6 +100,7 @@ function DetailsTab({
   useEffect(() => { setLineItems(po.lineItems); }, [po.lineItems]);
 
   const { currentUser } = useCurrentUserStore();
+  const { canWriteEquipt, canSubmitForApproval } = useRoleCapabilities();
   const { mutate: submitForApproval, isPending: submitting } = useSubmitForApproval();
   const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
   const { mutate: addLineItemDB } = useAddPOLineItem();
@@ -200,7 +202,7 @@ function DetailsTab({
           isTerminalError={isError}
         />
         {/* Submit for approval */}
-        {status === "requested" && (
+        {status === "requested" && canSubmitForApproval && (
           <div className="mt-3">
             <Button
               size="sm"
@@ -231,6 +233,7 @@ function DetailsTab({
           </div>
         )}
 
+        {canWriteEquipt && (
         <div className="mt-3 flex flex-wrap gap-2">
           {status === "approved" && (<>
             <Button size="sm" onClick={() => handleStatusChange("ordered")}>Mark as Ordered</Button>
@@ -243,6 +246,7 @@ function DetailsTab({
             <Button size="sm" variant="outline" onClick={() => handleStatusChange("requested")}>Reset to Requested</Button>
           )}
         </div>
+        )}
       </div>
 
       <Separator />
@@ -291,10 +295,10 @@ function DetailsTab({
           showProject
           // Once ordered, the DB refuses a total above the approved amount
           // for non-admins, so don't offer edits it would reject.
-          editable={
+          editable={canWriteEquipt && (
             !["ordered", "partially_fulfilled", "completed", "canceled"].includes(status) ||
             currentUser.role === "admin"
-          }
+          )}
           receivedQtyByLineItemId={receivedQtyByLineItemId}
           onItemsChange={setLineItems}
           onItemAdded={(item, newItems) => {
@@ -451,6 +455,7 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
   const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
   const { mutate: deletePO, isPending: deleting } = useDeletePurchaseOrder();
   const { setSelectedPOId } = usePOStore();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   function handleReceiptSubmit(fullyReceived: boolean) {
     const newStatus: POStatus = fullyReceived ? "completed" : "partially_fulfilled";
@@ -474,6 +479,7 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
+          {canWriteEquipt && (<>
           <EditButton onClick={() => onEditClick ? onEditClick() : setEditOpen(true)} />
           <Button
             variant="ghost"
@@ -483,6 +489,7 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+          </>)}
         </div>
       </div>
 

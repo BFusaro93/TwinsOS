@@ -21,6 +21,7 @@ import { ProjectDetailSheet } from "./ProjectDetailSheet";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -105,7 +106,9 @@ function DetailsTab({
   const [addProjectId, setAddProjectId] = useState("none");
 
   const { currentUser } = useCurrentUserStore();
-  const canSubmit = status === "draft" && (currentUser.role === "admin" || currentUser.role === "manager" || currentUser.role === "purchaser" || req.createdBy === currentUser.id);
+  const { canWriteEquipt, canSubmitForApproval, canEditRequisition } = useRoleCapabilities();
+  const canSubmit = status === "draft" && canSubmitForApproval && (currentUser.role === "admin" || currentUser.role === "manager" || currentUser.role === "purchaser" || req.createdBy === currentUser.id);
+  const canEditLines = canEditRequisition({ ...req, status });
 
   const { mutate: submitForApproval, isPending: submitting } = useSubmitForApproval();
   const { mutate: syncStatus } = useUpdateRequisitionStatus();
@@ -235,6 +238,7 @@ function DetailsTab({
         )}
 
         {/* Post-approval actions */}
+        {canWriteEquipt && (
         <div className="mt-3 flex flex-wrap gap-2">
           {status === "rejected" && (
             <Button size="sm" variant="outline" onClick={() => handleStatusChange("draft")}>
@@ -252,6 +256,7 @@ function DetailsTab({
             </div>
           )}
         </div>
+        )}
       </div>
 
       <Separator />
@@ -315,23 +320,25 @@ function DetailsTab({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Line Items
           </p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setAddOpen(true)}
-            className="h-7 gap-1 text-xs"
-          >
-            <Plus className="h-3 w-3" />
-            Add Line Item
-          </Button>
+          {canEditLines && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAddOpen(true)}
+              className="h-7 gap-1 text-xs"
+            >
+              <Plus className="h-3 w-3" />
+              Add Line Item
+            </Button>
+          )}
         </div>
         <LineItemsTable
           lineItems={lineItems}
           showProject
-          editable={
+          editable={canEditLines && (
             !["ordered", "closed"].includes(status) ||
             currentUser.role === "admin"
-          }
+          )}
           onItemsChange={setLineItems}
           onItemAdded={(newItem, updatedItems) => {
             // LineItemsTable already updated local state via onItemsChange.
@@ -491,13 +498,14 @@ function DetailsTab({
 }
 
 function HistoryTab({ req }: { req: Requisition }) {
+  const { canComment } = useRoleCapabilities();
   return (
     <div className="p-6">
       <div className="mb-6">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
           Comments
         </p>
-        <CommentsSection recordType="requisition" recordId={req.id} />
+        <CommentsSection recordType="requisition" recordId={req.id} canWrite={canComment(req)} />
       </div>
 
       <Separator className="mb-6" />
@@ -511,9 +519,10 @@ function HistoryTab({ req }: { req: Requisition }) {
 }
 
 function FilesTab({ req }: { req: Requisition }) {
+  const { canComment } = useRoleCapabilities();
   return (
     <div className="p-6">
-      <AttachmentsSection recordType="requisition" recordId={req.id} />
+      <AttachmentsSection recordType="requisition" recordId={req.id} canWrite={canComment(req)} />
     </div>
   );
 }
@@ -522,12 +531,15 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   // Shared with Equipt — only restrict users who actually have a Landscapt CRM role.
   const { can, isAdmin, roleId } = usePermissions();
   const hasCrmRole = !isAdmin && !!roleId;
-  const canEditRequisitions = !hasCrmRole || can("requisition_edit");
-  const canDeleteRequisitions = !hasCrmRole || can("requisition_delete");
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [poSheetOpen, setPoSheetOpen] = useState(false);
   const [status, setStatus] = useState<ApprovalStatus>(requisition.status);
+  // Requestors may only edit / delete their own requisitions while in draft.
+  const { canEditRequisition } = useRoleCapabilities();
+  const roleCanEdit = canEditRequisition({ ...requisition, status });
+  const canEditRequisitions = roleCanEdit && (!hasCrmRole || can("requisition_edit"));
+  const canDeleteRequisitions = roleCanEdit && (!hasCrmRole || can("requisition_delete"));
 
   // Keep local status in sync when the requisition is refetched from the server
   // (e.g. after another user approves, or after navigating away and back)

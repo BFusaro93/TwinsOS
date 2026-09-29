@@ -6,6 +6,55 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { Permissions } from "@/types/crm-roles";
 
+/**
+ * crm_roles permission keys that grant a WRITE (create / edit / delete /
+ * send / run). Viewer and requestor app roles (profiles.role) are read-only
+ * in the database for every table these touch, whatever their Landscapt CRM
+ * role says, so can() reports them false for those logins. Keys that mix
+ * viewing with writing (tickets_view_modify, forms_view_submit) are left
+ * alone so the screens stay viewable; the DB still refuses the writes.
+ */
+const WRITE_PERMISSION_KEYS = new Set<string>([
+  "manage_report_center", "social_media_edit", "allow_roles_access", "quickbooks_resync",
+  "bulk_edit_products", "imports",
+  "client_activate_deactivate", "client_add", "client_allow_edit", "client_allow_delete",
+  "client_bulk_edit", "client_bulk_create", "client_add_contract", "client_reset_portal_password",
+  "lead_allow_edit", "lead_allow_delete", "lead_bulk_create", "lead_add", "lead_convert_close",
+  "estimate_add", "estimate_edit", "estimate_send",
+  "contract_add", "contract_edit", "contract_delete", "contract_create_invoices",
+  "campaign_add", "campaign_edit", "campaign_delete", "campaign_send",
+  "sales_meeting_add", "sales_meeting_edit",
+  "tickets_add_notes", "tickets_add_calls", "tags_create_tag",
+  "automation_create_modify", "automation_stop", "automation_add_tags",
+  "forms_edit", "email_activity_send", "sms_send",
+  "document_template_add", "document_template_edit", "document_template_delete",
+  "sched_add_modify_projects", "snow_dispatch_manage",
+  "job_add", "job_cancel", "job_add_remove_custom_package_line_items",
+  "service_add", "service_edit", "service_delete", "service_bulk_price", "pricing_adjustment_run",
+  "package_add", "package_edit", "package_delete",
+  "chem_add_edit_usage", "chem_send_application_notice", "chem_create_uom",
+  "chem_create_application_method", "chem_create_target",
+  "emp_manage", "emp_add", "emp_edit", "emp_add_remove_tag",
+  "requisition_add", "requisition_edit", "requisition_delete",
+  "snow_invoicing_generate",
+  "acct_add_modify_invoices", "acct_send_invoices", "acct_send_statements",
+  "acct_add_modify_payments", "acct_delete_card_payments", "acct_delete_ach_payments",
+  "acct_process_cc_refunds_voids", "acct_add_modify_credits", "acct_qb_reconciliation",
+  "acct_add_modify_purchase_orders",
+]);
+
+/** Requestors may still draft (and edit / delete their own draft) requisitions. */
+const REQUESTOR_ALLOWED_WRITE_KEYS = new Set<string>([
+  "requisition_add", "requisition_edit", "requisition_delete",
+]);
+
+function isRoleBlockedWrite(profileRole: string | null | undefined, key: string): boolean {
+  if (!WRITE_PERMISSION_KEYS.has(key)) return false;
+  if (profileRole === "viewer") return true;
+  if (profileRole === "requestor") return !REQUESTOR_ALLOWED_WRITE_KEYS.has(key);
+  return false;
+}
+
 interface PermissionsResult {
   permissions: Permissions;
   can: (key: string) => boolean;
@@ -86,10 +135,12 @@ export function usePermissions(): PermissionsResult {
 
   const permissions = data?.permissions ?? {};
   const isAdmin = data?.isAdmin ?? false;
+  const profileRole = data?.profileRole ?? null;
 
   // Admins bypass all permission checks
   function can(key: string): boolean {
     if (isAdmin) return true;
+    if (isRoleBlockedWrite(profileRole, key)) return false;
     return !!permissions[key];
   }
 

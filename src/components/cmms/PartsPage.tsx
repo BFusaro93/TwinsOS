@@ -28,6 +28,7 @@ import { formatCurrency, matchesFilter } from "@/lib/utils";
 import { useParts, useBulkImportParts } from "@/lib/hooks/use-parts";
 import { useProducts } from "@/lib/hooks/use-products";
 import type { Part } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const STOCK_FILTER_OPTIONS = [
   { value: "oos_critical", label: "OOS (has min)" },
@@ -51,6 +52,7 @@ const PARTS_COLUMNS: ColumnDef[] = [
 export function PartsPage() {
   const { data: parts, isLoading } = useParts();
   const { mutateAsync: bulkImportParts } = useBulkImportParts();
+  const { canManageInventory } = useRoleCapabilities();
   const { data: products } = useProducts();
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -176,6 +178,7 @@ export function PartsPage() {
               }
               onImport={(rows) => bulkImportParts(rows)}
             />
+            {canManageInventory && (<>
             <Button size="sm" variant="outline" onClick={() => setBulkCostOpen(true)}>
               Update Costs
             </Button>
@@ -183,6 +186,7 @@ export function PartsPage() {
               <Plus className="mr-1.5 h-4 w-4" />
               New Part
             </Button>
+            </>)}
           </div>
         }
       />

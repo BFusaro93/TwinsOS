@@ -56,6 +56,7 @@ import { useDeleteProduct, useUpdateProduct, useAdjustProductQuantityManual } fr
 import { WO_STATUS_LABELS } from "@/lib/constants";
 import { ChemicalApplicationRatesEditor } from "@/components/crm/chemical/ChemicalApplicationRatesEditor";
 import type { ProductItem } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface ProductDetailSheetProps {
   product: ProductItem | null;
@@ -85,6 +86,7 @@ function DetailsTab({
   setQtyOnHand: (n: number, reason: string) => Promise<void>;
   onManageVendors: () => void;
 }) {
+  const { canManageInventory } = useRoleCapabilities();
   const margin =
     product.price > 0
       ? (((product.price - product.unitCost) / product.price) * 100).toFixed(1)
@@ -111,7 +113,7 @@ function DetailsTab({
               </Badge>
             </div>
           )}
-          <QtyAdjustControl value={qtyOnHand} onChange={setQtyOnHand} />
+          {canManageInventory && <QtyAdjustControl value={qtyOnHand} onChange={setQtyOnHand} />}
         </div>
       )}
 
@@ -128,9 +130,11 @@ function DetailsTab({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vendors</p>
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
-            Manage
-          </Button>
+          {canManageInventory && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
+              Manage
+            </Button>
+          )}
         </div>
         {(() => {
           const allVendors = [
@@ -500,6 +504,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
   const { data: allWOs = [] } = useWorkOrders();
+  const { canManageInventory } = useRoleCapabilities();
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -567,6 +572,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
 
   if (!product) return null;
 
+  const canEditProduct = canManageInventory;
   const effectiveQty = qtyOnHand ?? product.quantityOnHand ?? 0;
   const productId = product.id;
   const productOrgId = product.orgId;
@@ -629,11 +635,12 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
               imageUrl={product.pictureUrl}
               alt={product.name}
               size="md"
-              onUpload={(url) => updateProduct({ id: productId, pictureUrl: url })}
+              onUpload={canEditProduct ? (url) => updateProduct({ id: productId, pictureUrl: url }) : undefined}
             />
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-left">{product.name}</SheetTitle>
+                {canEditProduct && (
                 <div className="flex items-center gap-1">
                   <EditButton onClick={() => setEditOpen(true)} />
                   <Button
@@ -645,6 +652,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
+                )}
               </div>
               <div className="mt-1 flex items-center gap-2">
                 <StatusBadge

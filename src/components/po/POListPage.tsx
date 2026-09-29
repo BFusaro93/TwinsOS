@@ -34,6 +34,7 @@ import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { PO_STATUS_LABELS } from "@/lib/constants";
 import { cn, formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import type { POStatus, PurchaseOrder } from "@/types";
 
 const STATUS_OPTIONS = (Object.keys(PO_STATUS_LABELS) as POStatus[]).map((k) => ({
@@ -56,7 +57,8 @@ export function POListPage() {
   // Shared with Equipt (/po/orders) — an Equipt-only user has no crm_role at
   // all, so this only restricts users who actually have a Landscapt CRM role.
   const { can, isAdmin, roleId } = usePermissions();
-  const canModifyPOs = isAdmin || !roleId || can("acct_add_modify_purchase_orders");
+  const { canCreatePO } = useRoleCapabilities();
+  const canModifyPOs = canCreatePO && (isAdmin || !roleId || can("acct_add_modify_purchase_orders"));
   const { data: orders, isLoading } = usePurchaseOrders();
   const { mutateAsync: bulkImportPOs } = useBulkImportPurchaseOrders();
   const { selectedPOId, setSelectedPOId } = usePOStore();

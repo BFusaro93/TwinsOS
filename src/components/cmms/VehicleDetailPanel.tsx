@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NewVehicleDialog } from "@/components/cmms/NewVehicleDialog";
 import type { Vehicle, AssetStatus } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface VehicleDetailPanelProps {
   vehicle: Vehicle;
@@ -101,6 +102,7 @@ interface ServiceReminderCardProps {
 
 function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onReset }: ServiceReminderCardProps) {
   const [resetting, setResetting] = useState(false);
+  const { canWriteEquipt } = useRoleCapabilities();
   const [newDate, setNewDate] = useState("");
   const [newMileage, setNewMileage] = useState("");
   const hasMileage = mileage !== undefined; // tracks whether this card supports mileage at all
@@ -203,7 +205,7 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onRe
           </div>
         </div>
 
-        {!resetting && (
+        {!resetting && canWriteEquipt && (
           <Button
             variant="outline"
             size="sm"
@@ -278,6 +280,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
   const { filterFields } = useSettingsStore();
   const enabledFilters = filterFields.filter((f) => f.enabled);
   const { mutate: updateVehicle } = useUpdateVehicle();
+  const { canWriteEquipt } = useRoleCapabilities();
   const { data: meters } = useMeters();
 
   // Current odometer: highest-value miles/mi meter for this vehicle
@@ -289,6 +292,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
     .reduce<number | null>((best, m) => (best == null || m.currentValue > best ? m.currentValue : best), null);
 
   function saveNotes() {
+    if (!canWriteEquipt) return;
     updateVehicle(
       { id: vehicle.id, notes },
       {
@@ -352,10 +356,10 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
           imageUrl={localPhotoUrl}
           alt={vehicle.name}
           size="lg"
-          onUpload={(url) => {
+          onUpload={canWriteEquipt ? (url) => {
             setLocalPhotoUrl(url);
             updateVehicle({ id: vehicle.id, photoUrl: url });
-          }}
+          } : undefined}
         />
         <dl className="flex-1">
           <MetaRow label="Asset Tag" value={<span className="font-mono">{vehicle.assetTag}</span>} />
@@ -460,7 +464,8 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           onBlur={saveNotes}
-          placeholder="Add notes about this vehicle…"
+          readOnly={!canWriteEquipt}
+          placeholder={canWriteEquipt ? "Add notes about this vehicle…" : "No notes"}
           rows={4}
           className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
@@ -487,6 +492,7 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [status, setStatus] = useState<AssetStatus>(vehicle.status as AssetStatus);
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   // Sync local status state when the vehicle prop updates (e.g. status changed
   // from the Work Order detail panel and the cache invalidates).
@@ -509,6 +515,12 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {!canWriteEquipt ? (
+            <StatusBadge
+              variant={status as Parameters<typeof StatusBadge>[0]["variant"]}
+              label={ASSET_STATUS_LABELS[status] ?? status}
+            />
+          ) : (<>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -535,6 +547,7 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
             </DropdownMenuContent>
           </DropdownMenu>
           <EditButton onClick={() => setEditOpen(true)} />
+          </>)}
         </div>
       </div>
 

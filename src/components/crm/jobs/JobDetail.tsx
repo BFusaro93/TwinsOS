@@ -99,6 +99,7 @@ import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBilling
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 /**
  * crm_job_products statuses that still owe the client an invoice line —
@@ -171,6 +172,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const { can } = usePermissions();
+  // Viewer / requestor app roles are read-only in Landscapt.
+  const { canWriteCrm } = useRoleCapabilities();
   const { today: orgToday } = useOrgDates();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
@@ -201,7 +204,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const qc = useQueryClient();
 
   const [tab, setTab] = useState<Tab>(initialTab ?? "overview");
-  const [editing, setEditing] = useState(initialEditing);
+  const [editingRaw, setEditing] = useState(initialEditing);
+  const editing = editingRaw && canWriteCrm;
   const [edits, setEdits] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
@@ -753,7 +757,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         </div>
 
         <div className="flex items-center gap-1.5">
-          {effectiveStatus !== "completed" && job.jobType !== "recurring" && job.jobType !== "package" && (
+          {canWriteCrm && effectiveStatus !== "completed" && job.jobType !== "recurring" && job.jobType !== "package" && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => handleStatus("completed")}>
               <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500" />
@@ -769,7 +773,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               </Button>
             </PermissionGate>
           )}
-          {job.jobType !== "recurring" && job.jobType !== "package" && (
+          {job.jobType !== "recurring" && job.jobType !== "package" && (canWriteCrm || !!existingInvoice) && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               disabled={invoicing}
               onClick={handleInvoice}>
@@ -795,7 +799,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 Discard
               </Button>
             </>
-          ) : (
+          ) : canWriteCrm && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => {
                 // Pre-select the schedule that matches the current job schedule string
@@ -911,7 +915,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Job Settings</p>
                   {editing
                     ? <span className="text-[10px] text-brand-600 font-medium">Editing — save when done</span>
-                    : <button onClick={() => { const match = schedules.find((s) => s.name === job.recurrenceRule || s.name === job.schedule); setSelectedSchedId(match?.id ?? "__none__"); setEditing(true); }} className="text-[10px] text-slate-400 hover:text-brand-600 flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" />Edit</button>
+                    : canWriteCrm && <button onClick={() => { const match = schedules.find((s) => s.name === job.recurrenceRule || s.name === job.schedule); setSelectedSchedId(match?.id ?? "__none__"); setEditing(true); }} className="text-[10px] text-slate-400 hover:text-brand-600 flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" />Edit</button>
                   }
                 </div>
                 {editing ? (

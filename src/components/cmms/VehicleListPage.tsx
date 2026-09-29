@@ -49,6 +49,7 @@ import { useRouter } from "next/navigation";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import { cn, formatDate, matchesFilter } from "@/lib/utils";
 import type { Vehicle } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ const VEHICLE_COLUMNS: ColumnDef[] = [
 export function VehicleListPage() {
   const { data: vehicles, isLoading } = useVehicles();
   const { mutateAsync: bulkImportVehicles } = useBulkImportVehicles();
+  const { canWriteEquipt } = useRoleCapabilities();
   const { data: assets, isLoading: isAssetsLoading } = useAssets();
   const { data: meters } = useMeters();
 
@@ -433,18 +435,22 @@ export function VehicleListPage() {
               }
               onImport={(rows) => bulkImportVehicles(rows)}
             />
-            <Button variant="outline" size="sm" onClick={() => setBulkImportOpen(true)}>
-              <FolderUp className="mr-1.5 h-4 w-4" />
-              Import Files
-            </Button>
+            {canWriteEquipt && (
+              <Button variant="outline" size="sm" onClick={() => setBulkImportOpen(true)}>
+                <FolderUp className="mr-1.5 h-4 w-4" />
+                Import Files
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setScanOpen(true)}>
               <ScanLine className="mr-1.5 h-4 w-4" />
               Scan
             </Button>
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Vehicle
-            </Button>
+            {canWriteEquipt && (
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Vehicle
+              </Button>
+            )}
           </div>
         }
       />

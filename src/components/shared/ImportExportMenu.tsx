@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { exportCSVTemplate, readCSVFile, isBulkImportResult, type BulkImportResult } from "@/lib/csv";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface ImportExportMenuProps {
   /** Human-readable entity name, e.g. "Parts" */
@@ -190,7 +191,10 @@ export function ImportExportMenu({
   const { can, isAdmin, roleId } = usePermissions();
   const hasCrmRole = !isAdmin && !!roleId;
   const canExport = !hasCrmRole || can("export_lists");
-  const effectiveHideImport = hideImport ?? (hasCrmRole && !can("imports"));
+  // Viewer / requestor app roles are read-only in the DB for every table an
+  // import writes, whatever the caller or the CRM role says.
+  const { canWriteEquipt } = useRoleCapabilities();
+  const effectiveHideImport = !canWriteEquipt || (hideImport ?? (hasCrmRole && !can("imports")));
 
   // Step 1: Mapping
   const [mappingOpen, setMappingOpen] = useState(false);

@@ -33,6 +33,7 @@ import { APPROVAL_STATUS_LABELS } from "@/lib/constants";
 import { cn, formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ApprovalStatus, Requisition } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const STATUS_OPTIONS = (Object.keys(APPROVAL_STATUS_LABELS) as ApprovalStatus[]).map((k) => ({
   value: k,
@@ -57,7 +58,8 @@ export function RequisitionListPage() {
   const { can, isAdmin, roleId } = usePermissions();
   const hasCrmRole = !isAdmin && !!roleId;
   const canViewRequisitions = !hasCrmRole || can("requisition_list");
-  const canAddRequisitions = !hasCrmRole || can("requisition_add");
+  const { canCreateRequisition } = useRoleCapabilities();
+  const canAddRequisitions = canCreateRequisition && (!hasCrmRole || can("requisition_add"));
   const { data: requisitions, isLoading } = useRequisitions();
   const { selectedRequisitionId, setSelectedRequisitionId } = usePOStore();
   const searchParams = useSearchParams();

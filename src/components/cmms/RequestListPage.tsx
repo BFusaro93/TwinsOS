@@ -32,6 +32,7 @@ import { REQUEST_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatDate, matchesFilter } from "@/lib/utils";
 import type { MaintenanceRequestStatus, WorkOrderPriority } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const STATUS_OPTIONS = (
   Object.keys(REQUEST_STATUS_LABELS) as MaintenanceRequestStatus[]
@@ -54,6 +55,7 @@ const REQUEST_COLUMNS: ColumnDef[] = [
 
 export function RequestListPage() {
   const { data: requests, isLoading } = useRequests();
+  const { canCreateMaintenanceRequest } = useRoleCapabilities();
   const { selectedRequestId, setSelectedRequestId } = useCMMSStore();
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -249,10 +251,12 @@ export function RequestListPage() {
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
               </Button>
             </div>
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Request
-            </Button>
+            {canCreateMaintenanceRequest && (
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Request
+              </Button>
+            )}
           </div>
         }
       />

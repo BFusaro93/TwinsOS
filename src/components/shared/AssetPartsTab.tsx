@@ -15,6 +15,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import type { Part, AssetPart } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface AssetPartsTabProps {
   assetId: string;
@@ -26,6 +27,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
   const { data: allParts } = useParts();
   const { mutate: bulkAddAssetParts, isPending: linking } = useBulkAddAssetParts();
   const { mutate: removeAssetPart } = useRemoveAssetPart();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -106,10 +108,12 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
           {allLinked.length} part{allLinked.length !== 1 ? "s" : ""} linked
         </p>
-        <Button size="sm" variant="outline" onClick={() => { setSheetOpen(false); setSelectedPart(null); setLinkDialogOpen(true); }}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Link Part
-        </Button>
+        {canWriteEquipt && (
+          <Button size="sm" variant="outline" onClick={() => { setSheetOpen(false); setSelectedPart(null); setLinkDialogOpen(true); }}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Link Part
+          </Button>
+        )}
       </div>
 
       {/* Parts table / empty */}
@@ -163,13 +167,15 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
                       )}
                     </td>
                     <td className="px-2 py-2">
-                      <button
-                        className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
-                        title="Unlink part"
-                        onClick={() => removeAssetPart({ id: ap.id, assetId })}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {canWriteEquipt && (
+                        <button
+                          className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                          title="Unlink part"
+                          onClick={() => removeAssetPart({ id: ap.id, assetId })}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

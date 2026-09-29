@@ -48,6 +48,7 @@ import { cn, formatDate, matchesFilter, todayLocalISODate, localISODateFromToday
 import type { WorkOrder, WorkOrderStatus, WorkOrderPriority } from "@/types";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -339,6 +340,7 @@ function UpcomingMaintenanceView({
 export function WorkOrderListPage() {
   const pageOrgTimeZone = useOrgTimeZone();
   const { data: workOrders, isLoading } = useWorkOrders();
+  const { canEditWorkOrders } = useRoleCapabilities();
   const { selectedWorkOrderId, setSelectedWorkOrderId } = useCMMSStore();
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -682,10 +684,12 @@ export function WorkOrderListPage() {
               </Button>
             </div>
 
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Work Order
-            </Button>
+            {canEditWorkOrders && (
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Work Order
+              </Button>
+            )}
           </div>
         }
       />

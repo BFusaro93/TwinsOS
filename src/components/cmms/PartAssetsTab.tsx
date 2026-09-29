@@ -18,6 +18,7 @@ import { usePartAssetLinks, useAddPartAssetLink, useRemoveAssetPart } from "@/li
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import type { Asset, Vehicle } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 type LinkedRecord =
   | { kind: "asset"; record: Asset; linkId: string }
@@ -37,6 +38,7 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
   const { data: allVehicles = [] } = useVehicles();
   const { mutate: addLink, isPending: linking } = useAddPartAssetLink();
   const { mutate: removeLink } = useRemoveAssetPart();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -107,10 +109,12 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
           {items.length} asset{items.length !== 1 ? "s" : ""} / vehicle{items.length !== 1 ? "s" : ""} linked
         </p>
-        <Button size="sm" variant="outline" onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Link Asset / Vehicle
-        </Button>
+        {canWriteEquipt && (
+          <Button size="sm" variant="outline" onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Link Asset / Vehicle
+          </Button>
+        )}
       </div>
 
       {/* Table or empty state */}
@@ -160,7 +164,7 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
                     />
                   </td>
                   <td className="px-2 py-2 text-right">
-                    <button
+                    {canWriteEquipt && <button
                       type="button"
                       title="Unlink"
                       className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
@@ -173,7 +177,7 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
                       }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               ))}

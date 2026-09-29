@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 
 import type { GoodsReceipt } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface ReceivingDetailPanelProps {
   receipt: GoodsReceipt;
@@ -242,6 +243,7 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: allReceipts = [] } = useGoodsReceipts();
   const syncPOStatus = useUpdatePurchaseOrderStatus();
+  const { canReceive } = useRoleCapabilities();
 
   const selectedProduct =
     selectedProductId
@@ -315,7 +317,7 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
             {receipt.vendorName} · {receipt.poNumber}
           </p>
         </div>
-        <EditButton onClick={() => setEditOpen(true)} />
+        {canReceive && <EditButton onClick={() => setEditOpen(true)} />}
       </div>
 
       <RecordDetailTabs

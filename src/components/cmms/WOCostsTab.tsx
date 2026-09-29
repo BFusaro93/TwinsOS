@@ -35,6 +35,7 @@ import {
   useDeleteWOVendorCharge,
 } from "@/lib/hooks/use-wo-costs";
 import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface WOCostsTabProps {
   workOrderId: string;
@@ -45,6 +46,10 @@ interface WOCostsTabProps {
 // ── Shared row action buttons ─────────────────────────────────────────────────
 
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  // WO parts / labor / vendor charges are read-only for viewer, requestor
+  // and purchaser — keep the cell so the table columns still line up.
+  const { canEditWorkOrders } = useRoleCapabilities();
+  if (!canEditWorkOrders) return <td className="px-2 py-2" />;
   return (
     <td className="px-2 py-2 text-right">
       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -74,6 +79,7 @@ function SectionHeader({ icon, title, count, onAdd, extraAction }: {
   onAdd: () => void;
   extraAction?: React.ReactNode;
 }) {
+  const { canEditWorkOrders } = useRoleCapabilities();
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -85,10 +91,12 @@ function SectionHeader({ icon, title, count, onAdd, extraAction }: {
       </div>
       <div className="flex items-center gap-2">
         {extraAction}
-        <Button size="sm" variant="outline" onClick={onAdd}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Add
-        </Button>
+        {canEditWorkOrders && (
+          <Button size="sm" variant="outline" onClick={onAdd}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Add
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -107,6 +115,7 @@ function PartsSection({ workOrderId, workOrderNumber, workOrderTitle }: {
   const { mutate: addPart, isPending: adding } = useAddWOPart();
   const { mutate: updatePart } = useUpdateWOPart();
   const { mutate: deletePart } = useDeleteWOPart();
+  const { canCreateRequisition } = useRoleCapabilities();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -189,9 +198,11 @@ function PartsSection({ workOrderId, workOrderNumber, workOrderTitle }: {
         count={items.length}
         onAdd={() => setAddOpen(true)}
         extraAction={
-          <Button size="sm" variant="outline" onClick={() => setRequestPartsOpen(true)}>
-            Request Parts
-          </Button>
+          canCreateRequisition ? (
+            <Button size="sm" variant="outline" onClick={() => setRequestPartsOpen(true)}>
+              Request Parts
+            </Button>
+          ) : undefined
         }
       />
 

@@ -30,6 +30,7 @@ import { NewMeterDialog } from "@/components/cmms/NewMeterDialog";
 import { AddReadingDialog } from "@/components/cmms/AddReadingDialog";
 import { useMeterReadings, useDeleteMeterReading } from "@/lib/hooks/use-meter-readings";
 import type { Meter } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface MeterDetailPanelProps {
   meter: Meter;
@@ -56,6 +57,7 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
   const [deletingReadingId, setDeletingReadingId] = useState<string | null>(null);
   const { data: readings, isLoading } = useMeterReadings(meter.id);
   const { mutate: deleteReading, isPending: deletingReading } = useDeleteMeterReading();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   // Both the chart and the stat cards below are labeled as a 12-month
   // window ("Past 12 mo" / "Reading History (12 months)") but were computed
@@ -106,13 +108,13 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
           {meter.source === "samsara" ? "Samsara" : "Manual"}
         </Badge>
         <div className="flex items-center gap-2">
-          {meter.source === "manual" && (
+          {meter.source === "manual" && canWriteEquipt && (
             <Button size="sm" variant="outline" onClick={() => setAddReadingOpen(true)} className="gap-1.5">
               <Plus className="h-3.5 w-3.5" />
               Add Reading
             </Button>
           )}
-          <EditButton onClick={() => setEditOpen(true)} />
+          {canWriteEquipt && <EditButton onClick={() => setEditOpen(true)} />}
         </div>
       </div>
 
@@ -242,14 +244,16 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
                           </td>
                           <td className="px-3 py-2 text-right text-slate-400 capitalize">{r.source}</td>
                           <td className="px-2 py-2 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setDeletingReadingId(r.id)}
-                              className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                              title="Delete reading"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            {canWriteEquipt && (
+                              <button
+                                type="button"
+                                onClick={() => setDeletingReadingId(r.id)}
+                                className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                                title="Delete reading"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}

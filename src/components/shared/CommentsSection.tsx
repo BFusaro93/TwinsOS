@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 import { formatDateTime, getInitials, getAvatarColor } from "@/lib/utils";
 import { useComments, useAddComment } from "@/lib/hooks/use-comments";
 import { useCurrentUserStore } from "@/stores";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/shared/MentionTextarea";
 import { parseMentionSegments } from "@/lib/mentions";
@@ -35,9 +36,16 @@ interface CommentsSectionProps {
   recordId: string;
   /** Dark variant — use inside dark-background panels like the photo lightbox */
   dark?: boolean;
+  /** Whether the current user may post here. Defaults to the app role's
+   *  general write access (hidden for viewer / requestor); pass
+   *  `canComment(record)` from useRoleCapabilities to let a requestor
+   *  comment on their own records. */
+  canWrite?: boolean;
 }
 
-export function CommentsSection({ recordType, recordId, dark = false }: CommentsSectionProps) {
+export function CommentsSection({ recordType, recordId, dark = false, canWrite }: CommentsSectionProps) {
+  const { canComment } = useRoleCapabilities();
+  const showInput = canWrite ?? canComment();
   const { data: comments, isLoading } = useComments(recordType, recordId);
   const { mutate: addComment, isPending: sending } = useAddComment();
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
@@ -94,6 +102,7 @@ export function CommentsSection({ recordType, recordId, dark = false }: Comments
       )}
 
       {/* New comment input */}
+      {showInput && (
       <div className={`flex gap-2 rounded-md border p-2 ${dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-slate-200 bg-white"}`}>
         <MentionTextarea
           value={draft}
@@ -119,6 +128,7 @@ export function CommentsSection({ recordType, recordId, dark = false }: Comments
           <Send className="h-3.5 w-3.5" />
         </Button>
       </div>
+      )}
     </div>
   );
 }

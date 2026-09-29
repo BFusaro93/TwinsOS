@@ -26,6 +26,7 @@ import {
   useDeleteAutomation,
 } from "@/lib/hooks/use-automations";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 // ── Pre-built templates ───────────────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ export function AutomationsPage() {
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
   const deleteAutomation = useDeleteAutomation();
+  const { canWriteEquipt } = useRoleCapabilities();
   const [newOpen, setNewOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
   const [addingTemplate, setAddingTemplate] = useState<string | null>(null);
@@ -149,12 +151,12 @@ export function AutomationsPage() {
     }
   }
 
-  const newAutomationButton = (
+  const newAutomationButton = canWriteEquipt ? (
     <Button size="sm" className="gap-1.5" onClick={() => setNewOpen(true)}>
       <Plus className="h-4 w-4" />
       New Automation
     </Button>
-  );
+  ) : undefined;
 
   if (isLoading) {
     return (
@@ -195,7 +197,7 @@ export function AutomationsPage() {
                 size="sm"
                 variant="outline"
                 className="self-start"
-                disabled={alreadyAdded || addingTemplate === t.name}
+                disabled={!canWriteEquipt || alreadyAdded || addingTemplate === t.name}
                 onClick={() => handleAddTemplate(t)}
               >
                 {alreadyAdded ? "Added" : addingTemplate === t.name ? "Adding..." : "+ Add"}
@@ -269,6 +271,7 @@ export function AutomationsPage() {
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={rule.isEnabled}
+                      disabled={!canWriteEquipt}
                       onCheckedChange={() => toggleRule(rule.id, rule.isEnabled)}
                       aria-label={`Toggle ${rule.name}`}
                     />
@@ -290,7 +293,7 @@ export function AutomationsPage() {
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
+                  {canWriteEquipt && <div className="flex items-center justify-end gap-2">
                     <EditButton onClick={() => setEditingRule(rule)} />
                     <Button
                       variant="ghost"
@@ -301,7 +304,7 @@ export function AutomationsPage() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                  </div>
+                  </div>}
                 </TableCell>
               </TableRow>
             ))}

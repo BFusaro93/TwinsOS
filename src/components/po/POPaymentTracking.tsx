@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Check, Loader2, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpdatePurchaseOrderStatus } from "@/lib/hooks/use-purchase-orders";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import type { PurchaseOrder } from "@/types";
 
 interface CheckRowProps {
@@ -11,15 +12,16 @@ interface CheckRowProps {
   checked: boolean;
   sublabel?: string;
   pending?: boolean;
+  readOnly?: boolean;
   onToggle: () => void;
 }
 
-function CheckRow({ label, checked, sublabel, pending, onToggle }: CheckRowProps) {
+function CheckRow({ label, checked, sublabel, pending, readOnly, onToggle }: CheckRowProps) {
   return (
     <button
       type="button"
       onClick={onToggle}
-      disabled={pending}
+      disabled={pending || readOnly}
       className="flex w-full items-center gap-3 rounded-md px-1 py-1.5 text-left hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
     >
       <div className={cn(
@@ -43,6 +45,8 @@ function CheckRow({ label, checked, sublabel, pending, onToggle }: CheckRowProps
 
 export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
   const { mutate: updateStatus, isPending } = useUpdatePurchaseOrderStatus();
+  const { canWriteEquipt } = useRoleCapabilities();
+  const readOnly = !canWriteEquipt;
 
   // Local optimistic state seeded from the PO prop
   const [submittedToAP, setSubmittedToAP] = useState(po.paymentSubmittedToAP);
@@ -95,6 +99,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
         label="Submitted to AP"
         checked={submittedToAP}
         pending={isPending}
+        readOnly={readOnly}
         onToggle={() => toggle("paymentSubmittedToAP", submittedToAP, setSubmittedToAP)}
       />
       <CheckRow
@@ -102,6 +107,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
         checked={remitted}
         sublabel={paymentTypeLabel ?? undefined}
         pending={isPending}
+        readOnly={readOnly}
         onToggle={() => toggle("paymentRemitted", remitted, setRemitted)}
       />
       <div className="ml-8 mb-1">
@@ -109,6 +115,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
           type="text"
           placeholder="Check #"
           value={checkNumber}
+          disabled={readOnly}
           onChange={(e) => {
             setCheckNumber(e.target.value);
             saveCheckNumber(e.target.value);
@@ -120,6 +127,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
         label="Booked in QuickBooks"
         checked={bookedInQB}
         pending={isPending}
+        readOnly={readOnly}
         onToggle={() => toggle("paymentBookedInQB", bookedInQB, setBookedInQB)}
       />
     </div>

@@ -14,6 +14,7 @@ import { MeterDetailPanel } from "@/components/cmms/MeterDetailPanel";
 import { NewMeterDialog } from "@/components/cmms/NewMeterDialog";
 import { useMeters } from "@/lib/hooks/use-meters";
 import { useCMMSStore } from "@/stores/cmms-store";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const SOURCE_OPTIONS = [
   { value: "manual", label: "Manual" },
@@ -22,6 +23,7 @@ const SOURCE_OPTIONS = [
 
 export function MetersPage() {
   const [newMeterOpen, setNewMeterOpen] = useState(false);
+  const { canWriteEquipt } = useRoleCapabilities();
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("meter-filters", {});
   const { data: meters, isLoading } = useMeters();
@@ -83,10 +85,12 @@ export function MetersPage() {
         title="Meters"
         description="Equipment hour and mileage readings"
         action={
-          <Button size="sm" onClick={() => setNewMeterOpen(true)} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />
-            New Meter
-          </Button>
+          canWriteEquipt ? (
+            <Button size="sm" onClick={() => setNewMeterOpen(true)} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
+              New Meter
+            </Button>
+          ) : undefined
         }
       />
 
