@@ -80,8 +80,21 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est } = await (supabase as any)
-    .from("estimates").select("id, org_id").eq("id", estimateId).maybeSingle();
+    .from("estimates").select("id, org_id, approval_status").eq("id", estimateId).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
+
+  // Handing out the link is sending it, so the approval gate applies here
+  // exactly as in send-email (it was only enforced by the browser).
+  if (est.approval_status !== "not_required" && est.approval_status !== "approved") {
+    return NextResponse.json(
+      {
+        error: est.approval_status === "pending"
+          ? "This estimate is awaiting approval — its proposal link can't be shared yet."
+          : "This estimate's approval was rejected. Resubmit it for approval before sharing the link.",
+      },
+      { status: 409 }
+    );
+  }
 
   // Handing out the link is sending it: publish the current estimate so the
   // link shows what staff see right now (no-op if nothing changed).

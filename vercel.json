@@ -35,7 +35,7 @@
     },
     {
       "path": "/api/cron/scheduled-campaigns",
-      "schedule": "0 7 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/invoice-past-due",

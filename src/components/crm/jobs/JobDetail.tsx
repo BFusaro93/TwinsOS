@@ -1772,9 +1772,26 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         isChemicalJob={isChemicalJob}
                         crews={crews}
                         onDelete={async () => {
-                          if (!(await confirm({ title: "Delete this visit?", confirmLabel: "Delete Visit", destructive: true }))) return;
-                          await deleteVisit.mutateAsync(v.id);
-                          toast.success("Visit deleted");
+                          // A completed visit is usually billed — deleting it
+                          // would leave its invoice charging for a visit the
+                          // schedule no longer has. The DB refuses that once
+                          // the visit is on a live invoice
+                          // (trg_crm_job_visits_guard_invoiced); warn up front.
+                          const completed = v.status === "completed";
+                          if (!(await confirm({
+                            title: completed ? "Delete this completed visit?" : "Delete this visit?",
+                            description: completed
+                              ? "This visit was already completed. If it's on an invoice it can't be deleted — void or edit the invoice first."
+                              : undefined,
+                            confirmLabel: "Delete Visit",
+                            destructive: true,
+                          }))) return;
+                          try {
+                            await deleteVisit.mutateAsync(v.id);
+                            toast.success("Visit deleted");
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "Failed to delete visit");
+                          }
                         }}
                         onSaveNote={async (note) => {
                           await updateVisit.mutateAsync({ id: v.id, updates: { notes_to_crew: note || null } });

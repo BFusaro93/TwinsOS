@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: approval, error: approvalErr } = await db
     .from("crm_sequence_step_approvals")
-    .select("id, org_id, enrollment_id, event_id, sequence_id, client_id, estimate_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, from_address, status")
+    .select("id, org_id, enrollment_id, event_id, sequence_id, client_id, estimate_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, from_address, reply_to, status")
     .eq("id", id)
     .single();
 
@@ -94,6 +94,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           subject: approval.subject,
           bodyHtml: approval.body_html,
           fromAddress: approval.from_address ?? undefined,
+          // null on rows queued before reply_to existed — undefined lets
+          // sendResolvedSequenceEmail fall back to the org reply address.
+          replyTo: approval.reply_to ?? undefined,
         });
   if (!sendResult.ok) {
     return NextResponse.json({ error: sendResult.reason }, { status: 502 });

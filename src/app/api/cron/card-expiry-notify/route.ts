@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 const log = logger.child("card-expiry-notify cron");
 
@@ -41,13 +42,31 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: clients } = await (supabase as any)
-    .from("clients")
-    .select("id, org_id, saved_payment_method_id, organizations(stripe_connect_account_id, stripe_connect_livemode)")
-    .eq("saved_payment_method_type", "card")
-    .not("saved_payment_method_id", "is", null)
-    .is("deleted_at", null);
+  type CardClientRow = {
+    id: string;
+    org_id: string;
+    saved_payment_method_id: string;
+    organizations: { stripe_connect_account_id: string | null; stripe_connect_livemode: boolean | null } | null;
+  };
+  // Platform-wide scan — page past PostgREST's 1000-row cap, or every
+  // card-on-file client beyond the first page never got an expiry reminder.
+  // Ordered by id so the pages split stably.
+  let clients: CardClientRow[];
+  try {
+    clients = await fetchAllRows<CardClientRow>(() =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any)
+        .from("clients")
+        .select("id, org_id, saved_payment_method_id, organizations(stripe_connect_account_id, stripe_connect_livemode)")
+        .eq("saved_payment_method_type", "card")
+        .not("saved_payment_method_id", "is", null)
+        .is("deleted_at", null)
+        .order("id", { ascending: true })
+    );
+  } catch (err) {
+    log.error("failed to load card-on-file clients", { error: err });
+    return NextResponse.json({ error: "Failed to load clients" }, { status: 500 });
+  }
 
   const now = new Date();
   const thisMonth = { month: now.getMonth() + 1, year: now.getFullYear() };
@@ -57,12 +76,7 @@ export async function GET(request: Request) {
   let checked = 0;
   let fired = 0;
 
-  for (const client of (clients ?? []) as {
-    id: string;
-    org_id: string;
-    saved_payment_method_id: string;
-    organizations: { stripe_connect_account_id: string | null; stripe_connect_livemode: boolean | null } | null;
-  }[]) {
+  for (const client of clients) {
     const connectAccountId = client.organizations?.stripe_connect_account_id;
     if (!connectAccountId) continue;
     checked++;

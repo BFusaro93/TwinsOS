@@ -320,7 +320,10 @@ export async function POST(request: Request) {
       : "";
 
     if (notifType === "wo_created" || notifType === "wo_assigned") {
-      const num   = escapeHtml((entity.work_order_number ?? "Work Order") as string);
+      // Raw for the plain-text subject (escaping it there shows "&amp;"),
+      // escaped for the HTML body.
+      const rawNum = (entity.work_order_number ?? "Work Order") as string;
+      const num   = escapeHtml(rawNum);
       const title = escapeHtml((entity.title ?? "") as string);
       const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       // Admin broadcast recipients are watching all WOs — they weren't personally assigned,
@@ -330,7 +333,7 @@ export async function POST(request: Request) {
       const subjectVerb = isCreatedContext ? "created" : "assigned";
       const heading     = isCreatedContext ? "Work Order Created" : "Work Order Assigned";
       return {
-        subject: `Work order ${subjectVerb}: ${num}`,
+        subject: `Work order ${subjectVerb}: ${rawNum}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${heading}</h2>
           ${adminNote}<p style="margin:0 0 4px;color:#475569">${hi}</p>
@@ -341,12 +344,13 @@ export async function POST(request: Request) {
     }
 
     if (notifType === "wo_status_changed") {
-      const num    = escapeHtml((entity.work_order_number ?? "Work Order") as string);
+      const rawNum = (entity.work_order_number ?? "Work Order") as string;
+      const num    = escapeHtml(rawNum);
       const title  = escapeHtml((entity.title ?? "") as string);
       const status = escapeHtml(((entity.status as string) ?? "").replace(/_/g, " "));
       const link   = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
-        subject: `Work order status updated: ${num}`,
+        subject: `Work order status updated: ${rawNum}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Work Order Status Changed</h2>
           ${adminNote}<p style="margin:0 0 4px;color:#475569">${hi}</p>
@@ -357,12 +361,13 @@ export async function POST(request: Request) {
     }
 
     if (notifType === "wo_comment") {
-      const num   = escapeHtml((entity.work_order_number ?? "Work Order") as string);
+      const rawNum = (entity.work_order_number ?? "Work Order") as string;
+      const num   = escapeHtml(rawNum);
       const title = escapeHtml((entity.title ?? "") as string);
       const commentBody = escapeHtml(extra.commentBody ?? "");
       const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
-        subject: `New comment on ${num}`,
+        subject: `New comment on ${rawNum}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Comment on Work Order</h2>
           ${adminNote}<p style="margin:0 0 4px;color:#475569">${hi}</p>
@@ -375,7 +380,8 @@ export async function POST(request: Request) {
 
     if (notifType === "approved" || notifType === "rejected") {
       const isApproved = notifType === "approved";
-      const num = escapeHtml(((entity.requisition_number ?? entity.po_number ?? entity.estimate_number ?? "Request")) as string);
+      const rawNum = (entity.requisition_number ?? entity.po_number ?? entity.estimate_number ?? "Request") as string;
+      const num = escapeHtml(rawNum);
       const entityLabel = entityType === "requisition" ? "Purchase Requisition" : entityType === "crm_estimate" ? "Estimate" : "Purchase Order";
       const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions?id=${entity.id as string}`
         : entityType === "crm_estimate" ? `${SITE_URL}/crm/estimates/${entity.id as string}`
@@ -384,7 +390,7 @@ export async function POST(request: Request) {
       const verb  = isApproved ? "approved" : "rejected";
       const reason = escapeHtml(extra.comment ?? "");
       return {
-        subject: `${entityLabel} ${verb}: ${num}`,
+        subject: `${entityLabel} ${verb}: ${rawNum}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${entityLabel} ${isApproved ? "Approved" : "Rejected"}</h2>
           <p style="margin:0 0 4px;color:#475569">${hi}</p>
@@ -396,11 +402,12 @@ export async function POST(request: Request) {
     }
 
     if (notifType === "new_maintenance_request") {
-      const title = escapeHtml((entity.title ?? "Maintenance Request") as string);
+      const rawTitle = (entity.title ?? "Maintenance Request") as string;
+      const title = escapeHtml(rawTitle);
       const num   = escapeHtml((entity.request_number ?? "") as string);
       const link  = `${SITE_URL}/cmms/requests?id=${entity.id as string}`;
       return {
-        subject: `New maintenance request: ${title}`,
+        subject: `New maintenance request: ${rawTitle}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
           <p style="margin:0 0 4px;color:#475569">${hi}</p>

@@ -303,8 +303,11 @@ function DetailsTab({
     if (initialEntityStatus) setEntityStatus(initialEntityStatus);
   }, [initialEntityStatus]);
 
-  const { mutate: updateAssetStatus } = useUpdateAssetStatus();
-  const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
+  // mutateAsync (not mutate + per-call callbacks): the status change is
+  // chained off the WO update's promise, which still settles if this panel
+  // unmounts mid-flight — per-call onSuccess/onError would silently not fire.
+  const { mutateAsync: updateAssetStatus } = useUpdateAssetStatus();
+  const { mutateAsync: updateVehicleStatus } = useUpdateVehicleStatus();
   const { canEditWorkOrders, canWriteEquipt } = useRoleCapabilities();
 
   const hasLinkedEntity = !!workOrder.assetId;
@@ -321,11 +324,17 @@ function DetailsTab({
     const applyEntityStatus =
       hasLinkedEntity && entityStatusToApply !== "no_change" && entityId
         ? () => {
-            if (resolvedEntityType === "vehicle") {
-              updateVehicleStatus({ id: entityId, status: entityStatusToApply });
-            } else {
-              updateAssetStatus({ id: entityId, status: entityStatusToApply });
-            }
+            const update =
+              resolvedEntityType === "vehicle"
+                ? updateVehicleStatus({ id: entityId, status: entityStatusToApply })
+                : updateAssetStatus({ id: entityId, status: entityStatusToApply });
+            update.catch((err: unknown) => {
+              toast.error(
+                err instanceof Error
+                  ? `Work order completed, but the ${entityLabel.toLowerCase()} status wasn't updated: ${err.message}`
+                  : `Work order completed, but the ${entityLabel.toLowerCase()} status wasn't updated.`
+              );
+            });
           }
         : undefined;
     onStatusChange("done", applyEntityStatus);
@@ -514,11 +523,15 @@ function DetailsTab({
                         type="button"
                         onClick={() => {
                           setEntityStatus(opt.value);
-                          if (resolvedEntityType === "vehicle") {
-                            updateVehicleStatus({ id: workOrder.assetId!, status: opt.value });
-                          } else {
-                            updateAssetStatus({ id: workOrder.assetId!, status: opt.value });
-                          }
+                          const update =
+                            resolvedEntityType === "vehicle"
+                              ? updateVehicleStatus({ id: workOrder.assetId!, status: opt.value })
+                              : updateAssetStatus({ id: workOrder.assetId!, status: opt.value });
+                          update.catch((err: unknown) => {
+                            toast.error(
+                              err instanceof Error ? err.message : `Couldn't update the ${entityLabel.toLowerCase()} status.`
+                            );
+                          });
                         }}
                         className={cn(
                           "rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent",
@@ -741,7 +754,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { data: comments = [] } = useComments("work_order", workOrder.id);
   const { woCategories } = useSettingsStore();
   const { mutate: updateWO, isPending: isUpdatingWO } = useUpdateWorkOrder();
-  const { mutate: updateWOStatus } = useUpdateWorkOrderStatus();
+  const { mutateAsync: updateWOStatus } = useUpdateWorkOrderStatus();
   const { canEditWorkOrders } = useRoleCapabilities();
   const linkedAsset =
     workOrder.assetId && workOrder.linkedEntityType !== "vehicle"
@@ -835,14 +848,14 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
                 onStatusChange={(s, onSuccess) => {
                   const previous = status;
                   setStatus(s);
-                  updateWOStatus(
-                    { id: workOrder.id, status: s, automationId: workOrder.automationId },
-                    {
-                      onSuccess: () => onSuccess?.(),
-                      onError: (err) => {
-                        setStatus(previous);
-                        toast.error(err instanceof Error ? err.message : "Couldn't update the work order status.");
-                      },
+                  // Promise chain rather than per-call mutate callbacks, so the
+                  // follow-up (e.g. asset/vehicle status on completion) still
+                  // runs if the panel closes before the update settles.
+                  updateWOStatus({ id: workOrder.id, status: s, automationId: workOrder.automationId }).then(
+                    () => onSuccess?.(),
+                    (err: unknown) => {
+                      setStatus(previous);
+                      toast.error(err instanceof Error ? err.message : "Couldn't update the work order status.");
                     }
                   );
                 }}

@@ -1,5 +1,8 @@
 import type { ConditionField, ConditionOperator, TriggerConfig, TriggerType } from "@/types/crm-automations";
 import { isZapierTriggerType, notifyZapierSubscribers } from "@/lib/integrations/zapier";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("sequence-enrollment");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -174,7 +177,29 @@ export async function enrollClientInSequence(
     .select("id")
     .single();
 
-  if (error || !inserted) return null;
+  if (error || !inserted) {
+    const ctx = {
+      orgId: params.orgId,
+      sequenceId: params.sequenceId,
+      clientId: params.clientId,
+      estimateId: params.estimateId ?? null,
+      ticketId: params.ticketId ?? null,
+      invoiceId: params.invoiceId ?? null,
+      meetingId: params.meetingId ?? null,
+    };
+    // 23505 = one of the crm_sequence_enrollments_active_*_uidx partial
+    // unique indexes: an in-flight enrollment for this (sequence, scope key)
+    // already exists — usually a concurrent trigger racing us, which is
+    // expected. Log it rather than dropping it silently so an index that's
+    // too broad (e.g. the client index once swallowing meeting-scoped
+    // enrollments) is visible.
+    if (error?.code === "23505") {
+      log.warn("enrollment skipped: active enrollment already exists", { ...ctx, detail: error.message });
+    } else if (error) {
+      log.error("enrollment insert failed", { ...ctx, code: error.code, detail: error.message });
+    }
+    return null;
+  }
 
   await logSequenceExecution(supabase, {
     orgId: params.orgId,

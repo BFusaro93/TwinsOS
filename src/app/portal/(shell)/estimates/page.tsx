@@ -48,8 +48,13 @@ export default async function EstimatesPage() {
     .single() as { data: { allow_estimates: boolean } | null };
   if (settings?.allow_estimates === false) redirect("/portal");
 
+  // Portal customers have NO RLS read path to estimates/estimate_line_items
+  // (a direct PostgREST read would expose cost, margin and internal-note
+  // columns and every draft), so read with the service client, scoped here to
+  // this client + org and to client-safe columns only.
+  const service = createServiceClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: estimates } = await (supabase as any)
+  const { data: estimates } = await (service as any)
     .from("estimates")
     .select(
       "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
@@ -70,7 +75,6 @@ export default async function EstimatesPage() {
   // office hasn't sent yet (see lib/estimates/proposal-content.ts). The
   // versions table is staff-only under RLS, so read it with the service
   // client — every estimate here is already scoped to this client above.
-  const service = createServiceClient();
   const normalized = await Promise.all((estimates ?? []).map(async (e) => {
     const published = e.status === "sent" ? await getPublishedProposal(service, e.id) : null;
     if (published) {

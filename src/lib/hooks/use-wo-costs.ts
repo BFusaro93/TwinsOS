@@ -290,7 +290,7 @@ export function useUpdateWOPart() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: existing } = await (supabase as any)
         .from("wo_parts")
-        .select("quantity, part_id")
+        .select("quantity, part_id, quantity_deducted")
         .eq("id", id)
         .single();
 
@@ -304,10 +304,18 @@ export function useUpdateWOPart() {
       // Move inventory so this line's deduction equals the new quantity.
       // Works from what was actually deducted (not the old quantity), so a
       // line whose deduction was clamped at 0 doesn't get over-credited.
-      // Runs unconditionally (it's idempotent against quantity_deducted): if an
-      // earlier save committed the row but its stock RPC failed, skipping the
-      // sync when quantity is unchanged would leave the drift permanent.
-      if (existing?.part_id) {
+      //
+      // Syncs when the quantity changed, or — even when it didn't — when the
+      // line is OVER-deducted (quantity_deducted > quantity: an earlier save
+      // lowered the quantity, committed the row, then its stock RPC failed),
+      // so that drift still heals by crediting stock back. An UNDER-deducted
+      // line with an unchanged quantity is deliberately left alone: that is
+      // almost always a deduction capped at the stock on hand, and re-running
+      // it on a unit-cost-only edit would silently take later-received stock.
+      const qtyChanged = existing?.quantity !== quantity;
+      const overDeducted =
+        typeof existing?.quantity_deducted === "number" && existing.quantity_deducted > quantity;
+      if (existing?.part_id && (qtyChanged || overDeducted)) {
         await syncWOPartStock(supabase, id, quantity);
         await syncPartQtyToProduct(supabase, existing.part_id);
       }

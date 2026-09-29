@@ -7,6 +7,16 @@ import { mapVisit } from "./use-crm-jobs";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+
+/** `.in()` list size per request — keeps the query string well under URL limits. */
+const IN_CHUNK = 200;
+
+function chunkIds<T>(arr: T[], size = IN_CHUNK): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 // "per_event"/"per_event_per_inch" bill the whole STORM, not each dispatch
 // within it — a job with 2 visits during one storm (e.g. morning + afternoon
@@ -47,28 +57,34 @@ export function useUninvoicedSnowVisits(filters: {
     queryFn: async () => {
       const supabase = createClient();
 
+      // Paged: every completed snow visit ever stays in this result (invoiced
+      // ones included — the per-event group check below needs them), so a
+      // single select hit PostgREST's 1000-row cap and, oldest first, the
+      // newest storms were the ones silently cut off the queue. id is the
+      // tiebreaker that keeps the page boundaries stable.
+      const buildVisitsQuery = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("crm_job_visits")
+          .select(`
+            *,
+            clients(display_name, primary_phone),
+            crm_crews(name),
+            crm_jobs!inner(*, crm_crews(name), crm_job_services(*))
+          `)
+          .eq("status", "completed")
+          .eq("crm_jobs.job_type", "snow")
+          .is("crm_jobs.contract_id", null)
+          .is("deleted_at", null);
+
+        if (filters.stormEventId) q = q.eq("storm_event_id", filters.stormEventId);
+        if (filters.clientId) q = q.eq("client_id", filters.clientId);
+        if (filters.fromDate) q = q.gte("scheduled_date", filters.fromDate);
+        if (filters.toDate) q = q.lte("scheduled_date", filters.toDate);
+        return q.order("scheduled_date", { ascending: true }).order("id", { ascending: true });
+      };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("crm_job_visits")
-        .select(`
-          *,
-          clients(display_name, primary_phone),
-          crm_crews(name),
-          crm_jobs!inner(*, crm_crews(name), crm_job_services(*))
-        `)
-        .eq("status", "completed")
-        .eq("crm_jobs.job_type", "snow")
-        .is("crm_jobs.contract_id", null)
-        .is("deleted_at", null)
-        .order("scheduled_date", { ascending: true });
-
-      if (filters.stormEventId) q = q.eq("storm_event_id", filters.stormEventId);
-      if (filters.clientId) q = q.eq("client_id", filters.clientId);
-      if (filters.fromDate) q = q.gte("scheduled_date", filters.fromDate);
-      if (filters.toDate) q = q.lte("scheduled_date", filters.toDate);
-
-      const { data, error } = await q;
-      if (error) throw error;
+      const data = await fetchAllRows<any>(buildVisitsQuery);
       // contract_id is filtered at the DB level, but invoice_type is filtered
       // here client-side (a plain .neq() would silently drop jobs where
       // invoice_type is NULL, per SQL's three-valued NULL comparison logic —
@@ -81,18 +97,20 @@ export function useUninvoicedSnowVisits(filters: {
       // Exclude visits that already have a line item on a non-deleted invoice
       // (visit_id), so generating invoices is idempotent. Line items have no
       // deleted_at of their own — deletion happens via the parent invoice.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existingLines, error: linesErr } = await (supabase as any)
-        .from("crm_invoice_line_items")
-        .select("visit_id, crm_invoices!inner(deleted_at)")
-        .in("visit_id", visits.map((v) => v.id))
-        .is("crm_invoices.deleted_at", null);
-      if (linesErr) throw linesErr;
-
-      const invoicedVisitIds = new Set(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ((existingLines ?? []) as any[]).map((r) => r.visit_id).filter(Boolean)
-      );
+      // Chunked — one .in() over thousands of visit ids overflows the URL.
+      const invoicedVisitIds = new Set<string>();
+      for (const ids of chunkIds(visits.map((v) => v.id))) {
+        const lines = await fetchAllRows<{ visit_id: string | null }>(() =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("crm_invoice_line_items")
+            .select("id, visit_id, crm_invoices!inner(deleted_at)")
+            .in("visit_id", ids)
+            .is("crm_invoices.deleted_at", null)
+            .order("id", { ascending: true })
+        );
+        for (const l of lines) if (l.visit_id) invoicedVisitIds.add(l.visit_id);
+      }
 
       // Per-event billing groups (one charge per job+storm) must not be
       // partially re-billed: if a storm's morning push was already invoiced
@@ -117,17 +135,22 @@ export function useUninvoicedSnowVisits(filters: {
       // time. Flag any queued visit whose job already has a non-void invoice
       // line for the same service date so the user can decide.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: jobLines, error: jobLinesErr } = await (supabase as any)
-        .from("crm_invoice_line_items")
-        .select("service_date, visit_id, crm_invoices!inner(invoice_number, crm_job_id, status, deleted_at)")
-        .in("crm_invoices.crm_job_id", [...new Set(queue.map((v) => v.jobId))])
-        .is("crm_invoices.deleted_at", null)
-        .neq("crm_invoices.status", "void")
-        .is("visit_id", null);
-      if (jobLinesErr) throw jobLinesErr;
+      const jobLines: any[] = [];
+      for (const jobIds of chunkIds([...new Set(queue.map((v) => v.jobId))])) {
+        jobLines.push(...await fetchAllRows(() =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("crm_invoice_line_items")
+            .select("id, service_date, visit_id, crm_invoices!inner(invoice_number, crm_job_id, status, deleted_at)")
+            .in("crm_invoices.crm_job_id", jobIds)
+            .is("crm_invoices.deleted_at", null)
+            .neq("crm_invoices.status", "void")
+            .is("visit_id", null)
+            .order("id", { ascending: true })
+        ));
+      }
       const invoiceByJobDate = new Map<string, number | null>();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const l of (jobLines ?? []) as any[]) {
+      for (const l of jobLines) {
         if (!l.service_date || !l.crm_invoices?.crm_job_id) continue;
         invoiceByJobDate.set(`${l.crm_invoices.crm_job_id}|${l.service_date}`, l.crm_invoices.invoice_number ?? null);
       }

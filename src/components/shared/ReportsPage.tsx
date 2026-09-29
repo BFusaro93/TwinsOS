@@ -40,8 +40,9 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
   const [range, setRange] = useState<SpendRange>("12m");
   const [detailKind, setDetailKind] = useState<"spend" | "avg" | "pos" | "open" | null>(null);
 
-  // Canceled and rejected POs never delivered parts, so they don't count as spend. Range is by actual PO date.
-  const purchaseOrders = useMemo(() => {
+  // POs in range (by actual PO date), minus canceled/rejected ones, which never
+  // will be ordered. Backs the "Total POs" and "Open POs" cards.
+  const inRangePOs = useMemo(() => {
     const cutoffKey = rangeCutoffKey(range);
     return allPurchaseOrders.filter((po) => {
       if (po.status === "canceled" || po.status === "rejected") return false;
@@ -50,6 +51,14 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
     });
   }, [allPurchaseOrders, range]);
 
+  // Only POs actually placed with the vendor count as spend — same allow-list
+  // as the Parts Spend report (po/reports/parts-spend). "requested"/"pending"/
+  // "approved" haven't been ordered yet.
+  const purchaseOrders = useMemo(
+    () => inRangePOs.filter((po) => ["ordered", "partially_fulfilled", "completed"].includes(po.status)),
+    [inRangePOs]
+  );
+
   // Build product category lookup — spend charts show maintenance_part only
   const productCategoryMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -57,7 +66,7 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
     return map;
   }, [products]);
 
-  // Sum only maintenance_part line item costs across the non-canceled POs in range
+  // Sum only maintenance_part line item costs across the ordered POs in range
   const totalSpend = useMemo(
     () => purchaseOrders.reduce((sum, po) => {
       return sum + po.lineItems
@@ -76,7 +85,7 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
 
   const avgPOValue = partsPoCount > 0 ? totalSpend / partsPoCount : 0;
 
-  const openPOs = purchaseOrders.filter(
+  const openPOs = inRangePOs.filter(
     (po) =>
       po.status === "requested" ||
       po.status === "pending" ||
@@ -152,14 +161,14 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
         rows,
       };
     }
-    const list = detailKind === "open" ? openPOs : purchaseOrders;
+    const list = detailKind === "open" ? openPOs : inRangePOs;
     const rows = list.map((po) => poRow(po, po.grandTotal)).sort(byDateDesc);
     return {
       title: detailKind === "open" ? "Open POs" : "Total POs",
       description: `${rangeText} · ${rows.length} POs · amounts are PO grand totals`,
       rows,
     };
-  }, [detailKind, range, purchaseOrders, productCategoryMap, totalSpend, avgPOValue, openPOs]);
+  }, [detailKind, range, purchaseOrders, inRangePOs, productCategoryMap, totalSpend, avgPOValue, openPOs]);
 
   if (isLoading) {
     return (
@@ -191,7 +200,7 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} sub={rangeLabel} onClick={() => setDetailKind("spend")} />
         <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} sub={rangeLabel} onClick={() => setDetailKind("avg")} />
-        <StatCard label="Total POs" value={purchaseOrders.length} onClick={() => setDetailKind("pos")} />
+        <StatCard label="Total POs" value={inRangePOs.length} onClick={() => setDetailKind("pos")} />
         <StatCard label="Open POs" value={openPOs.length} onClick={() => setDetailKind("open")} />
       </div>
       <SpendDetailDialog detail={detail} onClose={() => setDetailKind(null)} />

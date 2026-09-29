@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { sendCampaignEmails } from "@/lib/campaigns/send-campaign";
+import { sendCampaignEmails, STUCK_SENDING_THRESHOLD_MS } from "@/lib/campaigns/send-campaign";
 
 // This loops over every due campaign (potentially several, each with its own
 // full recipient list) in one invocation — extend the ceiling so it has room
@@ -16,6 +16,8 @@ export const maxDuration = 300;
  * manual "Send Now" button. This finds every email campaign whose
  * scheduled_at has passed and is status="scheduled" (not yet sent) and
  * sends it via the same sendCampaignEmails() the interactive route uses.
+ * Stale status="sending" campaigns (a previous send that died mid-run) are
+ * also resumed; sendCampaignEmails skips recipients already sent to.
  *
  * Deliberately excludes status="draft" even if scheduled_at is set and in
  * the past: picking a send date on the create/edit form doesn't commit to
@@ -42,13 +44,21 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
 
+  // Also pick up campaigns stuck in "sending" — a send that died mid-run
+  // (function timeout, deploy, crash) otherwise stays "sending" forever.
+  // Uses the same stale cutoff sendCampaignEmails' claim UPDATE accepts, so
+  // a genuinely in-flight send is never re-claimed; its alreadySent dedupe
+  // skips recipients the dead run already reached.
+  const nowIso = new Date().toISOString();
+  const staleCutoffIso = new Date(Date.now() - STUCK_SENDING_THRESHOLD_MS).toISOString();
   const { data: dueCampaigns, error: fetchErr } = await db
     .from("crm_campaigns")
     .select("*")
     .eq("type", "email")
-    .eq("status", "scheduled")
-    .not("scheduled_at", "is", null)
-    .lte("scheduled_at", new Date().toISOString())
+    .or(
+      `and(status.eq.scheduled,scheduled_at.not.is.null,scheduled_at.lte.${nowIso}),` +
+        `and(status.eq.sending,updated_at.lt.${staleCutoffIso})`
+    )
     .is("deleted_at", null);
 
   if (fetchErr) {

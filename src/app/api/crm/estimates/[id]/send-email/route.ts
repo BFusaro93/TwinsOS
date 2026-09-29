@@ -142,6 +142,27 @@ export async function POST(
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
   }
 
+  // The approval gate was enforced only by the Send button in the browser; a
+  // direct POST could email (and open for acceptance) an estimate still
+  // awaiting, or refused, approval.
+  if (est.approval_status !== "not_required" && est.approval_status !== "approved") {
+    return NextResponse.json(
+      {
+        error: est.approval_status === "pending"
+          ? "This estimate is awaiting approval and can't be sent yet."
+          : "This estimate's approval was rejected. Resubmit it for approval before sending.",
+      },
+      { status: 409 }
+    );
+  }
+
+  // Only a draft/quote/sent estimate is (re)opened for acceptance by a send.
+  // Resending an accepted/lost/invoiced estimate emails the client a copy but
+  // must not move it back to 'sent' — that re-armed the proposal's Accept
+  // button (the accept routes only require stage 'sent') on an estimate
+  // already decided or billed.
+  const opensForAcceptance = ["draft", "quote", "sent"].includes(est.stage as string);
+
   const toEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
     : (est.clients?.primary_email ? [est.clients.primary_email as string] : []);
@@ -179,7 +200,7 @@ export async function POST(
   // reusable while it is not deleted, not yet accepted and not expired
   // (findLiveShareToken — shared with the share-link route so "Copy
   // proposal link" and the emailed button always point at the same URL).
-  const existingLive = await findLiveShareToken(supabase, estimateId);
+  const existingLive = opensForAcceptance ? await findLiveShareToken(supabase, estimateId) : null;
 
   let shareToken: { id: string; token: string } | null = existingLive
     ? { id: existingLive.id, token: existingLive.token }
@@ -187,7 +208,23 @@ export async function POST(
   // Only a token minted by THIS request is cleaned up if the send fails.
   let createdTokenId: string | null = null;
 
-  if (shareToken && existingLive) {
+  if (!opensForAcceptance) {
+    // View-only copy: never mint a token. Link the most recent unexpired
+    // token (accepted or not) — the proposal page still renders it, and it
+    // can't be accepted because the estimate isn't in 'sent'. With no such
+    // token the email simply carries no link (the PDF is still attached).
+    const nowIso = new Date().toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: viewRows } = await (supabase as any)
+      .from("estimate_share_tokens")
+      .select("id, token")
+      .eq("estimate_id", estimateId)
+      .is("deleted_at", null)
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    shareToken = (viewRows as { id: string; token: string }[] | null)?.[0] ?? null;
+  } else if (shareToken && existingLive) {
     const existingExpiry = existingLive.expiresAt;
     // Extend the link if this send asks for a later expiry than it has.
     if (expiresAt && existingExpiry && new Date(existingExpiry) < new Date(expiresAt)) {
@@ -218,7 +255,7 @@ export async function POST(
     createdTokenId = shareToken.id;
   }
 
-  const proposalUrl = proposalUrlFor(shareToken.token);
+  const proposalUrl = shareToken ? proposalUrlFor(shareToken.token) : null;
 
   const clientDisplayName = (est.clients?.display_name as string) ?? "";
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
@@ -253,8 +290,10 @@ export async function POST(
     .map((m: any) => ({ name: m.name as string, amountCents: (m.amount_cents as number) ?? 0 }));
 
   const pdfLineItems: EstimatePDFLineItem[] = lineItems
+    // An open estimate prints its quoted lines; a decided one (view-only
+    // resend) has moved them to won/lost, so print what was accepted.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((li: any) => li.status === "quote")
+    .filter((li: any) => opensForAcceptance ? li.status === "quote" : li.status === "won" || li.status === "quote")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((li: any) => ({
       rowType: (li.row_type as "item" | "section") ?? "item",
@@ -292,7 +331,9 @@ export async function POST(
     "[clientlastname]":     lastName,
     "[clientfullname]":     clientDisplayName,
     "[companyname]":        orgName,
-    "[estimatelink]":       `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`,
+    "[estimatelink]":       proposalUrl
+      ? `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`
+      : "",
     "[estimatenumber]":     String(est.estimate_number).padStart(5, "0"),
     "[estimatedate]":       quoteDate,
     "[estimatetotal]":      total,
@@ -440,8 +481,10 @@ export async function POST(
   // Snapshot estimate state at time of (successful) send. Numbered max+1
   // with retry on the (estimate_id, version_number) unique index.
   // What the proposal link will show from now on (see proposal-content.ts).
-  const proposalContent = await loadLiveProposalContent(supabase, estimateId);
-  await insertEstimateVersion(supabase, {
+  // Skipped for a view-only resend: publishing a new version would change
+  // what the (already decided) proposal link shows.
+  const proposalContent = opensForAcceptance ? await loadLiveProposalContent(supabase, estimateId) : null;
+  if (opensForAcceptance) await insertEstimateVersion(supabase, {
     org_id: est.org_id,
     estimate_id: estimateId,
     sent_to_email: toEmailsJoined,
@@ -497,13 +540,17 @@ export async function POST(
 
   // Move estimate to "sent" — sent_at is set only on the first send, as the
   // anchor timestamp for "no response in N days" automation triggers.
-  const sentIso = new Date().toISOString();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("estimates").update({
-    stage: "sent",
-    updated_at: sentIso,
-    ...(est.sent_at ? {} : { sent_at: sentIso }),
-  }).eq("id", estimateId);
+  // Conditioned on the stage still being open so a client accepting while
+  // this send was in flight isn't reverted.
+  if (opensForAcceptance) {
+    const sentIso = new Date().toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from("estimates").update({
+      stage: "sent",
+      updated_at: sentIso,
+      ...(est.sent_at ? {} : { sent_at: sentIso }),
+    }).eq("id", estimateId).in("stage", ["draft", "quote", "sent"]);
+  }
 
   // Log activity
   if (est.client_id) {
@@ -524,17 +571,21 @@ export async function POST(
   }
 
   // ── Enroll client in estimate_sent automation sequences ───────────────────
-  try {
-    await fireSimpleTrigger(supabase, {
-      orgId: est.org_id,
-      clientId: est.client_id,
-      estimateId,
-      triggerType: "estimate_sent",
-      matchValues: est.sales_rep_id ? [est.sales_rep_id] : undefined,
-    });
-  } catch (enrollErr) {
-    // best-effort — don't fail the send if enrollment errors
-    log.error("Enrollment error", { estimateId, error: enrollErr instanceof Error ? enrollErr.message : String(enrollErr) });
+  // Not for a view-only copy of a decided estimate: "no response" follow-ups
+  // would chase a client who already answered.
+  if (opensForAcceptance) {
+    try {
+      await fireSimpleTrigger(supabase, {
+        orgId: est.org_id,
+        clientId: est.client_id,
+        estimateId,
+        triggerType: "estimate_sent",
+        matchValues: est.sales_rep_id ? [est.sales_rep_id] : undefined,
+      });
+    } catch (enrollErr) {
+      // best-effort — don't fail the send if enrollment errors
+      log.error("Enrollment error", { estimateId, error: enrollErr instanceof Error ? enrollErr.message : String(enrollErr) });
+    }
   }
 
   return NextResponse.json({ ok: true, proposalUrl });

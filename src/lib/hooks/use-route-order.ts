@@ -11,11 +11,28 @@ import { createClient } from "@/lib/supabase/client";
  * grouping that has to be re-dragged every week.
  */
 
-/** `${crewId}:${jobId}` → position within that crew's route for that weekday. */
+/** `${crewId}:${dayOfWeek}:${jobId}` → position within that crew's route for that weekday. */
 export type RouteOrderMap = Map<string, number>;
 
-export function routeOrderKey(crewId: string, jobId: string): string {
-  return `${crewId}:${jobId}`;
+/**
+ * The weekday is part of the key: a job served Mon AND Thu has a remembered
+ * position for each day, and a crew:job key let whichever row came back last
+ * overwrite the other, so one day inherited the other day's sequence.
+ */
+export function routeOrderKey(crewId: string, dayOfWeek: number, jobId: string): string {
+  return `${crewId}:${dayOfWeek}:${jobId}`;
+}
+
+/**
+ * Weekday (0=Sun … 6=Sat) of a `YYYY-MM-DD` scheduled date — the same value
+ * crm_save_route_order stores (`extract(dow from v.scheduled_date)` on the
+ * date column, no timezone involved). Parsed as local midnight for the same
+ * reason as weekdaysInRange below. Returns null for an unparseable date.
+ */
+export function weekdayOfDate(iso: string): number | null {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+  return Number.isNaN(dt.getTime()) ? null : dt.getDay();
 }
 
 /**
@@ -57,13 +74,13 @@ export function useCrewRouteOrder(fromDate: string, toDate?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_crew_route_order")
-        .select("crew_id, job_id, position")
+        .select("crew_id, day_of_week, job_id, position")
         .in("day_of_week", days);
       if (error) throw error;
 
       const map: RouteOrderMap = new Map();
-      for (const row of (data ?? []) as { crew_id: string; job_id: string; position: number }[]) {
-        map.set(routeOrderKey(row.crew_id, row.job_id), row.position);
+      for (const row of (data ?? []) as { crew_id: string; day_of_week: number; job_id: string; position: number }[]) {
+        map.set(routeOrderKey(row.crew_id, row.day_of_week, row.job_id), row.position);
       }
       return map;
     },
