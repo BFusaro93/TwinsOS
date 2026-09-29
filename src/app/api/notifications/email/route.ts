@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
+import { EMAIL_FROM_EQUIPT, escapeHtml } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
 
 type NotifType =
@@ -311,17 +311,17 @@ export async function POST(request: Request) {
   }
 
   const resend = new Resend(resendKey);
-  const callerName = callerProfile.name ?? "A team member";
+  const callerName = escapeHtml(callerProfile.name ?? "A team member");
 
   function buildEmail(recipientName: string | null, isAdminBroadcast: boolean): { subject: string; html: string } {
-    const hi = `Hi ${recipientName ?? "there"},`;
+    const hi = `Hi ${escapeHtml(recipientName ?? "there")},`;
     const adminNote = isAdminBroadcast
       ? `<p style="margin:0 0 8px;font-size:11px;color:#94a3b8">You're receiving this because you have admin notifications enabled for all work orders.</p>`
       : "";
 
     if (notifType === "wo_created" || notifType === "wo_assigned") {
-      const num   = (entity.work_order_number ?? "Work Order") as string;
-      const title = (entity.title ?? "") as string;
+      const num   = escapeHtml((entity.work_order_number ?? "Work Order") as string);
+      const title = escapeHtml((entity.title ?? "") as string);
       const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       // Admin broadcast recipients are watching all WOs — they weren't personally assigned,
       // so use "created" language regardless of whether it's a wo_assigned event.
@@ -341,9 +341,9 @@ export async function POST(request: Request) {
     }
 
     if (notifType === "wo_status_changed") {
-      const num    = (entity.work_order_number ?? "Work Order") as string;
-      const title  = (entity.title ?? "") as string;
-      const status = ((entity.status as string) ?? "").replace(/_/g, " ");
+      const num    = escapeHtml((entity.work_order_number ?? "Work Order") as string);
+      const title  = escapeHtml((entity.title ?? "") as string);
+      const status = escapeHtml(((entity.status as string) ?? "").replace(/_/g, " "));
       const link   = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
         subject: `Work order status updated: ${num}`,
@@ -357,9 +357,9 @@ export async function POST(request: Request) {
     }
 
     if (notifType === "wo_comment") {
-      const num   = (entity.work_order_number ?? "Work Order") as string;
-      const title = (entity.title ?? "") as string;
-      const commentBody = extra.commentBody ?? "";
+      const num   = escapeHtml((entity.work_order_number ?? "Work Order") as string);
+      const title = escapeHtml((entity.title ?? "") as string);
+      const commentBody = escapeHtml(extra.commentBody ?? "");
       const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
         subject: `New comment on ${num}`,
@@ -375,14 +375,14 @@ export async function POST(request: Request) {
 
     if (notifType === "approved" || notifType === "rejected") {
       const isApproved = notifType === "approved";
-      const num = ((entity.requisition_number ?? entity.po_number ?? entity.estimate_number ?? "Request")) as string;
+      const num = escapeHtml(((entity.requisition_number ?? entity.po_number ?? entity.estimate_number ?? "Request")) as string);
       const entityLabel = entityType === "requisition" ? "Purchase Requisition" : entityType === "crm_estimate" ? "Estimate" : "Purchase Order";
       const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions?id=${entity.id as string}`
         : entityType === "crm_estimate" ? `${SITE_URL}/crm/estimates/${entity.id as string}`
         : `${SITE_URL}/po/orders?id=${entity.id as string}`;
       const color = isApproved ? "#60ab45" : "#dc2626";
       const verb  = isApproved ? "approved" : "rejected";
-      const reason = extra.comment ?? "";
+      const reason = escapeHtml(extra.comment ?? "");
       return {
         subject: `${entityLabel} ${verb}: ${num}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
@@ -396,8 +396,8 @@ export async function POST(request: Request) {
     }
 
     if (notifType === "new_maintenance_request") {
-      const title = (entity.title ?? "Maintenance Request") as string;
-      const num   = (entity.request_number ?? "") as string;
+      const title = escapeHtml((entity.title ?? "Maintenance Request") as string);
+      const num   = escapeHtml((entity.request_number ?? "") as string);
       const link  = `${SITE_URL}/cmms/requests?id=${entity.id as string}`;
       return {
         subject: `New maintenance request: ${title}`,

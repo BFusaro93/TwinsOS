@@ -130,11 +130,14 @@ export async function POST(request: Request) {
     if (p.email) emailMap.set(p.id, p.email);
   }
 
-  // 5. Fetch submitter name
+  // 5. Fetch the requester's name. Mid-chain (after an earlier step approves)
+  // the caller is the previous approver, not the person who submitted, so the
+  // record's creator is used; the caller is only a fallback.
+  const requesterId = (entity.created_by as string | null) ?? user.id;
   const { data: submitterProfile } = await adminClient
     .from("profiles")
     .select("name")
-    .eq("id", user.id)
+    .eq("id", requesterId)
     .single();
   const submitterName = submitterProfile?.name ?? "A team member";
 

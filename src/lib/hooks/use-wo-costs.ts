@@ -266,6 +266,7 @@ export function useAddWOPart() {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
+      queryClient.invalidateQueries({ queryKey: ["part-asset-links"] });
     },
   });
 }
@@ -303,7 +304,10 @@ export function useUpdateWOPart() {
       // Move inventory so this line's deduction equals the new quantity.
       // Works from what was actually deducted (not the old quantity), so a
       // line whose deduction was clamped at 0 doesn't get over-credited.
-      if (existing?.part_id && existing.quantity !== quantity) {
+      // Runs unconditionally (it's idempotent against quantity_deducted): if an
+      // earlier save committed the row but its stock RPC failed, skipping the
+      // sync when quantity is unchanged would leave the drift permanent.
+      if (existing?.part_id) {
         await syncWOPartStock(supabase, id, quantity);
         await syncPartQtyToProduct(supabase, existing.part_id);
       }

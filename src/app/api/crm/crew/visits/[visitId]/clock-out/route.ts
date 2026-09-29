@@ -42,7 +42,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_out_at, org_id, crew_id, status")
+    .select("clocked_out_at, org_id, crew_id, status, paused_at, break_minutes")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -53,6 +53,21 @@ export async function POST(
   if (existing?.clocked_out_at) {
     return NextResponse.json({ error: "Already clocked out" }, { status: 409 });
   }
+  // A cancelled / skipped visit must never be flipped to completed (and
+  // billed) by a stale or replayed crew request.
+  if (existing.status === "cancelled" || existing.status === "skipped") {
+    return NextResponse.json(
+      { error: `This visit is ${existing.status} — ask the office to reopen it first.`, code: "visit_terminal" },
+      { status: 409 }
+    );
+  }
+
+  // Clocking out straight from a break (no Resume tap) must still net the
+  // in-progress pause off the visit's hours, and must not leave paused_at
+  // dangling on a completed visit — the stop clock-out does the same.
+  const finalBreakMinutes = (existing.break_minutes ?? 0) + (existing.paused_at
+    ? Math.max(0, Math.round((new Date(now).getTime() - new Date(existing.paused_at as string).getTime()) / 60_000))
+    : 0);
 
   // actual_hours is intentionally not written here — it derives from
   // start_time/end_time (or clocked_in_at/out) x men_count via the
@@ -67,6 +82,8 @@ export async function POST(
       clocked_out_at:   now,
       end_time:         localTime ? `${localTime}:00` : undefined,
       completion_notes: notes ?? null,
+      paused_at:        null,
+      break_minutes:    finalBreakMinutes,
       updated_at:       now,
     })
     .eq("id", visitId)

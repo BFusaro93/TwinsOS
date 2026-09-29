@@ -18,7 +18,9 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q")?.trim() ?? "";
+  // Commas, parens and wildcards are PostgREST filter syntax inside .or(...);
+  // left in, a search like "a,b" (or a crafted one) breaks/reshapes the filter.
+  const q = (searchParams.get("q") ?? "").replace(/[,()%*\\]/g, " ").trim();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any)

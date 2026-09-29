@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapGoodsReceipt } from "@/lib/supabase/mappers";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
+import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
 import { correctPartReceipt, clampProductReduction, shortfallMessage } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
@@ -155,7 +156,7 @@ export function useUpdateGoodsReceipt() {
       // Fetch current receipt header + line quantities for audit comparison
       const { data: currentReceipt } = await supabase
         .from("goods_receipts")
-        .select("org_id, receipt_number, notes, tax_rate_percent, shipping_cost, po_number")
+        .select("org_id, receipt_number, notes, tax_rate_percent, shipping_cost, po_number, purchase_order_id")
         .eq("id", input.id)
         .single();
 
@@ -334,15 +335,9 @@ export function useUpdateGoodsReceipt() {
       }
 
       if (currentReceipt) {
-        const taxRate = currentReceipt.tax_rate_percent as number;
-        const shippingCost = currentReceipt.shipping_cost as number;
-
         // The create path (ReceiveGoodsDialog) only taxes lines whose PO
-        // line item is taxable — this edit path retaxed every line
-        // regardless, so correcting any quantity on a receipt with even
-        // one non-taxable line (e.g. a delivery fee) bumped the tax and
-        // grand total. Resolve each line's taxable flag from its PO line
-        // item, same source the create path reads it from.
+        // line item is taxable, so resolve each line's taxable flag from its
+        // PO line item, same source the create path reads it from.
         const poLineItemIds = [...oldByLineId.values()]
           .map((l) => l.po_line_item_id)
           .filter((v): v is string => !!v);
@@ -355,18 +350,77 @@ export function useUpdateGoodsReceipt() {
           return poLineItemId ? (taxableByPoLineId.get(poLineItemId) ?? true) : true;
         };
 
+        // Same PO-level math as the create path (ReceiveGoodsDialog): prorated
+        // discount + shipping, discount-reduces-tax handling, and the
+        // final-receipt true-up. Needs the PO header, its lines, and every
+        // OTHER live receipt on the PO.
+        const poId = currentReceipt.purchase_order_id as string;
+        const { data: poRow } = await supabase
+          .from("purchase_orders")
+          .select("subtotal, discount_cost, discount_reduces_tax, shipping_cost, tax_rate_percent, sales_tax, grand_total")
+          .eq("id", poId)
+          .single();
+        const { data: allPoLines } = await supabase
+          .from("po_line_items")
+          .select("id, quantity")
+          .eq("po_id", poId);
+        const { data: otherReceipts } = await supabase
+          .from("goods_receipts")
+          .select("id, sales_tax, shipping_cost, grand_total, goods_receipt_lines (po_line_item_id, quantity_received)")
+          .eq("purchase_order_id", poId)
+          .neq("id", input.id)
+          .is("deleted_at", null);
+
+        const receivedByPoLine = new Map<string, number>();
+        for (const r of otherReceipts ?? []) {
+          for (const l of (r.goods_receipt_lines ?? []) as { po_line_item_id: string | null; quantity_received: number }[]) {
+            if (!l.po_line_item_id) continue;
+            receivedByPoLine.set(l.po_line_item_id, (receivedByPoLine.get(l.po_line_item_id) ?? 0) + l.quantity_received);
+          }
+        }
+        for (const line of input.lines) {
+          const poLineItemId = oldByLineId.get(line.id)?.po_line_item_id;
+          if (!poLineItemId) continue;
+          receivedByPoLine.set(poLineItemId, (receivedByPoLine.get(poLineItemId) ?? 0) + line.quantityReceived);
+        }
+        const isFinalReceipt = (allPoLines ?? []).length > 0 &&
+          (allPoLines ?? []).every((l) => (receivedByPoLine.get(l.id) ?? 0) >= l.quantity);
+
         const newSubtotal = Math.round(input.lines.reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0));
         const newTaxableSubtotal = Math.round(
           input.lines
             .filter((l) => isLineTaxable(l.id))
             .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
         );
-        const newSalesTax = Math.round(newTaxableSubtotal * (taxRate / 100));
-        const newGrandTotal = newSubtotal + newSalesTax + shippingCost;
+        const totals = poRow
+          ? computeReceiptTotals({
+              subtotal: newSubtotal,
+              taxableSubtotal: newTaxableSubtotal,
+              po: {
+                subtotal: poRow.subtotal,
+                discountCost: poRow.discount_cost ?? 0,
+                discountReducesTax: poRow.discount_reduces_tax ?? false,
+                shippingCost: poRow.shipping_cost ?? 0,
+                taxRatePercent: poRow.tax_rate_percent ?? (currentReceipt.tax_rate_percent as number),
+                salesTax: poRow.sales_tax ?? 0,
+                grandTotal: poRow.grand_total ?? 0,
+              },
+              priorReceipts: (otherReceipts ?? []).map((r) => ({
+                salesTax: r.sales_tax,
+                shippingCost: r.shipping_cost,
+                grandTotal: r.grand_total,
+              })),
+              isFinalReceipt,
+            })
+          : null;
+        const newSalesTax = totals?.salesTax ?? Math.round(newTaxableSubtotal * ((currentReceipt.tax_rate_percent as number) / 100));
+        const newShipping = totals?.shippingCost ?? (currentReceipt.shipping_cost as number);
+        const newGrandTotal = totals?.grandTotal ?? newSubtotal + newSalesTax + newShipping;
 
         const headerPatch: Record<string, unknown> = {
           subtotal: newSubtotal,
           sales_tax: newSalesTax,
+          shipping_cost: newShipping,
           grand_total: newGrandTotal,
         };
         // Only include notes if it actually changed to avoid spurious audit entries

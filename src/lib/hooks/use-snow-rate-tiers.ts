@@ -87,35 +87,48 @@ export function useSaveSnowRateTiers() {
   return useMutation({
     mutationFn: async ({ jobId, tiers }: { jobId: string; tiers: TierInput[] }) => {
       const supabase = createClient();
+      // Insert-then-delete-old: a failed insert leaves the existing tiers
+      // intact instead of wiping them.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: delErr } = await (supabase as any)
+      const { data: oldRows, error: oldErr } = await (supabase as any)
         .from("crm_snow_rate_tiers")
-        .delete()
+        .select("id")
         .eq("job_id", jobId);
-      if (delErr) throw delErr;
+      if (oldErr) throw oldErr;
+      const oldIds = ((oldRows ?? []) as { id: string }[]).map((r) => r.id);
 
-      if (tiers.length === 0) return;
+      if (tiers.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: job, error: jobErr } = await (supabase as any)
+          .from("crm_jobs")
+          .select("org_id")
+          .eq("id", jobId)
+          .single();
+        if (jobErr || !job?.org_id) throw jobErr ?? new Error("Job not found");
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: job } = await (supabase as any)
-        .from("crm_jobs")
-        .select("org_id")
-        .eq("id", jobId)
-        .single();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: insErr } = await (supabase as any).from("crm_snow_rate_tiers").insert(
+          tiers.map((t, i) => ({
+            org_id: job.org_id,
+            job_id: jobId,
+            sort_order: i,
+            min_inches: t.minInches,
+            max_inches: t.maxInches,
+            rate_cents: t.rateCents,
+            rate_per_inch_cents: t.ratePerInchCents,
+          }))
+        );
+        if (insErr) throw insErr;
+      }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: insErr } = await (supabase as any).from("crm_snow_rate_tiers").insert(
-        tiers.map((t, i) => ({
-          org_id: job?.org_id,
-          job_id: jobId,
-          sort_order: i,
-          min_inches: t.minInches,
-          max_inches: t.maxInches,
-          rate_cents: t.rateCents,
-          rate_per_inch_cents: t.ratePerInchCents,
-        }))
-      );
-      if (insErr) throw insErr;
+      if (oldIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: delErr } = await (supabase as any)
+          .from("crm_snow_rate_tiers")
+          .delete()
+          .in("id", oldIds);
+        if (delErr) throw delErr;
+      }
     },
     onSuccess: () => {
       // Broad invalidation, not just ["snow-rate-tiers", jobId] — the

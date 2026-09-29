@@ -192,11 +192,18 @@ async function applySubscriptionToOrg(
     // 20260926190000_canceled_subscription_read_only.sql and useTrialStatus).
     // Dropping back to "trial" used to hand out full access for free.
     patch.plan = "canceled";
-    const currentQuery = db.from("organizations").select("plan, canceled_access_ends_at");
+    const currentQuery = db
+      .from("organizations")
+      .select("plan, canceled_access_ends_at, stripe_subscription_id");
     const { data: current } =
       "id" in lookup
         ? await currentQuery.eq("id", lookup.id).maybeSingle()
         : await currentQuery.eq("stripe_customer_id", lookup.stripeCustomerId).maybeSingle();
+    // A late "deleted"/"unpaid" event for an OLD subscription (the org has
+    // since resubscribed and points at a newer one) must not cancel the org.
+    if (current?.stripe_subscription_id && current.stripe_subscription_id !== subscription.id) {
+      return;
+    }
     // Repeat downgrade events (unpaid -> canceled) keep the original window.
     if (current?.plan !== "canceled" || !current?.canceled_access_ends_at) {
       patch.canceled_access_ends_at = new Date(

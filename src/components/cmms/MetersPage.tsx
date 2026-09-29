@@ -105,6 +105,7 @@ export function MetersPage() {
           />
         }
         hasSelection={!!selectedMeter}
+        onBack={() => setSelectedMeterId(null)}
       />
 
       <NewMeterDialog open={newMeterOpen} onOpenChange={setNewMeterOpen} />

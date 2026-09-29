@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO, differenceInMinutes } from "date-fns";
 import {
@@ -135,10 +135,10 @@ function PlannedMaterialRow({
 function ElapsedTimer({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
   // Refresh every minute
-  useState(() => {
+  useEffect(() => {
     const id = setInterval(() => forceUpdate(n => n + 1), 60_000);
     return () => clearInterval(id);
-  });
+  }, []);
   const mins = differenceInMinutes(new Date(), parseISO(start));
   const h = Math.floor(mins / 60);
   const m = mins % 60;

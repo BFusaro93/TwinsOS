@@ -28,17 +28,42 @@ export async function billSmsOverageForPeriod(
   const deltaCents = owedCents - usage.overage_billed_cents;
   if (deltaCents <= 0) return;
 
-  await stripe.invoiceItems.create({
-    customer: org.stripe_customer_id,
-    amount: deltaCents,
-    currency: "usd",
-    description: `SMS overage — ${overageCount} messages past the ${SMS_INCLUDED_PER_PERIOD} included this period`,
-  });
-
-  const { error } = await db
+  // Claim the delta first with a compare-and-swap on the previously-billed
+  // amount: if a concurrent run (or an overlapping cron) already advanced
+  // overage_billed_cents, zero rows match and we bill nothing.
+  const { data: claimed, error: claimErr } = await db
     .from("organization_sms_usage")
     .update({ overage_billed_cents: owedCents })
     .eq("org_id", org.id)
-    .eq("period_start", usage.period_start);
-  if (error) throw error;
+    .eq("period_start", usage.period_start)
+    .eq("overage_billed_cents", usage.overage_billed_cents)
+    .select("period_start");
+  if (claimErr) throw claimErr;
+  if (!claimed || claimed.length === 0) return;
+
+  try {
+    // The key is unique to this exact step (org, period, from-amount, to-amount),
+    // so a retry of the same delta collapses into the original Stripe item
+    // instead of creating a second one.
+    await stripe.invoiceItems.create(
+      {
+        customer: org.stripe_customer_id,
+        amount: deltaCents,
+        currency: "usd",
+        description: `SMS overage — ${overageCount} messages past the ${SMS_INCLUDED_PER_PERIOD} included this period`,
+      },
+      {
+        idempotencyKey: `sms-overage:${org.id}:${usage.period_start}:${usage.overage_billed_cents}:${owedCents}`,
+      }
+    );
+  } catch (err) {
+    // Stripe never took the charge — release the claim so the next run retries.
+    await db
+      .from("organization_sms_usage")
+      .update({ overage_billed_cents: usage.overage_billed_cents })
+      .eq("org_id", org.id)
+      .eq("period_start", usage.period_start)
+      .eq("overage_billed_cents", owedCents);
+    throw err;
+  }
 }

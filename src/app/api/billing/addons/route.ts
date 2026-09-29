@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only admins can manage billing" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
   const parsed = ToggleAddonSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -79,7 +79,11 @@ export async function POST(request: Request) {
   const existingItem = subscription.items.data.find((item) => item.price.id === priceId);
 
   if (enabled) {
-    if (!existingItem) {
+    // Upsert even when Stripe already has the item: a previous attempt may
+    // have created it and then failed on this write, and skipping here would
+    // leave the add-on billed but never recorded as enabled.
+    let itemId = existingItem?.id;
+    if (!itemId) {
       const item = await stripe.subscriptionItems.create(
         {
           subscription: subscription.id,
@@ -88,14 +92,15 @@ export async function POST(request: Request) {
         },
         { idempotencyKey: chargeIdempotencyKey(["addon_item", org.id, addon]) }
       );
-      const { error: upsertErr } = await serviceClient
-        .from("organization_addons")
-        .upsert(
-          { org_id: org.id, addon_key: addon, enabled: true, stripe_subscription_item_id: item.id },
-          { onConflict: "org_id,addon_key" }
-        );
-      if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+      itemId = item.id;
     }
+    const { error: upsertErr } = await serviceClient
+      .from("organization_addons")
+      .upsert(
+        { org_id: org.id, addon_key: addon, enabled: true, stripe_subscription_item_id: itemId },
+        { onConflict: "org_id,addon_key" }
+      );
+    if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 });
   } else {
     if (existingItem) {
       await stripe.subscriptionItems.del(existingItem.id, { proration_behavior: "create_prorations" });

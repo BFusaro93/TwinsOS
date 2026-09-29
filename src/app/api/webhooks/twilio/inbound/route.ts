@@ -160,7 +160,22 @@ export async function POST(request: Request) {
   const matchedIds = orgMatches.map((c) => c.id);
   const orgId = orgMatches[0].org_id;
 
-  await supabase.from("client_activity").insert(
+  // Twilio retries a webhook on timeouts/5xx, so the same MessageSid can arrive
+  // more than once. If we already filed it, ack without re-logging or opening
+  // a second ticket / re-appending the comment.
+  const { data: alreadyLogged } = await supabase
+    .from("client_activity")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("ref_table", "twilio_messages")
+    .eq("ref_id", messageSid)
+    .eq("direction", "inbound")
+    .limit(1);
+  if (alreadyLogged && alreadyLogged.length > 0) {
+    return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
+  }
+
+  const { error: activityErr } = await supabase.from("client_activity").insert(
     orgMatches.map((c) => ({
       org_id: c.org_id,
       client_id: c.id,
@@ -174,6 +189,12 @@ export async function POST(request: Request) {
       occurred_at: new Date().toISOString(),
     }))
   );
+  // 23505 = the unique index on (client_id, MessageSid) caught a concurrent
+  // duplicate delivery that slipped past the check above.
+  if (activityErr?.code === "23505") {
+    return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
+  }
+  if (activityErr) log.error("failed to log inbound sms", { error: activityErr.message });
 
   if (OPT_OUT_KEYWORDS.has(keyword)) {
     await supabase.from("clients").update({ sms_opt_in: false }).eq("org_id", orgId).in("id", matchedIds);

@@ -436,6 +436,9 @@ export function useAddJobsToStormEvent() {
       if (error) throw error;
       return rows.length;
     },
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["crm-job-visits", "storm-event", vars.stormEventId] }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-job-visits", "storm-event", vars.stormEventId] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
   });
 }

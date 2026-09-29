@@ -34,17 +34,25 @@ export async function GET(
     return NextResponse.json({ error: "This proposal link has expired" }, { status: 410 });
   }
 
-  // Record view (fire-and-forget — don't let tracking failures block the response)
-  const now = new Date().toISOString();
-  supabase
-    .from("estimate_share_tokens")
-    .update({
-      first_viewed_at: shareToken.first_viewed_at ?? now,
-      last_viewed_at: now,
-      view_count: (shareToken.view_count ?? 0) + 1,
-    })
-    .eq("id", shareToken.id)
-    .then(() => {/* intentionally ignored */});
+  // Record the view. Awaited (a fire-and-forget promise can be dropped when the
+  // serverless function returns) and incremented atomically in the DB so two
+  // simultaneous views can't both write the same read+1. Tracking failures
+  // never block the response.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: viewErr } = await (supabase as any).rpc("record_proposal_view", {
+    p_token_id: shareToken.id,
+  });
+  if (viewErr) {
+    const now = new Date().toISOString();
+    await supabase
+      .from("estimate_share_tokens")
+      .update({
+        first_viewed_at: shareToken.first_viewed_at ?? now,
+        last_viewed_at: now,
+        view_count: (shareToken.view_count ?? 0) + 1,
+      })
+      .eq("id", shareToken.id);
+  }
 
   // Fetch estimate with client info and line items
   const { data: est, error: estErr } = await supabase
@@ -56,6 +64,7 @@ export async function GET(
       estimate_line_items(*, estimate_line_item_subitems(total_cents, deleted_at))
     `)
     .eq("id", shareToken.estimate_id)
+    .is("deleted_at", null)
     .single();
 
   if (estErr || !est) {

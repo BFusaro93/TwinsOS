@@ -39,7 +39,7 @@ import { useReceivePartCostLayer } from "@/lib/hooks/use-parts";
 import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
-import { computeSalesTax } from "@/lib/utils/po-tax";
+import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
 import { correctPartReceipt } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
@@ -178,30 +178,6 @@ export function ReceiveGoodsDialog({
     })
     .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
   );
-  // A PO-level discount is a single flat amount for the whole order, but
-  // receiving can happen across multiple partial receipts — applying it in
-  // full to every receipt would double- (or triple-) count it, while
-  // omitting it entirely (the prior behavior) overstated every receipt's
-  // total on any PO with a discount. Prorate it by this receipt's share of
-  // the PO's total ordered subtotal instead.
-  const discountShare = po.discountCost > 0 && po.subtotal > 0
-    ? Math.round(po.discountCost * (subtotal / po.subtotal))
-    : 0;
-  // Shipping is also a single whole-order charge — adding it in full to every
-  // partial receipt billed a two-receipt PO's shipping twice. Prorate it the
-  // same way.
-  const shippingShare = po.shippingCost > 0 && po.subtotal > 0
-    ? Math.round(po.shippingCost * (subtotal / po.subtotal))
-    : 0;
-  // The prorated share is what this receipt's tax has to work from when the
-  // PO discounts before tax, for the same reason.
-  const proratedTax = computeSalesTax({
-    taxableSubtotal,
-    taxRatePercent: po.taxRatePercent,
-    discountCost: discountShare,
-    discountReducesTax: po.discountReducesTax,
-  });
-
   // Compares the CUMULATIVE received quantity (this receipt + everything
   // already received on prior receipts) against what was ordered — a plain
   // `l.quantityReceived === l.quantityOrdered` only looked at THIS
@@ -214,25 +190,29 @@ export function ReceiveGoodsDialog({
     const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
     return alreadyReceived + l.quantityReceived >= l.quantityOrdered;
   });
-  // Each partial receipt rounds its prorated tax/shipping/discount on its own,
-  // so the receipts could drift a cent or more from the PO (10 + 2 of 12 came
-  // to $298.76 on a $298.75 PO). The receipt that completes the PO takes
-  // whatever remains of the PO's totals instead, so the receipts always sum to
-  // exactly what the vendor is owed.
+  // Prorated discount/shipping/tax plus the final-receipt true-up live in the
+  // shared helper so editing a receipt applies the identical math.
   const priorReceipts = allReceipts.filter((r) => r.purchaseOrderId === po.id);
-  const remainingTax = po.salesTax - priorReceipts.reduce((sum, r) => sum + r.salesTax, 0);
-  const remainingShipping = po.shippingCost - priorReceipts.reduce((sum, r) => sum + r.shippingCost, 0);
-  const remainingTotal = po.grandTotal - priorReceipts.reduce((sum, r) => sum + r.grandTotal, 0);
-  const remainingDiscount = subtotal + remainingTax + remainingShipping - remainingTotal;
-  // Older receipts recorded full shipping each time, so a remainder can come
-  // out negative — keep the prorated figures rather than record nonsense.
-  const trueUp =
-    allFullyReceived && priorReceipts.length > 0 &&
-    remainingTax >= 0 && remainingShipping >= 0 && remainingDiscount >= 0;
-  const salesTax = trueUp ? remainingTax : proratedTax;
-  const shippingCost = trueUp ? remainingShipping : shippingShare;
-  const discountShown = trueUp ? remainingDiscount : discountShare;
-  const grandTotal = subtotal - discountShown + salesTax + shippingCost;
+  const {
+    salesTax,
+    shippingCost,
+    discount: discountShown,
+    grandTotal,
+  } = computeReceiptTotals({
+    subtotal,
+    taxableSubtotal,
+    po: {
+      subtotal: po.subtotal,
+      discountCost: po.discountCost,
+      discountReducesTax: po.discountReducesTax,
+      shippingCost: po.shippingCost,
+      taxRatePercent: po.taxRatePercent,
+      salesTax: po.salesTax,
+      grandTotal: po.grandTotal,
+    },
+    priorReceipts,
+    isFinalReceipt: allFullyReceived,
+  });
   const someReceived = lines.some((l) => l.quantityReceived > 0);
   const isValid = someReceived && receivedById !== "";
 

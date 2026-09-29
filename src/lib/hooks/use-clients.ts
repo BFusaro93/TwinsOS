@@ -8,6 +8,7 @@ import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { BulkImportResult } from "@/lib/csv";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -228,13 +229,17 @@ export function useClients() {
     queryKey: ["clients"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
-        .is("deleted_at", null)
-        .order("display_name");
-      if (error) throw error;
-      return (data.map(mapClient)) as Client[];
+      // PostgREST caps a response at 1000 rows, so page through the whole
+      // table — `id` breaks display_name ties so pages never skip/repeat rows.
+      const rows = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("clients")
+          .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
+          .is("deleted_at", null)
+          .order("display_name")
+          .order("id"),
+      );
+      return rows.map(mapClient) as Client[];
     },
   });
 }
@@ -586,10 +591,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * useBulkImportLeads so both importers dedup identically.
  */
 async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
-  const { data: existing } = await supabase
-    .from("clients")
-    .select("id, primary_email, primary_phone")
-    .is("deleted_at", null);
+  // Paged: a bare select stops at PostgREST's 1000-row cap, so in a larger org
+  // most existing clients would be missing from the maps and re-imported as
+  // duplicates.
+  const existing = await fetchAllRows<{ id: string; primary_email: string | null; primary_phone: string | null }>(() =>
+    supabase
+      .from("clients")
+      .select("id, primary_email, primary_phone")
+      .is("deleted_at", null)
+      .order("id"),
+  );
   const byEmail = new Map(
     (existing ?? []).filter((c) => c.primary_email).map((c) => [c.primary_email!.trim().toLowerCase(), c.id])
   );
@@ -1196,14 +1207,16 @@ export function useLeads() {
     queryKey: ["clients", { status: "lead" }],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*, client_tags(tag)")
-        .eq("status", "lead")
-        .is("deleted_at", null)
-        .order("display_name");
-      if (error) throw error;
-      return (data.map(mapClient)) as Client[];
+      const rows = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("clients")
+          .select("*, client_tags(tag)")
+          .eq("status", "lead")
+          .is("deleted_at", null)
+          .order("display_name")
+          .order("id"),
+      );
+      return rows.map(mapClient) as Client[];
     },
   });
 }

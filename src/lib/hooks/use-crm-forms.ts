@@ -118,7 +118,13 @@ export function useSaveFormFields(formId: string) {
       if (!res.ok) throw new Error("Failed to save fields");
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-form", formId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-form", formId] });
+      // The route soft-deletes rules that pointed at removed fields and bumps
+      // the form's updated_at, so both of those caches go stale too.
+      qc.invalidateQueries({ queryKey: ["crm-form-rules", formId] });
+      qc.invalidateQueries({ queryKey: ["crm-forms"] });
+    },
   });
 }
 
@@ -148,7 +154,11 @@ export function useSaveFormRules(formId: string) {
       if (!res.ok) throw new Error("Failed to save rules");
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-form-rules", formId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-form-rules", formId] });
+      // Rule edits bump the form's updated_at (Forms list "Date Modified").
+      qc.invalidateQueries({ queryKey: ["crm-forms"] });
+    },
   });
 }
 

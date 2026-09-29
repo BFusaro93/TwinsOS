@@ -343,10 +343,13 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
     const base = (clients ?? []).filter((c) => {
       // search
       const q = search.toLowerCase();
+      // Digits-only comparison so "9785550100" finds a phone stored as "(978) 555-0100".
+      const qDigits = q.replace(/\D/g, "");
       if (q && !(
         c.displayName.toLowerCase().includes(q) ||
         (c.primaryEmail ?? "").toLowerCase().includes(q) ||
         (c.primaryPhone ?? "").includes(q) ||
+        (qDigits.length >= 3 && (c.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
         (c.billingCity ?? "").toLowerCase().includes(q) ||
         (c.tags ?? []).some((t) => t.toLowerCase().includes(q))
       )) return false;

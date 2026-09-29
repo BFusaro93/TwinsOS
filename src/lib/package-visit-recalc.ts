@@ -44,14 +44,17 @@ export async function recalcNextPackageVisitDate(
   // recalc whenever that immediate next visit was cancelled/skipped — the
   // chain must cascade past it to whichever visit actually comes next, using
   // THAT service's own min_days against the just-completed visit's date.
+  // `prevDate` is the date the previous step in the chain now sits on. Once a
+  // step is shifted, every later step's min_days gap is measured from the
+  // shifted date, so the walk continues down the chain instead of stopping.
+  let prevDate = completedDateStr;
+  let foundFirst = false;
   for (const service of services) {
     // That service's own visit — one job_service_id can now have many visit rows
     // (per-service recurring visits generate one per occurrence), so this MUST
     // filter out completed/cancelled/skipped ones and order by date itself rather
-    // than trusting an arbitrary unordered row: without both, `.limit(1)` could
-    // just as easily return an already-terminal occurrence, silently no-opping
-    // this whole recalc even though a real future visit still needs pushing out.
-    const { data: nextVisits } = await supabase
+    // than trusting an arbitrary unordered row.
+    const { data: nextVisits, error: nextErr } = await supabase
       .from("crm_job_visits")
       .select("id, scheduled_date, status")
       .eq("job_service_id", service.id)
@@ -59,28 +62,38 @@ export async function recalcNextPackageVisitDate(
       .not("status", "in", "(completed,cancelled,skipped)")
       .order("scheduled_date", { ascending: true })
       .limit(1);
+    if (nextErr) throw nextErr;
     const nextVisit = nextVisits?.[0] as { id: string; scheduled_date: string; status: string } | undefined;
 
-    // This service has no surviving (non-terminal) visit — keep walking
-    // forward to the next service in the chain instead of giving up.
+    // No surviving (non-terminal) visit — keep walking forward.
     if (!nextVisit) continue;
 
-    // Found the real next visit in the chain. If its own service has no
-    // min_days constraint, there's nothing to enforce — done either way.
-    if (!service.min_days) return;
+    // First real visit with no min_days constraint: nothing to enforce before
+    // it, and (as before) the chain ends here. Later in the chain, a step
+    // without min_days just re-anchors the baseline on its own date.
+    if (!service.min_days) {
+      if (!foundFirst) return;
+      prevDate = nextVisit.scheduled_date;
+      continue;
+    }
+    foundFirst = true;
 
-    const candidateStr = shiftYmd(completedDateStr, service.min_days);
+    const candidateStr = shiftYmd(prevDate, service.min_days);
 
-    // min_days is a floor, not an exact offset — only push the next visit OUT if
-    // the actual completion date requires it; never pull an already-later date
-    // earlier.
+    // min_days is a floor, not an exact offset — only push OUT, never earlier.
     if (candidateStr > nextVisit.scheduled_date) {
-      await supabase
+      const { error: updErr } = await supabase
         .from("crm_job_visits")
         .update({ scheduled_date: candidateStr })
         .eq("id", nextVisit.id);
+      if (updErr) throw updErr;
+      prevDate = candidateStr;
+    } else {
+      // Already satisfies its gap, so later steps (already spaced from this
+      // one's date) are unaffected only if they held before — keep checking
+      // from this step's actual date.
+      prevDate = nextVisit.scheduled_date;
     }
-    return;
   }
 }
 

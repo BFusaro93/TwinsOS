@@ -24,11 +24,16 @@ export async function PATCH(req: Request) {
   const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
+  // Omitting the field must not wipe the phone (Twilio matching depends on it).
+  if (parsed.data.primary_phone === undefined) {
+    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  }
+
   const supabase = createServiceClient();
 
   const { error } = await supabase
     .from("clients")
-    .update({ primary_phone: parsed.data.primary_phone ?? null, updated_at: new Date().toISOString() })
+    .update({ primary_phone: parsed.data.primary_phone, updated_at: new Date().toISOString() })
     .eq("id", ctx.clientId)
     .eq("org_id", ctx.orgId);
 

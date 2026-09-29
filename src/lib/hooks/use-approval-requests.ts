@@ -210,7 +210,7 @@ export function useDecideApproval(entityId: string) {
       if (freshErr) throw freshErr;
       const freshMapped = fresh.map(mapApprovalRequest);
 
-      return { freshMapped, allResolved, entityType, newEntityStatus };
+      return { freshMapped, allResolved, entityType, newEntityStatus, decision: status };
     },
     onMutate: async () => {
       // Block Realtime invalidations for the entire mutation lifecycle
@@ -222,7 +222,7 @@ export function useDecideApproval(entityId: string) {
       const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       return { previousReqs, previousPOs };
     },
-    onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus }, variables) => {
+    onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus, decision }, variables) => {
       // Patch approval-requests cache with fresh server data
       if (freshMapped) {
         queryClient.setQueryData(["approval-requests", entityId], freshMapped);
@@ -242,6 +242,15 @@ export function useDecideApproval(entityId: string) {
             type: emailType, entityId, entityType,
             extra: emailType === "rejected" && variables.comment ? { comment: variables.comment } : {},
           }),
+        }).catch(() => {});
+      } else if (!allResolved && decision === "approved") {
+        // Mid-chain approval: the chain isn't done, so email the next step's
+        // approver (the route picks the lowest pending order; the actor's own
+        // row is already resolved so they are not re-notified).
+        fetch("/api/approval-requests/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entityId, entityType }),
         }).catch(() => {});
       }
     },

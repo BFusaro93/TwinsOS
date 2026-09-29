@@ -562,9 +562,13 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   const { data: projects = [] } = useProjects(true);
   const { data: allPOs = [] } = usePurchaseOrders();
 
-  const convertedPOs: PurchaseOrder[] = allPOs.filter((po) =>
-    convertedPoIds.includes(po.id)
+  // A split creates several POs but requisitions.converted_po_id holds only the
+  // first — derive the full set from purchase_orders.requisition_id, keeping the
+  // locally-tracked ids as an immediate fallback until the list refetches.
+  const convertedPOs: PurchaseOrder[] = allPOs.filter(
+    (po) => po.requisitionId === requisition.id || convertedPoIds.includes(po.id)
   );
+  const linkedPoIds = convertedPOs.map((po) => po.id);
   const convertedPO: PurchaseOrder | null = convertedPOs[0] ?? null;
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
@@ -684,7 +688,7 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
                 onStatusChange={setStatus}
                 onConvertToPO={() => setConvertOpen(true)}
                 onSplitToPOs={() => setSplitOpen(true)}
-                convertedPoIds={convertedPoIds}
+                convertedPoIds={linkedPoIds}
                 convertedPOs={convertedPOs}
                 onPoClick={() => setPoSheetOpen(true)}
                 onProductClick={(id) => setSelectedProductId(id)}

@@ -127,6 +127,7 @@ export function PMScheduleListPage() {
           />
         }
         hasSelection={!!selectedSchedule}
+        onBack={() => setSelectedPMScheduleId(null)}
       />
 
       <NewPMScheduleDialog open={dialogOpen} onOpenChange={setDialogOpen} />

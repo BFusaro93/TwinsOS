@@ -262,6 +262,10 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const [allowReentry, setAllowReentry] = useState(false);
   const [reentryDays, setReentryDays] = useState(1);
   const [saving, setSaving] = useState(false);
+  // Save replaces ALL triggers/stop conditions with local state, so it must
+  // not be reachable until both loads have actually succeeded — otherwise a
+  // fast click (or a failed load) saves an empty list over the real rules.
+  const [rulesLoaded, setRulesLoaded] = useState(false);
 
   const [triggers, setTriggers] = useState<LocalTrigger[]>([]);
   const [stopConditions, setStopConditions] = useState<ConditionRow[]>([]);
@@ -281,23 +285,27 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   useEffect(() => {
     if (!open || !sequenceId) return;
     const supabase = db();
+    let cancelled = false;
+    setRulesLoaded(false);
 
-    (async () => {
-      const { data: triggerRows } = await supabase
+    const triggersLoad = (async () => {
+      const { data: triggerRows, error: triggersError } = await supabase
         .from("crm_sequence_triggers")
         .select("id, trigger_type, config")
         .eq("sequence_id", sequenceId)
         .order("position");
+      if (triggersError) throw triggersError;
 
       const rows = (triggerRows ?? []) as { id: string; trigger_type: string; config: TriggerConfig | null }[];
       const triggerIds = rows.map((r) => r.id);
 
       const conditionsByTrigger = new Map<string, ConditionRow[]>();
       if (triggerIds.length > 0) {
-        const { data: condRows } = await supabase
+        const { data: condRows, error: condError } = await supabase
           .from("crm_sequence_trigger_conditions")
           .select("trigger_id, field, operator, value")
           .in("trigger_id", triggerIds);
+        if (condError) throw condError;
         (condRows ?? []).forEach((c: { trigger_id: string; field: string; operator: string; value: string | null }) => {
           const list = conditionsByTrigger.get(c.trigger_id) ?? [];
           list.push({ field: c.field as ConditionRow["field"], operator: c.operator as ConditionRow["operator"], value: c.value ?? "" });
@@ -305,6 +313,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
         });
       }
 
+      if (cancelled) return;
       setTriggers(
         rows.map((row) => ({
           _key: nextKey(),
@@ -315,20 +324,28 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
       );
     })();
 
-    supabase
-      .from("crm_sequence_stop_conditions")
-      .select("*")
-      .eq("sequence_id", sequenceId)
-      .order("created_at")
-      .then(({ data }: { data: { field: string; operator: string; value: string | null }[] | null }) => {
-        setStopConditions(
-          (data ?? []).map((row) => ({
-            field: row.field as ConditionRow["field"],
-            operator: row.operator as ConditionRow["operator"],
-            value: row.value ?? "",
-          }))
-        );
-      });
+    const stopLoad = (async () => {
+      const { data, error: stopError } = await supabase
+        .from("crm_sequence_stop_conditions")
+        .select("*")
+        .eq("sequence_id", sequenceId)
+        .order("created_at");
+      if (stopError) throw stopError;
+      if (cancelled) return;
+      setStopConditions(
+        ((data ?? []) as { field: string; operator: string; value: string | null }[]).map((row) => ({
+          field: row.field as ConditionRow["field"],
+          operator: row.operator as ConditionRow["operator"],
+          value: row.value ?? "",
+        }))
+      );
+    })();
+
+    Promise.all([triggersLoad, stopLoad])
+      .then(() => { if (!cancelled) setRulesLoaded(true); })
+      .catch(() => { if (!cancelled) toast.error("Couldn't load this sequence's rules — close and reopen to retry"); });
+
+    return () => { cancelled = true; };
   }, [open, sequenceId]);
 
   // ── Trigger handlers ─────────────────────────────────────────────────────────
@@ -647,7 +664,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!name.trim() || saving}>
+          <Button onClick={handleSave} disabled={!name.trim() || saving || !rulesLoaded}>
             {saving ? "Saving…" : "Save Sequence"}
           </Button>
         </DialogFooter>

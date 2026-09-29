@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { logger } from "@/lib/logger";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -135,7 +136,7 @@ GENERAL RULES:
 - Always flag upsell opportunities as a separate "Additional Opportunity:" line item at the bottom`;
 
 const requestSchema = z.object({
-  transcript: z.string().trim().min(1, "transcript is required"),
+  transcript: z.string().trim().min(1, "transcript is required").max(60000, "transcript is too long"),
 });
 
 export async function POST(req: NextRequest) {
@@ -147,6 +148,13 @@ export async function POST(req: NextRequest) {
 
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Client-portal logins are ordinary Supabase users with no profiles row;
+  // this tool is staff-only and spends paid AI credits.
+  const { data: staffProfile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+  if (!staffProfile) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let json: unknown;
@@ -186,7 +194,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ proposal: content.text });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "AI request failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    logger.child("estimate-builder").error("AI request failed", { error: err });
+    return NextResponse.json({ error: "AI request failed" }, { status: 500 });
   }
 }

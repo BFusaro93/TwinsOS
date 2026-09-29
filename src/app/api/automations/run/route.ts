@@ -244,8 +244,11 @@ async function evaluatePartLowStock(adminClient: AdminClient, orgId: string, par
     .select("id, quantity_on_hand, minimum_stock")
     .eq("org_id", orgId)
     .is("deleted_at", null)
+    .eq("is_inventory", true)
     .gt("minimum_stock", 0);
-  if (partName && partName !== "any") q = q.ilike("name", partName);
+  // Escape LIKE metacharacters so the configured name matches literally
+  // (case-insensitively) instead of acting as a pattern.
+  if (partName && partName !== "any") q = q.ilike("name", partName.replace(/[\\%_]/g, "\\$&"));
   const { data } = await q;
   return (data ?? []).some((p: { quantity_on_hand: number; minimum_stock: number }) => p.quantity_on_hand <= p.minimum_stock);
 }
@@ -596,13 +599,34 @@ async function handleRun(request: Request) {
       continue;
     }
 
-    const outcome = await executeAction(adminClient as AdminClient, auto, { orgId });
-    if ("skipReason" in outcome) { skipped.push({ automationId: auto.id, reason: outcome.skipReason }); continue; }
-
-    await (adminClient as AdminClient)
+    // Claim the firing BEFORE acting so overlapping runs can't both fire.
+    const { data: pollClaimed, error: pollClaimErr } = await (adminClient as AdminClient)
       .from("automations")
       .update({ last_fired_at: now, pending_reset: true, updated_at: now })
-      .eq("id", auto.id);
+      .eq("id", auto.id)
+      .eq("org_id", orgId)
+      .eq("pending_reset", false)
+      .select("id");
+    if (pollClaimErr) {
+      skipped.push({ automationId: auto.id, reason: `couldn't claim firing: ${pollClaimErr.message}` });
+      continue;
+    }
+    if (!pollClaimed || pollClaimed.length === 0) {
+      skipped.push({ automationId: auto.id, reason: "already fired by a concurrent run" });
+      continue;
+    }
+
+    const outcome = await executeAction(adminClient as AdminClient, auto, { orgId });
+    if ("skipReason" in outcome) {
+      // Nothing happened — give the claim back so the next run retries.
+      await (adminClient as AdminClient)
+        .from("automations")
+        .update({ pending_reset: false, last_fired_at: auto.last_fired_at ?? null, updated_at: now })
+        .eq("id", auto.id)
+        .eq("last_fired_at", now);
+      skipped.push({ automationId: auto.id, reason: outcome.skipReason });
+      continue;
+    }
     fired.push({ automationId: auto.id, name: auto.name, result: outcome.result });
   }
 

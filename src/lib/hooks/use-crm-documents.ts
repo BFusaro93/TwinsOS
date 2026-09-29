@@ -203,27 +203,40 @@ export function useSaveDocumentBlocks(templateId: string) {
         .eq("id", user!.id)
         .single();
 
-      // Delete existing blocks then re-insert
-      await supabase
+      // Replace the block set without a window where the template has none:
+      // note the current rows, insert the new set, THEN remove the old rows.
+      // (Deleting first lost every block when the insert failed, and an
+      // unchecked delete failure left old + new blocks duplicated.)
+      const { data: previous, error: previousError } = await supabase
         .from("crm_document_blocks")
-        .delete()
+        .select("id")
         .eq("template_id", templateId);
+      if (previousError) throw previousError;
+      const previousIds = (previous ?? []).map((b) => b.id);
 
-      if (blocks.length === 0) return;
+      if (blocks.length > 0) {
+        const { error } = await supabase.from("crm_document_blocks").insert(
+          blocks.map((b) => ({
+            template_id:  templateId,
+            org_id:       profile!.org_id,
+            block_type:   b.blockType,
+            order_index:  b.orderIndex,
+            content:      b.content,
+            // The editor hands back a plain object; the column is jsonb, and
+            // Json won't accept Record<string, unknown> without being told.
+            settings:     b.settings as Json,
+          }))
+        );
+        if (error) throw error;
+      }
 
-      const { error } = await supabase.from("crm_document_blocks").insert(
-        blocks.map((b) => ({
-          template_id:  templateId,
-          org_id:       profile!.org_id,
-          block_type:   b.blockType,
-          order_index:  b.orderIndex,
-          content:      b.content,
-          // The editor hands back a plain object; the column is jsonb, and
-          // Json won't accept Record<string, unknown> without being told.
-          settings:     b.settings as Json,
-        }))
-      );
-      if (error) throw error;
+      if (previousIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("crm_document_blocks")
+          .delete()
+          .in("id", previousIds);
+        if (deleteError) throw deleteError;
+      }
     },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["crm-document-template", templateId] }),
