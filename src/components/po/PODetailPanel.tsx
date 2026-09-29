@@ -293,7 +293,7 @@ function DetailsTab({
           // for non-admins, so don't offer edits it would reject.
           editable={
             !["ordered", "partially_fulfilled", "completed", "canceled"].includes(status) ||
-            currentUser.role === "admin" || currentUser.role === "manager"
+            currentUser.role === "admin"
           }
           receivedQtyByLineItemId={receivedQtyByLineItemId}
           onItemsChange={setLineItems}
