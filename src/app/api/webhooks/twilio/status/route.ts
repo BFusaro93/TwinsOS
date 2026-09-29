@@ -65,18 +65,21 @@ export async function POST(request: Request) {
   // different status; queued/sending/sent can't overwrite each other backwards.
   const RANK: Record<string, number> = { accepted: 0, queued: 0, sending: 1, sent: 2 };
   const terminal = ["delivered", "undelivered", "failed"];
-  let q = supabase
+  const excluded = [...terminal];
+  if (messageStatus in RANK) {
+    excluded.push(...Object.keys(RANK).filter((k) => RANK[k] > RANK[messageStatus]));
+  }
+  // `status NOT IN (...)` is NULL (not true) for a row whose status is NULL,
+  // so a plain .not() silently skipped rows logged without a status — they
+  // never received any delivery update. Match NULL explicitly. One combined
+  // .or() (rather than two) so both exclusion sets are ANDed in one filter.
+  const { error } = await supabase
     .from("client_activity")
     // `as never`: postgrest rejects excess properties on a dynamically-built patch.
     .update(patch as never)
     .eq("ref_table", "twilio_messages")
     .eq("ref_id", messageSid)
-    .not("status", "in", `(${terminal.join(",")})`);
-  if (messageStatus in RANK) {
-    const blocked = Object.keys(RANK).filter((k) => RANK[k] > RANK[messageStatus]);
-    if (blocked.length) q = q.not("status", "in", `(${blocked.join(",")})`);
-  }
-  const { error } = await q;
+    .or(`status.is.null,status.not.in.(${excluded.join(",")})`);
   if (error) console.error("[twilio status webhook] failed to update client_activity:", error);
 
   return NextResponse.json({ received: true });

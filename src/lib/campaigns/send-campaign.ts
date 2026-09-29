@@ -15,7 +15,7 @@ const SEND_CONCURRENCY = 5;
 // older than this is a route that died mid-send (e.g. hit the platform's
 // function timeout) rather than one that's genuinely still in flight.
 // Treat it as eligible for a retry rather than permanently stuck.
-const STUCK_SENDING_THRESHOLD_MS = 15 * 60 * 1000;
+export const STUCK_SENDING_THRESHOLD_MS = 15 * 60 * 1000;
 // Delay between concurrent-send batches so we stay under Resend's default
 // rate limit (2 req/sec) — 5 concurrent sends followed by an ~800ms pause
 // keeps us comfortably below that even accounting for jitter/latency.

@@ -3,6 +3,7 @@ import type { Database } from "@/types/supabase";
 import type { AnalysisConfig, AnalysisFilter, ReportResultRow } from "@/types/crm-reports";
 import type { KpiComputedActuals } from "@/types/crm-kpi-scorecard";
 import { runAnalysis } from "@/lib/reports/engine";
+import { BILLABLE_CONTRACT_STATUSES, monthlyRecurringCents } from "@/lib/reports/contract-schedule";
 import { loadVisitCosting, weightedTargetRate, type CostedVisit } from "@/lib/visit-costing";
 import { logger } from "@/lib/logger";
 
@@ -305,12 +306,19 @@ async function computeEstimates(supabase: Client, w: YearWindow): Promise<Values
 }
 
 async function computeContractsAndBalances(supabase: Client): Promise<Values> {
-  const [contracts, clients, active] = await Promise.all([
-    total(
+  const [contractsByFrequency, clients, active] = await Promise.all([
+    // Same gate the billing paths use (active + signed/active status), grouped
+    // by frequency because monthly_amount_cents is the PER-INVOICE amount at
+    // every billing_frequency — see src/lib/contract-billing.ts.
+    aggregate(
       supabase,
       "rpt_contracts",
-      [{ column: "is_active", op: "eq", value: true }],
-      [{ column: "monthly_amount_cents", fn: "sum" }]
+      [
+        { column: "is_active", op: "eq", value: true },
+        { column: "status", op: "in", value: BILLABLE_CONTRACT_STATUSES },
+      ],
+      [{ column: "monthly_amount_cents", fn: "sum" }],
+      ["billing_frequency"]
     ),
     total(supabase, "rpt_clients", [], [{ column: "balance_uninvoiced_cents", fn: "sum" }]),
     total(
@@ -321,7 +329,18 @@ async function computeContractsAndBalances(supabase: Client): Promise<Values> {
     ),
   ]);
   return {
-    contract_mrr: dollars(num(contracts?.sum_monthly_amount_cents)),
+    // MRR = per-invoice amount × invoices per year ÷ 12 (one_time adds 0).
+    contract_mrr: dollars(
+      contractsByFrequency.reduce(
+        (sum, r) =>
+          sum +
+          monthlyRecurringCents(
+            num(r.sum_monthly_amount_cents),
+            typeof r.billing_frequency === "string" ? r.billing_frequency : null
+          ),
+        0
+      )
+    ),
     uninvoiced_balance: dollars(num(clients?.sum_balance_uninvoiced_cents)),
     active_clients: num(active?.count_status),
   };

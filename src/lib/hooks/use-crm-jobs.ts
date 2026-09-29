@@ -282,7 +282,7 @@ type WaitingListRow = {
     state: string | null;
     zip: string | null;
   } | null;
-  crm_job_visits?: { id: string; deleted_at: string | null; job_service_id: string | null; status: string }[] | null;
+  crm_job_visits?: { id: string; deleted_at: string | null; job_service_id: string | null; status: string; scheduled_date: string }[] | null;
   crm_job_services?: { id: string }[] | null;
   [column: string]: unknown;
 };
@@ -302,7 +302,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
           client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
           crm_job_services(*),
-          crm_job_visits(id, deleted_at, job_service_id, status)
+          crm_job_visits(id, deleted_at, job_service_id, status, scheduled_date)
         `)
         .in("job_type", ["waiting_list", "package"])
         // Cancelled and on-hold jobs are not waiting to be dispatched.
@@ -856,6 +856,10 @@ export function useCreateVisit() {
       /** Crew size for this visit — defaults from the parent job's man_count so
        *  the dispatch board's MEN column isn't 0 until someone edits the sheet. */
       menCount?: number | null;
+      /** Initial status — defaults to the column default ('scheduled'). The
+       *  Waiting List passes 'dispatched' for a package service so the service
+       *  leaves the list (see useWaitingListJobs' package filter). */
+      status?: VisitStatus;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -875,6 +879,12 @@ export function useCreateVisit() {
           storm_event_id: values.stormEventId ?? null,
           order_num: values.orderNum ?? null,
           job_service_id: values.jobServiceId ?? null,
+          ...(values.status
+            ? {
+                status: values.status,
+                ...(values.status === 'dispatched' ? { dispatched_at: new Date().toISOString() } : {}),
+              }
+            : {}),
         })
         .select()
         .single();
@@ -924,7 +934,10 @@ export function useDeleteVisit() {
         .from('crm_job_visits')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', visitId);
-      if (error) throw error;
+      // Re-throw as a real Error carrying the DB message so callers can show
+      // it — e.g. the invoiced-visit lock (trg_crm_job_visits_guard_invoiced)
+      // explains why a completed, billed visit can't be deleted.
+      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to delete visit');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-job-visits'] }),
   });

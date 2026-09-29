@@ -1617,7 +1617,7 @@ function JobDetailSheet({
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
-import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey } from "@/lib/hooks/use-route-order";
+import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey, weekdayOfDate } from "@/lib/hooks/use-route-order";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 /** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
@@ -1919,7 +1919,11 @@ function TeamAssignDialog({
 
   // Use crews-with-members data so member names show up; fall back to the prop
   const richCrews = crewsWithMembers ?? [];
-  const unassigned = visits.filter((v) => !v.crewId);
+  // Resolve through effectiveCrewId everywhere in this dialog: most visits
+  // carry crew_id NULL and inherit the job's crew, and reading the raw column
+  // listed those as Unassigned, skipped them in Dispatch All and made the
+  // Unassign ✕ a no-op.
+  const unassigned = visits.filter((v) => !effectiveCrewId(v));
 
   // crm_crew_members.crew_id is each member's PERMANENT default crew (managed in
   // Team settings). dailyOverrides moves a member onto a different crew for
@@ -1932,7 +1936,7 @@ function TeamAssignDialog({
 
   const byCrew = (richCrews.length > 0 ? richCrews : crews).map((c) => ({
     crew: c,
-    visits: visits.filter((v) => v.crewId === c.id),
+    visits: visits.filter((v) => effectiveCrewId(v) === c.id),
     members: allMembers.filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === c.id),
   }));
 
@@ -1956,6 +1960,23 @@ function TeamAssignDialog({
     }
   }
 
+  /**
+   * Take a visit off its crew. A visit whose crew is INHERITED from the job
+   * (crew_id NULL) can't be unassigned per visit: NULL already means "use the
+   * job's crew", so writing NULL again changes nothing, and clearing the job's
+   * crew would strip every other visit of that job too (and future generated
+   * ones). Say so instead of silently doing nothing — the ✕ is hidden for
+   * those cards, this covers drag/tap into the pool.
+   */
+  async function unassign(v: CRMJobVisit | undefined) {
+    if (!v) return;
+    if (v.crewId) {
+      await reassign(v.id, null, v.jobId);
+    } else if (effectiveCrewId(v)) {
+      toast.info("This visit uses the job's crew. Move it to another crew, or change the crew on the job to unassign it.");
+    }
+  }
+
   /** Pick an item up, or put it back down if it's the one already held. */
   function toggleHold(item: NonNullable<typeof held>) {
     setHeld((h) => (h && h.kind === item.kind && h.id === item.id ? null : item));
@@ -1969,7 +1990,7 @@ function TeamAssignDialog({
     if (!item) return;
     if (item.kind === "visit") {
       const v = visits.find((x) => x.id === item.id);
-      if (v && v.crewId !== crewId) await reassign(item.id, crewId, v.jobId);
+      if (v && effectiveCrewId(v) !== crewId) await reassign(item.id, crewId, v.jobId);
       return;
     }
     const current = overrideCrewByMember.get(item.id) ?? defaultCrewByMember.get(item.id);
@@ -1982,14 +2003,13 @@ function TeamAssignDialog({
     const item = held;
     setHeld(null);
     if (item?.kind !== "visit") return;
-    const v = visits.find((x) => x.id === item.id);
-    if (v?.crewId) await reassign(item.id, null, v.jobId);
+    await unassign(visits.find((x) => x.id === item.id));
   }
 
   async function dispatchAll() {
     setPending(true);
     try {
-      const scheduled = visits.filter((v) => v.status === "scheduled" && v.crewId);
+      const scheduled = visits.filter((v) => v.status === "scheduled" && effectiveCrewId(v));
       await Promise.all(
         scheduled.map((v) =>
           updateVisit({
@@ -2055,7 +2075,7 @@ function TeamAssignDialog({
               held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => { if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, null, jId); setDragVisitId(null); } }}
+            onDrop={() => { if (dragVisitId) { void unassign(visits.find((v) => v.id === dragVisitId)); setDragVisitId(null); } }}
             onClick={() => void placeUnassigned()}
           >
             <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">
@@ -2120,7 +2140,11 @@ function TeamAssignDialog({
                   )}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
-                    if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); }
+                    if (dragVisitId) {
+                      const dv = visits.find((v) => v.id === dragVisitId);
+                      if (dv && effectiveCrewId(dv) !== crew.id) void reassign(dragVisitId, crew.id, dv.jobId);
+                      setDragVisitId(null);
+                    }
                     if (dragMemberId) {
                       void moveMember(dragMemberId, crew.id);
                       setDragMemberId(null);
@@ -2186,9 +2210,11 @@ function TeamAssignDialog({
                   <div className="space-y-1.5 min-h-[40px]">
                     {crewVisits.map((v) => {
                       const svcName = v.job?.services?.[0]?.serviceName ?? "Visit";
+                      const inherited = !v.crewId;
                       return (
                         <div
                           key={v.id}
+                          title={inherited ? "Crew comes from the job — move it to another crew, or change the job's crew to unassign" : undefined}
                           draggable
                           onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                           onDragEnd={() => setDragVisitId(null)}
@@ -2207,13 +2233,15 @@ function TeamAssignDialog({
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                           <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
                           <VisitStatusIcon status={v.status} />
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
-                            className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
-                            title="Unassign"
-                          >
-                            ✕
-                          </button>
+                          {!inherited && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
+                              className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
+                              title="Unassign"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -2231,7 +2259,7 @@ function TeamAssignDialog({
 
         <div className="flex items-center justify-between shrink-0 border-t bg-white px-5 py-3">
           <p className="text-xs text-slate-500">
-            {visits.filter((v) => v.crewId).length} of {visits.length} visits assigned
+            {visits.filter((v) => effectiveCrewId(v)).length} of {visits.length} visits assigned
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -2301,10 +2329,12 @@ function findOverlappingCrewVisit(
   start: string,
   end: string
 ): string | null {
+  // `current.crewId` is the caller's EFFECTIVE crew; compare the other stops
+  // the same way, or two job-inherited visits on one crew never "overlap".
   if (!current.crewId) return null;
   const conflict = visits.find((v) =>
     v.id !== current.id &&
-    (v.crewId ?? null) === current.crewId &&
+    effectiveCrewId(v) === current.crewId &&
     v.scheduledDate === current.scheduledDate &&
     timeRangesOverlap(start, end, v.startTime ?? "", v.endTime ?? "")
   );
@@ -2377,7 +2407,9 @@ function EditJobTimesDialog({
 }) {
   const visitId = visit.id;
   const visitDate = visit.scheduledDate;
-  const crewId = visit.crewId;
+  // Effective crew — a job-inherited visit (crew_id NULL) otherwise showed an
+  // empty roster here and had nobody to seed times for.
+  const crewId = effectiveCrewId(visit);
 
   const { data: memberTimes = [] } = useCrewMemberTimes(anchorVisitId);
   const { data: crewsWithMembers } = useCrews(false);
@@ -2797,8 +2829,8 @@ function VisitRow({
     // Only when men_count is still 0/null: an explicit Men value entered on
     // the sheet or the row is the dispatcher's call and must not be
     // overwritten by a roster count (see C-11).
-    if (visit.crewId && !visit.menCount) {
-      const crewSize = effectiveCrewSize(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize);
+    if (visitCrewId && !visit.menCount) {
+      const crewSize = effectiveCrewSize(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize);
       if (crewSize > 0) updates.men_count = crewSize;
     }
     try {
@@ -2815,7 +2847,7 @@ function VisitRow({
       // second, orphaned set of member-time rows for a sibling service.
       const targets = memberTimes.length > 0
         ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
-        : effectiveCrewMemberIds(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize)
+        : effectiveCrewMemberIds(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize)
             .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
       await Promise.all(targets.map((t) => upsertMemberTime.mutateAsync({
         visitId: anchorVisitId,
@@ -3921,8 +3953,9 @@ export function DispatchBoard() {
         const crewOf = effectiveCrewIdOf;
         const rememberedPos = (v: typeof filtered[number]) => {
           const crew = crewOf(v);
-          if (!crew || !v.jobId) return Number.MAX_SAFE_INTEGER;
-          return rememberedOrder?.get(routeOrderKey(crew, v.jobId)) ?? Number.MAX_SAFE_INTEGER;
+          const dow = v.scheduledDate ? weekdayOfDate(v.scheduledDate) : null;
+          if (!crew || !v.jobId || dow == null) return Number.MAX_SAFE_INTEGER;
+          return rememberedOrder?.get(routeOrderKey(crew, dow, v.jobId)) ?? Number.MAX_SAFE_INTEGER;
         };
 
         // Group on the EFFECTIVE crew name, not visit.crewName alone. A visit

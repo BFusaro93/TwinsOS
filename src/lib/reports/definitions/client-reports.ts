@@ -11,6 +11,8 @@ import {
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import { runAnalysis } from "@/lib/reports/engine";
+import { annualBillingProfile, BILLABLE_CONTRACT_STATUSES, type ContractScheduleRow } from "@/lib/reports/contract-schedule";
+import { normalizeBillingFrequency } from "@/lib/contract-billing";
 import { CLIENT_STATUSES, isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
 import { ymd, zoneDateParts } from "@/lib/time/zone";
 import type { AnalysisFilter } from "@/types/crm-reports";
@@ -443,7 +445,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     section: "client",
     name: "Client Contracts",
     description:
-      "Shows a single-line summary of all client contracts including billing day and monthly amounts.",
+      "Shows a single-line summary of all client contracts including billing frequency, billing day, and the amount billed in each month.",
     filters: [
       dateRangeFilterDef("Contract Start Between", "all_time"),
       { key: "active_only", label: "Active Only", type: "checkbox", defaultValue: "true" },
@@ -453,16 +455,20 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       let query = supabase
         .from("crm_contracts")
         .select(
-          "title, status, start_date, end_date, billing_day_of_month, monthly_amount_cents, monthly_amounts, is_active, clients:client_id(display_name)"
+          "title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, is_active, clients:client_id(display_name)"
         )
         .is("deleted_at", null);
-      if (params.active_only !== "false") query = query.eq("is_active", true);
+      // "Active" = what the billing paths actually invoice: is_active AND a
+      // signed/active status (a draft or cancelled contract never bills).
+      if (params.active_only !== "false") {
+        query = query.eq("is_active", true).in("status", BILLABLE_CONTRACT_STATUSES);
+      }
       if (from) query = query.gte("start_date", from);
       if (to) query = query.lte("start_date", to);
       const { data, error } = await query.order("start_date", { ascending: false });
       if (error) throw new Error(error.message);
 
-      type Row = {
+      type Row = ContractScheduleRow & {
         title: string | null;
         status: string | null;
         start_date: string | null;
@@ -472,13 +478,16 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         monthly_amounts: Record<string, number> | null;
         clients: { display_name: string | null } | null;
       };
+      // monthly_amount_cents is the PER-INVOICE amount at every frequency, so
+      // a month column shows an amount only in months the contract bills.
+      const profileYear = zoneDateParts(new Date(), timeZone).year;
       const rows = ((data ?? []) as unknown as Row[]).map((r) => {
+        const profile = annualBillingProfile(r, profileYear);
         const months: Record<string, number> = {};
         let total = 0;
         for (const m of MONTH_KEYS) {
-          const cents = r.monthly_amounts?.[m] ?? r.monthly_amount_cents ?? 0;
-          months[m] = cents;
-          total += cents;
+          months[m] = profile[m];
+          total += profile[m];
         }
         return {
           client_name: r.clients?.display_name ?? "",
@@ -486,6 +495,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
           status: r.status,
           start_date: r.start_date,
           end_date: r.end_date,
+          frequency: normalizeBillingFrequency(r.billing_frequency),
           day: r.billing_day_of_month,
           ...months,
           total_cents: total,
@@ -499,12 +509,16 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
           col("status", "Status"),
           col("start_date", "Start", "date"),
           col("end_date", "End", "date"),
+          col("frequency", "Frequency"),
           col("day", "Day", "number", false),
           ...MONTH_KEYS.map((m, i) => col(m, MONTH_LABELS[i], "money")),
           col("total_cents", "Annual Total", "money"),
         ],
         rows,
-        ["Monthly columns use the contract's per-month schedule when set, otherwise the flat monthly amount."]
+        [
+          "The contract amount is billed per invoice at its billing frequency, so each month column shows what the contract invoices in that month (zero in months a quarterly/annual contract doesn't bill; weekly/biweekly sum that month's runs this year).",
+          "Month amounts use the contract's per-month schedule when set, otherwise the flat amount. Annual Total is the sum of the month columns and ignores the contract's start/end dates.",
+        ]
       );
     },
   },

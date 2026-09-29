@@ -58,8 +58,10 @@ export default async function PortalHomePage() {
       .order("scheduled_date", { ascending: false })
       .limit(3),
 
+    // Portal customers have no RLS read path to estimates (it would expose
+    // internal cost/margin columns) — service client, scoped to this client.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any)
+    (createServiceClient() as any)
       .from("estimates")
       .select("id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date")
       .eq("client_id", ctx.clientId)

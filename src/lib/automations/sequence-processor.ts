@@ -309,6 +309,11 @@ async function runClaimedStep(
           to_name: built.toName || null,
           subject: built.subject,
           body_html: built.bodyHtml,
+          // Persist the resolved sender + reply address so approving later
+          // sends from the same "from sales rep"/org identity the step
+          // resolved to, instead of silently falling back to the org sender.
+          from_address: built.fromAddress,
+          reply_to: built.replyTo,
         });
       // 23505 = unique_violation on the one-pending-per-enrollment+event
       // index — a concurrent/prior run already queued this approval, which is

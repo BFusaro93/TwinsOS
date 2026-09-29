@@ -7154,6 +7154,7 @@ export type Database = {
           from_address: string | null
           id: string
           org_id: string
+          reply_to: string | null
           sequence_id: string
           status: string
           subject: string | null
@@ -7176,6 +7177,7 @@ export type Database = {
           from_address?: string | null
           id?: string
           org_id?: string
+          reply_to?: string | null
           sequence_id: string
           status?: string
           subject?: string | null
@@ -7198,6 +7200,7 @@ export type Database = {
           from_address?: string | null
           id?: string
           org_id?: string
+          reply_to?: string | null
           sequence_id?: string
           status?: string
           subject?: string | null
@@ -14846,6 +14849,15 @@ export type Database = {
         Args: { p_job_product_id: string }
         Returns: undefined
       }
+      find_clients_by_phone_last10: {
+        Args: { p_digits: string; p_org_ids: string[] }
+        Returns: {
+          created_at: string
+          display_name: string
+          id: string
+          org_id: string
+        }[]
+      }
       fn_audit_format_change: {
         Args: { p_key: string; p_new: string; p_old: string }
         Returns: string
@@ -14929,6 +14941,7 @@ export type Database = {
       }
       org_timezone: { Args: { p_org_id: string }; Returns: string }
       org_today: { Args: { p_org_id: string }; Returns: string }
+      phone_last10: { Args: { p: string }; Returns: string }
       receive_part_quantity: {
         Args: {
           p_cost_method: string

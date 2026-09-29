@@ -6,6 +6,7 @@ import {
   useWaitingListJobs,
   useCRMCrews,
   useCreateVisit,
+  useUpdateVisit,
 } from "@/lib/hooks/use-crm-jobs";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -162,6 +163,7 @@ interface DispatchJobsDialogProps {
 function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobsDialogProps) {
   const { data: crews } = useCRMCrews();
   const createVisit = useCreateVisit();
+  const updateVisit = useUpdateVisit();
   const singleService = items.length === 1 ? items[0].service : null;
   const [date, setDate] = useState(() => singleService?.startDate || toLocalDateString(new Date()));
   // Seeded from the jobs' own crew when they all share one. Defaulting to
@@ -175,18 +177,60 @@ function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobsDialogP
 
   async function handleDispatch() {
     if (!date) return;
-    await Promise.all(
-      items.map(({ job, service }) =>
-        createVisit.mutateAsync({
-          jobId: job.id,
-          clientId: job.clientId,
-          scheduledDate: date,
-          crewId: crewId || null,
-          jobServiceId: service?.id ?? null,
-          jobType: job.jobType,
+    try {
+      await Promise.all(
+        items.map(({ job, service }) => {
+          // A package service usually already has its season placeholder
+          // visit (generated per service, status 'scheduled'). Inserting
+          // another left the service listed — the list only drops a package
+          // service once its visit is past 'scheduled' — so every dispatch
+          // stacked up one more duplicate visit. Move the placeholder onto
+          // the chosen day/crew and mark it dispatched instead; only insert
+          // when the service has no live visit yet. Either way the visit
+          // ends 'dispatched', which is what takes it off this list.
+          if (job.jobType === "package" && service) {
+            const placeholder = (job.visits ?? []).find(
+              (v) => v.jobServiceId === service.id && v.status === "scheduled"
+            );
+            if (placeholder) {
+              return updateVisit.mutateAsync({
+                id: placeholder.id,
+                updates: {
+                  scheduled_date: date,
+                  crew_id: crewId || null,
+                  status: "dispatched",
+                  dispatched_at: new Date().toISOString(),
+                },
+                jobId: job.id,
+                jobType: job.jobType,
+              });
+            }
+            return createVisit.mutateAsync({
+              jobId: job.id,
+              clientId: job.clientId,
+              scheduledDate: date,
+              crewId: crewId || null,
+              jobServiceId: service.id,
+              jobType: job.jobType,
+              status: "dispatched",
+            });
+          }
+          return createVisit.mutateAsync({
+            jobId: job.id,
+            clientId: job.clientId,
+            scheduledDate: date,
+            crewId: crewId || null,
+            jobServiceId: service?.id ?? null,
+            jobType: job.jobType,
+          });
         })
-      )
-    );
+      );
+    } catch (err) {
+      // e.g. a package min-days spacing violation on the moved placeholder.
+      toast.error(err instanceof Error ? err.message : "Dispatch failed");
+      onDone();
+      return;
+    }
     toast.success(
       singleService
         ? `${singleService.serviceName} dispatched for ${date}`
@@ -230,8 +274,8 @@ function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobsDialogP
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleDispatch} disabled={!date || createVisit.isPending}>
-            {createVisit.isPending ? "Dispatching…" : "Dispatch"}
+          <Button size="sm" onClick={handleDispatch} disabled={!date || createVisit.isPending || updateVisit.isPending}>
+            {createVisit.isPending || updateVisit.isPending ? "Dispatching…" : "Dispatch"}
           </Button>
         </DialogFooter>
       </DialogContent>

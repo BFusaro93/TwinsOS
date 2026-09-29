@@ -235,8 +235,16 @@ function normaliseWOPriority(raw: string): string {
  * Bulk-inserts work orders from a CSV import.
  * Rows missing `title` are silently skipped.
  */
-/** yyyy-mm-dd from components (no Date/timezone round-trip). */
-function ymd(y: number, m: number, d: number): string {
+/**
+ * yyyy-mm-dd from components (no Date/timezone round-trip), or null when the
+ * components aren't a real calendar date — "13/40/24" must drop that one
+ * cell, not produce "2024-13-40" and fail the whole batch insert.
+ */
+function ymd(y: number, m: number, d: number): string | null {
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+  if (y < 1 || m < 1 || m > 12 || d < 1) return null;
+  // Day 0 of the next month = last day of month m (handles leap years).
+  if (d > new Date(Date.UTC(y, m, 0)).getUTCDate()) return null;
   return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 

@@ -1,4 +1,26 @@
 /**
+ * Permission-key groups shared by REPORT_PERMISSION_KEYS and
+ * DATASET_PERMISSION_KEYS, so a bespoke report over the same data as a gated
+ * dataset is gated by the same keys. Every key must exist in
+ * src/types/crm-roles.ts.
+ */
+const ACCOUNTING_DATASET_KEYS = [
+  "acct_rpt_invoiced_income_by_client",
+  "acct_rpt_invoices_with_balances",
+  "acct_rpt_ar_aging",
+];
+
+const PAYMENT_DATASET_KEYS = ["acct_rpt_payment_audit_summary", ...ACCOUNTING_DATASET_KEYS];
+
+const TIMESHEET_DATASET_KEYS = ["sched_rpt_job_hours_summary", "sched_rpt_employee_directory"];
+
+const ESTIMATE_DATASET_KEYS = [
+  "estimate_list",
+  "crm_rpt_estimates_by_stage",
+  "crm_rpt_won_estimates_by_service",
+];
+
+/**
  * Maps a Report Center report's `key` (from src/lib/reports/registry.ts) to
  * the crm_roles permission key(s) that gate seeing/running it. Any one of
  * the listed keys grants access (some reports have more than one because
@@ -84,6 +106,27 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "visits-report": ["sched_rpt_visits"],
   "revenue-projection": ["sched_rpt_revenue_budgeted_hours"],
   "approved-sales-by-sales-rep": ["sched_rpt_sales_count_by_sales_rep", "acct_rpt_booked_revenue_by_sales_rep"],
+  // Reports with no catalog entry of their own that expose labor cost,
+  // invoicing, payments, or estimate pricing. They reuse the keys of the
+  // dataset they read (DATASET_PERMISSION_KEYS below) so the bespoke `run`
+  // reports — which skip the dataset gate — can't be used to pull what the
+  // Custom Analysis builder would refuse.
+  "timesheet-detail": TIMESHEET_DATASET_KEYS,
+  "crew-hours-summary": TIMESHEET_DATASET_KEYS,
+  "service-profitability-summary": ["sched_rpt_job_cost_summary", "sched_rpt_job_costing"],
+  "wip-schedule": ["sched_rpt_job_costing", "sched_rpt_job_cost_summary"],
+  "financials-snapshot": PAYMENT_DATASET_KEYS,
+  "invoices-and-payments": PAYMENT_DATASET_KEYS,
+  "credit-card-charges": PAYMENT_DATASET_KEYS,
+  "credit-card-processing-fees": PAYMENT_DATASET_KEYS,
+  "sales-comparison-chart-paid": PAYMENT_DATASET_KEYS,
+  "kpi-week-over-week": PAYMENT_DATASET_KEYS,
+  "visits-client-balance-due": ACCOUNTING_DATASET_KEYS,
+  "sales-comparison-chart": ACCOUNTING_DATASET_KEYS,
+  "avg-gross-revenue-per-client": ACCOUNTING_DATASET_KEYS,
+  "estimate-value-vs-actual": ESTIMATE_DATASET_KEYS,
+  "close-ratios-by-sales-rep": ESTIMATE_DATASET_KEYS,
+  "sales-activity-last-7-days": ESTIMATE_DATASET_KEYS,
 };
 
 /**
@@ -100,25 +143,13 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
  * WIP, sales-rep month, contract usage, ...) are gated only by view_report_center.
  * Every key must exist in src/types/crm-roles.ts.
  */
-const ACCOUNTING_DATASET_KEYS = [
-  "acct_rpt_invoiced_income_by_client",
-  "acct_rpt_invoices_with_balances",
-  "acct_rpt_ar_aging",
-];
-
-const ESTIMATE_DATASET_KEYS = [
-  "estimate_list",
-  "crm_rpt_estimates_by_stage",
-  "crm_rpt_won_estimates_by_service",
-];
-
 export const DATASET_PERMISSION_KEYS: Record<string, string[]> = {
   rpt_employees: ["sched_rpt_employee_directory"],
-  rpt_timesheets: ["sched_rpt_job_hours_summary", "sched_rpt_employee_directory"],
+  rpt_timesheets: TIMESHEET_DATASET_KEYS,
   rpt_crew_drive_time: ["sched_rpt_job_hours_summary"],
   rpt_invoices: ACCOUNTING_DATASET_KEYS,
   rpt_invoice_line_items: ACCOUNTING_DATASET_KEYS,
-  rpt_payments: ["acct_rpt_payment_audit_summary", ...ACCOUNTING_DATASET_KEYS],
+  rpt_payments: PAYMENT_DATASET_KEYS,
   rpt_estimates: ESTIMATE_DATASET_KEYS,
   rpt_estimate_line_items: ESTIMATE_DATASET_KEYS,
   // Audit rows narrate every change in the org — pay rates, payment amounts,

@@ -714,12 +714,12 @@ export function ReportsReferenceGuide() {
             <strong>AR Write-off</strong> entries are excluded, and amounts are net of refunds.
           </li>
           <li>
-            <strong>The org's own clock, not the viewer's.</strong> Every date and time filter
-            (Today, Month to Date, a custom From/To, a bare date) is evaluated on that org's
+            <strong>The org&apos;s own clock, not the viewer&apos;s.</strong> Every date and time filter
+            (Today, Month to Date, a custom From/To, a bare date) is evaluated on that org&apos;s
             configured operating timezone (<code>organizations.timezone</code>, set under
             Settings &gt; Organization) — every existing org defaults to America/New_York, but a
-            due/overdue window or a "today" figure now follows whatever zone the org has chosen,
-            not the browser's zone and not a hardcoded Eastern assumption. Hours columns on
+            due/overdue window or a &quot;today&quot; figure now follows whatever zone the org has chosen,
+            not the browser&apos;s zone and not a hardcoded Eastern assumption. Hours columns on
             visit-based reports are man-hours (crew hours × number of men).
           </li>
           <li>

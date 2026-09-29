@@ -53,10 +53,8 @@ export async function POST(
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  // acceptedLineItemIds gets interpolated directly into a PostgREST
-  // .not("id","in", "(...)") filter string below — a malformed id containing
-  // `)`, `,`, or quotes could break the intended filter or change which rows
-  // match, so validate every entry is a real UUID before it's used anywhere.
+  // acceptedLineItemIds feeds a PostgREST `.in("id", ...)` filter below —
+  // validate every entry is a real UUID before it's used anywhere.
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (body.acceptedLineItemIds?.some((id) => !UUID_RE.test(id))) {
     return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
@@ -159,11 +157,11 @@ export async function POST(
     ) {
       return NextResponse.json({ error: "Deposit amount must be a whole number of cents" }, { status: 400 });
     }
-    // A deposit is a down payment on this job; it can never exceed it.
-    const estimateTotal = currentEstimate.total_cents ?? 0;
-    if (estimateTotal > 0 && body.depositAmount > estimateTotal) {
-      return NextResponse.json({ error: "Deposit amount exceeds the proposal total" }, { status: 400 });
-    }
+    // A deposit is a down payment on this job; it can never exceed it. That
+    // is checked below against the ACCEPTED total (after the won/lost split
+    // and recalc) — the pre-acceptance total_cents is the wrong basis: it
+    // still includes lines the client unticks, and on a Good/Better/Best
+    // estimate it is priced on one tier while the client may pick another.
     depositAmountCents = body.depositAmount;
   }
   const depositReference = body.depositReference?.slice(0, 200) ?? null;
@@ -216,7 +214,135 @@ export async function POST(
     );
   }
 
-  // 2b. Record the deposit the client says they are sending.
+  // Undo a claimed acceptance when a later step fails, so the client can
+  // retry instead of being left with a burned link on an estimate that is
+  // 'accepted' but only half split / priced on the wrong scope. Only lines
+  // this request moved are reset; the estimate goes back to 'sent' only if
+  // it is still the 'accepted' this request set; totals are recomputed from
+  // the restored open lines.
+  const rollbackAcceptance = async (touchedLineIds: string[]) => {
+    if (touchedLineIds.length) {
+      await supabase
+        .from("estimate_line_items")
+        .update({ status: "quote" })
+        .eq("estimate_id", shareToken.estimate_id)
+        .in("id", touchedLineIds)
+        .in("status", ["won", "lost"]);
+    }
+    await supabase
+      .from("estimates")
+      .update({ stage: "sent", updated_at: new Date().toISOString() })
+      .eq("id", shareToken.estimate_id)
+      .eq("stage", "accepted");
+    await supabase
+      .from("estimate_share_tokens")
+      .update({ accepted_at: null, accepted_by_name: null, signature_data: null, ip_address: null })
+      .eq("id", shareToken.id);
+    try {
+      await recalcEstimateTotals(supabase, shareToken.estimate_id);
+    } catch (err) {
+      log.error("failed to recalc totals after acceptance rollback", {
+        error: err instanceof Error ? err.message : err,
+        estimateId: shareToken.estimate_id,
+      });
+    }
+  };
+
+  // 3. Update line items → won/lost based on tier selection and explicit id
+  // list. The split is computed here in TS and applied with `.in()` — the old
+  // `.not("id","in", "('a','b')")` filter quoted each uuid, PostgREST kept the
+  // quotes as part of the value, the uuid cast failed (22P02) and, because
+  // the error was never checked, unticked lines silently stayed 'quote' and
+  // were billed as accepted.
+  const { data: openLines, error: openLinesErr } = await supabase
+    .from("estimate_line_items")
+    .select("id, tier, row_type")
+    .eq("estimate_id", shareToken.estimate_id)
+    .eq("status", "quote")
+    .is("deleted_at", null);
+  if (openLinesErr) {
+    log.error("failed to load line items for acceptance", {
+      error: openLinesErr,
+      estimateId: shareToken.estimate_id,
+    });
+    await rollbackAcceptance([]);
+    return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
+  }
+  const eligibleLines = (openLines ?? []) as { id: string; tier: string | null; row_type: string | null }[];
+  const acceptedIds = body.acceptedLineItemIds?.length ? new Set(body.acceptedLineItemIds) : null;
+  const isWonLine = (li: { id: string; tier: string | null; row_type: string | null }) => {
+    if (body.selectedTier) {
+      // Tier-based: items with tier=null OR tier=selectedTier → won; other tiers → lost
+      return li.tier === null || li.tier === body.selectedTier;
+    }
+    if (acceptedIds) {
+      // Section headers carry no price and are never offered as a checkbox;
+      // keep them with the accepted scope (same as the portal accept route).
+      return li.row_type === "section" || acceptedIds.has(li.id);
+    }
+    // No specific selection — mark all quote items won
+    return true;
+  };
+  const wonIds = eligibleLines.filter(isWonLine).map((li) => li.id);
+  const lostIds = eligibleLines.filter((li) => !isWonLine(li)).map((li) => li.id);
+
+  for (const [ids, status] of [[wonIds, "won"], [lostIds, "lost"]] as const) {
+    if (ids.length === 0) continue;
+    const { error: lineErr } = await supabase
+      .from("estimate_line_items")
+      .update({ status })
+      .eq("estimate_id", shareToken.estimate_id)
+      .in("id", ids)
+      // Only still-open lines: a line staff marked lost can't be revived.
+      .eq("status", "quote")
+      .is("deleted_at", null);
+    if (lineErr) {
+      log.error("failed to split line items on acceptance", {
+        error: lineErr,
+        estimateId: shareToken.estimate_id,
+        status,
+      });
+      await rollbackAcceptance([...wonIds, ...lostIds]);
+      return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
+    }
+  }
+
+  // 3b. Line items are now split into won/lost — recompute the estimate's
+  // stored totals down to just the won subset, so the confirmation email
+  // below and any later invoice/job-conversion reflect what was actually
+  // accepted, not the full pre-acceptance (e.g. all-tiers) total. This
+  // re-applies the estimate-level discount rule (percent re-derived from the
+  // won subtotal, flat clamped) and taxes the discounted amount — the same
+  // figures the public page displayed, so the recorded total_cents is the
+  // amount the client actually accepted.
+  let acceptedTotalCents: number;
+  try {
+    await recalcEstimateTotals(supabase, shareToken.estimate_id);
+    const { data: recalced, error: recalcReadErr } = await supabase
+      .from("estimates")
+      .select("total_cents")
+      .eq("id", shareToken.estimate_id)
+      .single();
+    if (recalcReadErr || !recalced) throw recalcReadErr ?? new Error("estimate not found after recalc");
+    acceptedTotalCents = (recalced.total_cents as number | null) ?? 0;
+  } catch (err) {
+    log.error("failed to recalc totals on acceptance", {
+      error: err instanceof Error ? err.message : err,
+      estimateId: shareToken.estimate_id,
+    });
+    await rollbackAcceptance([...wonIds, ...lostIds]);
+    return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
+  }
+
+  // 3c. A deposit is a down payment on the accepted scope; it can never
+  // exceed it. Checked against the post-split total, and the acceptance is
+  // undone (not half-recorded) so the client can correct the amount.
+  if (depositAmountCents !== null && depositAmountCents > acceptedTotalCents) {
+    await rollbackAcceptance([...wonIds, ...lostIds]);
+    return NextResponse.json({ error: "Deposit amount exceeds the proposal total" }, { status: 400 });
+  }
+
+  // 3d. Record the deposit the client says they are sending.
   //
   // This is a CLAIM, not money received: the client picks a method and types
   // an amount on the proposal page, and nothing is charged. So it is recorded
@@ -248,61 +374,6 @@ export async function POST(
     }
   }
 
-  // 3. Update line items → won/lost based on tier selection and explicit id list
-  if (body.selectedTier) {
-    // Tier-based: items with tier=null OR tier=selectedTier → won; other tiers → lost
-    await supabase
-      .from("estimate_line_items")
-      .update({ status: "won" })
-      .eq("estimate_id", shareToken.estimate_id)
-      .eq("status", "quote")
-      .is("deleted_at", null)
-      .or(`tier.is.null,tier.eq.${body.selectedTier}`);
-
-    await supabase
-      .from("estimate_line_items")
-      .update({ status: "lost" })
-      .eq("estimate_id", shareToken.estimate_id)
-      .eq("status", "quote")
-      .is("deleted_at", null)
-      .not("tier", "is", null)
-      .neq("tier", body.selectedTier);
-  } else if (body.acceptedLineItemIds?.length) {
-    await supabase
-      .from("estimate_line_items")
-      .update({ status: "won" })
-      .eq("estimate_id", shareToken.estimate_id)
-      .in("id", body.acceptedLineItemIds)
-      // Only still-open lines: a line staff marked lost can't be revived.
-      .eq("status", "quote")
-      .is("deleted_at", null);
-
-    await supabase
-      .from("estimate_line_items")
-      .update({ status: "lost" })
-      .eq("estimate_id", shareToken.estimate_id)
-      .not("id", "in", `(${body.acceptedLineItemIds.map((id) => `'${id}'`).join(",")})`)
-      .eq("status", "quote")
-      .is("deleted_at", null);
-  } else {
-    // No specific selection — mark all quote items won
-    await supabase
-      .from("estimate_line_items")
-      .update({ status: "won" })
-      .eq("estimate_id", shareToken.estimate_id)
-      .eq("status", "quote")
-      .is("deleted_at", null);
-  }
-
-  // 3b. Line items are now split into won/lost — recompute the estimate's
-  // stored totals down to just the won subset, so the confirmation email
-  // below and any later invoice/job-conversion reflect what was actually
-  // accepted, not the full pre-acceptance (e.g. all-tiers) total. This
-  // re-applies the estimate-level discount rule (percent re-derived from the
-  // won subtotal, flat clamped) and taxes the discounted amount — the same
-  // figures the public page displayed, so the recorded total_cents is the
-  // amount the client actually accepted.
-  await recalcEstimateTotals(supabase, shareToken.estimate_id);
   await recordAcceptedVersion(supabase, shareToken.estimate_id, body.acceptedByName.trim(), "proposal_link");
 
   // 4. Log to client_activity

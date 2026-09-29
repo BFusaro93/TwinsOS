@@ -114,16 +114,29 @@ function netByLine(
  * Whenever `net` isn't exactly divisible by the unit count, no integer rate
  * reproduces it against the estimate's qty — rounding a 13.8c rate up to 14c
  * over 5,000 sq ft billed $700 for a $690 line — so the service falls back to
- * a single unit at the whole per-visit price, which always can. The measured
- * quantity stays on the estimate line, the priced document.
+ * a single unit at the whole per-visit price. On a one-time job (one visit)
+ * that is exact. On a RECURRING job it is exact only when `net` divides
+ * evenly by the visit count: every visit bills the same qty x rate, and the
+ * job model has no way to carry a remainder (one service row per estimate
+ * line, and an extra "remainder" service would generate its own visits). So
+ * the per-visit price is rounded DOWN — the job never bills more than the
+ * client accepted — and `billedCents` reports what it will bill so the dialog
+ * can show the shortfall (at most visits - 1 cents, e.g. $100.00 over 3
+ * visits bills 3 x $33.33 = $99.99).
  */
-function jobServicePricing(li: EstimateLineItem, net: number, recurring: boolean): { qty: number; rateCents: number } {
+function jobServicePricing(
+  li: EstimateLineItem,
+  net: number,
+  recurring: boolean,
+): { qty: number; rateCents: number; billedCents: number } {
   const visits = recurring ? Math.max(1, li.visits || 1) : 1;
   const units = (li.qty || 0) * visits;
-  if (units <= 0) return { qty: 1, rateCents: Math.round(net / visits) };
-  const exactRate = net / units;
-  if (Number.isInteger(exactRate)) return { qty: li.qty, rateCents: exactRate };
-  return { qty: 1, rateCents: Math.round(net / visits) };
+  if (units > 0) {
+    const exactRate = net / units;
+    if (Number.isInteger(exactRate)) return { qty: li.qty, rateCents: exactRate, billedCents: net };
+  }
+  const perVisit = Math.floor(net / visits);
+  return { qty: 1, rateCents: perVisit, billedCents: perVisit * visits };
 }
 
 interface Props {
@@ -289,6 +302,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const totalCents = selectedItems.reduce((s, li) => s + (netByLineId.get(li.id) ?? 0), 0);
   const selectedMaterialItems = materialItems.filter((dc) => selectedMaterials.has(dc.id));
   const recurring = jobType === "recurring";
+  // Recurring lines whose accepted price doesn't divide evenly by their visit
+  // count — the job bills a few cents less than accepted (jobServicePricing).
+  const pricingShortfallCents = recurring
+    ? selectedItems.reduce((s, li) => {
+        const net = netByLineId.get(li.id) ?? 0;
+        return s + (net - jobServicePricing(li, net, true).billedCents);
+      }, 0)
+    : 0;
 
   async function handleCreate() {
     if (selectedItems.length === 0) {
@@ -501,6 +522,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               )}
             </table>
           </div>
+          {pricingShortfallCents > 0 && (
+            <p className="mt-1 text-xs text-amber-700">
+              Some prices don&apos;t divide evenly across their visits, so each visit is
+              rounded down to the cent — this job will bill {formatCurrency(totalCents - pricingShortfallCents)},{" "}
+              {formatCurrency(pricingShortfallCents)} less than accepted. Adjust a visit&apos;s
+              invoice if the difference matters.
+            </p>
+          )}
         </div>
 
         {/* Materials selector */}

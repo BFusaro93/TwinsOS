@@ -919,8 +919,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           {canSend && (
             <>
               <Button variant="outline" size="sm" className="h-8 text-xs"
-                disabled={ensuringShareLink}
-                title={liveProposalUrl
+                disabled={ensuringShareLink || estimate.approvalStatus === "pending" || estimate.approvalStatus === "rejected"}
+                title={estimate.approvalStatus === "pending" ? "Awaiting approval — the link can be shared once approved"
+                  : estimate.approvalStatus === "rejected" ? "Approval was rejected — resubmit for approval before sharing"
+                  : liveProposalUrl
                   ? `Copy the client's proposal link\n${liveProposalUrl}`
                   : "Copy a proposal link for this estimate (creates one if none is live yet)"}
                 onClick={() => void copyProposalLink()}>

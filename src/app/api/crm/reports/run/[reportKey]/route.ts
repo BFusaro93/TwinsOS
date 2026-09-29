@@ -3,7 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getReport } from "@/lib/reports/registry";
 import { runAnalysis } from "@/lib/reports/engine";
-import { REPORT_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
+import {
+  DATASET_PERMISSION_KEYS,
+  REPORT_PERMISSION_KEYS,
+} from "@/lib/reports/report-permissions";
 import { getCrewRunnableScope, isCrewCaller } from "@/lib/reports/crew-dashboard-access";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 
@@ -31,24 +34,37 @@ export async function GET(
 
   // Reports can expose sensitive data (balances, payroll, invoicing) —
   // mirrors the client-side gate in ReportCatalog.tsx, but this is the
-  // actual boundary since the catalog only hides the link. A report with
-  // no entry here has no catalog-defined permission and is left ungated.
+  // actual boundary since the catalog only hides the link. Gated in the same
+  // layers as the ad-hoc analysis route (analysis/run/route.ts):
+  //   1. baseline view_report_center (non-crew callers),
+  //   2. the report's own REPORT_PERMISSION_KEYS entry (non-crew callers),
+  //   3. the dataset's DATASET_PERMISSION_KEYS entry for declarative
+  //      (`analysis`) reports — applies to crew too, so a crew-visible
+  //      dashboard can't launder payroll/invoice data to a field account.
+  // Admins pass every check inside has_settings_permission.
   //
   // Crew logins never hold any of these keys; they may run a report only when
   // it's embedded in a dashboard an admin flagged visible_to_crew — see
   // crew-dashboard-access.ts.
+  const hasAnyPermission = async (keys: string[]): Promise<boolean> => {
+    const checks = await Promise.all(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      keys.map((key) => (supabase.rpc as any)("has_settings_permission", { p_key: key }))
+    );
+    return checks.some((r) => r.data === true);
+  };
+
   const permissionKeys = REPORT_PERMISSION_KEYS[reportKey];
   if (await isCrewCaller(supabase, user.id)) {
     const { reportKeys } = await getCrewRunnableScope(supabase);
     if (!reportKeys.has(reportKey)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-  } else if (permissionKeys) {
-    const checks = await Promise.all(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      permissionKeys.map((key) => (supabase.rpc as any)("has_settings_permission", { p_key: key }))
-    );
-    if (!checks.some((r) => r.data === true)) {
+  } else {
+    if (!(await hasAnyPermission(["view_report_center"]))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (permissionKeys && !(await hasAnyPermission(permissionKeys))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
@@ -80,6 +96,13 @@ export async function GET(
     }
     if (def.analysis) {
       const config = def.analysis(reportParams, timeZone);
+      const datasetKeys = DATASET_PERMISSION_KEYS[config.dataset];
+      if (datasetKeys && !(await hasAnyPermission(datasetKeys))) {
+        return NextResponse.json(
+          { error: "You don't have permission to query this dataset" },
+          { status: 403 }
+        );
+      }
       const result = await runAnalysis(
         supabase as unknown as SupabaseClient,
         config

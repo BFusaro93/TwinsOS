@@ -382,15 +382,44 @@ export async function recordEstimateDepositCharge({
 
   await db.rpc("sync_client_balance", { p_client_id: estimate.client_id });
 
-  await db.from("client_activity").insert({
-    org_id: orgId,
-    client_id: estimate.client_id,
-    activity_type: "payment",
-    subject: `Deposit received: ${method} (online) — credited to account`,
-    amount_cents: depositCents,
-    ref_id: inserted.id,
-    ref_table: "crm_payments",
-  });
+  // On the already-recorded path `inserted` is null (the insert failed with
+  // 23505), so dereferencing it threw and the webhook 500'd on every retry,
+  // forever. Resolve the existing payment's id instead, and don't add a
+  // second timeline entry when the first attempt already wrote one.
+  let paymentId: string | null = (inserted?.id as string | undefined) ?? null;
+  if (!paymentId) {
+    const { data: existingPayment } = await db
+      .from("crm_payments")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("stripe_payment_intent_id", paymentIntent.id)
+      .limit(1)
+      .maybeSingle();
+    paymentId = (existingPayment?.id as string | undefined) ?? null;
+  }
+  let activityExists = false;
+  if (alreadyRecorded && paymentId) {
+    const { data: existingActivity } = await db
+      .from("client_activity")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("ref_table", "crm_payments")
+      .eq("ref_id", paymentId)
+      .limit(1)
+      .maybeSingle();
+    activityExists = !!existingActivity;
+  }
+  if (paymentId && !activityExists) {
+    await db.from("client_activity").insert({
+      org_id: orgId,
+      client_id: estimate.client_id,
+      activity_type: "payment",
+      subject: `Deposit received: ${method} (online) — credited to account`,
+      amount_cents: depositCents,
+      ref_id: paymentId,
+      ref_table: "crm_payments",
+    });
+  }
 
   return "applied";
 }

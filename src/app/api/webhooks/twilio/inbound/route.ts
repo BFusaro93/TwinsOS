@@ -110,22 +110,27 @@ export async function POST(request: Request) {
     candidateOrgIds = ((sharedOrgs ?? []) as { id: string }[]).map((o) => o.id);
   }
 
-  let clientQuery = supabase
-    .from("clients")
-    .select("id, org_id, primary_phone, display_name, created_at")
-    .not("primary_phone", "is", null)
-    // A soft-deleted client must not claim an inbound text — the message would
-    // be filed against a record no screen shows.
-    .is("deleted_at", null)
-    .order("created_at", { ascending: true });
-  if (ownerOrgId) clientQuery = clientQuery.eq("org_id", ownerOrgId);
-  else clientQuery = clientQuery.in("org_id", candidateOrgIds ?? []);
-  const { data: clients } = await clientQuery;
-
+  // Matched SQL-side (phone_last10() + expression index on clients) rather
+  // than loading every phone client of every candidate org and comparing in
+  // JS — that select hit PostgREST's 1000-row cap, so on the shared sender a
+  // reply (or STOP) from a client past the cap silently matched nobody. The
+  // RPC keeps the same filters: non-null primary_phone, not soft-deleted
+  // (a deleted client must not claim an inbound text), oldest first.
   type MatchedClient = { id: string; org_id: string; display_name: string };
-  const allMatches = ((clients ?? []) as (MatchedClient & { primary_phone: string | null })[]).filter(
-    (c) => c.primary_phone && last10Digits(c.primary_phone) === digits
-  );
+  const { data: clients, error: matchErr } = await supabase.rpc("find_clients_by_phone_last10", {
+    p_digits: digits,
+    p_org_ids: ownerOrgId ? [ownerOrgId] : candidateOrgIds ?? [],
+  });
+  if (matchErr) {
+    // Fail loudly (5xx) so Twilio retries instead of dropping a STOP.
+    log.error("client phone match failed", { ownerOrgId, error: matchErr.message });
+    return NextResponse.json({ error: "Client lookup failed" }, { status: 500 });
+  }
+  const allMatches: MatchedClient[] = (clients ?? []).map((c) => ({
+    id: c.id,
+    org_id: c.org_id,
+    display_name: c.display_name,
+  }));
 
   if (allMatches.length === 0) {
     log.warn("no client matched inbound sms", { ownerOrgId });

@@ -8,6 +8,11 @@ import {
   eqFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import {
+  BILLABLE_CONTRACT_STATUSES,
+  scheduledContractInvoices,
+  type ContractScheduleRow,
+} from "@/lib/reports/contract-schedule";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
@@ -269,14 +274,17 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       const { data: contracts, error } = await supabase
         .from("crm_contracts")
         .select(
-          "id, title, status, start_date, end_date, monthly_amount_cents, monthly_amounts, clients:client_id(display_name)"
+          "id, title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, clients:client_id(display_name)"
         )
+        // Same gate the billing paths use: only signed/active contracts are
+        // ever invoiced, so only they carry a budget.
         .eq("is_active", true)
+        .in("status", BILLABLE_CONTRACT_STATUSES)
         .is("deleted_at", null)
         .limit(5000);
       if (error) throw new Error(error.message);
 
-      interface ContractRow {
+      interface ContractRow extends ContractScheduleRow {
         id: string;
         title: string | null;
         status: string | null;
@@ -313,28 +321,26 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         }
       }
 
-      const monthKeys = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-      // "This month" as it appears in America/New_York — a server running in
-      // UTC would otherwise flip to next month at 8pm ET on the last day.
-      const todayNy = todayInZone(timeZone);
-      const monthIndex = (ymdStr: string) => {
-        const [y, m] = ymdStr.split("-").map(Number);
-        return y * 12 + (m - 1); // months since year 0 — comparable/iterable
-      };
+      // "Today" in the org's zone — a server running in UTC would otherwise
+      // flip to tomorrow at 8pm ET.
+      const today = todayInZone(timeZone);
       const rows = contractRows.map((c) => {
-        // budget = sum of monthly amounts from start month through the current
-        // (or end) month, using the per-month schedule when present
+        // Budget = every invoice the contract's billing schedule has produced
+        // through today (or its end date): monthly_amount_cents is the
+        // PER-INVOICE amount at every frequency, so a quarterly contract
+        // budgets its amount once a quarter, not every month. Candidate run
+        // dates start a month before the start date so a bill-in-advance
+        // contract's first (pre-start) run is counted, as the cron bills it.
         let budgeted = 0;
-        let months = 0;
+        let billings = 0;
         if (c.start_date) {
-          const startIdx = monthIndex(c.start_date);
-          const lastIdx = Math.min(
-            monthIndex(todayNy),
-            c.end_date ? monthIndex(c.end_date) : Number.POSITIVE_INFINITY
-          );
-          for (let idx = startIdx; idx <= lastIdx && months < 120; idx += 1) {
-            budgeted += c.monthly_amounts?.[monthKeys[idx % 12]] ?? c.monthly_amount_cents ?? 0;
-            months += 1;
+          const [sy, sm] = c.start_date.split("-").map(Number);
+          const prev = new Date(sy, sm - 2, 1);
+          const from = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}-01`;
+          const to = c.end_date && c.end_date < today ? c.end_date : today;
+          for (const inv of scheduledContractInvoices(c, from, to)) {
+            budgeted += inv.amountCents;
+            billings += 1;
           }
         }
         const inv = invoicedByContract.get(c.id) ?? { invoiced: 0, paid: 0 };
@@ -342,7 +348,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           client_name: c.clients?.display_name ?? "",
           title: c.title,
           start_date: c.start_date,
-          months_elapsed: months,
+          billings_to_date: billings,
           budgeted_cents: budgeted,
           invoiced_cents: inv.invoiced,
           paid_cents: inv.paid,
@@ -356,7 +362,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           col("client_name", "Client"),
           col("title", "Contract"),
           col("start_date", "Start", "date"),
-          col("months_elapsed", "Months Elapsed", "number", false),
+          col("billings_to_date", "Billings to Date", "number", false),
           col("budgeted_cents", "Budgeted to Date", "money"),
           col("invoiced_cents", "Invoiced to Date", "money"),
           col("paid_cents", "Paid to Date", "money"),
@@ -364,9 +370,9 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          "Budgeted to Date sums the contract's monthly amounts from the start month through today (or the contract end).",
+          "Budgeted to Date sums every invoice the contract's billing schedule (frequency, billing day, bill-in-advance) has come due from its start through today (or the contract end) — the contract amount is per invoice, so a quarterly contract budgets it once a quarter.",
+          "Only signed/active contracts are included — the same ones the billing run invoices.",
           "Over / (Under) is invoiced-to-date minus budgeted-to-date.",
-          "A contract that starts mid-month is still credited a full month's budget for that first month.",
         ]
       );
     },

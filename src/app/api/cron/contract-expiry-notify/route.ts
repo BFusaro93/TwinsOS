@@ -5,6 +5,10 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { EMAIL_FROM } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("contract-expiry-notify cron");
 
 /**
  * GET /api/cron/contract-expiry-notify — called daily by Vercel Cron.
@@ -86,13 +90,35 @@ export async function GET(request: Request) {
       .select("id");
     if (!claimed?.length) continue;
 
+    // The claim above is taken before anything is sent; if the automation or
+    // the rep email then fails, give the claim back (only if it still holds
+    // this end date) so tomorrow's run retries instead of never notifying.
+    // Re-firing the automation on retry is safe: isEligibleForEnrollment
+    // won't re-enroll a client whose enrollment is still in flight.
+    const releaseClaim = async (reason: string, error?: unknown) => {
+      log.error("contract expiry notification failed; releasing claim for retry", {
+        contractId: contract.id, orgId: contract.org_id, endDate, reason, error,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("crm_contracts")
+        .update({ expiry_notified_for: null })
+        .eq("id", contract.id as string)
+        .eq("expiry_notified_for", endDate);
+    };
+
     const contractClientId = contract.client_id as string | null;
     if (contractClientId) {
-      await fireSimpleTrigger(supabase, {
-        orgId: contract.org_id as string,
-        clientId: contractClientId,
-        triggerType: "contract_about_to_expire",
-      });
+      try {
+        await fireSimpleTrigger(supabase, {
+          orgId: contract.org_id as string,
+          clientId: contractClientId,
+          triggerType: "contract_about_to_expire",
+        });
+      } catch (err) {
+        await releaseClaim("automation trigger failed", err);
+        continue;
+      }
     }
 
     const repId = contract.sales_rep_id as string | null;
@@ -124,6 +150,12 @@ export async function GET(request: Request) {
     const repName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim();
 
     const clientName = (contract.clients as Record<string, unknown> | null)?.display_name as string ?? "the client";
+    const contractTitle = (contract.title as string | null) ?? "Contract";
+    // Titles/client names are user-entered — escape them for the email HTML
+    // (the in-app notification and subject stay raw text).
+    const safeTitle = escapeHtml(contractTitle);
+    const safeClientName = escapeHtml(clientName);
+    const safeRepName = escapeHtml(repName || "there");
     // Whole calendar days on the org's clock — a UTC-midnight parse minus the
     // current instant floored to 0 for a contract ending today.
     const daysLeft = Math.round(
@@ -148,20 +180,25 @@ export async function GET(request: Request) {
     if (!rep.email || prefs.emailContractExpiring === false) continue;
 
     try {
-      await resend.emails.send({
+      const { error: sendErr } = await resend.emails.send({
         from: EMAIL_FROM,
         to: rep.email,
         subject: `Contract ${expiryPhrase(daysLeft)} — ${contract.title}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Contract Expiring Soon</h2>
-          <p style="margin:0 0 4px;color:#475569">Hi ${repName || "there"},</p>
-          <p style="margin:0 0 24px;color:#475569"><strong>${contract.title}</strong> for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.</p>
+          <p style="margin:0 0 4px;color:#475569">Hi ${safeRepName},</p>
+          <p style="margin:0 0 24px;color:#475569"><strong>${safeTitle}</strong> for ${safeClientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.</p>
           <a href="${contractUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Contracts</a>
         </div>`,
       });
+      if (sendErr) {
+        await releaseClaim("email send failed", sendErr.message);
+        continue;
+      }
       notified++;
-    } catch {
+    } catch (err) {
       // continue to next contract if one email fails
+      await releaseClaim("email send threw", err);
     }
   }
 

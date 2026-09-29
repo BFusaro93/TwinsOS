@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 
@@ -33,8 +33,10 @@ export async function GET() {
       .order("scheduled_date", { ascending: false })
       .limit(20),
 
+    // Portal customers have no RLS read path to estimates (it would expose
+    // internal cost/margin columns) — service client, scoped to this client.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any)
+    (createServiceClient() as any)
       .from("estimates")
       .select("id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at")
       .eq("client_id", ctx.clientId)
