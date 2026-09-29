@@ -274,15 +274,15 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-4 py-4 sm:px-6 lg:pr-12">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-slate-900">{schedule.title}</h2>
           <p className="text-sm text-slate-500">
             {PM_FREQUENCY_LABELS[schedule.frequency] ?? schedule.frequency}
             {scheduleAssets && scheduleAssets.length > 0 && ` · ${scheduleAssets.length} asset${scheduleAssets.length !== 1 ? "s" : ""}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <StatusValue schedule={schedule} pauseState={pauseState} />
 
           {/* Resuming ENDS the current pause today (a seasonal one stops

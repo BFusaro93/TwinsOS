@@ -90,8 +90,8 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-4 py-4 sm:px-6 lg:pr-12">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-slate-900">{meter.assetName}</h2>
           <p className="text-sm text-slate-500">{meter.name}</p>
         </div>
@@ -118,35 +118,35 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
 
       <div className="flex-1 overflow-y-auto">
         {/* Stat cards */}
-        <div className="grid grid-cols-3 gap-3 p-6">
-          <div className="rounded-md border bg-slate-50 p-3">
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:p-6">
+          <div className="min-w-0 rounded-md border bg-slate-50 p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
               Current
             </p>
             <p className="mt-1 text-xl font-bold text-slate-900">
               {meter.currentValue.toLocaleString()}
-              <span className="ml-1 text-sm font-normal text-slate-400">{meter.unit}</span>
+              <span className="ml-1 break-words text-sm font-normal text-slate-400">{meter.unit}</span>
             </p>
           </div>
           {totalDelta !== null && (
-            <div className="rounded-md border bg-slate-50 p-3">
+            <div className="min-w-0 rounded-md border bg-slate-50 p-3">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                 Past 12 mo
               </p>
               <p className="mt-1 text-xl font-bold text-slate-900">
                 +{totalDelta.toLocaleString()}
-                <span className="ml-1 text-sm font-normal text-slate-400">{meter.unit}</span>
+                <span className="ml-1 break-words text-sm font-normal text-slate-400">{meter.unit}</span>
               </p>
             </div>
           )}
           {avgPerMonth !== null && (
-            <div className="rounded-md border bg-slate-50 p-3">
+            <div className="min-w-0 rounded-md border bg-slate-50 p-3">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                 Avg / mo
               </p>
               <p className="mt-1 text-xl font-bold text-slate-900">
                 {avgPerMonth.toLocaleString()}
-                <span className="ml-1 text-sm font-normal text-slate-400">{meter.unit}</span>
+                <span className="ml-1 break-words text-sm font-normal text-slate-400">{meter.unit}</span>
               </p>
             </div>
           )}
