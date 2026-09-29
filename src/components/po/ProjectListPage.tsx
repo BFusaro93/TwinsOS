@@ -31,7 +31,6 @@ import { useSort } from "@/lib/hooks/use-sort";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
 import type { ProjectStatus } from "@/types";
-import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const STATUS_OPTIONS = (Object.keys(PROJECT_STATUS_LABELS) as ProjectStatus[]).map((k) => ({
   value: k,
@@ -50,7 +49,6 @@ const PROJECT_COLUMNS: ColumnDef[] = [
 export function ProjectListPage() {
   // Include archived projects in the management list so they can be unarchived
   const { data: projects, isLoading } = useProjects(true);
-  const { canWriteEquipt } = useRoleCapabilities();
   const { selectedProjectId, setSelectedProjectId } = usePOStore();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -251,12 +249,10 @@ export function ProjectListPage() {
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
               </Button>
             </div>
-            {canWriteEquipt && (
-              <Button size="sm" onClick={() => setNewProjectOpen(true)}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                New Project
-              </Button>
-            )}
+            <Button size="sm" onClick={() => setNewProjectOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New Project
+            </Button>
           </div>
         }
       />

@@ -144,7 +144,6 @@ import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
-import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -1957,7 +1956,6 @@ function jobBorderColor(job: CRMJob): string {
 function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; isLead?: boolean; onSwitchTab?: (tab: string) => void }) {
   const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
-  const { canWriteCrm } = useRoleCapabilities();
   const [jobFilter, setJobFilter] = useState<"active" | "completed">("active");
   const [clientVisitsModal, setClientVisitsModal] = useState<"upcoming" | "history" | null>(null);
   const [newEstimateOpen, setNewEstimateOpen] = useState(false);
@@ -2041,14 +2039,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           <span className="font-semibold text-sm text-slate-800">
             Estimates ({(estimates ?? []).length})
           </span>
-          {canWriteCrm && (
-            <PermissionGate permission="lead_estimates">
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
-                onClick={() => setNewEstimateOpen(true)}>
-                <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
-              </Button>
-            </PermissionGate>
-          )}
+          <PermissionGate permission="lead_estimates">
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
+              onClick={() => setNewEstimateOpen(true)}>
+              <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
+            </Button>
+          </PermissionGate>
         </div>
         <div className="divide-y">
           {(estimates ?? []).length === 0 ? (
@@ -2111,7 +2107,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               className="text-[11px] text-white/70 hover:text-white"
             >All History</button>
           </div>
-          {canWriteCrm && <DropdownMenu>
+          <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
                 <Plus className="mr-0.5 h-3 w-3" /> Add a Job
@@ -2133,7 +2129,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
-          </DropdownMenu>}
+          </DropdownMenu>
         </div>
 
         {/* Active / Completed tabs */}
@@ -2281,19 +2277,17 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               All
             </button>
           </div>
-          {canWriteCrm && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
-                  <Plus className="mr-0.5 h-3 w-3" /> Add a Transaction
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onSelect={() => setAddInvoiceOpen(true)}>Invoice</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setAddPaymentOpen(true)}>Payment</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
+                <Plus className="mr-0.5 h-3 w-3" /> Add a Transaction
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={() => setAddInvoiceOpen(true)}>Invoice</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAddPaymentOpen(true)}>Payment</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="divide-y overflow-y-auto">
@@ -2372,12 +2366,10 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                 All ({(estimates ?? []).length})
               </button>
             </div>
-            {canWriteCrm && (
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
-                onClick={() => setNewEstimateOpen(true)}>
-                <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
-              </Button>
-            )}
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
+              onClick={() => setNewEstimateOpen(true)}>
+              <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
+            </Button>
           </div>
 
           <div className="divide-y">
@@ -3220,8 +3212,6 @@ interface Props {
 
 export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }: Props) {
   const { can } = usePermissions();
-  // Viewer / requestor app roles are read-only in Landscapt too.
-  const { canWriteCrm } = useRoleCapabilities();
   const { data: client, isLoading } = useClient(clientId);
   const { data: contacts } = useClientContacts(clientId);
   const { data: properties } = useClientProperties(clientId);
@@ -3430,7 +3420,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               </PermissionGate>
 
               {/* Send split button */}
-              {canWriteCrm && <div className="flex items-center">
+              <div className="flex items-center">
                 <Button
                   size="sm"
                   className="h-7 rounded-r-none border-r-0 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white"
@@ -3477,7 +3467,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>}
+              </div>
 
               {/* More split button */}
               <div className="flex items-center">
@@ -3502,7 +3492,6 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => { if (client.billingAddress) window.open(`https://maps.google.com/?q=${encodeURIComponent(client.billingAddress + " " + client.billingCity)}`, "_blank"); else toast.error("No address on file"); }}>
                       <Map className="mr-2 h-3.5 w-3.5" /> Show Client on Map
                     </DropdownMenuItem>
-                    {canWriteCrm && (<>
                     <DropdownMenuItem onClick={() => { setAddContactOpen(true); }}>
                       <Plus className="mr-2 h-3.5 w-3.5" /> Add Contact
                     </DropdownMenuItem>
@@ -3521,7 +3510,6 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => setPortalInviteOpen(true)}>
                       <ExternalLink className="mr-2 h-3.5 w-3.5" /> Send Portal Invite
                     </DropdownMenuItem>
-                    </>)}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setActiveTab("audit")}>
                       <History className="mr-2 h-3.5 w-3.5" /> View Audit Trail
@@ -3531,8 +3519,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                         <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
                       </DropdownMenuItem>
                     )}
-                    {canWriteCrm && <DropdownMenuSeparator />}
-                    {!canWriteCrm ? null : client.status === "cancelled" ? (
+                    <DropdownMenuSeparator />
+                    {client.status === "cancelled" ? (
                       <DropdownMenuItem onClick={async () => { try { await activate(clientId); toast.success("Client reactivated"); } catch { toast.error("Failed to activate"); } }}>
                         <CheckCircle className="mr-2 h-3.5 w-3.5 text-green-600" /> Activate Client
                       </DropdownMenuItem>

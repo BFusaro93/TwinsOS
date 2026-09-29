@@ -5,14 +5,14 @@ import { FileText, Image, Trash2, Upload, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useAttachments, useUploadAttachment, useDownloadAttachment, useDeleteAttachment } from "@/lib/hooks/use-attachments";
 import { Button } from "@/components/ui/button";
-import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
+import { useRoleCapabilities, isEquiptRecordType } from "@/lib/hooks/use-role-capabilities";
 import type { AttachmentRecordType } from "@/types";
 
 interface AttachmentsSectionProps {
   recordType: AttachmentRecordType;
   recordId: string;
-  /** Whether the current user may upload here. Defaults to the app role's
-   *  general write access (hidden for viewer / requestor); pass
+  /** Whether the current user may upload here. On Equipt records it defaults
+   *  to the app role's write access (hidden for viewer / requestor); pass
    *  `canComment(record)` from useRoleCapabilities to let a requestor attach
    *  to their own records. A requestor can only delete files they uploaded. */
   canWrite?: boolean;
@@ -54,7 +54,8 @@ function FileIcon({ fileType }: { fileType: string }) {
 
 export function AttachmentsSection({ recordType, recordId, canWrite }: AttachmentsSectionProps) {
   const { canComment, canWriteEquipt, isOwn } = useRoleCapabilities();
-  const canUpload = canWrite ?? canComment();
+  const equiptRecord = isEquiptRecordType(recordType);
+  const canUpload = canWrite ?? (equiptRecord ? canComment() : true);
   const { data: attachments, isLoading } = useAttachments(recordType, recordId);
   const upload = useUploadAttachment(recordType, recordId);
   const download = useDownloadAttachment();
@@ -231,7 +232,7 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
                   >
                     View
                   </button>
-                  {canUpload && (canWriteEquipt || isOwn(att)) && (
+                  {canUpload && (!equiptRecord || canWriteEquipt || isOwn(att)) && (
                     <button
                       className="text-slate-300 transition-colors hover:text-red-500"
                       title="Delete file"

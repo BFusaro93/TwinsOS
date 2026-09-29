@@ -208,13 +208,15 @@ function QuickAddMenu() {
         : EQUIPT_QUICK_ADD
   )
     .filter((item) => item.quickAdd !== "client" || can("client_add"))
-    // Limited app roles (viewer / requestor / purchaser) only see what they
-    // can actually create.
+    // Limited Equipt app roles (viewer / requestor / purchaser) only see the
+    // Equipt records they can actually create; Landscapt items follow the
+    // Landscapt role.
     .filter((item) => {
       if (!item.quickAdd) return true;
       if (item.quickAdd === "requisition") return canCreateRequisition;
       if (item.quickAdd === "work_order") return canEditWorkOrders;
-      return canWriteEquipt;
+      if (item.quickAdd === "purchase_order" || item.quickAdd === "vendor") return canWriteEquipt;
+      return true;
     });
 
   if (items.length === 0) return null;

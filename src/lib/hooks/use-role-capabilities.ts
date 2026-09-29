@@ -8,7 +8,10 @@ import { useCurrentUserStore } from "@/stores/current-user-store";
  * in the SECURITY DEFINER writers — the database is the enforcement, this
  * only hides controls that would fail anyway.
  *
- *   viewer    — read-only everywhere (Equipt + Landscapt).
+ * These are EQUIPT roles. Landscapt screens follow the Landscapt role
+ * (crm_roles permissions via usePermissions), not these.
+ *
+ *   viewer    — read-only in Equipt.
  *   requestor — may create maintenance requests (edit/delete their own) and
  *               keep their OWN requisitions in draft (plus line items);
  *               can't submit for approval; may comment/attach on their own
@@ -26,6 +29,17 @@ import { useCurrentUserStore } from "@/stores/current-user-store";
 
 /** Anything with an owner. `createdBy` is the row's created_by; requisitions
  * and maintenance requests also count `requestedById`, matching the RLS. */
+/** comments / attachments record types that belong to Equipt — the only ones
+ * the role limits apply to (mirrors 20260929140000_scope_limited_roles_to_equipt). */
+const EQUIPT_RECORD_TYPES = new Set<string>([
+  "po", "purchase_order", "requisition", "work_order", "receiving", "vehicle", "request",
+  "maintenance_request", "asset", "vendor", "pm_schedule", "part", "product", "product_item", "meter",
+]);
+
+export function isEquiptRecordType(recordType: string): boolean {
+  return EQUIPT_RECORD_TYPES.has(recordType);
+}
+
 export interface OwnedRecord {
   createdBy?: string | null;
   requestedById?: string | null;
@@ -58,9 +72,6 @@ export interface RoleCapabilities {
   canCreateMaintenanceRequest: boolean;
   /** Approve / reject / convert a maintenance request into a work order. */
   canTriageMaintenanceRequests: boolean;
-  /** Landscapt writes, on top of crm_roles permissions. False for viewer and
-   * requestor (the DB refuses their CRM writes too). */
-  canWriteCrm: boolean;
   isOwn: (record: OwnedRecord | null | undefined) => boolean;
   /** Edit / delete a requisition header or its line items. */
   canEditRequisition: (req: OwnedDraftRecord | null | undefined) => boolean;
@@ -104,7 +115,6 @@ export function useRoleCapabilities(): RoleCapabilities {
     canSubmitForApproval: canWriteEquipt,
     canCreateMaintenanceRequest: !isViewer,
     canTriageMaintenanceRequests: canEditWorkOrders,
-    canWriteCrm: canWriteEquipt,
     isOwn,
     canEditRequisition: (req) => {
       if (canWriteEquipt) return true;
