@@ -812,7 +812,7 @@ function EmployeeDialog({
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="h-full rounded-none border-b-2 border-transparent px-3 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="h-full rounded-none border-b-2 border-transparent px-3 py-0 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
               >
                 {tab.label}
               </TabsTrigger>
