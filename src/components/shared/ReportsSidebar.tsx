@@ -60,20 +60,57 @@ export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Social Media",        href: "/dashboards/social-media",    icon: Share2,      hideFromCrew: true, permission: "view_dashboard_social_media", description: "Weekly reach, engagement, followers & leads by platform" },
 ];
 
+/** Dashboard routes that aren't in the nav but are still reachable by URL
+ *  (custom Report Center dashboards and the legacy tool pages mirrored under
+ *  /dashboards). Each needs its own view_dashboard_* key. Crew logins reach
+ *  custom dashboards through crm_dashboards.visible_to_crew, which the API
+ *  enforces (/api/crm/dashboards/[id]), so they're exempt from the role key. */
+export const GATED_DASHBOARD_ROUTES: { href: string; permission: string; crewExempt?: boolean }[] = [
+  { href: "/dashboards/custom",           permission: "view_dashboard_custom", crewExempt: true },
+  { href: "/dashboards/job-costing",      permission: "view_dashboard_job_costing" },
+  { href: "/dashboards/estimate-builder", permission: "view_dashboard_estimate_builder" },
+  { href: "/dashboards/calculators",      permission: "view_dashboard_calculators" },
+];
+
+/** The permission gate (if any) for a /dashboards pathname. */
+export function dashboardRouteGate(pathname: string): { permission: string; crewExempt: boolean } | null {
+  const matches = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const nav = DASHBOARDS_NAV.find((i) => i.permission && matches(i.href));
+  if (nav?.permission) return { permission: nav.permission, crewExempt: false };
+  const extra = GATED_DASHBOARD_ROUTES.find((r) => matches(r.href));
+  return extra ? { permission: extra.permission, crewExempt: !!extra.crewExempt } : null;
+}
+
 /** Role-permission check for a dashboard's `permission` key. Admins always
- *  pass; a login with no Landscapt role passes too (unchanged access for
- *  role-less managers). While permissions load, gated items are hidden. */
+ *  pass. Everyone else needs an active Landscapt role that has the key —
+ *  fail CLOSED: no linked employee, no role, a soft-deleted role, or a
+ *  permissions query that failed all mean "no". (PR #173 let role-less
+ *  logins through; that left every gated dashboard open to them.) While
+ *  permissions load, gated items are hidden.
+ *
+ *  Exception: the keys only mean something for someone who HAS a Landscapt
+ *  role. An Equipt-only login with no role (e.g. a shop mechanic) keeps the
+ *  Equipt-side dashboards by app role, as before #173. */
 export function useDashboardPermission(): {
   canViewDashboard: (permission?: string) => boolean;
   isLoading: boolean;
 } {
   const { can, isAdmin, roleId, isLoading } = usePermissions();
+  const { currentUser } = useCurrentUserStore();
   return {
-    canViewDashboard: (permission) =>
-      !permission || (!isLoading && (isAdmin || !roleId || can(permission))),
+    canViewDashboard: (permission) => {
+      if (!permission) return true;
+      if (isLoading) return false;
+      if (isAdmin) return true;
+      if (roleId) return can(permission);
+      return EQUIPT_SIDE_DASHBOARD_KEYS.has(permission) && currentUser.role !== "crew";
+    },
     isLoading,
   };
 }
+
+/** Dashboards that belong to Equipt rather than Landscapt — see useDashboardPermission. */
+const EQUIPT_SIDE_DASHBOARD_KEYS = new Set(["view_dashboard_equipt", "view_dashboard_driver_safety"]);
 
 /** DASHBOARDS_NAV filtered to what the current user may see. The sidebar and
  *  the /dashboards overview both render from this so they can't drift apart. */
@@ -137,6 +174,9 @@ export function ReportsSidebar() {
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
   const { data: customDashboards = [] } = useDashboards();
   const visibleNav = useVisibleDashboardsNav();
+  const { canViewDashboard } = useDashboardPermission();
+  const showCustomDashboards =
+    hasLandscapt && (currentUser.role === "crew" || canViewDashboard("view_dashboard_custom"));
 
   const isActivePath = (href: string) =>
     pathname === href || (href !== "/dashboards" && pathname.startsWith(href + "/"));
@@ -193,7 +233,7 @@ export function ReportsSidebar() {
                 isActive={isActivePath(item.href)}
               />
             ))}
-          {hasLandscapt &&
+          {showCustomDashboards &&
             customDashboards.map((dashboard) => (
               <NavLink
                 key={dashboard.id}

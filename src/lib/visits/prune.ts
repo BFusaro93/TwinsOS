@@ -13,6 +13,8 @@
  * new schedule). See src/lib/visits/generate.ts.
  */
 
+import { selectAllRows } from "@/lib/visits/generate";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -22,8 +24,9 @@ export const SCHEDULE_CHANGE_PRUNE_STATUSES = ["scheduled"];
 export const PAUSE_PRUNE_STATUSES = ["scheduled", "dispatched"];
 
 export interface FindUntouchedOptions {
-  /** Inclusive lower bound on scheduled_date — the org's today. */
-  fromDate: string;
+  /** Inclusive lower bound on scheduled_date — the org's today. null = no
+   *  lower bound (cancelling a one-time job cancels overdue visits too). */
+  fromDate: string | null;
   /** Only visits strictly after this date (shortened recurrence_end). */
   afterDate?: string | null;
   statuses: string[];
@@ -34,28 +37,32 @@ export async function findUntouchedFutureVisits(
   jobId: string,
   opts: FindUntouchedOptions
 ): Promise<string[]> {
-  let q = supabase
-    .from("crm_job_visits")
-    .select("id")
-    .eq("job_id", jobId)
-    .is("deleted_at", null)
-    .is("clocked_in_at", null)
-    .in("status", opts.statuses)
-    .gte("scheduled_date", opts.fromDate);
-  if (opts.afterDate) q = q.gt("scheduled_date", opts.afterDate);
-  const { data, error } = await q;
-  if (error) throw error;
-  const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+  // Paginated: PostgREST truncates at 1000 rows, and a year of weekly
+  // multi-service visits can exceed that.
+  const { rows, error } = await selectAllRows<{ id: string }>(() => {
+    let q = supabase
+      .from("crm_job_visits")
+      .select("id")
+      .eq("job_id", jobId)
+      .is("deleted_at", null)
+      .is("clocked_in_at", null)
+      .in("status", opts.statuses);
+    if (opts.fromDate) q = q.gte("scheduled_date", opts.fromDate);
+    if (opts.afterDate) q = q.gt("scheduled_date", opts.afterDate);
+    return q;
+  });
+  if (error) throw new Error(error);
+  const ids = rows.map((r) => r.id);
   if (ids.length === 0) return ids;
 
   const invoiced = new Set<string>();
   for (let i = 0; i < ids.length; i += 100) {
-    const { data: lines, error: lineErr } = await supabase
+    const { rows: lines, error: lineErr } = await selectAllRows<{ visit_id: string | null }>(() => supabase
       .from("crm_invoice_line_items")
       .select("visit_id")
-      .in("visit_id", ids.slice(i, i + 100));
-    if (lineErr) throw lineErr;
-    for (const l of (lines ?? []) as { visit_id: string | null }[]) if (l.visit_id) invoiced.add(l.visit_id);
+      .in("visit_id", ids.slice(i, i + 100)));
+    if (lineErr) throw new Error(lineErr);
+    for (const l of lines) if (l.visit_id) invoiced.add(l.visit_id);
   }
   return ids.filter((id) => !invoiced.has(id));
 }

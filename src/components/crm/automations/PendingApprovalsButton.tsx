@@ -1,5 +1,6 @@
 "use client";
 
+import { SandboxedHtmlPreview } from "@/components/shared/SandboxedHtmlPreview";
 import { useState } from "react";
 import { CheckCircle2, XCircle, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -75,10 +76,13 @@ export function PendingApprovalsButton() {
                         <p className="text-xs text-slate-500">
                           To: {a.toName ? `${a.toName} <${a.toEmail}>` : a.toEmail}
                         </p>
-                        <div
-                          className="mt-2 max-h-32 overflow-y-auto rounded border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600"
-                          dangerouslySetInnerHTML={{ __html: a.bodyHtml || "<em>(empty body)</em>" }}
-                        />
+                        <div className="mt-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600">
+                          <SandboxedHtmlPreview
+                            html={a.bodyHtml || "<em>(empty body)</em>"}
+                            minHeight={24}
+                            maxHeight={128}
+                          />
+                        </div>
                       </>
                     )}
                     <div className="mt-3 flex justify-end gap-2">

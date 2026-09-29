@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { logger } from "@/lib/logger";
+import { createServiceClient } from "@/lib/supabase/server";
 
 const log = logger.child("quickbooks");
 
@@ -114,15 +115,21 @@ interface QuickBooksIntegrationConfig {
 /**
  * Loads the org's stored connection, refreshing the access token first if
  * it's within 5 minutes of expiring. Returns null if the org has never
- * connected QuickBooks or the integration was disabled. Accepts any
- * Supabase client (session-scoped or service-role) — RLS on `integrations`
- * already scopes session clients to their own org.
+ * connected QuickBooks or the integration was disabled.
+ *
+ * The integrations row holds the OAuth tokens, so RLS makes it admin-only;
+ * invoice/payment sync is fired by whichever staff member sends or records
+ * it. Callers authorize the user and pass the orgId from their session, and
+ * the token read/refresh here always goes through the service role. The
+ * `_db` parameter is kept for call-site compatibility.
  */
 export async function getValidConnection(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
+  _db: any,
   orgId: string
 ): Promise<QuickBooksConnection | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createServiceClient() as any;
   const { data: row } = await db
     .from("integrations")
     .select("id, config, enabled")

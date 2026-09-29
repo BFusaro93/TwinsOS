@@ -252,15 +252,16 @@ async function evaluatePartLowStock(adminClient: AdminClient, orgId: string, par
 
 /** True if any active PM schedule is due within daysAhead days. */
 async function evaluatePmDue(adminClient: AdminClient, orgId: string, daysAhead: number): Promise<boolean> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() + daysAhead);
+  // next_due_date is a calendar date in the org's zone — compare against the
+  // org's today, not UTC's (which is already tomorrow after ~8pm ET).
+  const cutoff = shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), daysAhead);
   const { data } = await adminClient
     .from("pm_schedules")
     .select("id")
     .eq("org_id", orgId)
     .eq("is_active", true)
     .is("deleted_at", null)
-    .lte("next_due_date", cutoff.toISOString().slice(0, 10));
+    .lte("next_due_date", cutoff);
   if (!data || data.length === 0) return false;
   // Paused (off-season) schedules owe nothing.
   const { data: paused } = await adminClient
@@ -274,8 +275,8 @@ async function evaluatePmDue(adminClient: AdminClient, orgId: string, daysAhead:
 
 /** True if any open work order's due date is more than daysOverdue days in the past. */
 async function evaluateWoOverdue(adminClient: AdminClient, orgId: string, daysOverdue: number): Promise<boolean> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - daysOverdue);
+  // due_date is a calendar date in the org's zone (see evaluatePmDue).
+  const cutoff = shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), -daysOverdue);
   const { data } = await adminClient
     .from("work_orders")
     .select("id")
@@ -283,7 +284,7 @@ async function evaluateWoOverdue(adminClient: AdminClient, orgId: string, daysOv
     .is("deleted_at", null)
     .not("status", "in", '("done","skipped")')
     .not("due_date", "is", null)
-    .lte("due_date", cutoff.toISOString().slice(0, 10))
+    .lte("due_date", cutoff)
     .limit(1);
   return (data ?? []).length > 0;
 }
@@ -366,15 +367,25 @@ async function handleRun(request: Request) {
       // actually belongs to the caller's org before trusting it, same as
       // workOrderId/purchaseOrderId below, so a crafted request can't link a
       // newly created row to another org's asset.
+      // The id may be an asset OR a vehicle (work_orders.asset_id is
+      // polymorphic), so either table can vouch for it.
       let verifiedAssetId: string | null = null;
       if (assetId) {
-        const { data: asset } = await (adminClient as AdminClient)
-          .from("assets")
-          .select("id")
-          .eq("id", assetId)
-          .eq("org_id", callerOrgId)
-          .maybeSingle();
-        verifiedAssetId = asset ? assetId : null;
+        const [{ data: asset }, { data: vehicle }] = await Promise.all([
+          (adminClient as AdminClient)
+            .from("assets")
+            .select("id")
+            .eq("id", assetId)
+            .eq("org_id", callerOrgId)
+            .maybeSingle(),
+          (adminClient as AdminClient)
+            .from("vehicles")
+            .select("id")
+            .eq("id", assetId)
+            .eq("org_id", callerOrgId)
+            .maybeSingle(),
+        ]);
+        verifiedAssetId = asset || vehicle ? assetId : null;
       }
 
       // Fan out to any Zapier REST Hook subscriptions for the CMMS trigger
@@ -485,6 +496,10 @@ async function handleRun(request: Request) {
         .from("meters")
         .select("id, current_value, asset_id, asset_name, org_id")
         .eq("id", meterId)
+        // meter_id comes from the rule's own trigger_config (user-editable
+        // JSON) and this runs on the service-role client — never read another
+        // org's meter.
+        .eq("org_id", orgId)
         .is("deleted_at", null)
         .single();
       if (meterErr || !meter) {
@@ -503,19 +518,49 @@ async function handleRun(request: Request) {
         continue;
       }
       if (auto.pending_reset) {
-        skipped.push({ automationId: auto.id, reason: "already fired, waiting for meter to reset" });
+        skipped.push({ automationId: auto.id, reason: "already fired, waiting for its request/work order to be resolved" });
+        continue;
+      }
+
+      // Claim the firing BEFORE acting: a conditional update that only one
+      // concurrent run (two readings saved at once, or the cron racing a
+      // reading) can win, so a threshold crossing creates exactly one
+      // request/WO. last_fired_at is stamped here, before the WO exists,
+      // which is what the release trigger's "latest firing" check expects.
+      const { data: claimed, error: claimErr } = await (adminClient as AdminClient)
+        .from("automations")
+        .update({ last_fired_at: now, last_fired_value: currentValue, pending_reset: true, updated_at: now })
+        .eq("id", auto.id)
+        .eq("org_id", orgId)
+        .eq("pending_reset", false)
+        .select("id");
+      if (claimErr) {
+        skipped.push({ automationId: auto.id, reason: `couldn't claim firing: ${claimErr.message}` });
+        continue;
+      }
+      if (!claimed || claimed.length === 0) {
+        skipped.push({ automationId: auto.id, reason: "already fired by a concurrent run" });
         continue;
       }
 
       const outcome = await executeAction(adminClient as AdminClient, auto, {
         orgId, assetId: meter.asset_id ?? null, assetName: meter.asset_name ?? null,
       });
-      if ("skipReason" in outcome) { skipped.push({ automationId: auto.id, reason: outcome.skipReason }); continue; }
-
-      await (adminClient as AdminClient)
-        .from("automations")
-        .update({ last_fired_at: now, last_fired_value: currentValue, pending_reset: true, updated_at: now })
-        .eq("id", auto.id);
+      if ("skipReason" in outcome) {
+        // Nothing was created — give the claim back so the next run retries.
+        await (adminClient as AdminClient)
+          .from("automations")
+          .update({
+            pending_reset: false,
+            last_fired_at: auto.last_fired_at ?? null,
+            last_fired_value: auto.last_fired_value ?? null,
+            updated_at: now,
+          })
+          .eq("id", auto.id)
+          .eq("last_fired_at", now);
+        skipped.push({ automationId: auto.id, reason: outcome.skipReason });
+        continue;
+      }
       fired.push({ automationId: auto.id, name: auto.name, result: outcome.result });
       continue;
     }

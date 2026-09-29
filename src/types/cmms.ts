@@ -325,6 +325,8 @@ export interface PMSchedulePause {
   resumesOn: string | null;
   /** Repeat the same month/day window every year (needs resumesOn). */
   recursYearly: boolean;
+  /** A yearly pause that was ended: no season on or after this day is paused. */
+  endedOn: string | null;
   reason: string | null;
   createdAt: string;
 }

@@ -3,6 +3,10 @@ import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
 
+/** Visits a crew can no longer start. Same set the stop clock-in excludes. */
+const TERMINAL_STATUSES = ["completed", "cancelled", "skipped"];
+const TERMINAL_STATUS_FILTER = `(${TERMINAL_STATUSES.join(",")})`;
+
 const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
   // so the actual local time-of-day must come from the client's browser clock.
@@ -32,7 +36,7 @@ export async function POST(
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
     .select(`
-      clocked_in_at, org_id, crew_id,
+      clocked_in_at, org_id, crew_id, status,
       notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
       crm_jobs(notes_to_crew, notes_to_crew_updated_at)
     `)
@@ -45,6 +49,16 @@ export async function POST(
   }
   if (existing?.clocked_in_at) {
     return NextResponse.json({ error: "Already clocked in" }, { status: 409 });
+  }
+  // A completed / cancelled / skipped visit is never flipped back to
+  // in_progress: that would re-run completion side effects on clock-out, and
+  // for an invoiced visit the DB guard (trg_crm_job_visits_guard_invoiced)
+  // rejects it outright — which surfaced as a raw 500.
+  if (TERMINAL_STATUSES.includes(existing.status)) {
+    return NextResponse.json(
+      { error: `This visit is already ${existing.status} — ask the office to reopen it before clocking in.`, code: "visit_terminal" },
+      { status: 409 }
+    );
   }
 
   // Notes-acknowledgment gate — the same server-side enforcement the stop
@@ -81,9 +95,17 @@ export async function POST(
     })
     .eq("id", visitId)
     .is("clocked_in_at", null)
+    // Re-checked in the write: the office may complete it between the read above and here.
+    .not("status", "in", TERMINAL_STATUS_FILTER)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) {
+    return NextResponse.json(
+      { error: "This visit was just clocked in or closed out — refresh and try again.", code: "visit_changed" },
+      { status: 409 }
+    );
+  }
   return NextResponse.json(data);
 }

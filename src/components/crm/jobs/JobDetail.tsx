@@ -47,7 +47,7 @@ import {
 import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { createClient } from "@/lib/supabase/client";
-import { PAUSE_PRUNE_STATUSES, pruneUntouchedFutureVisits } from "@/lib/visits/prune";
+import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -324,13 +324,25 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
 
-      // Hold / cancel from this form (not useUpdateJobStatus): clear the
-      // job's untouched future visits the same way.
-      if (edits.status === "hold" || edits.status === "cancelled") {
-        await pruneUntouchedFutureVisits(createClient(), job.id, {
-          fromDate: orgToday(),
-          statuses: PAUSE_PRUNE_STATUSES,
+      // A status change from this form (not useUpdateJobStatus) applies the
+      // same visit rules: recurring/package hold/cancel prunes untouched
+      // future visits and a resume regenerates the season; other job types
+      // keep their visits (cancel marks the untouched ones cancelled).
+      if (typeof edits.status === "string" && edits.status !== job.status) {
+        const effect = await applyJobStatusToVisits(createClient(), {
+          jobId: job.id,
+          jobType: (typeof edits.job_type === "string" ? edits.job_type : null) ?? job.jobType,
+          previousStatus: job.status ?? null,
+          newStatus: edits.status,
+          today: orgToday(),
         });
+        if (effect.regenerate) {
+          try {
+            await resumeJobVisits(job.id);
+          } catch {
+            toast.error("Job saved, but its visits could not be regenerated — use Generate Visits");
+          }
+        }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
 

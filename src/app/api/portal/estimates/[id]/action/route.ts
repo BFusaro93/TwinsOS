@@ -109,6 +109,7 @@ export async function POST(
       .from("clients")
       .select("display_name")
       .eq("id", estimate.client_id)
+      .eq("org_id", ctx.orgId)
       .single() as { data: { display_name: string } | null };
 
     await submitEstimateChangeRequest(supabase, {
@@ -140,6 +141,7 @@ export async function POST(
       .from("estimate_line_items")
       .select("id, status, tier, row_type")
       .eq("estimate_id", id)
+      .eq("org_id", ctx.orgId)
       .is("deleted_at", null) as {
         data: { id: string; status: string; tier: string | null; row_type: string | null }[] | null;
         error: unknown;
@@ -225,6 +227,7 @@ export async function POST(
     .from("clients")
     .select("display_name")
     .eq("id", estimate.client_id)
+    .eq("org_id", ctx.orgId)
     .single() as { data: { display_name: string } | null };
 
   await notifyStaffOfEstimateDecision(supabase, {
@@ -245,6 +248,7 @@ export async function POST(
         .from("estimate_line_items")
         .update({ status: "won" })
         .eq("estimate_id", id)
+        .eq("org_id", ctx.orgId)
         .eq("status", "quote")
         .in("id", wonIds)
         .is("deleted_at", null);
@@ -255,6 +259,7 @@ export async function POST(
         .from("estimate_line_items")
         .update({ status: "lost" })
         .eq("estimate_id", id)
+        .eq("org_id", ctx.orgId)
         .eq("status", "quote")
         .in("id", lostIds)
         .is("deleted_at", null);

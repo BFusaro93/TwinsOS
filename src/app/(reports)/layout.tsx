@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { ReportsSidebar, DASHBOARDS_NAV, useDashboardPermission } from "@/components/shared/ReportsSidebar";
+import { ReportsSidebar, DASHBOARDS_NAV, dashboardRouteGate, useDashboardPermission } from "@/components/shared/ReportsSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
@@ -59,13 +59,12 @@ function CrewBlockedGuard({ children }: { children: React.ReactNode }) {
  *  role doesn't include — the sidebar/overview already hide the links. */
 function DashboardPermissionGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { currentUser } = useCurrentUserStore();
   const { canViewDashboard, isLoading } = useDashboardPermission();
-  const item = DASHBOARDS_NAV.find(
-    (i) => i.permission && (pathname === i.href || pathname.startsWith(i.href + "/"))
-  );
-  if (!item) return <>{children}</>;
+  const gate = dashboardRouteGate(pathname);
+  if (!gate || (gate.crewExempt && currentUser.role === "crew")) return <>{children}</>;
   if (isLoading) return null;
-  if (canViewDashboard(item.permission)) return <>{children}</>;
+  if (canViewDashboard(gate.permission)) return <>{children}</>;
   return (
     <div className="flex h-full items-center justify-center p-6">
       <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">

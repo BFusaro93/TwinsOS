@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateZapierRequest, checkZapierRateLimit, isZapierTriggerType } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 /**
  * GET /api/integrations/zapier/triggers/[event] — the polling-trigger
@@ -47,8 +49,9 @@ export async function GET(
   }
 
   const searchParams = new URL(request.url).searchParams;
+  const ctx = { orgToday: todayInZone(await getOrgTimeZone(db, auth.orgId)) };
   const rows = config.postFilter
-    ? (data ?? []).filter((row) => config.postFilter!(row, searchParams)).slice(0, 25)
+    ? (data ?? []).filter((row) => config.postFilter!(row, searchParams, ctx)).slice(0, 25)
     : (data ?? []);
   return NextResponse.json(rows.map(config.map));
 }

@@ -610,7 +610,7 @@ function CrewDialog({
                 key={tab.value}
                 value={tab.value}
                 disabled={tab.disabled}
-                className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
+                className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {tab.label}
               </TabsTrigger>

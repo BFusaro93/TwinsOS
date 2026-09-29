@@ -30,6 +30,7 @@ export default async function PortalHomePage() {
       .from("clients")
       .select("display_name, first_name, balance_outstanding_cents, balance_credits_cents")
       .eq("id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
       .single(),
 
     supabase

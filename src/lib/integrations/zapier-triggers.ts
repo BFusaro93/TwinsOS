@@ -26,7 +26,7 @@ export interface PollingTriggerConfig {
    * slicing to the usual 25, since the filter can reject most rows.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  postFilter?: (row: any, searchParams: URLSearchParams) => boolean;
+  postFilter?: (row: any, searchParams: URLSearchParams, ctx: { orgToday: string }) => boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   map: (row: any) => Record<string, unknown>;
 }
@@ -267,7 +267,9 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     filters: { is_active: true },
     hasSoftDelete: true,
     orderBy: "next_due_date",
-    postFilter: (p) => !!p.next_due_date && new Date(p.next_due_date) <= new Date(),
+    // next_due_date is an org-calendar date; compare as YYYY-MM-DD strings
+    // against the org's today (parsing it as a Date meant UTC midnight).
+    postFilter: (p, _searchParams, { orgToday }) => !!p.next_due_date && p.next_due_date <= orgToday,
     map: (p) => ({
       id: p.id, title: p.title, assetId: p.asset_id, assetName: p.asset_name, frequency: p.frequency,
       nextDueDate: p.next_due_date, lastCompletedDate: p.last_completed_date,

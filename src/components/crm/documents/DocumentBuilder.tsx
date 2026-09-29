@@ -53,6 +53,7 @@ import {
   AlignCenter,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 import { toast } from "sonner";
 import {
   BLOCK_TYPE_LABELS,
@@ -144,8 +145,9 @@ function ImageBlockContent({
     setUploading(true);
     try {
       const supabase = createClient();
+      const orgPrefix = await getStorageOrgPrefix(supabase);
       const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const path = `${orgPrefix}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("document-images")

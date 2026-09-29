@@ -67,6 +67,7 @@ export async function POST(req: Request) {
       .from("clients")
       .select("display_name, first_name, sales_rep_id")
       .eq("id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
       .single(),
   ]);
 
@@ -152,6 +153,7 @@ export async function POST(req: Request) {
       .from("crm_employees")
       .select("email, first_name, last_name")
       .eq("id", client.sales_rep_id)
+      .eq("org_id", ctx.orgId)
       .single();
     if (rep?.email) {
       notifyEmail = rep.email;

@@ -972,7 +972,8 @@ interface Props {
   clientId?: string;
 }
 
-const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
+// accountNumber (optional) disambiguates clients that share a display name.
+const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "accountNumber", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
 
 export function PaymentsList({ clientId }: Props) {
   const { can, isLoading: permissionsLoading } = usePermissions();

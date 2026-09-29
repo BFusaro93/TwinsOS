@@ -3,6 +3,7 @@ import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-sid
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
+import { findInvoicedLockedVisits } from "@/lib/visits/invoiced-guard";
 
 const log = logger.child("visits/complete");
 
@@ -123,11 +124,40 @@ export async function completeVisit(
   if (!sideEffects.ok && sideEffects.error) {
     // Completion and its side effects are not one transaction — restore the
     // prior status so a hard failure leaves the visit genuinely retryable.
-    await supabase
+    // EXCEPT when the failure came after the invoice line was written: the
+    // invoiced-visit guard (trg_crm_job_visits_guard_invoiced) forbids
+    // un-completing a visit on a live invoice, and it is right to — the
+    // invoice bills it. Leave it completed; a later completion call re-runs
+    // the side effects as a repair (dedupeActivity) once REPAIR_MIN_AGE_MS
+    // has passed.
+    let invoiced = false;
+    try {
+      const locked = await findInvoicedLockedVisits(
+        supabase,
+        [{ id: visitId, status: "completed", scheduled_date: null }],
+        { status: priorStatus }
+      );
+      invoiced = locked.has(visitId);
+    } catch (err) {
+      log.error("invoiced check before completion rollback failed", { visitId, error: err instanceof Error ? err.message : String(err) });
+      invoiced = true; // don't fight the guard blind
+    }
+    if (invoiced) {
+      log.error("visit completion side effects failed after invoicing; visit left completed", { visitId, error: sideEffects.error });
+      return {
+        ok: false,
+        status: 500,
+        error: `${sideEffects.error} — the visit is invoiced, so it stays completed; completing it again later retries the rest.`,
+      };
+    }
+    const { error: rollbackErr } = await supabase
       .from("crm_job_visits")
       .update({ status: priorStatus, completed_at: priorCompletedAt })
       .eq("id", visitId)
       .eq("status", "completed");
+    if (rollbackErr) {
+      log.error("visit completion rollback failed", { visitId, error: rollbackErr.message });
+    }
     return { ok: false, status: 500, error: sideEffects.error };
   }
 

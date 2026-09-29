@@ -8,6 +8,7 @@ import {
   GENERATOR_JOB_COLUMNS,
   NON_GENERATING_JOB_STATUSES,
   generateVisitsForJobs,
+  selectAllRows,
   type GeneratorJob,
 } from "@/lib/visits/generate";
 
@@ -42,24 +43,27 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: jobs, error: jobsErr } = await (supabase as any)
-    .from("crm_jobs")
-    .select(GENERATOR_JOB_COLUMNS)
-    .in("job_type", ["recurring", "package"])
-    .not("status", "in", `(${NON_GENERATING_JOB_STATUSES.map((s) => `"${s}"`).join(",")})`)
-    .is("deleted_at", null);
+  // Paginated — every org's active jobs can exceed PostgREST's 1000-row cap.
+  const { rows: jobs, error: jobsErr } = await selectAllRows<GeneratorJob>(() =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("crm_jobs")
+      .select(GENERATOR_JOB_COLUMNS)
+      .in("job_type", ["recurring", "package"])
+      .not("status", "in", `(${NON_GENERATING_JOB_STATUSES.map((s) => `"${s}"`).join(",")})`)
+      .is("deleted_at", null)
+  );
 
   if (jobsErr) {
-    log.error("job fetch failed", { error: jobsErr.message });
-    return NextResponse.json({ error: jobsErr.message }, { status: 500 });
+    log.error("job fetch failed", { error: jobsErr });
+    return NextResponse.json({ error: jobsErr }, { status: 500 });
   }
-  if (!jobs || jobs.length === 0) {
+  if (jobs.length === 0) {
     return NextResponse.json({ generated: 0, message: "No recurring jobs found." });
   }
 
   const orgToday = new Map<string, string>();
-  const result = await generateVisitsForJobs(supabase, jobs as GeneratorJob[], {
+  const result = await generateVisitsForJobs(supabase, jobs, {
     horizonDays: LOOKAHEAD_DAYS,
     packageWindowOnly: true,
     todayFor: async (orgId) => {

@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 export interface PortalContext {
   userId: string;
@@ -73,5 +73,20 @@ async function portalRowsForUser(supabase: any, userId: string): Promise<PortalU
     .select("client_id, org_id, email")
     .eq("user_id", userId)
     .is("deleted_at", null);
-  return (data ?? []) as PortalUserRow[];
+  const rows = (data ?? []) as PortalUserRow[];
+  if (rows.length === 0) return rows;
+
+  // A soft-deleted client loses portal access even if its portal-user row
+  // was never revoked (older deletes, or a revoke the deleting staff member
+  // lacked permission for). Checked with the service client so the answer
+  // doesn't depend on what the portal user's own RLS lets them read.
+  const service = createServiceClient();
+  const { data: liveClients, error } = await service
+    .from("clients")
+    .select("id, org_id")
+    .in("id", rows.map((r) => r.client_id))
+    .is("deleted_at", null);
+  if (error) return []; // fail closed
+  const live = new Set((liveClients ?? []).map((c) => `${c.org_id}:${c.id}`));
+  return rows.filter((r) => live.has(`${r.org_id}:${r.client_id}`));
 }
