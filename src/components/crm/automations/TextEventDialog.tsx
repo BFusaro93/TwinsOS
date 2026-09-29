@@ -20,6 +20,7 @@ import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToPlainText } from "@/lib/utils/document-template-renderer";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { SMS_EVENT_MERGE_TAGS } from "@/types/crm-proposals";
 import { toast } from "sonner";
 
 interface Props {
@@ -113,6 +114,19 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
+            <div className="flex flex-wrap gap-1.5">
+              {SMS_EVENT_MERGE_TAGS.map((mt) => (
+                <button
+                  key={mt.tag}
+                  type="button"
+                  title={mt.label}
+                  onClick={() => setMessage((m) => m + mt.tag)}
+                  className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                >
+                  {mt.tag}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <Label>Send To</Label>

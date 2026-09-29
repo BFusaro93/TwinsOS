@@ -3862,7 +3862,11 @@ export function DispatchBoard() {
       const q   = search.toLowerCase();
       const cli = (v.clientName ?? "").toLowerCase();
       const cty = (v.job?.serviceCity ?? "").toLowerCase();
-      const svc = (v.job?.services ?? []).map((s) => s.serviceName).join(" ").toLowerCase();
+      // Match the service code the Service column shows as well as the name.
+      const svc = (v.job?.services ?? [])
+        .map((s) => `${s.serviceName} ${(s.serviceId && serviceCodeById.get(s.serviceId)) || ""}`)
+        .join(" ")
+        .toLowerCase();
       if (!cli.includes(q) && !cty.includes(q) && !svc.includes(q)) return false;
     }
     if (colFilterKey && colFilterValue) {

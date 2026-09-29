@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
-import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
+import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { MERGE_TAGS_BY_TYPE } from "@/types/crm-documents";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
@@ -146,7 +146,11 @@ export function InvoiceEmailDialog({
       .replace(/\[invoicetax\]/gi,      () => escapeHtml(formatCurrency(0)))
       .replace(/\[paymentlink\]/gi,     () => escapeHtml("#"))
       .replace(/\[salesrepname\]/gi,    () => escapeHtml("Your Rep"))
-      .replace(/\[companyphonenumber\]/gi, () => escapeHtml("(555) 000-0000"));
+      .replace(/\[companyphonenumber\]/gi, () => escapeHtml("(555) 000-0000"))
+      // Any other recognized tag this preview has no invoice data for falls
+      // back to the Documents sample values, so the preview never shows raw
+      // "[tag]" text (the real send resolves or blanks every tag).
+      .replace(/\[(\w+)\]/g, (m) => escapeHtml(SAMPLE_MERGE_VALUES[m.toLowerCase()] ?? m));
   }
 
   async function handleSend() {
