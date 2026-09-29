@@ -545,7 +545,7 @@ export function useBulkImportInvoices() {
         if (error) throw error;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
+        const { data: invoiceNumber } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from("crm_invoice_line_items").insert({
@@ -554,6 +554,17 @@ export function useBulkImportInvoices() {
           qty: 1,
           rate_cents: amountCents,
           total_cents: amountCents,
+        });
+
+        // Log to the client's activity timeline (same as useAssignInvoiceNumber).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("client_activity").insert({
+          client_id: clientId,
+          activity_type: "invoice",
+          subject: invoiceNumber != null ? `Invoice #${invoiceNumber}` : "Invoice",
+          amount_cents: totalCents,
+          ref_id: invoice.id,
+          ref_table: "crm_invoices",
         });
         created++;
       }

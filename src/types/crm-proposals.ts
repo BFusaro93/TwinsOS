@@ -61,6 +61,18 @@ export const CHEMICAL_EMAIL_MERGE_TAGS = [
 
 export type ChemicalMergeTag = typeof CHEMICAL_EMAIL_MERGE_TAGS[number]["tag"];
 
+// Merge tags the automation "Text Message" event resolves
+// (resolveSmsStepContent in lib/automations/sequence-sms.ts). Keep in sync
+// with that resolver's mergeTags map; unknown tags are sent blank.
+export const SMS_EVENT_MERGE_TAGS = [
+  { tag: "[clientfirstname]", label: "Client First Name" },
+  { tag: "[clientfullname]",  label: "Client Full Name" },
+  { tag: "[companyname]",     label: "Company Name" },
+  { tag: "[meetingdate]",     label: "Meeting Date" },
+  { tag: "[meetingtime]",     label: "Meeting Time" },
+  { tag: "[meetinglocation]", label: "Meeting Location" },
+] as const;
+
 // Merge tags supported in general-purpose client email templates (Settings →
 // Clients → Email Templates, used by the Dispatch Board / Waiting List bulk
 // "Email Selected Clients" action) — must match buildClientMergeVars exactly,

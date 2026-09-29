@@ -252,15 +252,16 @@ async function evaluatePartLowStock(adminClient: AdminClient, orgId: string, par
 
 /** True if any active PM schedule is due within daysAhead days. */
 async function evaluatePmDue(adminClient: AdminClient, orgId: string, daysAhead: number): Promise<boolean> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() + daysAhead);
+  // next_due_date is a calendar date in the org's zone — compare against the
+  // org's today, not UTC's (which is already tomorrow after ~8pm ET).
+  const cutoff = shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), daysAhead);
   const { data } = await adminClient
     .from("pm_schedules")
     .select("id")
     .eq("org_id", orgId)
     .eq("is_active", true)
     .is("deleted_at", null)
-    .lte("next_due_date", cutoff.toISOString().slice(0, 10));
+    .lte("next_due_date", cutoff);
   if (!data || data.length === 0) return false;
   // Paused (off-season) schedules owe nothing.
   const { data: paused } = await adminClient
@@ -274,8 +275,8 @@ async function evaluatePmDue(adminClient: AdminClient, orgId: string, daysAhead:
 
 /** True if any open work order's due date is more than daysOverdue days in the past. */
 async function evaluateWoOverdue(adminClient: AdminClient, orgId: string, daysOverdue: number): Promise<boolean> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - daysOverdue);
+  // due_date is a calendar date in the org's zone (see evaluatePmDue).
+  const cutoff = shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), -daysOverdue);
   const { data } = await adminClient
     .from("work_orders")
     .select("id")
@@ -283,7 +284,7 @@ async function evaluateWoOverdue(adminClient: AdminClient, orgId: string, daysOv
     .is("deleted_at", null)
     .not("status", "in", '("done","skipped")')
     .not("due_date", "is", null)
-    .lte("due_date", cutoff.toISOString().slice(0, 10))
+    .lte("due_date", cutoff)
     .limit(1);
   return (data ?? []).length > 0;
 }
