@@ -43,7 +43,7 @@ export function WarrantyFields({ idPrefix, value, onChange, purchaseDate, resolv
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <Label htmlFor={`${idPrefix}-warranty-start`}>Warranty Start</Label>
           <Input
             id={`${idPrefix}-warranty-start`}
@@ -59,7 +59,7 @@ export function WarrantyFields({ idPrefix, value, onChange, purchaseDate, resolv
         </div>
 
         {value.mode === "end_date" ? (
-          <div className="grid gap-1.5">
+          <div className="grid content-start gap-1.5">
             <Label htmlFor={`${idPrefix}-warranty-end`}>Warranty End</Label>
             <Input
               id={`${idPrefix}-warranty-end`}
@@ -69,7 +69,7 @@ export function WarrantyFields({ idPrefix, value, onChange, purchaseDate, resolv
             />
           </div>
         ) : (
-          <div className="grid gap-1.5">
+          <div className="grid content-start gap-1.5">
             <Label htmlFor={`${idPrefix}-warranty-term`}>Coverage Period</Label>
             <div className="flex gap-2">
               <Input
