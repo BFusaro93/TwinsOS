@@ -37,6 +37,7 @@ import { useRouter } from "next/navigation";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import { cn, matchesFilter, getInitials, getAvatarColor } from "@/lib/utils";
 import type { Asset } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const STATUS_OPTIONS = Object.entries(ASSET_STATUS_LABELS).map(([value, label]) => ({
   value,
@@ -60,6 +61,7 @@ const ASSET_COLUMNS: ColumnDef[] = [
 export function AssetListPage() {
   const { data: assets, isLoading } = useAssets();
   const { mutateAsync: bulkImportAssets } = useBulkImportAssets();
+  const { canWriteEquipt } = useRoleCapabilities();
   const { data: vehicles, isLoading: isVehiclesLoading } = useVehicles();
   const { selectedAssetId, setSelectedAssetId, setSelectedVehicleId } = useCMMSStore();
   const router = useRouter();
@@ -384,10 +386,12 @@ export function AssetListPage() {
               <ScanLine className="mr-1.5 h-4 w-4" />
               Scan
             </Button>
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Asset
-            </Button>
+            {canWriteEquipt && (
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Asset
+              </Button>
+            )}
           </div>
         }
       />

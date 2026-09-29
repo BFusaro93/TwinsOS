@@ -21,12 +21,15 @@ import {
   useDeletePMPart,
 } from "@/lib/hooks/use-pm-parts";
 import type { PMPart } from "@/types/cmms";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface PMPartsTabProps {
   pmScheduleId: string;
 }
 
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  const { canWriteEquipt } = useRoleCapabilities();
+  if (!canWriteEquipt) return <td className="px-2 py-2" />;
   return (
     <td className="px-2 py-2 text-right">
       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -53,6 +56,7 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
   const { data: items = [] } = usePMParts(pmScheduleId);
   const { data: allParts = [] } = useParts();
   const { mutate: addPart, isPending: adding } = useAddPMPart();
+  const { canWriteEquipt } = useRoleCapabilities();
   const { mutate: updatePart } = useUpdatePMPart();
   const { mutate: deletePart } = useDeletePMPart();
 
@@ -129,10 +133,12 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
             <span className="ml-1.5 font-normal normal-case text-slate-300">({items.length})</span>
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Add Part
-        </Button>
+        {canWriteEquipt && (
+          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Add Part
+          </Button>
+        )}
       </div>
 
       <p className="text-xs text-slate-400">

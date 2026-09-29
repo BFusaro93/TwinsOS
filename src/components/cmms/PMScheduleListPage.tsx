@@ -17,6 +17,7 @@ import { useCMMSStore } from "@/stores";
 import { PM_FREQUENCY_LABELS } from "@/lib/constants";
 import { Skeleton } from "@/components/ui/skeleton";
 import { matchesFilter, matchesIsActiveFilter } from "@/lib/utils";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const FREQUENCY_OPTIONS = Object.entries(PM_FREQUENCY_LABELS).map(([value, label]) => ({
   value,
@@ -30,6 +31,7 @@ const STATUS_OPTIONS = [
 
 export function PMScheduleListPage() {
   const { data: schedules, isLoading } = usePMSchedules();
+  const { canWriteEquipt } = useRoleCapabilities();
   const { selectedPMScheduleId, setSelectedPMScheduleId } = useCMMSStore();
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("pm-filters", {});
@@ -101,10 +103,12 @@ export function PMScheduleListPage() {
       <PageHeader
         title="PM Schedules"
         action={
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Schedule
-          </Button>
+          canWriteEquipt ? (
+            <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New Schedule
+            </Button>
+          ) : undefined
         }
       />
 

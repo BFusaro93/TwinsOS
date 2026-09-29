@@ -48,6 +48,7 @@ import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { ProductDetailSheet } from "@/components/po/ProductDetailSheet";
 import { PODetailPanel } from "@/components/po/PODetailPanel";
 import type { Vendor, W9Status, Part, ProductItem, PurchaseOrder } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface VendorDetailSheetProps {
   vendor: Vendor | null;
@@ -94,8 +95,10 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
   const w9Config = W9_STATUS_CONFIG[effectiveW9Status];
   const [notes, setNotes] = useState(vendor.notes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
+  const { canWriteEquipt } = useRoleCapabilities();
 
   function saveNotes() {
+    if (!canWriteEquipt) return;
     onUpdateNotes(notes);
     setNotesSaved(true);
     setTimeout(() => setNotesSaved(false), 1500);
@@ -150,7 +153,8 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             onBlur={saveNotes}
-            placeholder="Add notes about this vendor…"
+            readOnly={!canWriteEquipt}
+            placeholder={canWriteEquipt ? "Add notes about this vendor…" : "No notes"}
             rows={4}
             className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
@@ -206,6 +210,7 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
   const { data: allParts, isLoading: partsLoading } = useParts();
   const { data: allProducts, isLoading: productsLoading } = useProducts();
   const { mutate: updatePart } = useUpdatePart();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
   const [partSheetOpen, setPartSheetOpen] = useState(false);
@@ -310,15 +315,17 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
               Parts
               <span className="ml-1.5 font-normal normal-case text-slate-300">({linkedParts.length})</span>
             </p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 px-2 text-xs"
-              onClick={() => { setPartSheetOpen(false); setSelectedPart(null); setLinkDialogOpen(true); }}
-            >
-              <Plus className="h-3 w-3" />
-              Add Part
-            </Button>
+            {canWriteEquipt && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => { setPartSheetOpen(false); setSelectedPart(null); setLinkDialogOpen(true); }}
+              >
+                <Plus className="h-3 w-3" />
+                Add Part
+              </Button>
+            )}
           </div>
 
           {linkedParts.length === 0 ? (
@@ -365,13 +372,15 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
                           {formatCurrency(part.unitCost)}
                         </td>
                         <td className="px-2 py-2">
-                          <button
-                            className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
-                            title="Unlink part from vendor"
-                            onClick={() => handleUnlinkPart(part)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {canWriteEquipt && (
+                            <button
+                              className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                              title="Unlink part from vendor"
+                              onClick={() => handleUnlinkPart(part)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -663,6 +672,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { mutate: updateVendor } = useUpdateVendor();
   const { mutate: deleteVendor, isPending: deleting } = useDeleteVendor();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   if (!vendor) return null;
 
@@ -713,17 +723,19 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
                 {vendor.isActive ? "Active" : "Inactive"}
               </Badge>
             </div>
-            <div className="flex items-center gap-1">
-              <EditButton onClick={() => setEditOpen(true)} />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
-                onClick={() => setDeleteConfirmOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
+            {canWriteEquipt && (
+              <div className="flex items-center gap-1">
+                <EditButton onClick={() => setEditOpen(true)} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </SheetHeader>
 

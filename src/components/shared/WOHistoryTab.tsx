@@ -12,6 +12,7 @@ import { formatDate } from "@/lib/utils";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
 import type { WorkOrder } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface WOHistoryTabProps {
   assetId: string;
@@ -23,6 +24,7 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
   const { data: workOrders, isLoading } = useWorkOrders();
   const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
   const [newWOOpen, setNewWOOpen] = useState(false);
+  const { canEditWorkOrders } = useRoleCapabilities();
   const woPortalRef = useRef<HTMLDivElement>(null);
   const level = useOverlayLevel();
   const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
@@ -72,10 +74,12 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
     return (
       <div className="flex h-40 flex-col items-center justify-center gap-3">
         <p className="text-sm text-slate-400">No work orders found for this {recordLabel}.</p>
-        <Button size="sm" className="gap-1.5 text-xs" onClick={() => setNewWOOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          New Work Order
-        </Button>
+        {canEditWorkOrders && (
+          <Button size="sm" className="gap-1.5 text-xs" onClick={() => setNewWOOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            New Work Order
+          </Button>
+        )}
         <NewWorkOrderDialog
           open={newWOOpen}
           onOpenChange={setNewWOOpen}
@@ -92,10 +96,12 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             {assetWOs.length} work order{assetWOs.length !== 1 ? "s" : ""}
           </p>
-          <Button size="sm" className="gap-1.5 text-xs" onClick={() => setNewWOOpen(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            New Work Order
-          </Button>
+          {canEditWorkOrders && (
+            <Button size="sm" className="gap-1.5 text-xs" onClick={() => setNewWOOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              New Work Order
+            </Button>
+          )}
         </div>
         <div className="overflow-hidden rounded-md border">
           <table className="w-full text-sm">

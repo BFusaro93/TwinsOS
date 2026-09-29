@@ -39,6 +39,7 @@ import { NewProductDialog } from "@/components/po/NewProductDialog";
 import { NewPartDialog } from "@/components/cmms/NewPartDialog";
 import type { Vendor, ProductItem, Part } from "@/types";
 import { computeSalesTax } from "@/lib/utils/po-tax";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface DraftLineItem {
   id: string;
@@ -111,6 +112,8 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   const { data: parts = [] } = useParts();
   const { data: projects = [] } = useProjects();
   const { costMethod, taxRatePercent: orgTaxRate } = useSettingsStore();
+  // Requestors can draft requisitions but not add catalog entries / vendors.
+  const { canWriteEquipt } = useRoleCapabilities();
 
   // Extra items created inline during this session
   const [extraVendors, setExtraVendors] = useState<Vendor[]>([]);
@@ -491,7 +494,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                       value={vendorId}
                       onValueChange={setVendorId}
                       noneLabel="No preference"
-                      onCreateNew={() => setVendorDialogOpen(true)}
+                      onCreateNew={canWriteEquipt ? () => setVendorDialogOpen(true) : undefined}
                     />
                   </div>
                 </div>
@@ -553,8 +556,8 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                                   value={li.productItemId}
                                   onValueChange={(val) => handleLineItemProductChange(li.id, val)}
                                   size="sm"
-                                  onCreateNewProduct={() => { setPendingLineItemId(li.id); setProductDialogOpen(true); }}
-                                  onCreateNewPart={() => { setPendingLineItemId(li.id); setPartDialogOpen(true); }}
+                                  onCreateNewProduct={canWriteEquipt ? () => { setPendingLineItemId(li.id); setProductDialogOpen(true); } : undefined}
+                                  onCreateNewPart={canWriteEquipt ? () => { setPendingLineItemId(li.id); setPartDialogOpen(true); } : undefined}
                                 />
                               </td>
                               <td className="py-1.5 pr-2 align-top">

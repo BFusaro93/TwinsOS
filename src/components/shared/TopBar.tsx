@@ -33,6 +33,7 @@ import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -196,6 +197,7 @@ function QuickAddMenu() {
   const { currentUser } = useCurrentUserStore();
   const { open: openQuickAdd } = useQuickAddStore();
   const { can } = usePermissions();
+  const { canWriteEquipt, canEditWorkOrders, canCreateRequisition } = useRoleCapabilities();
   const isCRM = pathname.startsWith("/crm");
 
   const items = (
@@ -204,7 +206,18 @@ function QuickAddMenu() {
       : isCRM
         ? CRM_QUICK_ADD
         : EQUIPT_QUICK_ADD
-  ).filter((item) => item.quickAdd !== "client" || can("client_add"));
+  )
+    .filter((item) => item.quickAdd !== "client" || can("client_add"))
+    // Limited app roles (viewer / requestor / purchaser) only see what they
+    // can actually create.
+    .filter((item) => {
+      if (!item.quickAdd) return true;
+      if (item.quickAdd === "requisition") return canCreateRequisition;
+      if (item.quickAdd === "work_order") return canEditWorkOrders;
+      return canWriteEquipt;
+    });
+
+  if (items.length === 0) return null;
 
   return (
     <DropdownMenu>

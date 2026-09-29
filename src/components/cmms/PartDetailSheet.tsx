@@ -50,6 +50,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import type { Part } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface PartDetailSheetProps {
   part: Part | null;
@@ -92,6 +93,7 @@ function DetailsTab({
   onManageVendors: () => void;
 }) {
   const isLowStock = part.isInventory && qtyOnHand <= part.minimumStock;
+  const { canManageInventory } = useRoleCapabilities();
 
   const allVendors = [
     ...(part.vendorName ? [{ vendorId: part.vendorId ?? "", vendorName: part.vendorName }] : []),
@@ -169,7 +171,7 @@ function DetailsTab({
               </Badge>
             )}
           </div>
-          <QtyAdjustControl value={qtyOnHand} onChange={setQtyOnHand} />
+          {canManageInventory && <QtyAdjustControl value={qtyOnHand} onChange={setQtyOnHand} />}
         </div>
       ) : (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
@@ -192,9 +194,11 @@ function DetailsTab({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vendors</p>
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
-            Manage
-          </Button>
+          {canManageInventory && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
+              Manage
+            </Button>
+          )}
         </div>
         {allVendors.length > 0 ? (
           <div className="flex flex-col gap-1.5">
@@ -226,15 +230,17 @@ function DetailsTab({
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Interchangeable Parts
               </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={() => onAddGenericToOem(part.id)}
-              >
-                <Plus className="h-3 w-3" />
-                Add Alternative
-              </Button>
+              {canManageInventory && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => onAddGenericToOem(part.id)}
+                >
+                  <Plus className="h-3 w-3" />
+                  Add Alternative
+                </Button>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               {subParts.map((sp) => (
@@ -271,7 +277,7 @@ function DetailsTab({
       )}
 
       {/* Standalone parts (no parent, no children) — offer to link as generic */}
-      {subParts.length === 0 && !parentPart && (
+      {subParts.length === 0 && !parentPart && canManageInventory && (
         <>
           <Separator />
           <div>
@@ -298,15 +304,17 @@ function DetailsTab({
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Interchangeable Parts
               </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={() => onAddGenericToOem(parentPart.id)}
-              >
-                <Plus className="h-3 w-3" />
-                Add Alternative
-              </Button>
+              {canManageInventory && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => onAddGenericToOem(parentPart.id)}
+                >
+                  <Plus className="h-3 w-3" />
+                  Add Alternative
+                </Button>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               {/* OEM / name-brand parent */}
@@ -641,6 +649,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
   const { data: allVehicles = [] } = useVehicles();
   const { mutate: updatePart } = useUpdatePart();
   const { mutateAsync: adjustQtyManualAsync } = useAdjustPartQuantityManual();
+  const { canManageInventory } = useRoleCapabilities();
   const level = useOverlayLevel();
   const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
   const { backdrop: childBackdropZ, panel: childPanelZ } = overlayZ(level + 1);
@@ -818,7 +827,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                 imageUrl={livePart.pictureUrl}
                 alt={livePart.name}
                 size="md"
-                onUpload={(url) => updatePart({ id: partId, pictureUrl: url })}
+                onUpload={canManageInventory ? (url) => updatePart({ id: partId, pictureUrl: url }) : undefined}
               />
               <div className="min-w-0 flex-1">
                 {/* Name row: title on the left, Edit button on the right (in flow) */}
@@ -826,7 +835,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                   <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">
                     {livePart.name}
                   </h2>
-                  <EditButton onClick={() => setEditOpen(true)} />
+                  {canManageInventory && <EditButton onClick={() => setEditOpen(true)} />}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   {(livePart.categories?.length ? livePart.categories : livePart.category ? [livePart.category] : []).map((cat) => (

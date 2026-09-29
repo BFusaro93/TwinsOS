@@ -33,6 +33,7 @@ import { shiftYmd } from "@/lib/time/zone";
 import { useCMMSStore } from "@/stores";
 import { WorkOrderDetailPanel } from "./WorkOrderDetailPanel";
 import type { MaintenanceRequest, MaintenanceRequestStatus } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface RequestDetailPanelProps {
   request: MaintenanceRequest;
@@ -78,6 +79,7 @@ function DetailsTab({
   onOpenWoSheet: () => void;
 }) {
   const isError = status === "rejected";
+  const { canTriageMaintenanceRequests } = useRoleCapabilities();
 
   return (
     <div className="flex flex-col gap-5 p-6">
@@ -91,6 +93,7 @@ function DetailsTab({
           isTerminalError={isError}
         />
         <div className="mt-3 flex flex-wrap gap-2">
+          {canTriageMaintenanceRequests && (<>
           {status === "open" && (
             <Button size="sm" onClick={() => onStatusChange("in_review")}>Begin Review</Button>
           )}
@@ -107,6 +110,7 @@ function DetailsTab({
           {status === "rejected" && (
             <Button size="sm" variant="outline" onClick={() => onStatusChange("open")}>Reopen</Button>
           )}
+          </>)}
           {status === "converted" && (
             <p className="text-xs text-slate-400 mt-1">This request has been converted to a work order.</p>
           )}
@@ -179,9 +183,10 @@ function HistoryTab({ request }: { request: MaintenanceRequest }) {
 }
 
 function FilesTab({ request }: { request: MaintenanceRequest }) {
+  const { canComment } = useRoleCapabilities();
   return (
     <div className="p-6">
-      <AttachmentsSection recordType="request" recordId={request.id} />
+      <AttachmentsSection recordType="request" recordId={request.id} canWrite={canComment(request)} />
     </div>
   );
 }
@@ -198,6 +203,8 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
     : null;
   const { mutate: syncStatus } = useUpdateRequestStatus();
   const { mutate: deleteRequest, isPending: deleting } = useDeleteRequest();
+  const { canEditMaintenanceRequest } = useRoleCapabilities();
+  const canEditRequest = canEditMaintenanceRequest(request);
   const { mutate: createWorkOrder, isPending: converting } = useCreateWorkOrder();
   const { mutate: convertToWO } = useConvertRequestToWO();
   const { setSelectedRequestId } = useCMMSStore();
@@ -271,6 +278,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
             variant={status}
             label={REQUEST_STATUS_LABELS[status]}
           />
+          {canEditRequest && (<>
           <EditButton onClick={() => setEditOpen(true)} />
           <Button
             variant="ghost"
@@ -280,6 +288,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+          </>)}
         </div>
       </div>
 

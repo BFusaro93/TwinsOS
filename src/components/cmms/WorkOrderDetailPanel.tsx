@@ -48,6 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { WorkOrder, WorkOrderStatus, AssetStatus } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface WorkOrderDetailPanelProps {
   workOrder: WorkOrder;
@@ -71,6 +72,7 @@ function CategoryPicker({
   enabledCats: Array<{ id: string; label: string }>;
   onCategoryChange: (categories: string[]) => void;
 }) {
+  const { canEditWorkOrders } = useRoleCapabilities();
   const [selected, setSelected] = useState(categories);
   useEffect(() => {
     setSelected(categories);
@@ -89,6 +91,7 @@ function CategoryPicker({
           </span>
         );
       })}
+      {!canEditWorkOrders ? (selected.length === 0 && <span className="text-sm text-slate-400">—</span>) : (
       <Popover>
         <PopoverTrigger asChild>
           <button
@@ -125,6 +128,7 @@ function CategoryPicker({
           </div>
         </PopoverContent>
       </Popover>
+      )}
     </div>
   );
 }
@@ -299,6 +303,7 @@ function DetailsTab({
 
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
+  const { canEditWorkOrders, canWriteEquipt } = useRoleCapabilities();
 
   const hasLinkedEntity = !!workOrder.assetId;
   // Determine entity type: use linkedEntityType if set, otherwise infer from click handlers
@@ -373,7 +378,7 @@ function DetailsTab({
         )}
 
         {/* Action strip */}
-        {!completing && (
+        {!completing && canEditWorkOrders && (
           <div className="mt-3 flex flex-wrap gap-2">
             {status === "open" && (<>
               <Button size="sm" onClick={() => onStatusChange("in_progress")}>Start Work</Button>
@@ -477,7 +482,11 @@ function DetailsTab({
         {hasLinkedEntity && (
           <MetaRow
             label={`${entityLabel} Status`}
-            value={
+            value={!canWriteEquipt ? (
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ASSET_STATUS_COLORS[entityStatus] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                {ASSET_STATUS_LABELS[entityStatus] ?? entityStatus}
+              </span>
+            ) : (
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -513,7 +522,7 @@ function DetailsTab({
                   </div>
                 </PopoverContent>
               </Popover>
-            }
+            )}
           />
         )}
         <MetaRow
@@ -536,6 +545,7 @@ function DetailsTab({
                     {name}
                   </span>
                 ))}
+                {!canEditWorkOrders ? (displayNames.length === 0 && <span className="text-sm text-slate-400">—</span>) : (
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -582,6 +592,7 @@ function DetailsTab({
                     </div>
                   </PopoverContent>
                 </Popover>
+                )}
               </div>
             );
           })()}
@@ -654,7 +665,7 @@ function DetailsTab({
       <SubWorkOrdersSection
         subWorkOrders={subWorkOrders}
         onSubWOClick={onSubWOClick}
-        canAddSub={!parentWorkOrder}
+        canAddSub={!parentWorkOrder && canEditWorkOrders}
         onAddSub={onAddSub}
       />
 
@@ -722,6 +733,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { woCategories } = useSettingsStore();
   const { mutate: updateWO, isPending: isUpdatingWO } = useUpdateWorkOrder();
   const { mutate: updateWOStatus } = useUpdateWorkOrderStatus();
+  const { canEditWorkOrders } = useRoleCapabilities();
   const linkedAsset =
     workOrder.assetId && workOrder.linkedEntityType !== "vehicle"
       ? (assets.find((a) => a.id === workOrder.assetId) ?? null)
@@ -760,6 +772,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
+          {canEditWorkOrders && (<>
           <EditButton onClick={() => setEditOpen(true)} />
           <Button
             variant="ghost"
@@ -769,6 +782,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+          </>)}
         </div>
       </div>
 

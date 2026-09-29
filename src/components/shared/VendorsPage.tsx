@@ -23,6 +23,7 @@ import { ImportExportMenu } from "./ImportExportMenu";
 import { downloadCSV } from "@/lib/csv";
 import type { Vendor } from "@/types";
 import { NewVendorDialog } from "./NewVendorDialog";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const STATUS_FILTER = [
   { value: "active", label: "Active" },
@@ -32,6 +33,7 @@ const STATUS_FILTER = [
 export function VendorsPage() {
   const { data: vendors, isLoading } = useVendors();
   const { mutateAsync: bulkImportVendors } = useBulkImportVendors();
+  const { canWriteEquipt } = useRoleCapabilities();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newVendorOpen, setNewVendorOpen] = useState(false);
@@ -73,10 +75,12 @@ export function VendorsPage() {
               templateFilename="vendors-template.csv"
               requiredColumns={["name"]}
             />
-            <Button size="sm" onClick={() => setNewVendorOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Vendor
-            </Button>
+            {canWriteEquipt && (
+              <Button size="sm" onClick={() => setNewVendorOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Vendor
+              </Button>
+            )}
           </div>
         }
       />

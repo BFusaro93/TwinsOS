@@ -34,6 +34,7 @@ import { WOHistoryTab } from "@/components/shared/WOHistoryTab";
 import { AssetMetersTab } from "@/components/shared/AssetMetersTab";
 import { NewAssetDialog } from "@/components/cmms/NewAssetDialog";
 import type { Asset, AssetStatus } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface AssetDetailPanelProps {
   asset: Asset;
@@ -57,8 +58,10 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
   const { filterFields } = useSettingsStore();
   const enabledFilters = filterFields.filter((f) => f.enabled);
   const { mutate: updateAsset } = useUpdateAsset();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   function saveNotes() {
+    if (!canWriteEquipt) return;
     updateAsset(
       { id: asset.id, notes },
       {
@@ -86,10 +89,10 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
           imageUrl={localPhotoUrl}
           alt={asset.name}
           size="lg"
-          onUpload={(url) => {
+          onUpload={canWriteEquipt ? (url) => {
             setLocalPhotoUrl(url);
             updateAsset({ id: asset.id, photoUrl: url });
-          }}
+          } : undefined}
         />
         <dl className="flex-1">
         <MetaRow label="Asset Tag" value={<span className="font-mono">{asset.assetTag}</span>} />
@@ -200,7 +203,8 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           onBlur={saveNotes}
-          placeholder="Add notes about this asset…"
+          readOnly={!canWriteEquipt}
+          placeholder={canWriteEquipt ? "Add notes about this asset…" : "No notes"}
           rows={4}
           className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
@@ -220,6 +224,7 @@ function FilesTab({ asset }: { asset: Asset }) {
 function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: () => void }) {
   const { data: allAssets } = useAssets();
   const { mutate: updateAsset, isPending: linking } = useUpdateAsset();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkSearch, setLinkSearch] = useState("");
@@ -263,7 +268,7 @@ function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: (
           Sub-assets
           <span className="ml-1.5 font-normal normal-case text-slate-300">({subAssets.length})</span>
         </p>
-        <div className="flex items-center gap-2">
+        {canWriteEquipt && <div className="flex items-center gap-2">
           {/* Link existing asset */}
           <Popover open={linkOpen} onOpenChange={(o) => { setLinkOpen(o); if (!o) setLinkSearch(""); }}>
             <PopoverTrigger asChild>
@@ -317,7 +322,7 @@ function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: (
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             New Sub-Asset
           </Button>
-        </div>
+        </div>}
       </div>
 
       {subAssets.length === 0 ? (
@@ -344,14 +349,16 @@ function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: (
                 variant={sub.status as Parameters<typeof StatusBadge>[0]["variant"]}
                 label={ASSET_STATUS_LABELS[sub.status] ?? sub.status}
               />
-              <button
-                type="button"
-                title="Unlink this sub-asset"
-                onClick={() => handleUnlink(sub.id)}
-                className="ml-1 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
-              >
-                <Unlink className="h-3.5 w-3.5" />
-              </button>
+              {canWriteEquipt && (
+                <button
+                  type="button"
+                  title="Unlink this sub-asset"
+                  onClick={() => handleUnlink(sub.id)}
+                  className="ml-1 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                >
+                  <Unlink className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
         ))
@@ -372,6 +379,7 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
   const [subAssetOpen, setSubAssetOpen] = useState(false);
   const [status, setStatus] = useState<AssetStatus>(asset.status as AssetStatus);
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
+  const { canWriteEquipt } = useRoleCapabilities();
 
   // Sync local status state when the asset prop updates (e.g. status changed
   // from the Work Order detail panel and the cache invalidates).
@@ -395,6 +403,12 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {!canWriteEquipt ? (
+            <StatusBadge
+              variant={status as Parameters<typeof StatusBadge>[0]["variant"]}
+              label={ASSET_STATUS_LABELS[status] ?? status}
+            />
+          ) : (<>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -429,6 +443,7 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
             <Copy className="h-4 w-4" />
           </button>
           <EditButton onClick={() => setEditOpen(true)} />
+          </>)}
         </div>
       </div>
 

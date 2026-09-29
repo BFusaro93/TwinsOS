@@ -21,6 +21,7 @@ import {
   useDeletePMScheduleAssetPart,
 } from "@/lib/hooks/use-pm-schedule-assets";
 import type { PMScheduleAssetPart } from "@/types/cmms";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface PMScheduleAssetsTabProps {
   pmScheduleId: string;
@@ -170,6 +171,7 @@ function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDial
 function AssetPartsSection({ pmScheduleAssetId }: { pmScheduleAssetId: string }) {
   const { data: parts, isLoading } = usePMScheduleAssetParts(pmScheduleAssetId);
   const deletePart = useDeletePMScheduleAssetPart();
+  const { canWriteEquipt } = useRoleCapabilities();
   const [addOpen, setAddOpen] = useState(false);
   const [editingPart, setEditingPart] = useState<PMScheduleAssetPart | null>(null);
 
@@ -180,7 +182,7 @@ function AssetPartsSection({ pmScheduleAssetId }: { pmScheduleAssetId: string })
   return (
     <div className="border-t bg-slate-50/60">
       {(parts ?? []).length === 0 ? (
-        <p className="px-4 py-2 text-xs text-slate-400 italic">No parts — click + to add</p>
+        <p className="px-4 py-2 text-xs text-slate-400 italic">{canWriteEquipt ? "No parts — click + to add" : "No parts"}</p>
       ) : (
         <table className="w-full text-xs">
           <thead>
@@ -203,7 +205,7 @@ function AssetPartsSection({ pmScheduleAssetId }: { pmScheduleAssetId: string })
                 <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(p.unitCost)}</td>
                 <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(p.unitCost * p.quantity)}</td>
                 <td className="px-2 py-2 text-right">
-                  <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {canWriteEquipt && <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => setEditingPart(p)}
                       className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
@@ -216,7 +218,7 @@ function AssetPartsSection({ pmScheduleAssetId }: { pmScheduleAssetId: string })
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
-                  </div>
+                  </div>}
                 </td>
               </tr>
             ))}
@@ -233,11 +235,11 @@ function AssetPartsSection({ pmScheduleAssetId }: { pmScheduleAssetId: string })
         </table>
       )}
 
-      <div className="flex justify-end px-3 py-2">
+      {canWriteEquipt && <div className="flex justify-end px-3 py-2">
         <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-slate-500 hover:text-slate-700" onClick={() => setAddOpen(true)}>
           <Plus className="h-3.5 w-3.5" /> Add Part
         </Button>
-      </div>
+      </div>}
 
       <PartDialog
         open={addOpen}

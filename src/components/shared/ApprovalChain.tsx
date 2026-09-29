@@ -10,6 +10,7 @@ import { useApprovalRequests, useDecideApproval } from "@/lib/hooks/use-approval
 import { useRoles } from "@/lib/hooks/use-roles";
 import { useCurrentUserStore } from "@/stores";
 import type { ApprovalRequest, ApprovalRequestStatus } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -383,6 +384,10 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
   // (enforced server-side in decide_approval — see 20260929100000).
   const canOverride = currentUser.role === "admin" || currentUser.role === "manager";
   const currentUserIsAdmin = currentUser.role === "admin";
+  // Viewers / requestors can't decide approvals (the DB refuses their writes),
+  // even if an approval step was assigned to them by name — show the chain
+  // read-only.
+  const { canSubmitForApproval: canDecide } = useRoleCapabilities();
   const { data: requests = [], isLoading } = useApprovalRequests(entityId);
   const { mutate: decide, isPending: deciding, isError: decideError } = useDecideApproval(entityId);
 
@@ -456,8 +461,8 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
           stepNumber={i + 1}
           isActive={group.flowStepId === activeGroup?.flowStepId}
           isLast={i === groups.length - 1}
-          currentUserId={currentUser.id}
-          canOverride={canOverride}
+          currentUserId={canDecide ? currentUser.id : ""}
+          canOverride={canDecide && canOverride}
           currentUserIsAdmin={currentUserIsAdmin}
           onDecide={handleDecide}
           deciding={deciding}

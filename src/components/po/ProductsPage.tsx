@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ProductItem } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const PRODUCTS_COLUMNS: ColumnDef[] = [
   { key: "photo", label: "Photo", locked: true },
@@ -65,7 +66,8 @@ export function ProductsPage() {
   // check to users who actually have a CRM role. Everyone else (including
   // Equipt purchasers) keeps their existing unrestricted access.
   const { can, isAdmin, roleId } = usePermissions();
-  const canBulkEditProducts = isAdmin || !roleId || can("bulk_edit_products");
+  const { canManageInventory } = useRoleCapabilities();
+  const canBulkEditProducts = canManageInventory && (isAdmin || !roleId || can("bulk_edit_products"));
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -162,10 +164,12 @@ export function ProductsPage() {
                 </Link>
               </Button>
             )}
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Product
-            </Button>
+            {canManageInventory && (
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Product
+              </Button>
+            )}
           </div>
         }
       />

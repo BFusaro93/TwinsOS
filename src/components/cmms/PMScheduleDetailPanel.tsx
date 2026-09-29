@@ -39,6 +39,7 @@ import {
 import { useConfirm } from "@/components/shared/useConfirm";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import type { PMSchedule, PMSchedulePause, PMSchedulePauseState } from "@/types";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface PMScheduleDetailPanelProps {
   schedule: PMSchedule;
@@ -92,6 +93,7 @@ function StatusValue({ schedule, pauseState }: { schedule: PMSchedule; pauseStat
 function PausesSection({ pmScheduleId }: { pmScheduleId: string }) {
   const { data: pauses = [] } = usePMSchedulePauses(pmScheduleId);
   const { mutate: endPause, isPending } = useEndPMSchedulePause();
+  const { canWriteEquipt } = useRoleCapabilities();
   const { today } = useOrgDates();
   const [confirm, confirmDialog] = useConfirm();
   if (pauses.length === 0) return null;
@@ -126,7 +128,7 @@ function PausesSection({ pmScheduleId }: { pmScheduleId: string }) {
                   <p className="font-medium text-slate-800">{pauseLabel(p)}</p>
                   {p.reason && <p className="text-xs text-slate-500">{p.reason}</p>}
                 </div>
-                {action && (
+                {action && canWriteEquipt && (
                   <button
                     type="button"
                     title={action === "remove" ? "Remove this pause (it hasn't started)" : "End this pause today"}
@@ -206,6 +208,7 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
   const [generateError, setGenerateError] = useState<string | null>(null);
 
   const { mutate: deletePMSchedule, isPending: deleting } = useDeletePMSchedule();
+  const { canWriteEquipt, canEditWorkOrders } = useRoleCapabilities();
   const { setSelectedPMScheduleId, setSelectedWorkOrderId } = useCMMSStore();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -288,7 +291,7 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
           {/* Resuming ENDS the current pause today (a seasonal one stops
               recurring) — it never deletes it, so the cycles it excused stay
               excused in PM compliance. */}
-          {pauseState && currentPause ? (
+          {!canWriteEquipt ? null : pauseState && currentPause ? (
             <Button
               size="sm"
               variant="outline"
@@ -318,6 +321,7 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
           ) : null}
 
           {/* Generate Work Orders button */}
+          {canEditWorkOrders && (
           <Button
             size="sm"
             variant="outline"
@@ -337,7 +341,9 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
             <Play className="h-3.5 w-3.5" />
             {generating ? "Generating…" : alreadyGeneratedToday ? "WOs Open" : "Generate WOs"}
           </Button>
+          )}
 
+          {canWriteEquipt && (<>
           <EditButton onClick={() => setEditOpen(true)} />
           <Button
             variant="ghost"
@@ -347,6 +353,7 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+          </>)}
         </div>
       </div>
 

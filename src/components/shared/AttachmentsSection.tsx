@@ -5,11 +5,17 @@ import { FileText, Image, Trash2, Upload, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useAttachments, useUploadAttachment, useDownloadAttachment, useDeleteAttachment } from "@/lib/hooks/use-attachments";
 import { Button } from "@/components/ui/button";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import type { AttachmentRecordType } from "@/types";
 
 interface AttachmentsSectionProps {
   recordType: AttachmentRecordType;
   recordId: string;
+  /** Whether the current user may upload here. Defaults to the app role's
+   *  general write access (hidden for viewer / requestor); pass
+   *  `canComment(record)` from useRoleCapabilities to let a requestor attach
+   *  to their own records. A requestor can only delete files they uploaded. */
+  canWrite?: boolean;
 }
 
 const ACCEPTED = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt";
@@ -46,7 +52,9 @@ function FileIcon({ fileType }: { fileType: string }) {
   return <FileText className="h-4 w-4 text-slate-400" />;
 }
 
-export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionProps) {
+export function AttachmentsSection({ recordType, recordId, canWrite }: AttachmentsSectionProps) {
+  const { canComment, canWriteEquipt, isOwn } = useRoleCapabilities();
+  const canUpload = canWrite ?? canComment();
   const { data: attachments, isLoading } = useAttachments(recordType, recordId);
   const upload = useUploadAttachment(recordType, recordId);
   const download = useDownloadAttachment();
@@ -112,6 +120,7 @@ export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionP
       />
 
       {/* Drop zone / upload button */}
+      {canUpload && (
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -139,6 +148,7 @@ export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionP
             : "Upload files or drag & drop"}
         </Button>
       </div>
+      )}
 
       {/* Per-file upload errors */}
       {fileErrors.length > 0 && (
@@ -221,13 +231,15 @@ export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionP
                   >
                     View
                   </button>
-                  <button
-                    className="text-slate-300 transition-colors hover:text-red-500"
-                    title="Delete file"
-                    onClick={() => setConfirmDeleteId(att.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {canUpload && (canWriteEquipt || isOwn(att)) && (
+                    <button
+                      className="text-slate-300 transition-colors hover:text-red-500"
+                      title="Delete file"
+                      onClick={() => setConfirmDeleteId(att.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               )}
             </li>
