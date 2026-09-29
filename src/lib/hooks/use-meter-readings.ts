@@ -28,6 +28,47 @@ export function useAddMeterReading() {
   return useMutation({
     mutationFn: async (input: Omit<MeterReading, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
+
+      // Meters (hours, odometer) only count up, and meter automations fire
+      // on the latest value — a typo'd low reading (or a backdated one out of
+      // order) would re-arm or mis-fire a rule and corrupt the history. There
+      // is no "meter replaced / rolled over" flag on meters, so a lower value
+      // is rejected outright; a replaced meter gets a new meter record.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const readDb = supabase as any;
+      const [{ data: before, error: beforeErr }, { data: after, error: afterErr }] = await Promise.all([
+        readDb
+          .from("meter_readings")
+          .select("value, reading_at")
+          .eq("meter_id", input.meterId)
+          .is("deleted_at", null)
+          .lte("reading_at", input.readingAt)
+          .order("reading_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        readDb
+          .from("meter_readings")
+          .select("value, reading_at")
+          .eq("meter_id", input.meterId)
+          .is("deleted_at", null)
+          .gt("reading_at", input.readingAt)
+          .order("value", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (beforeErr) throw beforeErr;
+      if (afterErr) throw afterErr;
+      if (before && Number(input.value) < Number(before.value)) {
+        throw new Error(
+          `This reading (${input.value}) is lower than the previous one (${Number(before.value)}). Meter readings can't go down — check the value, or add a new meter if this one was replaced.`
+        );
+      }
+      if (after && Number(input.value) > Number(after.value)) {
+        throw new Error(
+          `This reading (${input.value}) is higher than a later reading (${Number(after.value)}). Check the value or the reading date.`
+        );
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("meter_readings").insert({
         meter_id: input.meterId,

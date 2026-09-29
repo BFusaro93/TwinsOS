@@ -1,5 +1,6 @@
 "use client";
 
+import { escapeCsvCell } from "@/lib/csv";
 import { useState } from "react";
 import Link from "next/link";
 import {
@@ -1278,7 +1279,8 @@ export function ContractsList({ clientId }: Props) {
       return;
     }
     const header = ["Client", "Contract", "Status", "Billing Day", "Monthly Amount", "Start Date", "End Date", "Last Bill Date"];
-    const csvEscape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    // Shared exporter escape: quotes + formula-injection neutralization.
+    const csvEscape = (v: string) => escapeCsvCell(v);
     const lines = [header.map(csvEscape).join(",")];
     for (const c of rows) {
       lines.push([

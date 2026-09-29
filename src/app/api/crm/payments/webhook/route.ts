@@ -77,99 +77,66 @@ export async function POST(request: Request) {
   } catch {
     cardBrand = null;
   }
+  const method = methodForCardBrand(cardBrand);
 
-  // `balanceCents` is the balance the intent was created against, captured
-  // at create-intent time — if a second PaymentIntent for the same invoice
-  // was created before the first settled (e.g. the customer opened the pay
-  // link on two devices, or the portal and the public link both created
-  // one), both intents can genuinely succeed as real card charges, each
-  // quoting the FULL balance owed at creation time. Re-check the invoice's
-  // actual remaining balance right before applying this payment and clamp
-  // to it, crediting any excess as unused/prepayment credit rather than
-  // driving the balance negative or double-counting what's owed. This can't
-  // undo a real double charge on the customer's card, but it keeps the
-  // ledger honest about what's actually still owed.
-  const { data: invoiceBefore, error: invoiceBeforeErr } = await supabase
-    .from("crm_invoices")
-    .select("total_cents, amount_paid_cents, status")
-    .eq("id", invoiceId)
-    .single();
-  if (invoiceBeforeErr) {
-    console.error("[crm payments webhook] failed to load invoice before applying payment:", invoiceBeforeErr);
-    return NextResponse.json({ error: "Failed to load invoice" }, { status: 500 });
-  }
+  // The ledger write is ONE transaction in record_stripe_invoice_payment()
+  // (20260927100100) — the same RPC src/lib/stripe/record-charge.ts uses for
+  // Connect charges. It clamps to the invoice's live balance under a row lock
+  // (a second intent for the same invoice credits its excess to the client),
+  // refuses draft/void/deleted invoices, and is idempotent on the
+  // PaymentIntent id, so a Stripe retry is a no-op and a failure writes
+  // nothing. recordStripeCharge() itself can't be called here: it requires
+  // the connected account the charge fired on, and these are PLATFORM
+  // intents (created with our own key, so their metadata is trusted).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+  const { data, error } = await db.rpc("record_stripe_invoice_payment", {
+    p_org_id: orgId,
+    p_client_id: clientId,
+    p_payment_intent_id: paymentIntent.id,
+    p_allocations: [{ invoice_id: invoiceId, amount_cents: balanceCents }],
+    p_fee_cents: feeCents,
+    p_method: method,
+    p_payment_date: todayInZone(await getOrgTimeZone(supabase, orgId)),
+    p_channel_label: "card",
+  });
 
-  const currentBalanceCents = Math.max(0, invoiceBefore.total_cents - invoiceBefore.amount_paid_cents);
-  const appliedCents = Math.min(balanceCents, currentBalanceCents);
-  const overpaidCents = balanceCents - appliedCents;
-
-  const { data: inserted, error: insertErr } = await supabase
-    .from("crm_payments")
-    .insert({
-      org_id: orgId,
-      invoice_id: invoiceId,
-      client_id: clientId,
-      amount_cents: balanceCents,
-      unused_amount_cents: overpaidCents,
-      payment_date: todayInZone(await getOrgTimeZone(supabase, orgId)),
-      method: methodForCardBrand(cardBrand),
-      memo: overpaidCents > 0
-        ? "Paid online via card (exceeds invoice balance — excess credited to account)"
-        : "Paid online via card",
-      is_prepayment: false,
-      processing_fee_cents: feeCents,
-      stripe_payment_intent_id: paymentIntent.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
-      return NextResponse.json({ received: true });
-    }
-    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
+  if (error) {
+    if ((error as { code?: string }).code === "23505") return NextResponse.json({ received: true });
+    log.error("failed to record stripe payment", { error, paymentIntentId: paymentIntent.id });
     return NextResponse.json({ error: "Failed to record payment" }, { status: 500 });
   }
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    result: string;
+    payment_id: string;
+    amount_cents: number | null;
+    unused_cents: number | null;
+    newly_paid_invoice_ids: string[] | null;
+  } | null;
+  if (!row) {
+    log.error("record_stripe_invoice_payment returned no row", { paymentIntentId: paymentIntent.id });
+    return NextResponse.json({ error: "Failed to record payment" }, { status: 500 });
+  }
+  if (row.result === "already_recorded") return NextResponse.json({ received: true });
 
+  // Best-effort follow-up: the money is recorded, so nothing below may 500
+  // (Stripe would retry a no-op forever).
   try {
-    // Row-locked (SELECT ... FOR UPDATE inside the RPC) so a concurrent
-    // recording/edit/refund against this same invoice can't read the same
-    // stale amount_paid_cents and clobber this write — see
-    // apply_payment_to_invoice()'s own migration comment. A plain
-    // read-then-write here would reintroduce exactly the race that RPC was
-    // built to close.
-    const { data: rpcResult, error: rpcErr } = await supabase.rpc("apply_payment_to_invoice", {
-      p_invoice_id: invoiceId,
-      p_delta_cents: appliedCents,
-    });
-    if (rpcErr) throw rpcErr;
-    const wasNewlyPaid = !!(rpcResult as { was_newly_paid?: boolean }[] | null)?.[0]?.was_newly_paid;
-
-    if (wasNewlyPaid) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
+    for (const paidInvoiceId of row.newly_paid_invoice_ids ?? []) {
+      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId: paidInvoiceId, triggerType: "invoice_paid" });
     }
-
-    if (appliedCents > 0) {
-      const { error: allocErr } = await supabase
-        .from("crm_payment_allocations")
-        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: appliedCents });
-      if (allocErr) throw allocErr;
-    }
-
-    await supabase.rpc("sync_client_balance", { p_client_id: clientId });
-
-    await supabase.from("client_activity").insert({
+    const unusedCents = row.unused_cents ?? 0;
+    await db.from("client_activity").insert({
+      org_id: orgId,
       client_id: clientId,
       activity_type: "payment",
-      subject: `Payment received: ${methodForCardBrand(cardBrand)} (online)${overpaidCents > 0 ? " — partly credited to account" : ""}`,
-      amount_cents: balanceCents,
-      ref_id: inserted.id,
+      subject: `Payment received: ${method} (online)${unusedCents > 0 ? " — partly credited to account" : ""}`,
+      amount_cents: row.amount_cents ?? balanceCents,
+      ref_id: row.payment_id,
       ref_table: "crm_payments",
     });
   } catch (err) {
-    log.error("recorded payment but failed to apply it", { error: err, paymentId: inserted.id });
-    return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
+    log.error("recorded payment but a follow-up step failed", { error: err, paymentId: row.payment_id });
   }
 
   return NextResponse.json({ received: true });

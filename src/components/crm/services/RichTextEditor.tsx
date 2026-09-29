@@ -7,6 +7,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import Image from "@tiptap/extension-image";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 import { toast } from "sonner";
 
 export interface RichTextEditorHandle {
@@ -127,8 +128,9 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
 
     try {
       const supabase = createClient();
+      const orgPrefix = await getStorageOrgPrefix(supabase);
       const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const path = `${orgPrefix}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("document-images")
         .upload(path, file, { upsert: true, contentType: file.type });

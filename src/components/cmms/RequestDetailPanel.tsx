@@ -27,6 +27,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useUpdateRequestStatus, useDeleteRequest, useConvertRequestToWO } from "@/lib/hooks/use-requests";
 import { useCreateWorkOrder, useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { useAutomations } from "@/lib/hooks/use-automations";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd } from "@/lib/time/zone";
 import { useCMMSStore } from "@/stores";
@@ -201,6 +202,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const { mutate: convertToWO } = useConvertRequestToWO();
   const { setSelectedRequestId } = useCMMSStore();
   const { toISODate } = useOrgDates();
+  const { data: automations = [] } = useAutomations();
 
   function handleStatusChange(s: MaintenanceRequestStatus) {
     setStatus(s);
@@ -208,10 +210,14 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   }
 
   function handleConvertToWO() {
-    // Requests raised by an automation are meter-triggered PMs (an oil change
-    // at N hours): preventive, and due 7 days after the meter tripped — the
-    // same rule PM compliance scores them by (v_pm_outcomes).
-    const fromAutomation = !!request.automationId;
+    // Requests raised by a METER automation are meter-triggered PMs (an oil
+    // change at N hours): preventive, and due 7 days after the meter tripped —
+    // the same rule PM compliance scores them by (v_pm_outcomes, which only
+    // counts meter_threshold rules). Requests from other automations (low
+    // stock, overdue WO…) stay ordinary reactive requests.
+    const fromAutomation = !!request.automationId && automations.some(
+      (a) => a.id === request.automationId && a.trigger.type === "meter_threshold"
+    );
     createWorkOrder(
       {
         title: request.title,

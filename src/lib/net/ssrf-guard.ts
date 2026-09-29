@@ -1,5 +1,7 @@
 import { lookup } from "dns/promises";
-import { isIPv4, isIPv6 } from "net";
+import { lookup as lookupCb, type LookupAddress } from "dns";
+import { request as httpsRequest } from "https";
+import { isIPv4, isIPv6, type LookupFunction } from "net";
 
 /**
  * Blocks the common SSRF targets for a user-supplied webhook/callback URL:
@@ -9,12 +11,10 @@ import { isIPv4, isIPv6 } from "net";
  * literal string, so "https://evil.example.com" that resolves to
  * 127.0.0.1/10.x/192.168.x is caught too, not just raw IP literals.
  *
- * Not a defense against DNS-rebinding (an attacker changing the DNS record
- * between this check and actual delivery) — that needs pinning the resolved
- * IP through to the fetch() itself, which native fetch doesn't support
- * without a custom Agent. This covers the straightforward "register a hook
- * pointed at an internal address" case, which is the realistic threat for a
- * Zapier subscription URL.
+ * On its own this is not a defense against DNS-rebinding (the record
+ * changing between this check and delivery) or redirects — deliver with
+ * postJsonToPublicUrl() below, which re-validates the address actually
+ * connected to and never follows redirects.
  */
 export async function assertPublicHttpsUrl(rawUrl: string): Promise<{ ok: true } | { ok: false; error: string }> {
   let url: URL;
@@ -86,4 +86,66 @@ function isPrivateOrReservedIpv6(address: string): boolean {
   if (normalized.startsWith("ff")) return true; // ff00::/8 multicast
 
   return false;
+}
+
+/**
+ * lookup() for https.request that resolves the host and refuses to connect
+ * when ANY resolved address is private/reserved. Because the socket connects
+ * to exactly the address validated here, a DNS record flipped after
+ * assertPublicHttpsUrl() (rebinding) can't reach an internal host.
+ */
+const publicOnlyLookup: LookupFunction = (hostname, options, callback) => {
+  lookupCb(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err, "", 0);
+    const list = addresses as unknown as LookupAddress[];
+    if (!list.length || list.some((a) => isPrivateOrReservedIp(a.address))) {
+      return callback(
+        Object.assign(new Error("target resolves to a private or reserved address"), { code: "ESSRF" }),
+        "",
+        0
+      );
+    }
+    if ((options as { all?: boolean }).all) {
+      return (callback as unknown as (e: null, a: LookupAddress[]) => void)(null, list);
+    }
+    callback(null, list[0].address, list[0].family);
+  });
+};
+
+/**
+ * POSTs JSON to a user-supplied https URL with SSRF protection end to end:
+ * the URL is validated, the connection is pinned to a re-validated public
+ * address, and redirects are NOT followed (a 3xx is returned as-is, so
+ * callers treat it as a failed delivery) — a redirect to an internal
+ * address can't bypass the guard.
+ */
+export async function postJsonToPublicUrl(
+  rawUrl: string,
+  payload: unknown,
+  opts: { timeoutMs?: number } = {}
+): Promise<{ ok: boolean; status: number; error?: string }> {
+  const safety = await assertPublicHttpsUrl(rawUrl);
+  if (!safety.ok) return { ok: false, status: 0, error: safety.error };
+
+  const body = JSON.stringify(payload);
+  const url = new URL(rawUrl);
+  return new Promise((resolve) => {
+    const req = httpsRequest(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        lookup: publicOnlyLookup,
+        timeout: opts.timeoutMs ?? 10_000,
+      },
+      (res) => {
+        res.resume(); // drain; the body is never used
+        const status = res.statusCode ?? 0;
+        resolve({ ok: status >= 200 && status < 300, status });
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("request timed out")));
+    req.on("error", (err) => resolve({ ok: false, status: 0, error: err.message }));
+    req.end(body);
+  });
 }

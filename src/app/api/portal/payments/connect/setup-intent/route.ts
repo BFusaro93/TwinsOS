@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
   if (customerId !== client.stripe_customer_id) {
     const serviceClient = createServiceClient();
-    const { error } = await serviceClient.from("clients").update({ stripe_customer_id: customerId }).eq("id", client.id);
+    const { error } = await serviceClient.from("clients").update({ stripe_customer_id: customerId }).eq("id", client.id).eq("org_id", ctx.orgId);
     if (error) log.error("failed to save stripe customer id", { error, clientId: client.id });
   }
 
@@ -160,7 +160,8 @@ export async function PUT(request: Request) {
       saved_payment_method_summary: summary,
       autopay_enabled: enableAutopay,
     })
-    .eq("id", client.id);
+    .eq("id", client.id)
+    .eq("org_id", ctx.orgId);
   if (error) {
     log.error("failed to save payment method", { error, clientId: client.id });
     return NextResponse.json({ error: "Failed to save payment method" }, { status: 500 });

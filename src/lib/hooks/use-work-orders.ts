@@ -116,10 +116,10 @@ export function useUpdateWorkOrderStatus() {
     mutationFn: async ({
       id,
       status,
-      automationId,
     }: {
       id: string;
       status: WorkOrderStatus;
+      /** Accepted for callers' convenience; meter-firing release is DB-side. */
       automationId?: string | null;
     }) => {
       const supabase = createClient();
@@ -138,76 +138,14 @@ export function useUpdateWorkOrderStatus() {
         }
       }
 
-      // Previous status/creation time decide whether this completion consumes
-      // the automation's latest firing (see below).
-      const { data: before } = await supabase
-        .from("work_orders")
-        .select("status, created_at")
-        .eq("id", id)
-        .single();
-
       const { error } = await supabase.from("work_orders").update({ status }).eq("id", id);
       if (error) throw error;
 
-      // When completing a WO that was triggered by an automation, advance the
-      // threshold — but only once per firing. last_fired_value is set when the
-      // automation fires and cleared here when that firing's WO is completed,
-      // so it marks an unconsumed firing. Previously the threshold advanced on
-      // EVERY transition to done (and fell back to the already-advanced
-      // threshold once last_fired_value was cleared), so re-completing a WO —
-      // or completing an older WO from a previous cycle — skipped an interval.
-      if (status === "done" && automationId && before?.status !== "done") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: auto } = await (supabase as any)
-          .from("automations")
-          .select("*")
-          .eq("id", automationId)
-          .single();
-
-        // The firing this WO answers must be the automation's latest one: a
-        // WO created before last_fired_at belongs to an earlier cycle (the
-        // run route stamps last_fired_at just before creating the WO; 60s
-        // allows for app/DB clock skew).
-        const firedAt = auto?.last_fired_at ? new Date(auto.last_fired_at as string).getTime() : null;
-        const createdAt = before?.created_at ? new Date(before.created_at).getTime() : null;
-        const isLatestFiring =
-          auto?.last_fired_value != null &&
-          firedAt != null &&
-          (createdAt == null || createdAt >= firedAt - 60_000);
-
-        if (auto && auto.trigger_type === "meter_threshold" && isLatestFiring) {
-          const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
-          const interval = tc.interval != null ? Number(tc.interval) : null;
-          const baseValue = Number(auto.last_fired_value);
-
-          if (interval != null) {
-            const newThreshold = baseValue + interval;
-            // Conditioned on the same firing still being unconsumed, so two
-            // concurrent completions can't both advance it.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase as any)
-              .from("automations")
-              .update({
-                trigger_config: { ...tc, threshold: newThreshold },
-                pending_reset: false,
-                last_fired_at: null,
-                last_fired_value: null,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", automationId)
-              .eq("last_fired_at", auto.last_fired_at);
-          } else {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase as any)
-              .from("automations")
-              .update({
-                pending_reset: false,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", automationId);
-          }
-        }
-      }
+      // Meter automations: the DB trigger trg_work_orders_release_meter_firing
+      // (20260928130200) releases the rule's latest firing when its WO is
+      // done/skipped (threshold advances) or deleted (re-arms), on every write
+      // path — this hook used to do it client-side, only on done, which left
+      // rules stuck forever after a skip, a rejected request or a deletion.
     },
     onSuccess: (_, { id, status }) => {
       if (status) patchWOCache(queryClient, id, { status });

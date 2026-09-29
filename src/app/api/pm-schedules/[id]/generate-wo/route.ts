@@ -211,19 +211,43 @@ export async function POST(
   // and are never cleaned up when the underlying asset is later soft-deleted or
   // marked disposed — without this check, generating work orders would keep
   // creating WOs against equipment that no longer exists / is retired.
+  //
+  // pm_schedule_assets.asset_id is polymorphic — it can point at an asset OR
+  // a vehicle (same as work_orders.asset_id, disambiguated there by
+  // linked_entity_type). Checking only `assets` silently dropped every
+  // vehicle, so a vehicle-only schedule could never generate while
+  // v_pm_outcomes still scored its cycles as not_generated.
   const assetIds = allScheduleAssets.map((sa) => sa.asset_id).filter(Boolean);
-  const { data: liveAssets } = await adminClient
-    .from("assets")
-    .select("id, status")
-    .in("id", assetIds)
-    .is("deleted_at", null)
-    .not("status", "eq", "disposed");
-  const liveAssetIds = new Set((liveAssets ?? []).map((a) => a.id));
-  const scheduleAssets = allScheduleAssets.filter((sa) => liveAssetIds.has(sa.asset_id));
+  const [{ data: liveAssets, error: liveAssetsErr }, { data: liveVehicles, error: liveVehiclesErr }] = await Promise.all([
+    adminClient
+      .from("assets")
+      .select("id")
+      .eq("org_id", profile.org_id)
+      .in("id", assetIds)
+      .is("deleted_at", null)
+      .not("status", "eq", "disposed"),
+    adminClient
+      .from("vehicles")
+      .select("id")
+      .eq("org_id", profile.org_id)
+      .in("id", assetIds)
+      .is("deleted_at", null)
+      .not("status", "eq", "disposed"),
+  ]);
+  if (liveAssetsErr || liveVehiclesErr) {
+    return NextResponse.json(
+      { error: `Couldn't load the schedule's equipment: ${(liveAssetsErr ?? liveVehiclesErr)?.message}` },
+      { status: 500 }
+    );
+  }
+  const entityTypeById = new Map<string, "asset" | "vehicle">();
+  for (const a of liveAssets ?? []) entityTypeById.set(a.id as string, "asset");
+  for (const v of liveVehicles ?? []) entityTypeById.set(v.id as string, "vehicle");
+  const scheduleAssets = allScheduleAssets.filter((sa) => entityTypeById.has(sa.asset_id));
 
   if (scheduleAssets.length === 0) {
     return NextResponse.json(
-      { error: "All assets linked to this PM schedule have been deleted or disposed. Update the schedule's assets before generating work orders." },
+      { error: "All assets and vehicles linked to this PM schedule have been deleted or disposed. Update the schedule's assets before generating work orders." },
       { status: 422 }
     );
   }
@@ -249,11 +273,21 @@ export async function POST(
   // skipping forward past any cycles inside a pause, so a schedule resumed
   // after winter isn't generated "due" on a December date. A schedule with no
   // next due date is due the day it's generated.
+  //
+  // Cycles are counted from the schedule's anchor day (pm_schedules.anchor_date,
+  // kept on next_due_date's cadence by trg_pm_schedules_anchor), not from the
+  // last due date: re-anchoring on each batch's due date made a monthly PM on
+  // the 31st drift to the 28th after February and stay there. Daily/weekly
+  // cadences don't clamp, so they step from next due directly.
+  const cadenceAnchor: string | null =
+    ["monthly", "quarterly", "annual"].includes(schedule.frequency)
+      ? (schedule.anchor_date ?? schedule.next_due_date)
+      : schedule.next_due_date;
   let pmDueDate: string = schedule.next_due_date ?? today;
   if (schedule.next_due_date) {
     const { data: firstUnpaused } = await adminClient.rpc("pm_schedule_next_cycle", {
       p_schedule_id: scheduleId,
-      p_anchor: schedule.next_due_date,
+      p_anchor: cadenceAnchor ?? schedule.next_due_date,
       p_after: shiftYmd(schedule.next_due_date, -1),
     });
     if (firstUnpaused) pmDueDate = firstUnpaused as string;
@@ -279,6 +313,7 @@ export async function POST(
         wo_type: "preventive",
         asset_id: sa.asset_id,
         asset_name: sa.asset_name,
+        linked_entity_type: entityTypeById.get(sa.asset_id) ?? "asset",
         pm_schedule_id: scheduleId,
         work_order_number: baseNumber,
         due_date: pmDueDate,
@@ -373,6 +408,7 @@ export async function POST(
           wo_type: "preventive",
           asset_id: sa.asset_id,
           asset_name: sa.asset_name,
+          linked_entity_type: entityTypeById.get(sa.asset_id) ?? "asset",
           pm_schedule_id: scheduleId,
           parent_work_order_id: parentWO.id,
           work_order_number: `${baseNumber}-${i + 1}`,
@@ -430,7 +466,7 @@ export async function POST(
   const yesterday = shiftYmd(today, -1);
   const { data: nextCycle } = await adminClient.rpc("pm_schedule_next_cycle", {
     p_schedule_id: scheduleId,
-    p_anchor: pmDueDate,
+    p_anchor: schedule.next_due_date ? (cadenceAnchor ?? pmDueDate) : pmDueDate,
     p_after: pmDueDate > yesterday ? pmDueDate : yesterday,
   });
   // Null only when every future cycle is paused (an open-ended pause starting
