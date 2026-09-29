@@ -108,7 +108,7 @@ export function WorkOrdersGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>In-app</strong>, for admins/managers/technicians: CMMS &gt; Requests &gt; + New
+            <strong>In-app</strong>, for admins/managers/staff: CMMS &gt; Requests &gt; + New
             Request — title, priority, optional asset/vehicle, description.
           </li>
           <li>

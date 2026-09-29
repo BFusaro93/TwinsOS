@@ -461,7 +461,7 @@ const USER_TYPE_OPTIONS: { value: UserType; label: string }[] = [
 ];
 
 const USER_ROLES = [
-  "Admin", "Manager", "Sales / Account Mgr", "Technician", "Purchaser", "Viewer",
+  "Admin", "Manager", "Sales / Account Mgr", "Staff", "Purchaser", "Viewer",
 ];
 
 // Display labels for the platform-wide account role (org_users/profiles.role) —
@@ -470,7 +470,7 @@ const PLATFORM_ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   manager: "Manager",
   purchaser: "Purchaser",
-  technician: "Technician",
+  technician: "Staff",
   viewer: "Viewer",
   requestor: "Requestor",
   crew: "Crew",

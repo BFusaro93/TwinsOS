@@ -95,7 +95,7 @@ const CATEGORIES = [
     items: [
       { icon: Zap, title: "Automations", body: "One trigger → action engine spans both products — job completed, part low stock, PM due — firing emails, texts, or work orders." },
       { icon: PieChart, title: "Reporting & Custom Dashboards", body: "About 100 built-in reports — including job costing, revenue, and receivables — plus a drag-and-drop dashboard and analysis builder for everything else." },
-      { icon: UserCog, title: "Roles & Permissions", body: "Six role types — Admin, Manager, Purchaser, Technician, Requestor, Viewer — control exactly what each person can see and do." },
+      { icon: UserCog, title: "Roles & Permissions", body: "Six role types — Admin, Manager, Staff, Purchaser, Requestor, Viewer — control exactly what each person can see and do." },
       { icon: Shield, title: "Data Isolation & Security", body: "Every record is scoped to your organization at the database level — queries that don't match your org simply return nothing." },
     ],
   },
