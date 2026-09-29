@@ -30,18 +30,31 @@ export async function GET(request: Request) {
   // Each row is then re-checked against its own org's today below.
   const utcToday = new Date().toISOString().slice(0, 10);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: overdue } = await (supabase as any)
-    .from("crm_tickets")
-    .select("id, org_id, client_id, due_date")
-    .not("due_date", "is", null)
-    .lt("due_date", utcToday)
-    .in("status", ["open", "pending"])
-    .not("client_id", "is", null)
-    .is("deleted_at", null);
+  // Page through the results — a single select silently truncates at 1000 rows.
+  type Row = { id: string; org_id: string; client_id: string; due_date: string };
+  const overdue: Row[] = [];
+  for (let from = 0; ; ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: page, error } = await (supabase as any)
+      .from("crm_tickets")
+      .select("id, org_id, client_id, due_date")
+      .not("due_date", "is", null)
+      .lt("due_date", utcToday)
+      .in("status", ["open", "pending"])
+      .not("client_id", "is", null)
+      .is("deleted_at", null)
+      .order("id")
+      .range(from, from + 999);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!page || page.length === 0) break;
+    overdue.push(...(page as Row[]));
+    from += page.length;
+  }
 
   let fired = 0;
-  for (const ticket of (overdue ?? []) as { id: string; org_id: string; client_id: string; due_date: string }[]) {
+  for (const ticket of overdue) {
     // Re-check on the owning org's calendar: a ticket due today is not past
     // due, and the UTC-bounded query above may have included one.
     const orgToday = todayInZone(await getOrgTimeZone(supabase, ticket.org_id));

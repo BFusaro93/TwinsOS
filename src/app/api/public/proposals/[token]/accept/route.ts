@@ -105,6 +105,7 @@ export async function POST(
     .from("estimates")
     .select("stage, total_cents, valid_until_date, tiers_enabled")
     .eq("id", shareToken.estimate_id)
+    .is("deleted_at", null)
     .single();
   if (!currentEstimate || currentEstimate.stage !== "sent") {
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
@@ -195,10 +196,25 @@ export async function POST(
   }
 
   // 2. Move estimate stage → accepted
-  await supabase
+  // Conditional on stage='sent' so staff marking it lost mid-request isn't
+  // overwritten; on failure the token claim is released so the link isn't
+  // burned while the estimate stays 'sent'.
+  const { data: stageMoved, error: stageErr } = await supabase
     .from("estimates")
     .update({ stage: "accepted", updated_at: now })
-    .eq("id", shareToken.estimate_id);
+    .eq("id", shareToken.estimate_id)
+    .eq("stage", "sent")
+    .select("id");
+  if (stageErr || !stageMoved || stageMoved.length === 0) {
+    await supabase
+      .from("estimate_share_tokens")
+      .update({ accepted_at: null })
+      .eq("id", shareToken.id);
+    return NextResponse.json(
+      { error: stageErr ? "Failed to record acceptance" : "This proposal is no longer actionable" },
+      { status: stageErr ? 500 : 409 }
+    );
+  }
 
   // 2b. Record the deposit the client says they are sending.
   //

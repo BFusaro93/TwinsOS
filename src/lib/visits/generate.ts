@@ -216,6 +216,9 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   if (rules.length === 0) return out;
   const dates = occurrencesForRules(rules, from, to, { fallbackAnchor: jobStart });
 
+  // Service rows exist but all are excluded: nothing billable to generate.
+  // (Only a job with NO service rows gets unlinked whole-job visits.)
+  if (services.length > 0 && services.every((s) => s.included === false)) return out;
   const activeServices = services
     .filter((s) => s.included !== false)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));

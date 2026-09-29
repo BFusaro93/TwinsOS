@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, escapeHtml } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
 import { recordPath } from "@/lib/notifications/record-links";
 import { stripMentionTokens } from "@/lib/mentions";
@@ -77,10 +77,10 @@ export async function notifyMentions(
           to: p.email,
           subject: title,
           html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-            <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${title}</h2>
-            <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
-            <p style="margin:0 0 8px;color:#475569">${commenterName} mentioned you in a comment:</p>
-            <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${snippet}</blockquote>
+            <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${escapeHtml(title)}</h2>
+            <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(p.name ?? "there")},</p>
+            <p style="margin:0 0 8px;color:#475569">${escapeHtml(commenterName)} mentioned you in a comment:</p>
+            <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${escapeHtml(snippet)}</blockquote>
             ${button}
           </div>`,
         }).catch(() => {

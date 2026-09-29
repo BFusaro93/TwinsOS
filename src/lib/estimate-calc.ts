@@ -664,7 +664,11 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     if (m.milestone_type !== "percent") continue;
     const newAmountCents = Math.round((totalCents * m.milestone_value) / 10000);
     if (newAmountCents !== m.amount_cents) {
-      await supabase.from("estimate_milestones").update({ amount_cents: newAmountCents }).eq("id", m.id);
+      const { error: msErr } = await supabase
+        .from("estimate_milestones")
+        .update({ amount_cents: newAmountCents })
+        .eq("id", m.id);
+      if (msErr) throw msErr;
     }
   }
 }

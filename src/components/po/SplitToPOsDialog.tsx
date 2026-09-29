@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { AlertCircle } from "lucide-react";
 import {
   Dialog,
@@ -18,6 +19,7 @@ import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useCreatePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
+import { useUpdateRequisitionStatus } from "@/lib/hooks/use-requisitions";
 import type { Requisition, LineItem, PurchaseOrder } from "@/types";
 import { computeSalesTax } from "@/lib/utils/po-tax";
 
@@ -63,6 +65,11 @@ export function SplitToPOsDialog({
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
   const { mutateAsync: createPO } = useCreatePurchaseOrder();
+  const { mutateAsync: syncRequisition } = useUpdateRequisitionStatus();
+  // POs already created for a vendor group in this dialog session, keyed by
+  // the group's vendor + line ids. A retry after a mid-loop failure skips
+  // these instead of creating duplicates.
+  const createdByGroupRef = useRef<Map<string, PurchaseOrder>>(new Map());
 
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [creating, setCreating] = useState(false);
@@ -70,6 +77,7 @@ export function SplitToPOsDialog({
   // Initialise assignments whenever dialog opens
   useEffect(() => {
     if (!open) return;
+    createdByGroupRef.current = new Map();
     setAssignments(
       requisition.lineItems.map((li) => {
         const resolved = resolveVendor(li, products, parts);
@@ -107,31 +115,36 @@ export function SplitToPOsDialog({
   async function handleCreate() {
     setCreating(true);
     const now = new Date().toISOString();
-    const created: PurchaseOrder[] = [];
+    const createdMap = createdByGroupRef.current;
 
     // The requisition's discount/shipping apply to the whole requisition, not
     // any one vendor's share — allocate both proportionally by each group's
     // share of the requisition's total subtotal, so the split POs' combined
     // totals reconcile back to the source requisition instead of dropping
-    // the discount/shipping entirely.
+    // the discount/shipping entirely. Allocated up front for every group so a
+    // retry that skips already-created groups still yields identical amounts.
     const requisitionSubtotal = requisition.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
     let discountRemaining = requisition.discountCost;
     let shippingRemaining = requisition.shippingCost;
+    const plans = groupList.map((group, i) => {
+      const isLastGroup = i === groupList.length - 1;
+      const lineItems = group.items.map((a) => a.lineItem);
+      const subtotal = Math.round(lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0));
+      const share = requisitionSubtotal > 0 ? subtotal / requisitionSubtotal : 0;
+      // Last group absorbs whatever's left so the cents always sum exactly
+      // to the requisition's original discountCost/shippingCost.
+      const discountCost = isLastGroup ? discountRemaining : Math.round(requisition.discountCost * share);
+      const shippingCost = isLastGroup ? shippingRemaining : Math.round(requisition.shippingCost * share);
+      discountRemaining -= discountCost;
+      shippingRemaining -= shippingCost;
+      const key = `${group.vendorId}:${lineItems.map((li) => li.id).sort().join(",")}`;
+      return { group, key, lineItems, subtotal, discountCost, shippingCost };
+    });
 
     try {
-      for (let i = 0; i < groupList.length; i++) {
-        const group = groupList[i];
-        const isLastGroup = i === groupList.length - 1;
-        const lineItems = group.items.map((a) => a.lineItem);
-        const subtotal = lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-        const share = requisitionSubtotal > 0 ? subtotal / requisitionSubtotal : 0;
-
-        // Last group absorbs whatever's left so the cents always sum exactly
-        // to the requisition's original discountCost/shippingCost.
-        const discountCost = isLastGroup ? discountRemaining : Math.round(requisition.discountCost * share);
-        const shippingCost = isLastGroup ? shippingRemaining : Math.round(requisition.shippingCost * share);
-        discountRemaining -= discountCost;
-        shippingRemaining -= shippingCost;
+      for (const plan of plans) {
+        if (createdMap.has(plan.key)) continue;
+        const { group, lineItems, subtotal, discountCost, shippingCost } = plan;
 
         const salesTax = computeSalesTax({
           taxableSubtotal: subtotal,
@@ -164,11 +177,23 @@ export function SplitToPOsDialog({
           notes: null,
         });
 
-        created.push(result);
+        createdMap.set(plan.key, result);
+        // Record the conversion right away (not only after the whole loop) so
+        // a later group failing can't leave committed POs unlinked.
+        const first = [...createdMap.values()][0];
+        await syncRequisition({ id: requisition.id, status: "ordered", convertedPoId: first.id });
       }
 
-      onCreated(created);
+      onCreated(plans.map((p) => createdMap.get(p.key)).filter((po): po is PurchaseOrder => !!po));
       onOpenChange(false);
+    } catch (err) {
+      const made = [...createdMap.values()];
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(
+        made.length > 0
+          ? `Created ${made.length} of ${plans.length} POs (${made.map((p) => p.poNumber).join(", ")}) before an error: ${msg}. Click Create again to finish the rest — already-created POs won't be duplicated.`
+          : `Failed to create purchase orders: ${msg}`
+      );
     } finally {
       setCreating(false);
     }

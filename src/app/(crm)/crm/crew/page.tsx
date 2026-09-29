@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
@@ -18,10 +18,12 @@ import type { VisitStatus } from "@/types/crm-jobs";
 
 function DriveElapsed({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
-  useState(() => {
+  // useEffect, not a useState initializer: an initializer's returned cleanup
+  // is stored as state and never runs, so the interval leaked on unmount.
+  useEffect(() => {
     const id = setInterval(() => forceUpdate((n) => n + 1), 60_000);
     return () => clearInterval(id);
-  });
+  }, []);
   const mins = Math.max(0, differenceInMinutes(new Date(), parseISO(start)));
   const h = Math.floor(mins / 60);
   const m = mins % 60;

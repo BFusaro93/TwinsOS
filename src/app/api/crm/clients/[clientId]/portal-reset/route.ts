@@ -40,7 +40,9 @@ export async function DELETE(
     .eq("client_id", clientId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
-    .single() as { data: { id: string; user_id: string } | null };
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: { id: string; user_id: string } | null };
 
   if (!portalUser) {
     return NextResponse.json({ error: "No portal account found for this client" }, { status: 404 });

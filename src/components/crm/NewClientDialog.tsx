@@ -61,6 +61,9 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
   const { data: createdClient } = useClient(createdId ?? "");
 
   async function handleCreate() {
+    // Enter in the name field calls this directly (bypassing the disabled
+    // button), so a held/double Enter would otherwise create duplicate clients.
+    if (isPending) return;
     if (!displayName.trim()) { toast.error("Display name is required"); return; }
     if (rf.isRequired("primary_phone") && !primaryPhone.trim()) { toast.error("Phone is required"); return; }
     if (rf.isRequired("primary_email") && !primaryEmail.trim()) { toast.error("Email is required"); return; }

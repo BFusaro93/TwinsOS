@@ -235,6 +235,11 @@ function normaliseWOPriority(raw: string): string {
  * Bulk-inserts work orders from a CSV import.
  * Rows missing `title` are silently skipped.
  */
+/** yyyy-mm-dd from components (no Date/timezone round-trip). */
+function ymd(y: number, m: number, d: number): string {
+  return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 /** Parse M/D/YY or M/D/YY HH:MM date strings from QuickBooks CSV exports. */
 function parseCsvDate(raw: string): string | null {
   if (!raw?.trim()) return null;
@@ -242,17 +247,22 @@ function parseCsvDate(raw: string): string | null {
   const m1 = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})$/);
   if (m1) {
     const [, mo, dy, yr, hr, mn] = m1;
-    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy), parseInt(hr), parseInt(mn)).toISOString().slice(0, 10);
+    return ymd(2000 + parseInt(yr), parseInt(mo), parseInt(dy));
   }
   // M/D/YY (date only)
   const m2 = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
   if (m2) {
     const [, mo, dy, yr] = m2;
-    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy)).toISOString().slice(0, 10);
+    return ymd(2000 + parseInt(yr), parseInt(mo), parseInt(dy));
   }
   // M/D/YYYY or other long-year formats
+  const m3 = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m3) return ymd(parseInt(m3[3]), parseInt(m3[1]), parseInt(m3[2]));
+  // ISO yyyy-mm-dd (with optional time): take the date part as written.
+  const m4 = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m4) return ymd(parseInt(m4[1]), parseInt(m4[2]), parseInt(m4[3]));
   const d = new Date(raw);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  if (!isNaN(d.getTime())) return ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
   return null;
 }
 

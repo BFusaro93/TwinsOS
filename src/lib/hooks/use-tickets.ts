@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { CRMTicket, NewTicketFormValues, TicketStatus } from "@/types/crm-tickets";
 
 const log = logger.child("use-tickets");
@@ -42,18 +43,22 @@ export function useTickets(filters?: { status?: TicketStatus; clientId?: string 
     queryKey: ["crm-tickets", filters],
     queryFn: async () => {
       const supabase = createClient();
-      let query = supabase
-        .from("crm_tickets")
-        .select("*, clients(display_name)")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+      // PostgREST caps a response at 1000 rows — page through so older
+      // tickets don't silently drop off the list once an org passes that.
+      // `id` breaks created_at ties so pages never skip/repeat rows.
+      const rows = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("crm_tickets")
+          .select("*, clients(display_name)")
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .order("id");
 
-      if (filters?.status) query = query.eq("status", filters.status);
-      if (filters?.clientId) query = query.eq("client_id", filters.clientId);
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data.map(mapTicket)) as CRMTicket[];
+        if (filters?.status) query = query.eq("status", filters.status);
+        if (filters?.clientId) query = query.eq("client_id", filters.clientId);
+        return query;
+      });
+      return rows.map(mapTicket) as CRMTicket[];
     },
   });
 }
@@ -153,8 +158,12 @@ export function useBulkImportTickets() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
-      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+      // Paged: past PostgREST's 1000-row cap, clients would be missing here and
+      // their tickets imported unlinked.
+      const clients = await fetchAllRows<{ id: string; display_name: string }>(() =>
+        supabase.from("clients").select("id, display_name").is("deleted_at", null).order("id"),
+      );
+      const byName = new Map(clients.map((c) => [c.display_name.trim().toLowerCase(), c.id]));
 
       let created = 0;
       let skipped = 0;
@@ -201,6 +210,7 @@ export function useUpdateTicket() {
       const supabase = createClient();
 
       let wasReopened = false;
+      let wasClosed = false;
       let clientId: string | null = null;
       let effectiveCategory: string | null = null;
       // Guard against a TOCTOU race: another user could change the status
@@ -210,12 +220,16 @@ export function useUpdateTicket() {
       // applies if nothing changed it in the meantime; a 0-row result means
       // a race happened and we refetch + retry once.
       let beforeStatus: string | null = null;
-      const checkReopen = updates.status !== undefined && updates.status !== "closed";
+      // Also read the before-state when closing: a bulk "Mark Closed" goes
+      // through this hook, and without it the ticket_closed automation trigger
+      // (which useCloseTicket fires) was silently skipped for those tickets.
+      const checkReopen = updates.status !== undefined;
       if (checkReopen) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: before } = await (supabase as any).from("crm_tickets").select("status, client_id, category").eq("id", id).single();
         beforeStatus = before?.status ?? null;
-        wasReopened = before?.status === "closed";
+        wasReopened = before?.status === "closed" && updates.status !== "closed";
+        wasClosed = before?.status !== "closed" && updates.status === "closed";
         clientId = before?.client_id ?? null;
         effectiveCategory = updates.category !== undefined ? updates.category : before?.category ?? null;
       }
@@ -257,7 +271,8 @@ export function useUpdateTicket() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: fresh } = await (supabase as any).from("crm_tickets").select("status, client_id, category").eq("id", id).single();
           beforeStatus = fresh?.status ?? null;
-          wasReopened = fresh?.status === "closed";
+          wasReopened = fresh?.status === "closed" && updates.status !== "closed";
+          wasClosed = fresh?.status !== "closed" && updates.status === "closed";
           clientId = fresh?.client_id ?? clientId;
           effectiveCategory = updates.category !== undefined ? updates.category : fresh?.category ?? effectiveCategory;
 
@@ -280,7 +295,7 @@ export function useUpdateTicket() {
         const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
         if (error) throw error;
       }
-      return { wasReopened, clientId, effectiveCategory };
+      return { wasReopened, wasClosed, clientId, effectiveCategory };
     },
     onSuccess: (result, { id, updates }) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
@@ -290,6 +305,14 @@ export function useUpdateTicket() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ event: "assigned" }),
         }).catch(() => {});
+      }
+      if (result?.wasClosed && result.clientId) {
+        fireAutomationTrigger({
+          triggerType: "ticket_closed",
+          clientId: result.clientId,
+          ticketId: id,
+          matchValues: result.effectiveCategory ? [result.effectiveCategory] : undefined,
+        });
       }
       if (result?.wasReopened && result.clientId) {
         fireAutomationTrigger({

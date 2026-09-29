@@ -912,7 +912,9 @@ export function useUpsertCrewMemberTime() {
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
-      qc.invalidateQueries({ queryKey: ["crew-member-times", visitId] });
+      // Broad key: the Dispatch Board reads these through the date-batched
+      // ["crew-member-times", "date", ...] query, which a per-visit key misses.
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
     onError: () => toast.error("Failed to save crew member time"),
   });
@@ -931,7 +933,9 @@ export function useDeleteCrewMemberTime() {
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
-      qc.invalidateQueries({ queryKey: ["crew-member-times", visitId] });
+      // Broad key: the Dispatch Board reads these through the date-batched
+      // ["crew-member-times", "date", ...] query, which a per-visit key misses.
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
     onError: () => toast.error("Failed to remove crew member time"),
   });

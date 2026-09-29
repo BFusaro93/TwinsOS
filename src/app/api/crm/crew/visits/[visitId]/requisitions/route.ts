@@ -72,6 +72,7 @@ export async function POST(
     .from("product_items")
     .select("id, org_id, name, part_number, unit_cost, category")
     .eq("id", productItemId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (productError) return NextResponse.json({ error: productError.message }, { status: 500 });
   if (!product || product.org_id !== visit.org_id) {

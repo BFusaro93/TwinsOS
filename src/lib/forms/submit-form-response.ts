@@ -1,3 +1,4 @@
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { Resend } from "resend";
 import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
@@ -372,19 +373,26 @@ export async function submitFormResponse(
    *  digits only rather than requiring an exact string match. Scoped to the
    *  org so the candidate set stays small. */
   async function uniqueClientIdByPhoneDigits(value: string): Promise<string | null> {
-    const targetDigits = normalizePhoneDigits(value);
+    // comparablePhone drops a leading US country code so "+1 555-123-4567"
+    // matches "555-123-4567". Paged: PostgREST caps a response at 1000 rows,
+    // so in a larger org most stored numbers were never even compared.
+    const targetDigits = comparablePhone(value);
     if (!targetDigits) return null;
 
-    const [{ data: contactRows }, { data: clientRows }] = await Promise.all([
-      db.from("client_contacts").select("client_id, phone, clients!inner(deleted_at)").eq("org_id", form.org_id).is("deleted_at", null).is("clients.deleted_at", null).not("phone", "is", null),
-      db.from("clients").select("id, primary_phone").eq("org_id", form.org_id).is("deleted_at", null).not("primary_phone", "is", null),
+    const [contactRows, clientRows] = await Promise.all([
+      fetchAllRows<{ client_id: string; phone: string | null }>(() =>
+        db.from("client_contacts").select("client_id, phone, clients!inner(deleted_at)").eq("org_id", form.org_id).is("deleted_at", null).is("clients.deleted_at", null).not("phone", "is", null).order("id")
+      ),
+      fetchAllRows<{ id: string; primary_phone: string | null }>(() =>
+        db.from("clients").select("id, primary_phone").eq("org_id", form.org_id).is("deleted_at", null).not("primary_phone", "is", null).order("id")
+      ),
     ]);
     const ids = new Set<string>();
-    for (const row of (contactRows ?? []) as { client_id: string; phone: string | null }[]) {
-      if (row.phone && normalizePhoneDigits(row.phone) === targetDigits) ids.add(row.client_id);
+    for (const row of contactRows) {
+      if (row.phone && comparablePhone(row.phone) === targetDigits) ids.add(row.client_id);
     }
-    for (const row of (clientRows ?? []) as { id: string; primary_phone: string | null }[]) {
-      if (row.primary_phone && normalizePhoneDigits(row.primary_phone) === targetDigits) ids.add(row.id);
+    for (const row of clientRows) {
+      if (row.primary_phone && comparablePhone(row.primary_phone) === targetDigits) ids.add(row.id);
     }
     return ids.size === 1 ? [...ids][0] : null;
   }

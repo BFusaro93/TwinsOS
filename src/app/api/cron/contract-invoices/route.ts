@@ -253,6 +253,16 @@ export async function GET(request: Request) {
 
     if (liErr) {
       console.error(`[contract-invoices] line item insert error for contract ${contract.id}:`, liErr);
+      // Soft-delete the line-item-less invoice: left live, the idempotency
+      // check above would see it next run and skip this contract's period
+      // forever, leaving the client unbilled.
+      const { error: orphanErr } = await sb
+        .from("crm_invoices")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", invoice.id);
+      if (orphanErr) {
+        console.error(`[contract-invoices] failed to soft-delete orphan invoice ${invoice.id}:`, orphanErr);
+      }
       results.push({ contractId: contract.id, status: "skipped", reason: `line item insert failed: ${liErr.message}` });
       continue;
     }

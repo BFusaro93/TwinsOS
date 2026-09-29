@@ -13,6 +13,11 @@ import type { Project } from "@/types";
 // will only ever have customer_name set, so these hooks match on
 // EITHER: client_id when a real link exists, or customer_name otherwise.
 
+/** Escapes LIKE wildcards so a client name is matched literally by ilike. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
 export function useClientProjects(clientId: string, displayName: string) {
   return useQuery({
     queryKey: ["client-projects", clientId, displayName],
@@ -20,7 +25,7 @@ export function useClientProjects(clientId: string, displayName: string) {
       const db = createClient() as any;
       const [byId, byName] = await Promise.all([
         db.from("projects").select("*").eq("client_id", clientId).is("deleted_at", null),
-        db.from("projects").select("*").ilike("customer_name", displayName).is("deleted_at", null),
+        db.from("projects").select("*").ilike("customer_name", escapeLike(displayName)).is("deleted_at", null),
       ]);
       if (byId.error) throw byId.error;
       if (byName.error) throw byName.error;
@@ -58,7 +63,7 @@ export function useClientPhotoJobs(clientId: string, displayName: string) {
       const db = createClient() as any;
       const [byId, byName] = await Promise.all([
         db.from("photo_jobs").select("*").eq("client_id", clientId).is("deleted_at", null),
-        db.from("photo_jobs").select("*").ilike("customer_name", displayName).is("deleted_at", null),
+        db.from("photo_jobs").select("*").ilike("customer_name", escapeLike(displayName)).is("deleted_at", null),
       ]);
       if (byId.error) throw byId.error;
       if (byName.error) throw byName.error;

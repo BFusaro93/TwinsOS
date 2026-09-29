@@ -110,6 +110,7 @@ export async function sendCampaignEmails(
     return { ok: false, error: "Campaign needs a subject and body before sending" };
   }
 
+  const buildRecipientQuery = () => {
   let query = db
     .from("clients")
     .select(`
@@ -143,10 +144,23 @@ export async function sendCampaignEmails(
   } else if (campaign.target_segment === "past_clients") {
     query = query.in("status", ["inactive", "cancelled"]);
   }
+  return query;
+  };
 
-  const { data: recipients, error: recipErr } = await query;
-  if (recipErr) return { ok: false, error: recipErr.message };
-  if (!recipients || recipients.length === 0) {
+  // Page through the audience: a single select silently truncates at 1000 rows.
+  // Ordered by id so the pages split stably.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recipients: any[] = [];
+  for (let from = 0; ; ) {
+    const { data: page, error: recipErr } = await buildRecipientQuery()
+      .order("id")
+      .range(from, from + 999);
+    if (recipErr) return { ok: false, error: recipErr.message };
+    if (!page || page.length === 0) break;
+    recipients.push(...page);
+    from += page.length;
+  }
+  if (recipients.length === 0) {
     return { ok: false, error: "No eligible recipients (check Do Not Market / missing emails)" };
   }
 
@@ -191,6 +205,24 @@ export async function sendCampaignEmails(
   let delivered = 0;
   let failed = 0;
 
+  // A re-claimed campaign (stuck in 'sending' and recovered) may already have
+  // mailed part of the audience before the route died — each successful send
+  // logged a client_activity row, so skip those clients rather than re-send.
+  const alreadySent = new Set<string>();
+  for (let from = 0; ; ) {
+    const { data: sentRows } = await db
+      .from("client_activity")
+      .select("client_id")
+      .eq("org_id", orgId)
+      .eq("ref_table", "crm_campaigns")
+      .eq("ref_id", campaign.id)
+      .order("id")
+      .range(from, from + 999);
+    if (!sentRows || sentRows.length === 0) break;
+    for (const r of sentRows as { client_id: string }[]) alreadySent.add(r.client_id);
+    from += sentRows.length;
+  }
+
   interface Recipient {
     id: string;
     display_name: string | null;
@@ -223,7 +255,7 @@ export async function sendCampaignEmails(
     referring_client: { display_name: string } | null;
   }
 
-  await sendInBatches(recipients as Recipient[], async (recipient) => {
+  await sendInBatches((recipients as Recipient[]).filter((r) => !alreadySent.has(r.id)), async (recipient) => {
     const client = {
       displayName: recipient.display_name,
       firstName: recipient.first_name,

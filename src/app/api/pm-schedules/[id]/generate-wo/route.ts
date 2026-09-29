@@ -136,6 +136,11 @@ export async function POST(
   if (!profile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 403 });
   }
+  // The service-role client below bypasses RLS, so the role rules that gate
+  // creating work orders must be restated here.
+  if (["viewer", "requestor", "crew"].includes(profile.role as string)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -153,6 +158,9 @@ export async function POST(
 
   if (schedErr || !schedule) {
     return NextResponse.json({ error: "PM schedule not found" }, { status: 404 });
+  }
+  if (schedule.is_active === false) {
+    return NextResponse.json({ error: "This PM schedule is inactive." }, { status: 409 });
   }
 
   const today = todayInZone(await getOrgTimeZone(userClient, profile.org_id as string));
@@ -476,7 +484,8 @@ export async function POST(
     .from("pm_schedules")
     .update({
       next_due_date: nextDue,
-      last_completed_date: today,
+      // last_completed_date is stamped by the DB when the PM work order is
+      // actually completed (trg_work_orders_sync_pm_last_completed).
     })
     .eq("id", scheduleId);
   if (advanceErr) {

@@ -60,12 +60,23 @@ export async function POST(request: Request) {
   if (messageStatus === "delivered") patch.delivered_at = new Date().toISOString();
   if (messageStatus === "failed" || messageStatus === "undelivered") patch.failed_at = new Date().toISOString();
 
-  const { error } = await supabase
+  // Twilio doesn't guarantee callback order: a late "sent" must not overwrite
+  // "delivered"/"failed". Terminal statuses are never overwritten by a
+  // different status; queued/sending/sent can't overwrite each other backwards.
+  const RANK: Record<string, number> = { accepted: 0, queued: 0, sending: 1, sent: 2 };
+  const terminal = ["delivered", "undelivered", "failed"];
+  let q = supabase
     .from("client_activity")
     // `as never`: postgrest rejects excess properties on a dynamically-built patch.
     .update(patch as never)
     .eq("ref_table", "twilio_messages")
-    .eq("ref_id", messageSid);
+    .eq("ref_id", messageSid)
+    .not("status", "in", `(${terminal.join(",")})`);
+  if (messageStatus in RANK) {
+    const blocked = Object.keys(RANK).filter((k) => RANK[k] > RANK[messageStatus]);
+    if (blocked.length) q = q.not("status", "in", `(${blocked.join(",")})`);
+  }
+  const { error } = await q;
   if (error) console.error("[twilio status webhook] failed to update client_activity:", error);
 
   return NextResponse.json({ received: true });

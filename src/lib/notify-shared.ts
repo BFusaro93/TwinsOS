@@ -27,6 +27,7 @@ export async function resolveBroadcastRecipients(
     const { data: picked } = await supabase
       .from("profiles")
       .select("id, email, name, notification_prefs")
+      .eq("org_id", orgId)
       .in("id", recipientIds);
     return picked ?? [];
   }

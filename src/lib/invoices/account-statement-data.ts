@@ -1,3 +1,4 @@
+import { selectAllRows } from "@/lib/visits/generate";
 import type { AccountStatementActivityRow } from "@/components/crm/invoices/pdf/AccountStatementDocument";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,23 +27,35 @@ export async function buildAccountStatementData(
 ): Promise<AccountStatementData> {
   const { clientId, fromDate, toDate } = params;
 
-  const { data: invoiceRows } = await supabase
+  const { rows: invoiceRows, error: invoiceErr } = await selectAllRows<Record<string, unknown>>(() => supabase
     .from("crm_invoices")
     .select("id, invoice_number, invoice_date, description, total_cents")
     .eq("client_id", clientId)
     .neq("status", "void")
     .neq("status", "draft")
     .is("deleted_at", null)
-    .lte("invoice_date", toDate)
-    .order("invoice_date", { ascending: true });
+    .lte("invoice_date", toDate));
 
-  const { data: paymentRows } = await supabase
+  if (invoiceErr) throw new Error(`Failed to load invoices for statement: ${invoiceErr}`);
+
+  // Payments applied to a void/draft invoice must not reduce the balance: that
+  // invoice is excluded from charges above. Join the invoice's status/deleted_at
+  // to drop them (payments with no invoice, e.g. unapplied credits, stay).
+  const { rows: rawPaymentRows, error: paymentErr } = await selectAllRows<Record<string, unknown>>(() => supabase
     .from("crm_payments")
-    .select("id, payment_date, amount_cents, method, reference, is_credit, invoice_id, crm_invoices(invoice_number)")
+    .select("id, payment_date, amount_cents, refunded_amount_cents, method, reference, is_credit, invoice_id, crm_invoices(invoice_number, status, deleted_at)")
     .eq("client_id", clientId)
     .is("deleted_at", null)
-    .lte("payment_date", toDate)
-    .order("payment_date", { ascending: true });
+    .lte("payment_date", toDate));
+
+  if (paymentErr) throw new Error(`Failed to load payments for statement: ${paymentErr}`);
+
+  const paymentRows = rawPaymentRows.filter((r) => {
+    if (!r.invoice_id) return true;
+    const inv = r.crm_invoices as { status?: string; deleted_at?: string | null } | null;
+    if (!inv) return true;
+    return inv.status !== "void" && inv.status !== "draft" && !inv.deleted_at;
+  });
 
   type LedgerEntry = {
     date: string;
@@ -71,7 +84,8 @@ export async function buildAccountStatementData(
           ? `Credit${r.reference ? ` (Ref #: ${r.reference})` : ""}`
           : `Payment — ${r.method}${invoiceNumber ? ` (Invoice #${invoiceNumber})` : ""}${r.reference ? ` (Ref #: ${r.reference})` : ""}`,
         invoiceNumber,
-        amountCents: -((r.amount_cents as number) ?? 0),
+        // Net of refunds: a refunded payment no longer reduces what's owed.
+        amountCents: -(((r.amount_cents as number) ?? 0) - ((r.refunded_amount_cents as number) ?? 0)),
       };
     }),
   ].sort((a, b) => a.date.localeCompare(b.date));

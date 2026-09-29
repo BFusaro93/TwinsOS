@@ -63,7 +63,11 @@ export function useUploadClientFile() {
         .single();
 
       const ext = input.file.name.split(".").pop();
-      const storagePath = `${prof!.org_id}/${input.clientId}/${Date.now()}-${input.file.name}`;
+      // Storage keys reject many characters that are legal in file names
+      // (brackets, #, non-ASCII…) — keep the original name in the DB row and
+      // use a safe one in the key.
+      const safeName = input.file.name.replace(/[^A-Za-z0-9._-]+/g, "_");
+      const storagePath = `${prof!.org_id}/${input.clientId}/${Date.now()}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)

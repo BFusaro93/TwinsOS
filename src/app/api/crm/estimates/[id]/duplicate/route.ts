@@ -52,6 +52,29 @@ export async function POST(
       description: newDescription,
       stage: "draft",
       reason: null,
+      // A copy is a fresh draft: nothing about acceptance, deposits, sending or
+      // the upsell claim (unique per ticket) carries over from the source.
+      upsell_ticket_id: null,
+      approval_status: "not_required",
+      sent_at: null,
+      expiry_notified_at: null,
+      portal_accepted_at: null,
+      portal_declined_at: null,
+      portal_signature_name: null,
+      portal_user_id: null,
+      deposit_collected_at: null,
+      deposit_collected_cents: 0,
+      deposit_method: null,
+      deposit_notes: null,
+      deposit_reference: null,
+      deposit_pending_at: null,
+      deposit_pending_cents: null,
+      deposit_pending_intent_id: null,
+      deposit_pending_method: null,
+      deposit_failed_at: null,
+      deposit_failed_cents: null,
+      deposit_failed_method: null,
+      deposit_failed_reason: null,
       // reset financial aggregates so they recalculate fresh
       subtotal_cents: 0,
       discount_cents: 0,
@@ -68,6 +91,15 @@ export async function POST(
   if (estErr || !newEst) {
     return NextResponse.json({ error: estErr?.message ?? "Insert failed" }, { status: 500 });
   }
+
+  // Any failure below would leave a half-built copy, so soft-delete it first.
+  const failAndCleanup = async (message: string) => {
+    await supabase
+      .from("estimates")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", newEst.id);
+    return NextResponse.json({ error: message }, { status: 500 });
+  };
 
   // Fetch source line items (non-deleted)
   const { data: lineItems } = await supabase
@@ -95,7 +127,7 @@ export async function POST(
         .select("id")
         .single();
       if (liErr || !insertedLi) {
-        return NextResponse.json({ error: liErr?.message ?? "Line item insert failed" }, { status: 500 });
+        return failAndCleanup(liErr?.message ?? "Line item insert failed");
       }
       newIdByOldId.set(oldLid as string, insertedLi.id);
     }
@@ -117,7 +149,7 @@ export async function POST(
         .filter((si) => si !== null) as Record<string, unknown>[];
       if (newSubitems.length) {
         const { error: siErr } = await supabase.from("estimate_line_item_subitems").insert(newSubitems);
-        if (siErr) return NextResponse.json({ error: siErr.message }, { status: 500 });
+        if (siErr) return failAndCleanup(siErr.message);
       }
     }
   }
@@ -135,7 +167,7 @@ export async function POST(
       return { ...dcRest, org_id: newEst.org_id, estimate_id: newEst.id };
     });
     const { error: dcErr } = await supabase.from("estimate_direct_costs").insert(newDCs);
-    if (dcErr) return NextResponse.json({ error: dcErr.message }, { status: 500 });
+    if (dcErr) return failAndCleanup(dcErr.message);
   }
 
   // The new estimate row was inserted with all financial aggregates zeroed

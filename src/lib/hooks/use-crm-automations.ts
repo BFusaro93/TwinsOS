@@ -199,15 +199,40 @@ export function useUpdateAutomation() {
   });
 }
 
+/**
+ * Enrollment only checks is_active (never deleted_at) on the automation and
+ * sequence, and in-flight enrollments keep processing their remaining steps —
+ * so a bare soft-delete left a "deleted" automation still enrolling clients
+ * and sending. Deleting therefore also deactivates and stops what's pending.
+ */
+async function stopPendingEnrollments(sequenceIds: string[]) {
+  if (sequenceIds.length === 0) return;
+  const nowIso = new Date().toISOString();
+  const { error } = await db()
+    .from("crm_sequence_enrollments")
+    .update({ stopped_at: nowIso, updated_at: nowIso })
+    .in("sequence_id", sequenceIds)
+    .is("completed_at", null)
+    .is("stopped_at", null);
+  if (error) throw error;
+}
+
 export function useDeleteAutomation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      const nowIso = new Date().toISOString();
       const { error } = await db()
         .from("crm_automations")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: nowIso, is_active: false })
         .eq("id", id);
       if (error) throw error;
+      const { data: sequences, error: seqError } = await db()
+        .from("crm_automation_sequences")
+        .select("id")
+        .eq("automation_id", id);
+      if (seqError) throw seqError;
+      await stopPendingEnrollments((sequences ?? []).map((s: { id: string }) => s.id));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-automations"] });
@@ -312,9 +337,10 @@ export function useDeleteSequence() {
     mutationFn: async ({ id, automationId }: { id: string; automationId: string }) => {
       const { error } = await db()
         .from("crm_automation_sequences")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: new Date().toISOString(), is_active: false })
         .eq("id", id);
       if (error) throw error;
+      await stopPendingEnrollments([id]);
       return automationId;
     },
     onSuccess: (_data, { automationId }) => {

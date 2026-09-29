@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 export interface CustomFieldDef {
   id: string;
@@ -232,12 +233,14 @@ export function useAllClientCustomFieldValues() {
     queryKey: ["crm_client_custom_field_values", "all"],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_client_custom_field_values")
-        .select("*");
-      if (error) throw error;
-      return (data ?? []).map(mapValue) as ClientCustomFieldValue[];
+      // One row per client x field, so this passes PostgREST's 1000-row cap
+      // quickly — page through, or the audience filter silently ignores
+      // everyone past the first 1000 values.
+      const rows = await fetchAllRows<unknown>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("crm_client_custom_field_values").select("*").order("id"),
+      );
+      return rows.map(mapValue) as ClientCustomFieldValue[];
     },
   });
 }

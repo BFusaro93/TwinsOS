@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import type { PortalInviteRow, PortalUserRow } from "@/lib/portal/portal-db";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 export async function POST(
   req: Request,
@@ -51,7 +52,8 @@ export async function POST(
     .select("id")
     .eq("client_id", clientId)
     .is("deleted_at", null)
-    .single() as { data: Pick<PortalUserRow, "id"> | null };
+    .limit(1)
+    .maybeSingle() as { data: Pick<PortalUserRow, "id"> | null };
 
   if (existing) {
     return NextResponse.json({ error: "Client already has a portal account" }, { status: 409 });
@@ -99,7 +101,9 @@ export async function POST(
     to: email,
     ...(replyTo ? { replyTo } : {}),
     subject: `You're invited to the ${orgName} Client Portal`,
-    html: buildInviteEmail({ orgName, clientFirstName, portalUrl }),
+    // Org and client names are freeform (client names can arrive from public
+    // form submissions) — escape before they go into the HTML body.
+    html: buildInviteEmail({ orgName: escapeHtml(orgName), clientFirstName: escapeHtml(clientFirstName), portalUrl }),
   });
 
   if (sendErr) {

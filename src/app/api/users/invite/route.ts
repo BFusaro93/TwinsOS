@@ -4,6 +4,14 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "@/lib/email/send";
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export async function POST(request: Request) {
   // 1. Validate the calling user's session and confirm they are an admin.
   const supabase = await createServerClient();
@@ -36,8 +44,11 @@ export async function POST(request: Request) {
   }
 
   const { email, name, role } = body;
-  if (!email || !name || !role) {
+  if (typeof email !== "string" || typeof name !== "string" || typeof role !== "string" || !email.trim() || !name.trim() || !role) {
     return NextResponse.json({ error: "email, name, and role are required" }, { status: 400 });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
   }
 
   const validRoles = ["admin", "manager", "technician", "purchaser", "viewer", "requestor", "crew"];
@@ -97,15 +108,17 @@ export async function POST(request: Request) {
   // password-recovery email and flip their profiles.status to "invited"
   // below — a cross-tenant write triggered by an org member with no
   // authority over the other org's data.
+  let existingStatus: string | null = null;
   if (linkType === "recovery" && linkData.user) {
     const { data: existingProfile } = await adminClient
       .from("profiles")
-      .select("org_id")
+      .select("org_id, status")
       .eq("id", linkData.user.id)
       .maybeSingle();
     if (existingProfile && existingProfile.org_id !== callerProfile.org_id) {
       return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
     }
+    existingStatus = existingProfile?.status ?? null;
   }
 
   // Build the URL directly so the user lands on /reset-password without
@@ -125,7 +138,7 @@ export async function POST(request: Request) {
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
         <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to Landscapt</h2>
-        <p style="margin:0 0 24px;color:#475569">Hi ${name}, you've been added as a <strong>${role}</strong> on your team's Landscapt account.</p>
+        <p style="margin:0 0 24px;color:#475569">Hi ${escapeHtml(name)}, you've been added as a <strong>${escapeHtml(role)}</strong> on your team's Landscapt account.</p>
         <a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Accept Invitation</a>
         <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">This link expires in 24 hours. If you weren't expecting this, you can ignore this email.</p>
       </div>
@@ -137,8 +150,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to send invite email" }, { status: 500 });
   }
 
-  // 5. Update profile status to 'invited'.
-  if (linkData.user) {
+  // 5. Update profile status to 'invited' — but never downgrade a user who is
+  //    already active (re-sending a set-password link to a current teammate
+  //    must not relabel them as a pending invite).
+  if (linkData.user && existingStatus !== "active") {
     await adminClient
       .from("profiles")
       .update({ status: "invited" })

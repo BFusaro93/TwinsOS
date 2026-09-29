@@ -1,3 +1,4 @@
+import { allocatePoLine } from "@/lib/utils/project-po-allocation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
@@ -28,7 +29,7 @@ export function useProjects(includeArchived = false) {
         .from("projects")
         .select(`
           *,
-          po_line_items(quantity, unit_cost, total_cost, taxable, purchase_orders(tax_rate_percent, shipping_cost, subtotal, deleted_at)),
+          po_line_items(quantity, unit_cost, total_cost, taxable, purchase_orders(tax_rate_percent, shipping_cost, subtotal, discount_cost, discount_reduces_tax, status, deleted_at, po_line_items(total_cost, taxable))),
           requisition_line_items(quantity, unit_cost, total_cost, requisitions(tax_rate_percent, status, converted_po_id, deleted_at)),
           project_direct_items(quantity, unit_cost, deleted_at),
           project_subcontract_costs(amount, deleted_at)
@@ -47,33 +48,65 @@ export function useProjects(includeArchived = false) {
         // canceled PO's cost must drop out of the project total, mirroring
         // ProjectDetailPanel's own totals (which source from usePurchaseOrders()/
         // useRequisitions(), both already filtered to deleted_at IS NULL).
+        type PoRef = {
+          tax_rate_percent: number; shipping_cost: number; subtotal: number;
+          discount_cost: number | null; discount_reduces_tax: boolean | null;
+          status: string; deleted_at: string | null;
+          po_line_items: { total_cost: number; taxable: boolean | null }[] | null;
+        };
+        // Canceled/rejected POs never get spent, so they drop out too.
         const poLines: {
           quantity: number; unit_cost: number; total_cost: number; taxable: boolean | null;
-          purchase_orders: { tax_rate_percent: number; shipping_cost: number; subtotal: number; deleted_at: string | null } | null;
+          purchase_orders: PoRef | null;
         }[] = (row.po_line_items ?? []).filter(
-          (li: { purchase_orders: { deleted_at: string | null } | null }) => !li.purchase_orders?.deleted_at
+          (li: { purchase_orders: PoRef | null }) =>
+            !li.purchase_orders?.deleted_at &&
+            li.purchase_orders?.status !== "canceled" &&
+            li.purchase_orders?.status !== "rejected"
         );
+        // Rejected/closed requisitions are dead — no pending cost.
         const reqLines: {
           quantity: number; unit_cost: number; total_cost: number;
           requisitions: { tax_rate_percent: number; status: string; converted_po_id: string | null; deleted_at: string | null } | null;
         }[] = (row.requisition_line_items ?? []).filter(
-          (li: { requisitions: { deleted_at: string | null } | null }) => !li.requisitions?.deleted_at
+          (li: { requisitions: { deleted_at: string | null; status: string } | null }) =>
+            !li.requisitions?.deleted_at &&
+            li.requisitions?.status !== "rejected" &&
+            li.requisitions?.status !== "closed"
         );
         const directItems: { quantity: number; unit_cost: number; deleted_at: string | null }[] =
           row.project_direct_items ?? [];
         const subcontractCosts: { amount: number; deleted_at: string | null }[] =
           row.project_subcontract_costs ?? [];
 
-        const lineItemTotal = poLines.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
-        const poTax = poLines.reduce((sum, li) => {
-          if (li.taxable === false || !li.purchase_orders) return sum;
-          return sum + Math.round((li.total_cost ?? 0) * li.purchase_orders.tax_rate_percent / 100);
-        }, 0);
-        const poShipping = poLines.reduce((sum, li) => {
+        // Per-line share of the PO's tax, shipping and discount — same
+        // allocation ProjectDetailPanel uses.
+        let poTax = 0;
+        let poShipping = 0;
+        let poDiscount = 0;
+        for (const li of poLines) {
           const po = li.purchase_orders;
-          if (!po || !po.shipping_cost || !po.subtotal) return sum;
-          return sum + Math.round(((li.total_cost ?? 0) / po.subtotal) * po.shipping_cost);
-        }, 0);
+          if (!po) continue;
+          const siblings = po.po_line_items ?? [];
+          const poSubtotal = siblings.length > 0
+            ? siblings.reduce((sum, l) => sum + (l.total_cost ?? 0), 0)
+            : po.subtotal;
+          const poTaxableSubtotal = siblings.length > 0
+            ? siblings.filter((l) => l.taxable !== false).reduce((sum, l) => sum + (l.total_cost ?? 0), 0)
+            : poSubtotal;
+          const a = allocatePoLine(li.total_cost ?? 0, li.taxable !== false, {
+            poSubtotal,
+            poTaxableSubtotal,
+            taxRatePercent: po.tax_rate_percent,
+            shippingCost: po.shipping_cost,
+            discountCost: po.discount_cost ?? 0,
+            discountReducesTax: po.discount_reduces_tax ?? false,
+          });
+          poTax += a.tax;
+          poShipping += a.shipping;
+          poDiscount += a.discount;
+        }
+        const lineItemTotal = poLines.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
 
         // Skip REQ line items whose requisition was already converted to a PO —
         // that cost is already counted via po_line_items above.
@@ -94,7 +127,7 @@ export function useProjects(includeArchived = false) {
           .reduce((sum, c) => sum + (c.amount ?? 0), 0);
 
         const computedTotal =
-          lineItemTotal + poTax + poShipping + reqTotal + reqTax + directItemTotal + subcontractTotal;
+          lineItemTotal - poDiscount + poTax + poShipping + reqTotal + reqTax + directItemTotal + subcontractTotal;
         return mapProject({ ...row, total_cost: computedTotal });
       }) as Project[];
     },

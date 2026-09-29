@@ -68,6 +68,7 @@ export function useAddAssetPart() {
     },
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ["asset-parts", input.assetId] });
+      queryClient.invalidateQueries({ queryKey: ["part-asset-links"] });
     },
   });
 }
@@ -97,6 +98,7 @@ export function useBulkAddAssetParts() {
       assetIds.forEach((id) =>
         queryClient.invalidateQueries({ queryKey: ["asset-parts", id] })
       );
+      queryClient.invalidateQueries({ queryKey: ["part-asset-links"] });
     },
   });
 }
@@ -115,6 +117,7 @@ export function useRemoveAssetPart() {
     },
     onSuccess: (assetId) => {
       queryClient.invalidateQueries({ queryKey: ["asset-parts", assetId] });
+      queryClient.invalidateQueries({ queryKey: ["part-asset-links"] });
     },
   });
 }

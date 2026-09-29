@@ -10,7 +10,7 @@ import { EMAIL_FROM } from "@/lib/email/send";
  * GET /api/cron/contract-expiry-notify — called daily by Vercel Cron.
  *
  * Finds contracts ending in the next 3 days (still active) and emails the
- * contract's sales rep — same shape as /api/crm/estimates/expiry-notify, but
+ * contract's sales rep ONCE per end date (expiry_notified_for) — same shape as /api/crm/estimates/expiry-notify, but
  * keyed off `sales_rep_id` (contracts' owner field) rather than `created_by`
  * (which is what the estimate cron uses, since these two features ended up
  * with different owner columns).
@@ -73,6 +73,18 @@ export async function GET(request: Request) {
     const endDate = contract.end_date as string | null;
     if (!endDate) continue;
     if (endDate < orgToday || endDate > shiftYmd(orgToday, 3)) continue;
+
+    // One reminder per contract end date: claim it atomically before doing
+    // anything, so a repeat run (or an overlapping one) skips this contract.
+    // Renewing changes end_date, which re-arms the reminder for the new date.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: claimed } = await (supabase as any)
+      .from("crm_contracts")
+      .update({ expiry_notified_for: endDate })
+      .eq("id", contract.id as string)
+      .or(`expiry_notified_for.is.null,expiry_notified_for.neq.${endDate}`)
+      .select("id");
+    if (!claimed?.length) continue;
 
     const contractClientId = contract.client_id as string | null;
     if (contractClientId) {

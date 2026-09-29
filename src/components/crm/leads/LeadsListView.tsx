@@ -85,10 +85,13 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
 
   const filtered = (leads ?? []).filter((l) => {
     const q = search.toLowerCase();
+    // Digits-only comparison so "9785550100" finds a phone stored as "(978) 555-0100".
+    const qDigits = q.replace(/\D/g, "");
     if (!q) return true;
     return (
       l.displayName.toLowerCase().includes(q) ||
       (l.primaryPhone ?? "").includes(q) ||
+      (qDigits.length >= 3 && (l.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
       (l.primaryEmail ?? "").toLowerCase().includes(q) ||
       (l.billingCity ?? "").toLowerCase().includes(q)
     );

@@ -79,6 +79,7 @@ import { useParts } from "@/lib/hooks/use-parts";
 import { usePhotoJobByProjectId } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useTicketsLinkedTo } from "@/lib/hooks/use-tickets";
 import { computeSalesTax } from "@/lib/utils/po-tax";
+import { allocatePoLine } from "@/lib/utils/project-po-allocation";
 import { TicketDetailSheet } from "@/components/crm/tickets/TicketDetailSheet";
 import { Ticket as TicketIcon } from "lucide-react";
 import {
@@ -160,6 +161,8 @@ function MaterialsTab({ project }: { project: Project }) {
   const linkedItems: ProjectLineItem[] = [];
   (requisitions ?? []).forEach((req) => {
     if (req.convertedPoId && req.status === "ordered") return;
+    // Rejected/closed requisitions carry no pending cost (mirrors use-projects).
+    if (req.status === "rejected" || req.status === "closed") return;
     req.lineItems
       .filter((li) => li.projectId === project.id)
       .forEach((li) => {
@@ -179,6 +182,8 @@ function MaterialsTab({ project }: { project: Project }) {
       });
   });
   (purchaseOrders ?? []).forEach((po) => {
+    // Canceled/rejected POs are never spent (mirrors use-projects).
+    if (po.status === "canceled" || po.status === "rejected") return;
     po.lineItems
       .filter((li) => li.projectId === project.id)
       .forEach((li) => {
@@ -422,26 +427,41 @@ function MaterialsTab({ project }: { project: Project }) {
   (requisitions ?? []).forEach((req) => taxRateBySourceId.set(req.id, req.taxRatePercent));
 
   const subtotal = items.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
-  const totalTax = items.reduce((sum, li) => {
-    if (li.taxable === false) return sum; // non-taxable items (deposits, delivery, etc.)
-    const rate = taxRateBySourceId.get(li.sourceId) ?? 0;
-    return sum + Math.round(li.quantity * li.unitCost * rate / 100);
-  }, 0);
 
-  // Allocate PO shipping proportionally: for each PO that has line items on this
-  // project, include (project_subtotal_on_po / po_total_subtotal) × shipping_cost.
-  const allocatedShipping = (purchaseOrders ?? []).reduce((acc, po) => {
-    if (!po.shippingCost) return acc;
-    const projectSubtotal = po.lineItems
-      .filter((li) => li.projectId === project.id)
-      .reduce((s, li) => s + li.quantity * li.unitCost, 0);
-    if (projectSubtotal === 0) return acc;
-    const poSubtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-    if (poSubtotal === 0) return acc;
-    return acc + Math.round((projectSubtotal / poSubtotal) * po.shippingCost);
-  }, 0);
+  // PO lines: tax, shipping and discount are allocated per line by its share of
+  // the PO (allocatePoLine), exactly as the projects list does. Requisition
+  // lines only carry tax; direct items carry none.
+  const poById = new Map((purchaseOrders ?? []).map((po) => [po.id, po]));
+  let totalTax = 0;
+  let allocatedShipping = 0;
+  let allocatedDiscount = 0;
+  for (const li of items) {
+    const lineTotal = li.quantity * li.unitCost;
+    if (li.sourceType === "po") {
+      const po = poById.get(li.sourceId);
+      if (!po) continue;
+      const poSubtotal = po.lineItems.reduce((s, l) => s + l.quantity * l.unitCost, 0);
+      const poTaxableSubtotal = po.lineItems
+        .filter((l) => l.taxable !== false)
+        .reduce((s, l) => s + l.quantity * l.unitCost, 0);
+      const a = allocatePoLine(lineTotal, li.taxable !== false, {
+        poSubtotal,
+        poTaxableSubtotal,
+        taxRatePercent: po.taxRatePercent,
+        shippingCost: po.shippingCost,
+        discountCost: po.discountCost,
+        discountReducesTax: po.discountReducesTax,
+      });
+      totalTax += a.tax;
+      allocatedShipping += a.shipping;
+      allocatedDiscount += a.discount;
+    } else if (li.taxable !== false) {
+      const rate = taxRateBySourceId.get(li.sourceId) ?? 0;
+      totalTax += Math.round(lineTotal * rate / 100);
+    }
+  }
 
-  const total = subtotal + totalTax + allocatedShipping;
+  const total = subtotal - allocatedDiscount + totalTax + allocatedShipping;
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -539,6 +559,12 @@ function MaterialsTab({ project }: { project: Project }) {
               <span>Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
             </div>
+            {allocatedDiscount > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Discount (from POs)</span>
+                <span>-{formatCurrency(allocatedDiscount)}</span>
+              </div>
+            )}
             {totalTax > 0 && (
               <div className="flex justify-between py-1 text-slate-600">
                 <span>Sales Tax</span>

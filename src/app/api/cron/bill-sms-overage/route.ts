@@ -4,7 +4,7 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { billSmsOverageForPeriod } from "@/lib/stripe/sms-billing";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { monthStartInZone } from "@/lib/time/zone";
+import { monthStartInZone, shiftYmd } from "@/lib/time/zone";
 
 const log = logger.child("cron bill-sms-overage");
 
@@ -54,16 +54,23 @@ export async function GET(request: Request) {
     if (!org) continue;
     // Per org: the period this cron bills must be the same key the send path
     // incremented, which is the org's own month — not the UTC one.
-    const periodStartStr = monthStartInZone(new Date(), await getOrgTimeZone(supabase, org.id));
+    const tz = await getOrgTimeZone(supabase, org.id);
+    const periodStartStr = monthStartInZone(new Date(), tz);
     try {
-      const { data: usage } = await supabase
+      // Also reconcile the previous month's row: usage sent after the last
+      // run of a month (the final day's sends) would otherwise never be billed
+      // once the current period rolls over.
+      const prevPeriodStr = monthStartInZone(new Date(`${shiftYmd(periodStartStr, -1)}T12:00:00Z`), tz);
+      const { data: usageRows } = await supabase
         .from("organization_sms_usage")
         .select("period_start, count, overage_billed_cents")
         .eq("org_id", org.id)
-        .eq("period_start", periodStartStr)
-        .maybeSingle();
-      if (!usage) continue; // no sends yet this period
-      await billSmsOverageForPeriod(stripe, supabase, org, usage);
+        .in("period_start", [prevPeriodStr, periodStartStr])
+        .order("period_start", { ascending: true });
+      if (!usageRows || usageRows.length === 0) continue; // no sends yet
+      for (const usage of usageRows) {
+        await billSmsOverageForPeriod(stripe, supabase, org, usage);
+      }
       billed++;
     } catch (err) {
       failed++;

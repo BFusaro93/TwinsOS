@@ -19,6 +19,7 @@ import { NewWorkOrderDialog } from "./NewWorkOrderDialog";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS, ASSET_STATUS_LABELS, ASSET_STATUS_COLORS } from "@/lib/constants";
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
+import { toast } from "sonner";
 import { useWorkOrders, useUpdateWorkOrder, useUpdateWorkOrderStatus, useDeleteWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCMMSStore, useSettingsStore } from "@/stores";
@@ -264,7 +265,8 @@ function DetailsTab({
 }: {
   workOrder: WorkOrder;
   status: WorkOrderStatus;
-  onStatusChange: (s: WorkOrderStatus) => void;
+  /** onSuccess runs only after the WO status write succeeds. */
+  onStatusChange: (s: WorkOrderStatus, onSuccess?: () => void) => void;
   onAssetClick?: () => void;
   onVehicleClick?: () => void;
   subWorkOrders: WorkOrder[];
@@ -307,14 +309,21 @@ function DetailsTab({
   const entityLabel = resolvedEntityType === "vehicle" ? "Vehicle" : "Asset";
 
   function handleConfirmComplete() {
-    if (hasLinkedEntity && newEntityStatus !== "no_change" && workOrder.assetId) {
-      if (resolvedEntityType === "vehicle") {
-        updateVehicleStatus({ id: workOrder.assetId, status: newEntityStatus });
-      } else {
-        updateAssetStatus({ id: workOrder.assetId, status: newEntityStatus });
-      }
-    }
-    onStatusChange("done");
+    const entityId = workOrder.assetId;
+    const entityStatusToApply = newEntityStatus;
+    // The asset/vehicle status change runs only once the WO is actually done,
+    // so a failed WO update can't leave the equipment marked out of service.
+    const applyEntityStatus =
+      hasLinkedEntity && entityStatusToApply !== "no_change" && entityId
+        ? () => {
+            if (resolvedEntityType === "vehicle") {
+              updateVehicleStatus({ id: entityId, status: entityStatusToApply });
+            } else {
+              updateAssetStatus({ id: entityId, status: entityStatusToApply });
+            }
+          }
+        : undefined;
+    onStatusChange("done", applyEntityStatus);
     setCompleting(false);
     setNewEntityStatus("no_change");
   }
@@ -809,9 +818,19 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
               <DetailsTab
                 workOrder={workOrder}
                 status={status}
-                onStatusChange={(s) => {
+                onStatusChange={(s, onSuccess) => {
+                  const previous = status;
                   setStatus(s);
-                  updateWOStatus({ id: workOrder.id, status: s, automationId: workOrder.automationId });
+                  updateWOStatus(
+                    { id: workOrder.id, status: s, automationId: workOrder.automationId },
+                    {
+                      onSuccess: () => onSuccess?.(),
+                      onError: (err) => {
+                        setStatus(previous);
+                        toast.error(err instanceof Error ? err.message : "Couldn't update the work order status.");
+                      },
+                    }
+                  );
                 }}
                 onAssetClick={linkedAsset ? () => setAssetSheetOpen(true) : undefined}
                 onVehicleClick={linkedVehicle ? () => setVehicleSheetOpen(true) : undefined}
