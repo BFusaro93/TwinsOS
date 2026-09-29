@@ -330,7 +330,7 @@ function DetailsTab({
           showProject
           editable={
             !["ordered", "closed"].includes(status) ||
-            currentUser.role === "admin" || currentUser.role === "manager"
+            currentUser.role === "admin"
           }
           onItemsChange={setLineItems}
           onItemAdded={(newItem, updatedItems) => {

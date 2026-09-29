@@ -137,8 +137,9 @@ function ApproverRow({
   request: ApprovalRequest;
   isActiveStep: boolean;
   isCurrentUser: boolean;
-  /** Admin OR manager — RLS grants both roles chain-override on the backend
-   *  (20260803000000_enforce_approval_chain_order.sql); this must match. */
+  /** Whether this user may decide this step on someone else's behalf —
+   *  admins on any step, managers on non-admin steps (decide_approval,
+   *  20260929100000_managers_cannot_override_admin_approvals.sql). */
   canOverride: boolean;
   onDecide: (status: "approved" | "rejected", comment: string) => void;
   deciding: boolean;
@@ -277,6 +278,7 @@ function StepGroupCard({
   isActive,
   isLast,
   currentUserId,
+  currentUserIsAdmin,
   canOverride,
   onDecide,
   deciding,
@@ -286,6 +288,7 @@ function StepGroupCard({
   isActive: boolean;
   isLast: boolean;
   currentUserId: string;
+  currentUserIsAdmin: boolean;
   canOverride: boolean;
   onDecide: (request: ApprovalRequest, status: "approved" | "rejected", comment: string) => void;
   deciding: boolean;
@@ -360,7 +363,7 @@ function StepGroupCard({
                 request={request}
                 isActiveStep={isActive}
                 isCurrentUser={request.approverId === currentUserId}
-                canOverride={canOverride}
+                canOverride={canOverride && (currentUserIsAdmin || request.approverRole !== "admin")}
                 onDecide={(status, comment) => onDecide(request, status, comment)}
                 deciding={deciding}
               />
@@ -376,9 +379,10 @@ function StepGroupCard({
 
 export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChainProps) {
   const { currentUser } = useCurrentUserStore();
-  // Matches the RLS chain-override grant (admin OR manager) — see
-  // 20260803000000_enforce_approval_chain_order.sql.
+  // Admins can stand in on any step; managers only on non-admin steps
+  // (enforced server-side in decide_approval — see 20260929100000).
   const canOverride = currentUser.role === "admin" || currentUser.role === "manager";
+  const currentUserIsAdmin = currentUser.role === "admin";
   const { data: requests = [], isLoading } = useApprovalRequests(entityId);
   const { mutate: decide, isPending: deciding, isError: decideError } = useDecideApproval(entityId);
 
@@ -454,6 +458,7 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
           isLast={i === groups.length - 1}
           currentUserId={currentUser.id}
           canOverride={canOverride}
+          currentUserIsAdmin={currentUserIsAdmin}
           onDecide={handleDecide}
           deciding={deciding}
         />
