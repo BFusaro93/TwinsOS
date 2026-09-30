@@ -89,7 +89,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { Project, ProjectStatus, Requisition, PurchaseOrder, ProjectSubcontractCost, SubcontractCostType } from "@/types";
-import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -148,7 +147,6 @@ function MaterialsTab({ project }: { project: Project }) {
   const { mutate: deleteDirectItem } = useDeleteProjectDirectItem();
   const { mutateAsync: addReqLineItem } = useAddRequisitionLineItem();
   const { mutateAsync: addPOLineItem } = useAddPOLineItem();
-  const { canWriteEquipt } = useRoleCapabilities();
 
   // Build the initial list from linked REQ / PO line items.
   // Skip requisitions that have been converted to a PO (status "ordered"
@@ -469,12 +467,10 @@ function MaterialsTab({ project }: { project: Project }) {
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Materials</p>
-        {canWriteEquipt && (
-          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="h-7 gap-1 text-xs">
-            <Plus className="h-3 w-3" />
-            Add Material
-          </Button>
-        )}
+        <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="h-7 gap-1 text-xs">
+          <Plus className="h-3 w-3" />
+          Add Material
+        </Button>
       </div>
 
       {items.length === 0 ? (
@@ -543,14 +539,14 @@ function MaterialsTab({ project }: { project: Project }) {
                       )}
                     </TableCell>
                     <TableCell className="px-2 text-right">
-                      {canWriteEquipt && <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <button onClick={() => openEdit(li)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Edit">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => deleteItem(li)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title={li.sourceType !== "direct" ? "Remove from view only (edit via source document)" : "Delete"} disabled={li.sourceType !== "direct"}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      </div>}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -698,7 +694,6 @@ function SubcontractsTab({ project }: { project: Project }) {
   const { mutate: createCost, isPending: creating } = useCreateProjectSubcontractCost();
   const { mutate: updateCost, isPending: updating } = useUpdateProjectSubcontractCost();
   const { mutate: deleteCost } = useDeleteProjectSubcontractCost();
-  const { canWriteEquipt } = useRoleCapabilities();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -765,12 +760,10 @@ function SubcontractsTab({ project }: { project: Project }) {
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Other Costs</p>
-        {canWriteEquipt && (
-          <Button size="sm" variant="outline" onClick={openAdd} className="h-7 gap-1 text-xs">
-            <Plus className="h-3 w-3" />
-            Add Cost
-          </Button>
-        )}
+        <Button size="sm" variant="outline" onClick={openAdd} className="h-7 gap-1 text-xs">
+          <Plus className="h-3 w-3" />
+          Add Cost
+        </Button>
       </div>
 
       {isLoading ? (
@@ -779,11 +772,9 @@ function SubcontractsTab({ project }: { project: Project }) {
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-10 text-center">
           <Building2 className="h-8 w-8 text-slate-300" />
           <p className="text-sm text-slate-400">No other costs yet.</p>
-          {canWriteEquipt && (
-            <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
-              <Plus className="h-3 w-3" /> Add First Cost
-            </Button>
-          )}
+          <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
+            <Plus className="h-3 w-3" /> Add First Cost
+          </Button>
         </div>
       ) : (
         <>
@@ -814,14 +805,14 @@ function SubcontractsTab({ project }: { project: Project }) {
                     </TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(cost.amount)}</TableCell>
                     <TableCell className="px-2 text-right">
-                      {canWriteEquipt && <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <button onClick={() => openEdit(cost)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Edit">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => setDeleteConfirmId(cost.id)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Delete">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      </div>}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -986,7 +977,6 @@ function HoursField({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const { canWriteEquipt } = useRoleCapabilities();
 
   function startEdit() {
     setDraft(value != null ? String(value) : "");
@@ -1018,10 +1008,6 @@ function HoursField({
     );
   }
 
-  if (!canWriteEquipt) {
-    return <span className="px-1 text-sm font-medium text-slate-900">{value != null ? `${value} hrs` : "—"}</span>;
-  }
-
   return (
     <button
       type="button"
@@ -1046,7 +1032,6 @@ function RateField({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const { canWriteEquipt } = useRoleCapabilities();
 
   function startEdit() {
     setDraft((valueCents / 100).toFixed(2));
@@ -1077,10 +1062,6 @@ function RateField({
         <span className="text-xs text-slate-400">/hr</span>
       </div>
     );
-  }
-
-  if (!canWriteEquipt) {
-    return <span className="px-1 text-sm font-medium text-slate-900">{formatCurrency(valueCents)}/hr</span>;
   }
 
   return (
@@ -1114,7 +1095,6 @@ function DetailsTab({
   const router = useRouter();
   const { data: linkedPhotoJob } = usePhotoJobByProjectId(project.id);
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
-  const { canWriteEquipt } = useRoleCapabilities();
   // Use project-level snapshot if set; fall back to org settings for old projects
   const effectiveFullRate = project.laborRateCents ?? breakevenLaborRateCents;
   const effectiveBurdenedRate = project.burdenedRateCents ?? burdenedLaborRateCents;
@@ -1146,7 +1126,7 @@ function DetailsTab({
           currentIndex={PROJECT_STATUS_INDEX[status]}
           isTerminalError={status === "canceled"}
         />
-        {canWriteEquipt && <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {status === "sold" && (<>
             <Button size="sm" onClick={() => onStatusChange("scheduled")}>Mark Scheduled</Button>
             <Button size="sm" variant="outline" onClick={() => onStatusChange("canceled")}>Cancel Project</Button>
@@ -1171,7 +1151,7 @@ function DetailsTab({
           {status === "canceled" && (
             <Button size="sm" variant="outline" onClick={() => onStatusChange("sold")}>Reopen</Button>
           )}
-        </div>}
+        </div>
       </div>
 
       <Separator />
@@ -1422,7 +1402,6 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const { mutate: deleteProject, isPending: deleting } = useDeleteProject();
   const { mutate: archiveProject, isPending: archiving } = useArchiveProject();
   const { mutate: updateProject } = useUpdateProject();
-  const { canWriteEquipt } = useRoleCapabilities();
   const { data: allRequisitions } = useRequisitions();
   const { data: allPurchaseOrders } = usePurchaseOrders();
   const { data: subcontractCostsRaw = [] } = useProjectSubcontractCosts(project.id);
@@ -1524,7 +1503,6 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
-          {canWriteEquipt && (<>
           <EditButton onClick={() => setEditOpen(true)} />
           {/* Matches the Job Photos archive button (JobPhotosPage) — outline
               with an Archive/ArchiveRestore icon, brand-colored when archived. */}
@@ -1549,7 +1527,6 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-          </>)}
         </div>
       </div>
 

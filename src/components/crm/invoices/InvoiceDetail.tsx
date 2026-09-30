@@ -58,7 +58,6 @@ import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "
 import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
-import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
 import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { InvoiceEmailDialog } from "@/components/crm/invoices/InvoiceEmailDialog";
@@ -599,10 +598,6 @@ export function InvoiceDetail({
   const { mutateAsync: updateFinancials } = useUpdateInvoiceFinancials();
   const { mutateAsync: updateHeader } = useUpdateInvoiceHeader();
   const { mutateAsync: setLock } = useSetInvoiceLock();
-  // Viewer / requestor app roles are read-only in Landscapt: every field
-  // renders the same as on a locked invoice.
-  const { canWriteCrm } = useRoleCapabilities();
-  const editLocked = (invoice?.locked ?? false) || !canWriteCrm;
   const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const { mutateAsync: voidInvoice } = useVoidInvoice();
@@ -787,8 +782,6 @@ export function InvoiceDetail({
   function handlePrint() {
     const win = window.open(`/api/crm/invoices/${invoice!.id}/pdf`, "_blank");
     if (win) win.addEventListener("load", () => win.print(), { once: true });
-    // Read-only roles can print, but the lock / status write would be refused.
-    if (!canWriteCrm) return;
     // A printed invoice has gone out to the client on paper even though no
     // email was sent — move it out of "draft" the same way emailing does, so
     // auto-invoicing (visits/[visitId]/complete) treats the period as closed
@@ -940,13 +933,12 @@ export function InvoiceDetail({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {canWriteCrm && onDiscard && invoice.invoiceNumber == null && (
+          {onDiscard && invoice.invoiceNumber == null && (
             <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-red-600"
               onClick={handleDiscard}>
               Discard
             </Button>
           )}
-          {canWriteCrm && (<>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handleToggleLock}
             title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
@@ -966,7 +958,6 @@ export function InvoiceDetail({
             title={cardPaymentsReady ? undefined : "Connect your Stripe account in Settings > Accounting to accept card payments"}>
             <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500" /> Collect Payment
           </Button>
-          </>)}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handlePrint}>
             <Printer className="mr-1 h-3.5 w-3.5 text-slate-500" /> Print
@@ -978,11 +969,9 @@ export function InvoiceDetail({
               <Mail className="mr-1 h-3.5 w-3.5 text-blue-500" /> Email
             </Button>
           )}
-          {canWriteCrm && (
-            <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving || editLocked}>
-              <Save className="mr-1 h-3.5 w-3.5" />{saving ? "Saving…" : "Save Invoice"}
-            </Button>
-          )}
+          <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving || invoice.locked}>
+            <Save className="mr-1 h-3.5 w-3.5" />{saving ? "Saving…" : "Save Invoice"}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" className="h-8 w-8">
@@ -993,8 +982,8 @@ export function InvoiceDetail({
               <DropdownMenuItem onSelect={handleDownloadPDF}>
                 <Printer className="mr-2 h-3.5 w-3.5 text-slate-500" /> Download PDF
               </DropdownMenuItem>
-              {canWriteCrm && <DropdownMenuSeparator />}
-              {canWriteCrm && invoice.status !== "void" && (
+              <DropdownMenuSeparator />
+              {invoice.status !== "void" && (
                 <DropdownMenuItem
                   disabled={voidBlocked !== null}
                   title={voidBlocked ?? undefined}
@@ -1006,7 +995,6 @@ export function InvoiceDetail({
                   <Ban className="mr-2 h-3.5 w-3.5 text-slate-500" /> Void Invoice
                 </DropdownMenuItem>
               )}
-              {canWriteCrm && (<>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-red-600 focus:text-red-600"
@@ -1014,7 +1002,6 @@ export function InvoiceDetail({
               >
                 <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete Invoice
               </DropdownMenuItem>
-              </>)}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1106,7 +1093,7 @@ export function InvoiceDetail({
                 }}
                 type="number"
                 className="ml-1 w-20 bg-brand-700 text-white text-sm font-semibold border-brand-500"
-                disabled={editLocked}
+                disabled={invoice.locked}
               />
             </span>
             {invoice.clientName && (
@@ -1114,7 +1101,7 @@ export function InvoiceDetail({
             )}
             <Select
               value={invoice.status}
-              disabled={editLocked}
+              disabled={invoice.locked}
               onValueChange={(v) => {
                 // Voiding needs to zero the balance and resync the client's total,
                 // so route it through the confirm dialog instead of a bare status write.
@@ -1149,7 +1136,7 @@ export function InvoiceDetail({
                   onSave={(v) => updateHeader({ id: invoice.id, patch: { service_address: v || null } })}
                   className="text-xs text-slate-600 w-full"
                   placeholder="Click to set a different service address…"
-                  disabled={editLocked}
+                  disabled={invoice.locked}
                 />
               </div>
             </div>
@@ -1167,20 +1154,20 @@ export function InvoiceDetail({
                         onSave={(v) => setInvoiceNumber(Number(v) || invoice.invoiceNumber)}
                         type="number"
                         className="w-28"
-                        disabled={editLocked}
+                        disabled={invoice.locked}
                       />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Invoice Date</td>
                     <td className="py-2 text-slate-700">
-                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" disabled={editLocked} />
+                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Terms</td>
                     <td className="py-2">
-                      <Select value={terms} onValueChange={handleTermsChange} disabled={editLocked}>
+                      <Select value={terms} onValueChange={handleTermsChange} disabled={invoice.locked}>
                         <SelectTrigger className="h-7 text-xs w-40 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue />
                         </SelectTrigger>
@@ -1195,7 +1182,7 @@ export function InvoiceDetail({
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Due Date</td>
                     <td className="py-2 text-slate-700">
-                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" disabled={editLocked} />
+                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
                   <tr>
@@ -1204,7 +1191,7 @@ export function InvoiceDetail({
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          disabled={editLocked}
+                          disabled={invoice.locked}
                           onClick={() => {
                             const fallback = (invoice.clientDefaultTaxRateBps ?? 0) > 0
                               ? invoice.clientDefaultTaxRateBps!
@@ -1232,7 +1219,7 @@ export function InvoiceDetail({
                               cents={taxRateBps}
                               onChange={setTaxRateBps}
                               className="h-7 w-24 text-right text-xs"
-                              disabled={editLocked}
+                              disabled={invoice.locked}
                               aria-label="Tax rate percent"
                             />
                             <span className="text-slate-500 font-medium">%</span>
@@ -1257,10 +1244,10 @@ export function InvoiceDetail({
                           onChange={(e) => handleDiscountStrChange(e.target.value)}
                           onBlur={() => setDiscountCents(Math.round((parseFloat(discountStr) || 0) * 100))}
                           className="h-7 w-24 text-right text-xs"
-                          disabled={editLocked}
+                          disabled={invoice.locked}
                         />
                         {activeDiscounts.length > 0 && (
-                          <Select onValueChange={applyNamedDiscount} disabled={editLocked}>
+                          <Select onValueChange={applyNamedDiscount} disabled={invoice.locked}>
                             <SelectTrigger className="h-7 w-48 max-w-full min-w-0 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
                               <SelectValue placeholder="Apply a saved discount…" />
                             </SelectTrigger>
@@ -1286,7 +1273,7 @@ export function InvoiceDetail({
                         onSave={(v) => updateHeader({ id: invoice.id, patch: { po_number: v || null } })}
                         className="w-36"
                         placeholder="Click to add…"
-                        disabled={editLocked}
+                        disabled={invoice.locked}
                       />
                     </td>
                   </tr>
@@ -1296,7 +1283,7 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.salesRepId ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { sales_rep_id: v || null } })}
-                        disabled={editLocked}
+                        disabled={invoice.locked}
                       >
                         <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Assign sales rep…" />
@@ -1322,7 +1309,7 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.preferredPaymentMethod ?? invoice.clientDefaultPaymentMethod ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { preferred_payment_method: v || null } })}
-                        disabled={editLocked}
+                        disabled={invoice.locked}
                       >
                         <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Select method…" />
@@ -1373,7 +1360,7 @@ export function InvoiceDetail({
               </thead>
               <tbody>
                 {lineItems.map((li) => (
-                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} locked={editLocked} />
+                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} locked={invoice.locked} />
                 ))}
                 {lineItems.length === 0 && (
                   <tr>
@@ -1388,16 +1375,16 @@ export function InvoiceDetail({
             {/* Add item + totals */}
             <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50">
               <Popover
-                open={lineItemPickerOpen && !editLocked}
+                open={lineItemPickerOpen && !invoice.locked}
                 onOpenChange={(o) => {
-                  if (editLocked) return;
+                  if (invoice.locked) return;
                   setLineItemPickerOpen(o);
                   if (!o) setLineItemSearch("");
                   else setTimeout(() => lineItemSearchRef.current?.focus(), 50);
                 }}
               >
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-xs" disabled={editLocked}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" disabled={invoice.locked}>
                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Line Item
                     <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
                   </Button>
@@ -1506,7 +1493,7 @@ export function InvoiceDetail({
               automatically, so without this prompt a converted job gets
               invoiced its full amount and the client is asked for money they
               have already paid. */}
-          {canWriteCrm && unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
+          {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
             <div className="mx-8 mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-blue-900">

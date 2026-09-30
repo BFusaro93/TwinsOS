@@ -5,7 +5,7 @@ import { Send } from "lucide-react";
 import { formatDateTime, getInitials, getAvatarColor } from "@/lib/utils";
 import { useComments, useAddComment } from "@/lib/hooks/use-comments";
 import { useCurrentUserStore } from "@/stores";
-import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
+import { useRoleCapabilities, isEquiptRecordType } from "@/lib/hooks/use-role-capabilities";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/shared/MentionTextarea";
 import { parseMentionSegments } from "@/lib/mentions";
@@ -36,8 +36,8 @@ interface CommentsSectionProps {
   recordId: string;
   /** Dark variant — use inside dark-background panels like the photo lightbox */
   dark?: boolean;
-  /** Whether the current user may post here. Defaults to the app role's
-   *  general write access (hidden for viewer / requestor); pass
+  /** Whether the current user may post here. On Equipt records it defaults
+   *  to the app role's write access (hidden for viewer / requestor); pass
    *  `canComment(record)` from useRoleCapabilities to let a requestor
    *  comment on their own records. */
   canWrite?: boolean;
@@ -45,7 +45,7 @@ interface CommentsSectionProps {
 
 export function CommentsSection({ recordType, recordId, dark = false, canWrite }: CommentsSectionProps) {
   const { canComment } = useRoleCapabilities();
-  const showInput = canWrite ?? canComment();
+  const showInput = canWrite ?? (isEquiptRecordType(recordType) ? canComment() : true);
   const { data: comments, isLoading } = useComments(recordType, recordId);
   const { mutate: addComment, isPending: sending } = useAddComment();
   const { currentUser, currentUserLoaded } = useCurrentUserStore();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Download, Upload, FileDown, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -191,10 +192,14 @@ export function ImportExportMenu({
   const { can, isAdmin, roleId } = usePermissions();
   const hasCrmRole = !isAdmin && !!roleId;
   const canExport = !hasCrmRole || can("export_lists");
-  // Viewer / requestor app roles are read-only in the DB for every table an
-  // import writes, whatever the caller or the CRM role says.
+  // Viewer / requestor app roles are read-only in the DB for Equipt tables
+  // (vendors included, wherever they're imported from). Landscapt imports
+  // follow the Landscapt role above.
+  const pathname = usePathname();
+  const importsEquipt = !pathname.startsWith("/crm") || pathname.startsWith("/crm/vendors");
   const { canWriteEquipt } = useRoleCapabilities();
-  const effectiveHideImport = !canWriteEquipt || (hideImport ?? (hasCrmRole && !can("imports")));
+  const effectiveHideImport =
+    (importsEquipt && !canWriteEquipt) || (hideImport ?? (hasCrmRole && !can("imports")));
 
   // Step 1: Mapping
   const [mappingOpen, setMappingOpen] = useState(false);
