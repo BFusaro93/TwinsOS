@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { getSeatConfig, isBillablePlan, type BillablePlan } from "./plans";
+import { BILLABLE_PLANS, getSeatConfig, isBillablePlan, type BillablePlan } from "./plans";
 
 const SEAT_OVERAGE_ENV_VAR: Record<BillablePlan, string> = {
   starter: "STRIPE_PRICE_SEAT_OVERAGE_STARTER",
@@ -37,6 +37,26 @@ export async function syncSeatOverage(
 ): Promise<void> {
   if (!isBillablePlan(plan)) return;
   const overagePriceId = getSeatOveragePriceIdForPlan(plan);
+
+  // A plan change swaps the base price but leaves the OLD plan's overage
+  // item on the subscription — without this the org is billed seat overage
+  // twice (old plan's item + the new one created below). Two plans can share
+  // one overage price id, so never delete the current plan's id.
+  const otherOveragePriceIds = new Set(
+    BILLABLE_PLANS.map((p) => getSeatOveragePriceIdForPlan(p.plan))
+      .filter((id): id is string => !!id && id !== overagePriceId)
+  );
+  for (const item of subscription.items.data) {
+    if (otherOveragePriceIds.has(item.price.id)) {
+      try {
+        await stripe.subscriptionItems.del(item.id, { proration_behavior: "create_prorations" });
+      } catch (err) {
+        // A webhook retry replays the same item list — already gone is fine.
+        if ((err as { code?: string }).code !== "resource_missing") throw err;
+      }
+    }
+  }
+
   if (!overagePriceId) return; // not configured in Stripe yet — skip silently, same as other optional prices
 
   const { seatsIncluded } = getSeatConfig(plan, overrides);

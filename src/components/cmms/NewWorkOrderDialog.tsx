@@ -236,7 +236,9 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     const commonFields = {
       title,
       description: description || null,
-      status: "open" as import("@/types/cmms").WorkOrderStatus,
+      // Editing keeps the WO's status and its PM / parent / automation links —
+      // resetting them here reopened completed WOs and detached PM and sub-WOs.
+      status: (isEditing && initialData ? initialData.status : "open") as import("@/types/cmms").WorkOrderStatus,
       priority: priority as import("@/types/cmms").WorkOrderPriority,
       woType: woType !== "none" ? (woType as "reactive" | "preventive") : null,
       category: categoryIds[0] ?? null,
@@ -251,9 +253,9 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
       recurrenceFrequency: recurrenceFrequency !== "none"
         ? (recurrenceFrequency as import("@/types/cmms").WorkOrder["recurrenceFrequency"])
         : null,
-      parentWorkOrderId: null,
-      pmScheduleId: null,
-      automationId: null,
+      parentWorkOrderId: isEditing && initialData ? initialData.parentWorkOrderId ?? null : null,
+      pmScheduleId: isEditing && initialData ? initialData.pmScheduleId ?? null : null,
+      automationId: isEditing && initialData ? initialData.automationId ?? null : null,
     };
     if (isEditing && initialData) {
       updateWO.mutate(
@@ -623,7 +625,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
                 </Select>
                 {recurrenceFrequency !== "none" && (
                   <p className="text-xs text-slate-500">
-                    A new work order will be generated automatically at this interval once the current one is marked done.
+                    When this work order is marked done, the next one is created automatically, due one interval after this one&rsquo;s due date.
                   </p>
                 )}
               </div>

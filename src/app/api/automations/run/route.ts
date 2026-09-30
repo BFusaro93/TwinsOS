@@ -1,236 +1,43 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 import { processDueEnrollment } from "@/lib/automations/sequence-processor";
 import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
-import { EMAIL_FROM } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
+import {
+  EVENT_TRIGGER_TYPES,
+  SUPPORTED_ACTION_TYPES,
+  executeAction,
+  fireEventAutomations,
+  type AdminClient,
+} from "@/lib/automations/cmms-automation-actions";
 
 const log = logger.child("crm-processor");
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AdminClient = ReturnType<typeof createClient<any>>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AutomationRow = Record<string, any>;
-
-const SUPPORTED_ACTION_TYPES = [
-  "create_work_order",
-  "create_wo_request",
-  "create_requisition",
-  "send_notification",
-  "send_email",
-];
 
 // Trigger types evaluated by polling current state on every run (meter
 // value, stock level, due dates) — each needs the fire-once/reset-on-clear
 // gating below since the underlying condition can stay true for days.
 const POLL_TRIGGER_TYPES = ["meter_threshold", "part_low_stock", "pm_due", "wo_overdue"] as const;
-// Trigger types that correspond to a discrete event (something was created,
-// something's status changed) rather than a standing condition — these are
-// fired directly by the code path that causes the event, via the eventTrigger
-// body param below, not by polling.
-const EVENT_TRIGGER_TYPES = ["request_submitted", "wo_status_change", "po_status_change"] as const;
+// Event trigger types (EVENT_TRIGGER_TYPES) are fired via the eventTrigger
+// body param below, or directly by server code (submitWorkRequest).
 
-interface ActionContext {
-  orgId: string;
-  assetId?: string | null;
-  assetName?: string | null;
+// Meter rules whose action creates a request/WO wait on it (pending_reset)
+// and are released by release_meter_automation_firing(). Every other action
+// (notify, email, requisition) has nothing to wait on, so the runner
+// advances the threshold itself the moment it fires.
+const METER_WAITING_ACTIONS = ["create_work_order", "create_wo_request"];
+
+/** trigger_config.interval as a positive number, or null. */
+function meterInterval(tc: Record<string, unknown>): number | null {
+  const n = Number(tc.interval);
+  return tc.interval != null && tc.interval !== "" && Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/**
- * Executes one automation's configured action. Shared by every trigger type
- * (polled or event-fired) so "what happens" is identical regardless of
- * "when it fires" — this was extracted from the old meter-only inline logic
- * so part_low_stock/pm_due/wo_overdue/request_submitted/wo_status_change/
- * po_status_change could reuse it instead of duplicating five branches.
- */
-async function executeAction(
-  adminClient: AdminClient,
-  auto: AutomationRow,
-  ctx: ActionContext
-): Promise<{ result: string } | { skipReason: string }> {
-  const ac = (auto.action_config ?? {}) as Record<string, unknown>;
-  const acTitle = (ac.title as string) ?? "Automated Work Order";
-  const acPriority = (ac.priority as string) ?? "medium";
-  const orgId = ctx.orgId;
-
-  if (auto.action_type === "create_work_order") {
-    // Atomic per-org/year counter, not Date.now() — see next_work_order_number().
-    const { data: workOrderNumber, error: woNumErr } = await adminClient.rpc("next_work_order_number", {
-      p_org_id_override: orgId,
-    });
-    if (woNumErr || !workOrderNumber) return { skipReason: `failed to generate WO number: ${woNumErr?.message ?? "unknown"}` };
-    // A meter rule is preventive maintenance by definition (an oil change at
-    // N hours), and counts toward PM compliance as due 7 days after the meter
-    // trips — see v_pm_outcomes.
-    const isMeterPM = auto.trigger_type === "meter_threshold";
-    const meterDueDate = isMeterPM
-      ? shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), 7)
-      : null;
-    const { data: wo, error: woErr } = await adminClient
-      .from("work_orders")
-      .insert({
-        org_id: orgId,
-        title: acTitle,
-        priority: acPriority,
-        assigned_to_name: (ac.assigned_to as string) || null,
-        status: "open",
-        asset_id: ctx.assetId ?? null,
-        asset_name: ctx.assetName ?? null,
-        work_order_number: workOrderNumber,
-        automation_id: auto.id,
-        is_recurring: false,
-        ...(isMeterPM && { wo_type: "preventive", due_date: meterDueDate }),
-      })
-      .select("id, work_order_number")
-      .single();
-    if (woErr || !wo) return { skipReason: `failed to create WO: ${woErr?.message ?? "unknown"}` };
-    return { result: wo.work_order_number };
-  }
-
-  if (auto.action_type === "create_wo_request") {
-    const requestNumber = `MR-${new Date().getFullYear()}-${Date.now()}`;
-    const { data: mr, error: mrErr } = await adminClient
-      .from("maintenance_requests")
-      .insert({
-        org_id: orgId,
-        request_number: requestNumber,
-        title: acTitle,
-        priority: acPriority,
-        status: "open",
-        asset_id: ctx.assetId ?? null,
-        asset_name: ctx.assetName ?? null,
-        requested_by_name: "Automation",
-        description: `Auto-generated by automation: ${auto.name}`,
-        automation_id: auto.id,
-      })
-      .select("id, request_number")
-      .single();
-    if (mrErr || !mr) return { skipReason: `failed to create MR: ${mrErr?.message ?? "unknown"}` };
-
-    try {
-      const resendKey = process.env.RESEND_API_KEY;
-      if (resendKey) {
-        const { data: recipients } = await adminClient
-          .from("profiles")
-          .select("email, name, notification_prefs")
-          .eq("org_id", orgId)
-          .in("role", ["admin", "manager"]);
-
-        const eligible = (recipients ?? []).filter((p: { email: string | null; notification_prefs: Record<string, unknown> | null }) => {
-          if (!p.email) return false;
-          const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
-          return prefs["emailNewMaintenanceRequest"] !== false;
-        });
-
-        if (eligible.length > 0) {
-          const resend = new Resend(resendKey);
-          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
-          const subject = `New maintenance request: ${acTitle}`;
-          const link = `${siteUrl}/cmms/requests?id=${mr.id}`;
-          await Promise.allSettled(
-            eligible.map((p: { email: string | null; name: string | null }) =>
-              resend.emails.send({
-                from: EMAIL_FROM,
-                to: p.email as string,
-                subject,
-                html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-                  <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
-                  <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
-                  <p style="margin:0 0 24px;color:#475569">Automation <strong>${auto.name}</strong> created: <strong>${mr.request_number} — ${acTitle}</strong>.</p>
-                  <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
-                </div>`,
-              })
-            )
-          );
-        }
-      }
-    } catch {
-      // best-effort — don't fail the automation run
-    }
-    return { result: mr.request_number };
-  }
-
-  if (auto.action_type === "create_requisition") {
-    // Atomic per-org/year counter, not Date.now() — see next_requisition_number().
-    const { data: requisitionNumber, error: reqNumErr } = await adminClient.rpc("next_requisition_number", {
-      p_org_id_override: orgId,
-    });
-    if (reqNumErr || !requisitionNumber) return { skipReason: `failed to generate requisition number: ${reqNumErr?.message ?? "unknown"}` };
-    const { data: req, error: reqErr } = await adminClient
-      .from("requisitions")
-      .insert({
-        org_id: orgId,
-        requisition_number: requisitionNumber,
-        title: auto.name,
-        status: "draft",
-        requested_by_name: "Automation",
-        notes: (ac.notes as string) || `Auto-generated by automation: ${auto.name}`,
-      })
-      .select("id, requisition_number")
-      .single();
-    if (reqErr || !req) return { skipReason: `failed to create requisition: ${reqErr?.message ?? "unknown"}` };
-    return { result: req.requisition_number };
-  }
-
-  if (auto.action_type === "send_notification") {
-    const recipientRole = (ac.recipient_role as string) ?? "all";
-    const message = (ac.message as string) ?? `Automation "${auto.name}" triggered.`;
-
-    let profileQuery = adminClient.from("profiles").select("id").eq("org_id", orgId);
-    if (recipientRole !== "all") profileQuery = profileQuery.eq("role", recipientRole);
-
-    const { data: profiles, error: profileErr } = await profileQuery;
-    if (profileErr || !profiles?.length) {
-      return { skipReason: `no profiles found for role "${recipientRole}"` };
-    }
-
-    const rows = profiles.map((p: { id: string }) => ({
-      org_id: orgId,
-      user_id: p.id,
-      type: "automation_alert",
-      title: "Automation Alert",
-      message,
-      entity_id: null,
-      entity_type: null,
-    }));
-    const { error: notifErr } = await adminClient.from("notifications").insert(rows);
-    if (notifErr) return { skipReason: `failed to insert notifications: ${notifErr.message}` };
-    return { result: `notified ${profiles.length} user${profiles.length === 1 ? "" : "s"}` };
-  }
-
-  if (auto.action_type === "send_email") {
-    const recipient = (ac.recipient as string) ?? "";
-    if (!recipient) return { skipReason: "no recipient in action_config" };
-
-    const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) return { skipReason: "RESEND_API_KEY not configured" };
-
-    const fromEmail = process.env.FROM_EMAIL ?? "noreply@landscapt.com";
-    const subject = `Automation triggered: ${auto.name}`;
-    const body = (ac.message as string)
-      ? `${ac.message as string}\n\nTriggered by automation: ${auto.name}`
-      : `Automation "${auto.name}" was triggered.`;
-
-    const emailRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: fromEmail, to: [recipient], subject, text: body }),
-    });
-    if (!emailRes.ok) {
-      const errText = await emailRes.text();
-      return { skipReason: `email send failed: ${errText}` };
-    }
-    return { result: `email sent to ${recipient}` };
-  }
-
-  return { skipReason: `unsupported action_type: ${auto.action_type}` };
-}
 
 /** True if ANY part matching the automation's configured name (or "any") is
  *  at or below its minimum stock. A single automation only tracks one
@@ -323,6 +130,7 @@ async function handleRun(request: Request) {
     authHeader === `Bearer ${process.env.CRON_SECRET}`;
 
   let callerOrgId: string | null = null;
+  let callerUserId: string | null = null;
 
   if (!isCron) {
     const userClient = await createServerClient();
@@ -342,6 +150,7 @@ async function handleRun(request: Request) {
       return NextResponse.json({ error: "Profile not found" }, { status: 403 });
     }
     callerOrgId = profile.org_id;
+    callerUserId = user.id;
   }
 
   // ── Event-fired mode ──────────────────────────────────────────────────────
@@ -415,45 +224,15 @@ async function handleRun(request: Request) {
         if (po) await notifyZapierSubscribers(adminClient, callerOrgId, "po_approved", config.map(po));
       }
 
-      const autoQuery = (adminClient as AdminClient)
-        .from("automations")
-        .select("*")
-        .eq("trigger_type", eventTrigger)
-        .eq("org_id", callerOrgId)
-        .eq("enabled", true)
-        .in("action_type", SUPPORTED_ACTION_TYPES)
-        .is("deleted_at", null);
-
-      const { data: candidates } = await autoQuery;
-      const fired: { automationId: string; name: string; result: string }[] = [];
-      const skipped: { automationId: string; reason: string }[] = [];
-      const now = new Date().toISOString();
-
-      for (const auto of candidates ?? []) {
-        if (eventTrigger === "wo_status_change" || eventTrigger === "po_status_change") {
-          const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
-          if (tc.to_status !== toStatus) {
-            skipped.push({ automationId: auto.id, reason: `toStatus "${toStatus}" doesn't match configured "${tc.to_status}"` });
-            continue;
-          }
-        }
-
-        const outcome = await executeAction(adminClient as AdminClient, auto, {
-          orgId: callerOrgId,
-          assetId: verifiedAssetId,
-          assetName: verifiedAssetId ? (assetName ?? null) : null,
-        });
-        if ("skipReason" in outcome) {
-          skipped.push({ automationId: auto.id, reason: outcome.skipReason });
-          continue;
-        }
-
-        await (adminClient as AdminClient)
-          .from("automations")
-          .update({ last_fired_at: now, updated_at: now })
-          .eq("id", auto.id);
-        fired.push({ automationId: auto.id, name: auto.name, result: outcome.result });
-      }
+      const { fired, skipped } = await fireEventAutomations(adminClient as AdminClient, {
+        orgId: callerOrgId,
+        eventTrigger,
+        toStatus: toStatus ?? null,
+        assetId: verifiedAssetId,
+        assetName: assetName ?? null,
+        // The caller's own action fired these — never notify them about it.
+        actorUserId: callerUserId,
+      });
 
       return NextResponse.json({ fired: fired.length, skipped: skipped.length, details: { fired, skipped } });
     }
@@ -512,6 +291,98 @@ async function handleRun(request: Request) {
 
       const currentValue = Number(meter.current_value ?? 0);
       const triggered = operator === ">=" ? currentValue >= threshold : currentValue <= threshold;
+
+      // ── Notify / email / requisition rules on a rising (>=) meter ────────
+      // These create nothing the release trigger could wait on, and a meter
+      // never drops back below the threshold, so the old "fire, set
+      // pending_reset, wait" gating made them fire exactly once, forever.
+      // Instead the firing itself moves the threshold on by the service
+      // interval (from the reading that fired it — the same rule
+      // release_meter_automation_firing() applies to a completed WO). A rule
+      // with no interval has no next threshold, so it fires once and is
+      // switched off rather than left looking enabled. (<= rules keep the
+      // wait-until-clear gating below: their condition does clear.)
+      if (operator === ">=" && !METER_WAITING_ACTIONS.includes(auto.action_type as string)) {
+        const interval = meterInterval(tc);
+
+        // Rules that fired before this change are still parked on
+        // pending_reset. Release them without firing: advance past the
+        // reading that fired them, or switch off a rule with no interval.
+        if (auto.pending_reset) {
+          const firedAt = auto.last_fired_value != null ? Number(auto.last_fired_value) : threshold;
+          await (adminClient as AdminClient)
+            .from("automations")
+            .update(
+              interval != null
+                ? { trigger_config: { ...tc, threshold: firedAt + interval }, pending_reset: false, updated_at: now }
+                : { pending_reset: false, enabled: false, updated_at: now }
+            )
+            .eq("id", auto.id)
+            .eq("org_id", orgId)
+            .eq("pending_reset", true);
+          skipped.push({
+            automationId: auto.id,
+            reason: interval != null
+              ? `released legacy firing; threshold advanced to ${firedAt + interval}`
+              : "released legacy firing; no service interval, so the rule was disabled",
+          });
+          continue;
+        }
+
+        if (!triggered) {
+          skipped.push({ automationId: auto.id, reason: `meter value ${currentValue} does not satisfy ${operator} ${threshold}` });
+          continue;
+        }
+
+        // Claim by advancing the threshold, conditioned on last_fired_at
+        // being what we read, so two overlapping runs can't both fire.
+        let claimQuery = (adminClient as AdminClient)
+          .from("automations")
+          .update({
+            last_fired_at: now,
+            last_fired_value: currentValue,
+            trigger_config: interval != null ? { ...tc, threshold: currentValue + interval } : tc,
+            ...(interval == null && { enabled: false }),
+            updated_at: now,
+          })
+          .eq("id", auto.id)
+          .eq("org_id", orgId)
+          .eq("pending_reset", false);
+        claimQuery = auto.last_fired_at
+          ? claimQuery.eq("last_fired_at", auto.last_fired_at)
+          : claimQuery.is("last_fired_at", null);
+        const { data: advClaimed, error: advClaimErr } = await claimQuery.select("id");
+        if (advClaimErr) {
+          skipped.push({ automationId: auto.id, reason: `couldn't claim firing: ${advClaimErr.message}` });
+          continue;
+        }
+        if (!advClaimed || advClaimed.length === 0) {
+          skipped.push({ automationId: auto.id, reason: "already fired by a concurrent run" });
+          continue;
+        }
+
+        const advOutcome = await executeAction(adminClient as AdminClient, auto, {
+          orgId, assetId: meter.asset_id ?? null, assetName: meter.asset_name ?? null,
+        });
+        if ("skipReason" in advOutcome) {
+          // Nothing happened — put the threshold back so the next run retries.
+          await (adminClient as AdminClient)
+            .from("automations")
+            .update({
+              trigger_config: tc,
+              enabled: true,
+              last_fired_at: auto.last_fired_at ?? null,
+              last_fired_value: auto.last_fired_value ?? null,
+              updated_at: now,
+            })
+            .eq("id", auto.id)
+            .eq("last_fired_at", now);
+          skipped.push({ automationId: auto.id, reason: advOutcome.skipReason });
+          continue;
+        }
+        fired.push({ automationId: auto.id, name: auto.name, result: advOutcome.result });
+        continue;
+      }
 
       if (!triggered) {
         if (auto.pending_reset) {
@@ -573,14 +444,17 @@ async function handleRun(request: Request) {
     // different condition check and no asset context.
     let triggered: boolean;
     let notMetReason: string;
+    // use-automations.ts saves these keys snake_case (part_name, days_ahead,
+    // days_overdue); the camelCase reads here never matched, so every rule
+    // ran on the defaults. Read both.
     if (auto.trigger_type === "part_low_stock") {
-      triggered = await evaluatePartLowStock(adminClient as AdminClient, orgId, (tc.partName as string) ?? "any");
+      triggered = await evaluatePartLowStock(adminClient as AdminClient, orgId, ((tc.part_name ?? tc.partName) as string | undefined) ?? "any");
       notMetReason = "no matching part is at or below its minimum stock";
     } else if (auto.trigger_type === "pm_due") {
-      triggered = await evaluatePmDue(adminClient as AdminClient, orgId, Number(tc.daysAhead ?? 7));
+      triggered = await evaluatePmDue(adminClient as AdminClient, orgId, Number(tc.days_ahead ?? tc.daysAhead ?? 7));
       notMetReason = "no active PM schedule is due within the configured window";
     } else if (auto.trigger_type === "wo_overdue") {
-      triggered = await evaluateWoOverdue(adminClient as AdminClient, orgId, Number(tc.daysOverdue ?? 1));
+      triggered = await evaluateWoOverdue(adminClient as AdminClient, orgId, Number(tc.days_overdue ?? tc.daysOverdue ?? 1));
       notMetReason = "no open work order is overdue by the configured amount";
     } else {
       skipped.push({ automationId: auto.id, reason: `unsupported poll trigger_type: ${auto.trigger_type}` });

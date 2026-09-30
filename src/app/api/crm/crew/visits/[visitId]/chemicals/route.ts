@@ -19,12 +19,12 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_id")
+    .select("org_id, crew_id, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
   if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-  if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 

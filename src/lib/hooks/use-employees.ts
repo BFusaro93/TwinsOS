@@ -144,11 +144,13 @@ export function useEmployees(activeOnly = true) {
     queryKey: ["crm-employees", { activeOnly }],
     queryFn: async () => {
       const supabase = createClient();
+      // Sensitive columns (pay, identity, license, clock PIN) are not
+      // directly SELECT-able by `authenticated`; crm_list_employees() returns
+      // full rows, masked per the caller's crm_roles permissions.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
-        .from("crm_employees")
+        .rpc("crm_list_employees", {})
         .select("*, manager:manager_id(first_name, last_name)")
-        .is("deleted_at", null)
         .order("last_name");
       if (activeOnly) q = q.eq("is_active", true);
       const { data, error } = await q;
@@ -183,10 +185,8 @@ export function useEmployee(id: string) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
-        .from("crm_employees")
+        .rpc("crm_list_employees", { p_employee_id: id })
         .select("*, manager:manager_id(first_name, last_name)")
-        .eq("id", id)
-        .is("deleted_at", null)
         .single();
       if (error) throw error;
       return mapEmployee(data);
@@ -201,13 +201,21 @@ export function useCreateEmployee() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: async (values: Record<string, any>) => {
       const supabase = createClient();
+      // RETURNING * would need SELECT on the sensitive columns — return the
+      // id only and re-read the row through crm_list_employees().
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data: inserted, error } = await (supabase as any)
         .from("crm_employees")
         .insert(values)
-        .select()
+        .select("id")
         .single();
       if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: readError } = await (supabase as any)
+        .rpc("crm_list_employees", { p_employee_id: inserted.id })
+        .select("*, manager:manager_id(first_name, last_name)")
+        .single();
+      if (readError) throw readError;
       return mapEmployee(data);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-employees"] }),

@@ -41,6 +41,7 @@ export function WorkOrdersGuide() {
           <TOCLink href="#difference">Work Order vs. Maintenance Request</TOCLink>
           <TOCLink href="#creating-wo">Creating a Work Order</TOCLink>
           <TOCLink href="#wo-status">Work Order status</TOCLink>
+          <TOCLink href="#recurring">Recurring work orders</TOCLink>
           <TOCLink href="#requests">Maintenance Requests</TOCLink>
           <TOCLink href="#converting">Converting a Request to a Work Order</TOCLink>
           <TOCLink href="#pm-schedules">Where PM Schedules fit in</TOCLink>
@@ -68,8 +69,8 @@ export function WorkOrdersGuide() {
           / High / Critical — not &ldquo;Urgent&rdquo;), Type (Reactive / Preventive / unspecified),
           Category (multi-select), Asset or Vehicle, Scheduled Date (hides the work order from lists
           until that date arrives), Assigned To (multi-select), Due Date, Description, and an
-          optional Recurrence (Daily / Weekly / Biweekly / Monthly / Quarterly / Yearly — regenerates
-          a fresh copy automatically once the current one is marked Done).
+          optional Recurrence (Daily / Weekly / Biweekly / Monthly / Quarterly / Yearly — see{" "}
+          <a href="#recurring" className="text-[#60ab45] hover:underline">Recurring work orders</a>).
         </p>
         <Callout>
           <strong>Selecting more than one Asset/Vehicle creates a parent + sub-work-order
@@ -100,6 +101,52 @@ export function WorkOrdersGuide() {
           Both Done and Skipped can be reopened back to Open with a single click if something was
           closed by mistake.
         </p>
+      </Section>
+
+      <Section id="recurring" title="Recurring work orders">
+        <p>
+          When a Work Order with a Recurrence is marked <strong>Done</strong>, the next one is
+          created automatically — whether it was completed from the web app, the crew app, the API,
+          or an automation. A &ldquo;Next work order scheduled for &hellip;&rdquo; message confirms
+          it when you complete it in the web app, and the new one appears in the list right away.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Due date:</strong> the previous Due Date plus one interval (a monthly work order
+            due Mar 15 produces one due Apr 15). If the previous one had no Due Date, the interval
+            counts from the day it was completed, in your organization&apos;s timezone. A Scheduled
+            Date moves forward by the same interval.
+          </li>
+          <li>
+            <strong>What carries over:</strong> title, description, priority, type, categories,
+            asset or vehicle, assignees, and the recurrence itself. The new one starts at{" "}
+            <strong>Open</strong> with its own work order number.
+          </li>
+          <li>
+            <strong>What doesn&apos;t:</strong> parts, labor, and vendor charges on the Costs tab.
+            Parts are left off on purpose — adding a part deducts it from inventory, and the next
+            occurrence may be weeks away. Add parts when the work is actually done.
+          </li>
+          <li>
+            <strong>Multi-asset work orders</strong> recur as a whole: completing the parent creates
+            a new parent with a fresh sub-work order for each of its assets.
+          </li>
+          <li>
+            <strong>One next occurrence per work order.</strong> Reopening a completed recurring
+            work order and marking it Done again doesn&apos;t create a second copy, and neither does
+            re-completing one whose next occurrence you deleted.
+          </li>
+          <li>
+            <strong>To end a series,</strong> edit the current work order and set Recurrence to
+            &ldquo;Does not repeat&rdquo; before completing it. A deleted work order never generates
+            a next one.
+          </li>
+        </ul>
+        <Callout>
+          Work orders generated this way don&apos;t send a &ldquo;new work order assigned&rdquo;
+          notification. For recurring maintenance with more control — such as generating work orders
+          ahead of the due date with an automation — use a <strong>PM Schedule</strong> instead.
+        </Callout>
       </Section>
 
       <Section id="requests" title="Maintenance Requests">
@@ -149,8 +196,9 @@ export function WorkOrdersGuide() {
 
       <Section id="pm-schedules" title="Where PM Schedules fit in">
         <p>
-          Recurring maintenance is driven by <strong>PM Schedules</strong> (CMMS &gt; PM Schedules),
-          not by Work Orders or Requests directly — see the Preventive Maintenance Schedules guide
+          Planned, recurring maintenance programs are driven by <strong>PM Schedules</strong> (CMMS
+          &gt; PM Schedules) — a work order&apos;s own Recurrence setting is the lightweight
+          alternative for a single repeating task. See the Preventive Maintenance Schedules guide
           for the full mechanics. In short: generating work orders from a schedule is a manual button
           click by default, but an Automations rule can make it fire automatically ahead of the due
           date without anyone clicking anything.
@@ -205,9 +253,8 @@ export function WorkOrdersGuide() {
           </li>
           <li>
             <strong>Work Order, Maintenance Request, and Requisition numbers all use different
-            prefixes and digit counts</strong> (<code>WO-</code>, <code>MR-</code>,{" "}
-            <code>REQ-</code>) and none of them are strictly sequential — they&apos;re
-            timestamp-derived, not gapless counters.
+            prefixes</strong> (<code>WO-</code>, <code>MR-</code>, <code>REQ-</code>). Work
+            order numbers count up per organization each year (<code>WO-2026-000123</code>).
           </li>
         </ul>
       </Section>

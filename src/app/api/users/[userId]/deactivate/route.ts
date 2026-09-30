@@ -34,7 +34,7 @@ export async function POST(
 
   const { data: targetProfile } = await supabase
     .from("profiles")
-    .select("org_id")
+    .select("org_id, status")
     .eq("id", userId)
     .single();
   if (!targetProfile || targetProfile.org_id !== callerProfile.org_id) {
@@ -46,22 +46,30 @@ export async function POST(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Ban first — this is what actually revokes access (blocks sign-in and
-  // invalidates future token refreshes). The status flag alone is just a
-  // label the Users list reads; nothing else in the app enforces it.
-  const { error: banError } = await adminClient.auth.admin.updateUserById(userId, {
-    ban_duration: PERMANENT_BAN_DURATION,
-  });
-  if (banError) {
-    return NextResponse.json({ error: banError.message }, { status: 500 });
-  }
-
+  // Profile first: its trigger holds the last-active-admin guard (with a
+  // per-org advisory lock), so a deactivation that would strand the org
+  // without an admin fails HERE — before the auth user is banned. Banning
+  // first used to leave the last admin banned but still "active".
   const { error: updateError } = await adminClient
     .from("profiles")
     .update({ status: "inactive" })
     .eq("id", userId);
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // The ban is what actually revokes access (blocks sign-in and invalidates
+  // future token refreshes).
+  const { error: banError } = await adminClient.auth.admin.updateUserById(userId, {
+    ban_duration: PERMANENT_BAN_DURATION,
+  });
+  if (banError) {
+    // Don't leave the user labeled inactive while still able to sign in.
+    await adminClient
+      .from("profiles")
+      .update({ status: targetProfile.status ?? "active" })
+      .eq("id", userId);
+    return NextResponse.json({ error: banError.message }, { status: 500 });
   }
 
   // The GoTrue ban doesn't reach MCP/OAuth tokens — those are our own rows

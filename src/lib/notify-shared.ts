@@ -4,7 +4,8 @@
  * means "all admins/managers" (the original, un-configurable behavior); an
  * explicit array (even empty) means "exactly these people". Shared by
  * estimate-client-notify.ts and ticket-notify.ts so both broadcast-style
- * notifications behave identically.
+ * notifications behave identically. Deactivated users (status 'inactive')
+ * are never recipients.
  */
 export async function resolveBroadcastRecipients(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,6 +29,7 @@ export async function resolveBroadcastRecipients(
       .from("profiles")
       .select("id, email, name, notification_prefs")
       .eq("org_id", orgId)
+      .neq("status", "inactive")
       .in("id", recipientIds);
     return picked ?? [];
   }
@@ -36,6 +38,7 @@ export async function resolveBroadcastRecipients(
     .from("profiles")
     .select("id, email, name, notification_prefs")
     .eq("org_id", orgId)
+    .neq("status", "inactive")
     .in("role", ["admin", "manager"]);
   return admins ?? [];
 }

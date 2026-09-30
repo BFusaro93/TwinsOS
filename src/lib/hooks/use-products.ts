@@ -44,8 +44,12 @@ export function useProduct(id: string) {
 }
 
 /**
- * Called on goods receipt for stocked_material and project_material line items.
- * Appends a cost layer and — when WAC is active — recalculates unitCost.
+ * Called on goods receipt for every PO line (the product side of a
+ * maintenance_part too). One RPC (receive_product_receipt) appends the cost
+ * layer, increments quantity_on_hand and — when WAC is active — recalculates
+ * unitCost. (receive_product_cost_layer is the legacy layer-only RPC the
+ * previous client paired with adjust_product_item_quantity; don't call it.)
+ * Reverse it with correct_product_receipt (see ReceiveGoodsDialog rollback).
  */
 export function useReceiveProductCostLayer() {
   const queryClient = useQueryClient();
@@ -59,8 +63,10 @@ export function useReceiveProductCostLayer() {
       poNumber?: string;
       /** PO line item this receipt is against — when given, the RPC enforces
        *  that cumulative goods_receipt_lines quantity for this line never
-       *  exceeds what was ordered (see the 20260901150000 migration). */
-      poLineItemId?: string;
+       *  exceeds what was ordered (see the 20260901150000 migration).
+       *  Required since 20260930150000: the RPC refuses to add stock that
+       *  no goods receipt on an ordered PO accounts for. */
+      poLineItemId: string;
     }) => {
       const supabase = createClient();
       const { costMethod } = useSettingsStore.getState();
@@ -77,7 +83,7 @@ export function useReceiveProductCostLayer() {
       // the same product don't race on a stale JS-side read (see the RPC
       // migration for the corruption this previously caused).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateErr } = await (supabase.rpc as any)("receive_product_cost_layer", {
+      const { error: updateErr } = await (supabase.rpc as any)("receive_product_receipt", {
         p_org_id: current.org_id as string,
         p_product_id: receipt.productId,
         p_layer_quantity: receipt.quantity,
@@ -89,23 +95,14 @@ export function useReceiveProductCostLayer() {
         p_received_at: receipt.receivedAt,
         p_po_number: receipt.poNumber ?? "",
         p_cost_method: costMethod,
-        p_po_line_item_id: receipt.poLineItemId ?? null,
+        p_po_line_item_id: receipt.poLineItemId,
       });
       if (updateErr) throw updateErr;
-
-      // quantity_on_hand goes through the atomic adjust RPC (row-locked,
-      // DB-side add) rather than a JS read-modify-write — two people
-      // receiving the same product concurrently would otherwise race and
-      // lose one increment (last write wins on a value read before the
-      // other's write landed).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: qtyErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
-        p_org_id: current.org_id,
-        p_product_id: receipt.productId,
-        p_delta: receipt.quantity,
-        p_reason: `received via PO${receipt.poNumber ? ` ${receipt.poNumber}` : ""}`,
-      });
-      if (qtyErr) throw qtyErr;
+      // quantity_on_hand is incremented by the same RPC, under the same row
+      // lock as the layer append (receive_product_receipt, 20260930150000).
+      // Do NOT follow this with
+      // adjust_product_item_quantity(+Q): that RPC appends its own cost layer
+      // for positive deltas, so the pair wrote 2×Q of layers per receipt.
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });

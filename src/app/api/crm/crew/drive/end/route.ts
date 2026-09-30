@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const crewId = await resolveCallerCrewId(supabase, user.id, orgId);
   if (!crewId) return NextResponse.json({ error: "Not a crew account" }, { status: 403 });
 
-  const result = await closeOpenDriveSegment(supabase, crewId);
+  const result = await closeOpenDriveSegment(supabase, crewId, orgId);
   if (result.error) return NextResponse.json({ error: result.error }, { status: 500 });
 
   return NextResponse.json({ closed: result.closed });

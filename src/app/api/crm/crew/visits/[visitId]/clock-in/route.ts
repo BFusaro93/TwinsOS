@@ -38,13 +38,13 @@ export async function POST(
     .select(`
       clocked_in_at, org_id, crew_id, status,
       notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
-      crm_jobs(notes_to_crew, notes_to_crew_updated_at)
+      crm_jobs(crew_id, notes_to_crew, notes_to_crew_updated_at)
     `)
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-  if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
   if (existing?.clocked_in_at) {

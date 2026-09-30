@@ -40,7 +40,7 @@ import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
-import { correctPartReceipt } from "@/lib/inventory/part-stock";
+import { correctPartReceipt, correctProductReceipt } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -269,12 +269,16 @@ export function ReceiveGoodsDialog({
     }
 
     setApplyingInventory(true);
-    // Tracks which lines' inventory RPCs already succeeded in this submission
-    // so a later line's failure can reverse them — otherwise a partial failure
-    // mid-loop would leave earlier lines' increments applied with no receipt
-    // surviving to account for them, and retrying the submission would then
-    // double-increment inventory.
-    const succeeded: Array<{ productId: string; partId: string | null; quantity: number; unitCost: number }> = [];
+    // Every inventory RPC that succeeds in this submission is recorded as its
+    // own step (a maintenance_part line is two: part, then product) so a later
+    // failure — including one between the two steps of the same line — can
+    // undo exactly what was applied. Otherwise a partial failure would leave
+    // increments live with no receipt surviving to account for them, and a
+    // retry would double-increment inventory.
+    type AppliedStep =
+      | { kind: "part"; partId: string; quantity: number; unitCost: number }
+      | { kind: "product"; productId: string; quantity: number; unitCost: number };
+    const applied: AppliedStep[] = [];
     try {
       for (const line of linesToReceive) {
         // Find the PO line item to look up the productItemId
@@ -285,7 +289,6 @@ export function ReceiveGoodsDialog({
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
         }
 
-        let linkedPartId: string | null = null;
         if (matchedProduct.category === "maintenance_part") {
           // Also update the Parts inventory record if one is linked
           const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
@@ -299,9 +302,10 @@ export function ReceiveGoodsDialog({
               poNumber: po.poNumber,
               poLineItemId: line.lineItemId,
             });
-            linkedPartId = linkedPart.id;
+            applied.push({ kind: "part", partId: linkedPart.id, quantity: line.quantityReceived, unitCost: line.unitCost });
           }
         }
+        // One RPC: cost layer + quantity_on_hand (20260930150000).
         await receiveProductLayer({
           productId: matchedProduct.id,
           quantity: line.quantityReceived,
@@ -310,40 +314,36 @@ export function ReceiveGoodsDialog({
           poNumber: po.poNumber,
           poLineItemId: line.lineItemId,
         });
-        succeeded.push({ productId: matchedProduct.id, partId: linkedPartId, quantity: line.quantityReceived, unitCost: line.unitCost });
+        applied.push({ kind: "product", productId: matchedProduct.id, quantity: line.quantityReceived, unitCost: line.unitCost });
       }
     } catch (err) {
-      // Reverse the inventory adjustments that already succeeded earlier in
-      // this same loop before rolling back the receipt, so the whole receipt
-      // attempt is atomic — all-or-nothing — from the user's perspective.
-      if (succeeded.length > 0) {
+      // Undo the applied steps newest-first before rolling back the receipt,
+      // so the whole attempt is all-or-nothing. Both correction RPCs remove
+      // the units from this PO's cost layer (not FIFO from the oldest) and
+      // clamp at what is on hand instead of raising.
+      if (applied.length > 0) {
         const supabase = createClient();
-        for (const applied of succeeded) {
-          if (applied.partId) {
-            // Takes the units back out of the cost layer this receipt just
-            // added (the old overload moved quantity only, leaving the
-            // layer behind, and raised if the stock had moved meanwhile).
-            try {
+        for (const step of [...applied].reverse()) {
+          try {
+            if (step.kind === "part") {
               await correctPartReceipt(supabase, {
                 orgId: po.orgId,
-                partId: applied.partId,
-                delta: -Math.round(applied.quantity),
-                unitCost: applied.unitCost,
+                partId: step.partId,
+                delta: -Math.round(step.quantity),
+                unitCost: step.unitCost,
                 poNumber: po.poNumber,
               });
-            } catch (partRevertErr) {
-              toast.error(`Failed to reverse part inventory during rollback: ${errMsg(partRevertErr)}. Please review this PO's receipts manually.`);
+            } else {
+              await correctProductReceipt(supabase, {
+                orgId: po.orgId,
+                productId: step.productId,
+                delta: -step.quantity,
+                unitCost: step.unitCost,
+                poNumber: po.poNumber,
+              });
             }
-          }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: prodRevertErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
-            p_org_id: po.orgId,
-            p_product_id: applied.productId,
-            p_delta: -applied.quantity,
-            p_reason: "Receipt submission failed partway through — reversing already-applied inventory",
-          });
-          if (prodRevertErr) {
-            toast.error(`Failed to reverse product inventory during rollback: ${errMsg(prodRevertErr)}. Please review this PO's receipts manually.`);
+          } catch (revertErr) {
+            toast.error(`Failed to reverse ${step.kind} inventory during rollback: ${errMsg(revertErr)}. Please review this PO's receipts manually.`);
           }
         }
       }

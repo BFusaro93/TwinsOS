@@ -237,7 +237,7 @@ interface Props {
 }
 
 const INVOICE_TEMPLATE_COLUMNS = [
-  "clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount",
+  "clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "discount", "taxAmount",
 ];
 
 export function InvoicesList({ clientId }: Props) {
@@ -642,13 +642,22 @@ export function InvoicesList({ clientId }: Props) {
                         poNumber: inv.poNumber ?? "",
                         status: inv.status,
                         amount: (inv.subtotalCents / 100).toFixed(2),
+                        // Invoice-level discount — without it a re-import
+                        // overstated every discounted invoice's total.
+                        discount: (inv.discountCents / 100).toFixed(2),
                         taxAmount: (inv.taxCents / 100).toFixed(2),
                       })),
                       "invoices-export.csv"
                     )
                   }
                   onImport={async (rows) => {
-                    const { created, skipped } = await bulkImportInvoices(rows);
+                    const { created, skipped, warnings } = await bulkImportInvoices(rows);
+                    if (warnings.length > 0) {
+                      toast.warning(`${warnings.length} imported row${warnings.length !== 1 ? "s" : ""} adjusted`, {
+                        description: warnings.slice(0, 5).map((w) => `Row ${w.row}: ${w.reason}`).join("\n") + (warnings.length > 5 ? `\n…and ${warnings.length - 5} more` : ""),
+                        duration: 15000,
+                      });
+                    }
                     if (skipped > 0) {
                       toast.warning(`Imported ${created} invoice${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched client, missing description, or amount).`);
                     } else {

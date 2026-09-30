@@ -1,5 +1,10 @@
 import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { createServiceClient } from "@/lib/supabase/server";
+import { fireEventAutomations, type AdminClient } from "@/lib/automations/cmms-automation-actions";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("submit-work-request");
 
 const VALID_PRIORITIES = new Set(["low", "medium", "high", "critical"]);
 
@@ -129,6 +134,27 @@ export async function submitWorkRequest(
     }
   } catch {
     // best-effort — don't fail the request
+  }
+
+  // Fire the org's request_submitted automations, same as an in-app
+  // submission (useCreateRequest → /api/automations/run). That path only
+  // runs from the browser, so portal / Microsoft Forms / field-crew requests
+  // never triggered them. Service-role client: the actions create WOs /
+  // requisitions / notifications org-wide, and the public caller has no
+  // session. Scoped to the org this request was just filed under; the asset
+  // id was validated against that org above. Best-effort — never fails the
+  // request. The in-app path doesn't call this function, so nothing
+  // double-fires.
+  try {
+    await fireEventAutomations(createServiceClient() as unknown as AdminClient, {
+      orgId: org.id,
+      eventTrigger: "request_submitted",
+      assetId: validatedAssetId,
+      assetName: input.equipment?.trim() || null,
+      actorUserId: attribution.createdBy,
+    });
+  } catch (err) {
+    log.error("request_submitted automations failed", { requestId: mr.id, error: err instanceof Error ? err.message : String(err) });
   }
 
   return { requestNumber: mr.request_number, id: mr.id };

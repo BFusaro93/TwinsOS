@@ -25,12 +25,12 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_id, client_id, job_id, scheduled_date, status")
+    .select("org_id, crew_id, client_id, job_id, scheduled_date, status, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-  if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 

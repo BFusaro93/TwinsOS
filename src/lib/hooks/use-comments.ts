@@ -85,7 +85,7 @@ export function useAddComment() {
         fetch(`/api/crm/tickets/${recordId}/notify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event: "comment", commentBody: comment.body }),
+          body: JSON.stringify({ event: "comment", commentId: comment.id }),
         }).catch(() => {});
       }
       // @mentions notify regardless of record type — a separate, additive

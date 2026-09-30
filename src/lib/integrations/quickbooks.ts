@@ -400,7 +400,10 @@ async function buildServiceItemResolver(
 export interface QboInvoiceLineInput {
   description: string;
   qty: number;
+  /** Gross line amount (rate × qty) — QBO rejects a line whose Amount isn't UnitPrice × Qty. */
   amountCents: number;
+  /** Per-unit price in dollars; sent so QBO doesn't fall back to the Item's own price. */
+  unitPrice?: number;
   itemId: string;
 }
 
@@ -429,7 +432,11 @@ export async function createInvoice(conn: QuickBooksConnection, input: CreateInv
     DetailType: "SalesItemLineDetail",
     Amount: centsToDollars(l.amountCents),
     Description: l.description,
-    SalesItemLineDetail: { ItemRef: { value: l.itemId }, Qty: l.qty },
+    SalesItemLineDetail: {
+      ItemRef: { value: l.itemId },
+      Qty: l.qty,
+      ...(l.unitPrice != null ? { UnitPrice: l.unitPrice } : {}),
+    },
   }));
   if (input.discountCents && input.discountCents > 0) {
     lines.push({
@@ -566,7 +573,7 @@ export async function pushInvoiceToQuickBooks(
     .select(`
       id, client_id, invoice_number, invoice_date, due_date, description, qbo_invoice_id, discount_cents, tax_cents,
       clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
-      crm_invoice_line_items (name, description, qty, total_cents, sort_order)
+      crm_invoice_line_items (name, description, qty, rate_cents, total_cents, discount_cents, sort_order)
     `)
     .eq("id", invoiceId)
     .eq("org_id", orgId)
@@ -602,15 +609,39 @@ export async function pushInvoiceToQuickBooks(
       ? await Promise.all(
           lineItems.map(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            async (li: any) => ({
-              description: li.name ? `${li.name}${li.description ? ` — ${li.description}` : ""}` : (li.description ?? "Service"),
-              qty: Number(li.qty) || 1,
-              amountCents: li.total_cents ?? 0,
-              itemId: await resolveItemId(li.name),
-            })
+            async (li: any) => {
+              const qty = Number(li.qty) || 1;
+              const amountCents: number = li.total_cents ?? 0;
+              // UnitPrice must satisfy Amount = UnitPrice × Qty. The stored
+              // rate does whenever total_cents is round(rate × qty) (every
+              // invoicing path writes it that way); otherwise derive it.
+              const rateCents = li.rate_cents as number | null;
+              const unitPrice = rateCents != null && Math.round(rateCents * qty) === amountCents
+                ? centsToDollars(rateCents)
+                : Math.round((amountCents / qty) * 1e5) / 1e7;
+              return {
+                description: li.name ? `${li.name}${li.description ? ` — ${li.description}` : ""}` : (li.description ?? "Service"),
+                qty,
+                amountCents,
+                unitPrice,
+                itemId: await resolveItemId(li.name),
+              };
+            }
           )
         )
       : [{ description: invoice.description || "Service", qty: 1, amountCents: 0, itemId: await resolveItemId(null) }];
+
+    // Line-level discounts (crm_invoice_line_items.discount_cents) used to be
+    // dropped, so QuickBooks showed the pre-discount total. Lines stay gross
+    // (keeps Amount = UnitPrice × Qty exact, which QBO validates), and every
+    // line discount is folded into the single invoice DiscountLineDetail
+    // together with the document-level discount — same net total as
+    // Σ(total_cents − discount_cents) − invoice discount.
+    const lineDiscountCents: number = lineItems.reduce(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (s: number, li: any) => s + (li.discount_cents ?? 0),
+      0
+    );
 
     const qboInvoiceId = await createInvoice(conn, {
       customerId: resolved.customerId,
@@ -618,7 +649,7 @@ export async function pushInvoiceToQuickBooks(
       dueDate: invoice.due_date,
       docNumber: invoice.invoice_number != null ? String(invoice.invoice_number) : null,
       lines,
-      discountCents: invoice.discount_cents ?? 0,
+      discountCents: (invoice.discount_cents ?? 0) + lineDiscountCents,
       taxCents: invoice.tax_cents ?? 0,
     });
 

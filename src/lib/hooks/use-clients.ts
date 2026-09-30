@@ -648,16 +648,45 @@ export function useBulkImportClients() {
           const email = emailRaw?.toLowerCase() || null;
           const phone = r.primaryPhone?.trim() || null;
           const phoneDigits = phone?.replace(/\D/g, "") || null;
-          const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
-          if (matchedClientId) {
-            failed.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone (likely duplicate) — skipped` });
-            continue;
+          const accountNumber = r.accountNumber?.trim() || null;
+
+          // A row WITH an account number is matched by account number first
+          // (update that client below); email/phone duplicate detection is
+          // only the fallback for rows without one. Previously the email/
+          // phone check ran first and skipped re-imports of existing
+          // accounts as "likely duplicates" instead of updating them.
+          const CLIENT_UPDATE_COLS =
+            "id, display_name, primary_phone, primary_email, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip, source";
+          let existingByAccount: {
+            id: string; display_name: string; primary_phone: string | null; primary_email: string | null;
+            billing_address: string | null; billing_city: string | null; billing_state: string | null; billing_zip: string | null;
+            service_address: string | null; service_city: string | null; service_state: string | null; service_zip: string | null;
+            source: string | null;
+          } | null = null;
+          if (accountNumber) {
+            const { data: byAccount, error: accountLookupError } = await supabase
+              .from("clients")
+              .select(CLIENT_UPDATE_COLS)
+              .eq("account_number", accountNumber)
+              .is("deleted_at", null)
+              .maybeSingle();
+            if (accountLookupError) {
+              failed.push({ row: rowNum, error: `"${displayName}": ${accountLookupError.message}` });
+              continue;
+            }
+            existingByAccount = byAccount;
+          } else {
+            const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
+            if (matchedClientId) {
+              failed.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone (likely duplicate) — skipped` });
+              continue;
+            }
           }
 
           const row = {
             display_name: displayName,
             account_type: normalizeAccountType(r.accountType ?? ""),
-            account_number: r.accountNumber?.trim() || undefined,
+            account_number: accountNumber ?? undefined,
             primary_phone: phone,
             primary_email: emailRaw,
             billing_address: r.billingAddress?.trim() || null,
@@ -672,24 +701,29 @@ export function useBulkImportClients() {
             client_since: todayInZone(importOrgTimeZone),
           };
 
-          const { data: newClient, error } = await supabase
-            .from("clients")
-            .insert({ ...row, created_by: user?.id ?? null })
-            .select("id")
-            .single();
+          const { data: newClient, error } = existingByAccount
+            ? { data: null, error: null }
+            : await supabase
+                .from("clients")
+                .insert({ ...row, created_by: user?.id ?? null })
+                .select("id")
+                .single();
 
-          if (error?.code === "23505" && row.account_number) {
-            // Duplicate account_number. Only treat it as an update of the
-            // existing client when the row clearly refers to that same
-            // client (same display name). A different name means the CSV's
-            // account number collides with someone else's — report it
-            // instead of silently overwriting another client's record.
-            const { data: existing, error: lookupError } = await supabase
-              .from("clients")
-              .select("id, display_name, primary_phone, primary_email, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip, source")
-              .eq("account_number", row.account_number)
-              .is("deleted_at", null)
-              .maybeSingle();
+          if (existingByAccount || (error?.code === "23505" && row.account_number)) {
+            // Existing account_number (found up front, or a unique-constraint
+            // race on insert). Only treat it as an update of the existing
+            // client when the row clearly refers to that same client (same
+            // display name). A different name means the CSV's account number
+            // collides with someone else's — report it instead of silently
+            // overwriting another client's record.
+            const { data: existing, error: lookupError } = existingByAccount
+              ? { data: existingByAccount, error: null }
+              : await supabase
+                  .from("clients")
+                  .select(CLIENT_UPDATE_COLS)
+                  .eq("account_number", row.account_number!)
+                  .is("deleted_at", null)
+                  .maybeSingle();
             if (lookupError || !existing) {
               failed.push({ row: rowNum, error: `"${displayName}": account number ${row.account_number} is already in use — skipped` });
               continue;
@@ -1528,11 +1562,16 @@ export function useCloseLeadAsLost() {
   return useMutation({
     mutationFn: async ({ clientId, reason }: { clientId: string; reason: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // Only a lead can be closed as lost — without the status guard a stale
+      // list (or a direct call) could flip an ACTIVE client to "lost".
+      const { data, error } = await supabase
         .from("clients")
         .update({ status: "lost", cancellation_reason: reason, closed_at: new Date().toISOString() })
-        .eq("id", clientId);
+        .eq("id", clientId)
+        .eq("status", "lead")
+        .select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("This record is no longer a lead, so it can't be closed as lost.");
     },
     onSuccess: (_d, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -1547,10 +1586,13 @@ export function useBulkCloseLeadsAsLost() {
   return useMutation({
     mutationFn: async ({ clientIds, reason }: { clientIds: string[]; reason: string }) => {
       const supabase = createClient();
+      // Selected rows that are no longer leads (converted meanwhile) are
+      // left alone rather than being flipped to "lost".
       const { error } = await supabase
         .from("clients")
         .update({ status: "lost", cancellation_reason: reason, closed_at: new Date().toISOString() })
-        .in("id", clientIds);
+        .in("id", clientIds)
+        .eq("status", "lead");
       if (error) throw error;
     },
     onSuccess: () => {

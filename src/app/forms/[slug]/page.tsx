@@ -305,7 +305,9 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     // Re-evaluate against the final answers so a rule change made without
     // another Next/Back click (e.g. editing the last page right before
     // submitting) is still reflected in what gets excluded/tagged.
-    const { hidden: finalHidden, tagsToAdd, tagsToRemove } = evaluateRules(currentPage);
+    // Tag rules are NOT sent: the server evaluates add_tag/remove_tag itself
+    // (submitFormResponse) and ignores client-supplied tags.
+    const { hidden: finalHidden } = evaluateRules(currentPage);
 
     const data: Record<string, unknown> = {};
     for (const field of form.fields) {
@@ -336,7 +338,6 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         body: JSON.stringify({
           data,
           referer: typeof window !== "undefined" ? window.location.href : undefined,
-          ruleTags: { add: [...tagsToAdd], remove: [...tagsToRemove] },
           turnstileToken,
         }),
       });

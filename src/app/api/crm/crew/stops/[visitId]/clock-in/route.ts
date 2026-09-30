@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { stopKeyForVisit, isNotesAcknowledgmentCurrent, type StopKeyInput } from "@/lib/utils/visit-stops";
-import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
 import { logger } from "@/lib/logger";
 
@@ -28,6 +28,7 @@ interface VisitRow {
   notes_to_crew_updated_at: string | null;
   acknowledged_notes_at: string | null;
   crm_jobs: {
+    crew_id?: string | null;
     property_id: string | null;
     service_address: string | null;
     service_city: string | null;
@@ -40,7 +41,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
   return {
     clientId: row.client_id,
     scheduledDate: row.scheduled_date,
-    crewId: row.crew_id,
+    crewId: effectiveVisitCrewId(row),
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
@@ -50,7 +51,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
-  crm_jobs(property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
+  crm_jobs(crew_id, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
 `;
 
 /** The notes-to-crew this visit contributes to its stop, visit-level overriding job-level (same rule as groupVisitsIntoStops). */
@@ -99,7 +100,7 @@ export async function POST(
   // Guard against clocking in another crew's visit — RLS on crm_job_visits
   // only checks org_id, not crew_id, so a caller who obtains another crew's
   // visitId could otherwise still act on it. See assertCallerOwnsVisit().
-  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
@@ -122,11 +123,11 @@ export async function POST(
   const stopRows = (candidateRows as VisitRow[])
     .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
     // Defense in depth: stopKeyForVisit already encodes crew_id, so a match
-    // on anchorKey mathematically implies r.crew_id === anchor.crew_id (the
+    // on anchorKey mathematically implies effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor) (the
     // crew whose ownership was just verified above) — this filter makes that
     // invariant explicit rather than implicit, so no row outside the caller's
     // crew can ever enter the mutation set below.
-    .filter((r) => r.crew_id === anchor.crew_id);
+    .filter((r) => effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor));
 
   // Notes-acknowledgment gate, enforced here and not only in the two clients.
   // It was previously a pure UI disable on the Clock In button, so anything
@@ -187,10 +188,12 @@ export async function POST(
   // next job shouldn't leave a drive segment open for the rest of the day —
   // starting a job means they've clearly stopped driving. Non-fatal.
   try {
-    await closeOpenDriveSegment(supabase, anchor.crew_id!);
+    // Ownership was proven above, so the effective crew IS the caller's crew.
+    const driveCrewId = effectiveVisitCrewId(anchor);
+    if (driveCrewId) await closeOpenDriveSegment(supabase, driveCrewId, anchor.org_id);
   } catch (err) {
     log.error("auto-close drive segment failed", {
-      crewId: anchor.crew_id,
+      crewId: effectiveVisitCrewId(anchor),
       error: err instanceof Error ? err.message : String(err),
     });
   }

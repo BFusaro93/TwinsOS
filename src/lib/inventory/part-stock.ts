@@ -65,6 +65,34 @@ export async function correctPartReceipt(
 }
 
 /**
+ * Product-side twin of correctPartReceipt: moves product_items stock and its
+ * cost_layers together for a goods-receipt reversal/correction, taking a
+ * reduction out of this PO's layers first and clamping at what is on hand
+ * (see 20260930150000_receiving_rpcs_single_step_and_po_guard.sql).
+ */
+export async function correctProductReceipt(
+  supabase: AnySupabase,
+  input: { orgId: string; productId: string; delta: number; unitCost: number; poNumber: string | null }
+): Promise<PartStockResult> {
+  const { data, error } = await supabase
+    .rpc("correct_product_receipt", {
+      p_org_id: input.orgId,
+      p_product_id: input.productId,
+      p_delta: input.delta,
+      p_unit_cost: Math.round(input.unitCost),
+      p_po_number: input.poNumber ?? "",
+    })
+    .single();
+  if (error) throw error;
+  const row = data as { old_qty: number | null; requested_delta: number; applied_delta: number } | null;
+  return {
+    oldQty: row?.old_qty ?? null,
+    requestedDelta: Number(row?.requested_delta ?? input.delta),
+    appliedDelta: Number(row?.applied_delta ?? 0),
+  };
+}
+
+/**
  * adjust_product_item_quantity raises rather than go negative. For a
  * reduction, clamp to what the product still has on hand so a reversal of
  * already-used stock removes what remains instead of blocking the change.

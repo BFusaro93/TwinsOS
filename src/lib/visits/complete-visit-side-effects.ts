@@ -6,6 +6,11 @@ import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/auto
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import {
+  lineTotalCents,
+  resolveAutoInvoiceTaxRateBps,
+  resolveJobServiceTaxable,
+} from "@/lib/invoices/auto-invoice-tax";
 
 /**
  * Everything that must happen AFTER a crm_job_visits row flips to
@@ -261,6 +266,9 @@ export async function applyVisitCompletionSideEffects(
           .select("id")
           .eq("crm_job_id", j.id)
           .is("deleted_at", null)
+          // limit(1): with two invoices on the job, maybeSingle() errors and
+          // returns null data — which read as "not invoiced" and billed again.
+          .limit(1)
           .maybeSingle();
         if (existingInvoice) {
           result.invoiceSkipReason = "job_already_invoiced";
@@ -286,16 +294,17 @@ export async function applyVisitCompletionSideEffects(
         // back to the catalog flag. The rate comes from the accepted estimate
         // when the job was converted from one — so the invoice reproduces the
         // tax the client agreed to — otherwise the client's default rate.
-        let taxRateBps = 0;
+        // Shared with useCreateInvoiceFromJob via auto-invoice-tax.ts.
+        let estimateTaxRateBps: number | null = null;
         if (j.estimate_id) {
           const { data: est } = await supabase
             .from("estimates")
             .select("tax_rate_bps")
             .eq("id", j.estimate_id)
             .maybeSingle();
-          taxRateBps = (est as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? 0;
+          estimateTaxRateBps = (est as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? null;
         }
-        if (taxRateBps <= 0) taxRateBps = j.clients?.default_tax_rate_bps ?? 0;
+        const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, j.clients?.default_tax_rate_bps);
 
         // Build line items from services; fall back to a single line from job rate_cents.
         // Description precedence per line: this visit's own override, then the job-level
@@ -309,9 +318,9 @@ export async function applyVisitCompletionSideEffects(
                 description,
                 qty: s.qty ?? 1,
                 rate_cents: s.rate_cents ?? 0,
-                total_cents: (s.qty ?? 1) * (s.rate_cents ?? 0),
+                total_cents: lineTotalCents(s.rate_cents ?? 0, s.qty ?? 1),
                 service_date: visitDate,
-                is_taxable: s.is_taxable ?? s.crm_services?.is_taxable ?? false,
+                is_taxable: resolveJobServiceTaxable(s.is_taxable, s.crm_services?.is_taxable),
               };
             })
           : j.rate_cents
@@ -359,7 +368,7 @@ export async function applyVisitCompletionSideEffects(
             description: p.product_name,
             qty: billedQty,
             rate_cents: p.unit_price_cents,
-            total_cents: p.unit_price_cents * billedQty,
+            total_cents: lineTotalCents(p.unit_price_cents, billedQty),
             service_date: visitDate,
             is_taxable: false,
             jobProductId: p.id,

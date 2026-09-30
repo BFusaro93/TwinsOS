@@ -205,7 +205,7 @@ export function AutomationDialog({
           meterLabel,
           operator: meterOperator,
           value: Number(meterValue),
-          interval: intervalValue.trim() !== "" ? Number(intervalValue) : null,
+          interval: meterOperator === ">=" && intervalValue.trim() !== "" ? Number(intervalValue) : null,
         };
       case "part_low_stock":
         return { type: "part_low_stock", partName };
@@ -244,6 +244,10 @@ export function AutomationDialog({
     switch (triggerType) {
       case "meter_threshold":
         if (!meterId || !meterValue.trim()) return false;
+        // A rising (>=) meter rule needs an interval to know its NEXT
+        // threshold: without one it would re-fire at the same reading after
+        // every completed WO (or, for notify/email/requisition, never again).
+        if (meterOperator === ">=" && !(Number(intervalValue) > 0)) return false;
         break;
       case "part_low_stock":
         if (!partName.trim()) return false;
@@ -402,21 +406,22 @@ export function AutomationDialog({
                       />
                     </div>
                   </div>
-                  {(actionType === "create_work_order" || actionType === "create_wo_request") && (
+                  {meterOperator === ">=" && (
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="meter-interval">
-                        Service Interval{" "}
-                        <span className="font-normal text-slate-500">(optional)</span>
-                      </Label>
+                      <Label htmlFor="meter-interval">Service Interval</Label>
                       <Input
                         id="meter-interval"
                         type="number"
+                        min={0}
                         placeholder="e.g. 5000"
                         value={intervalValue}
                         onChange={(e) => setIntervalValue(e.target.value)}
+                        required
                       />
                       <p className="text-xs text-slate-500">
-                        e.g. 5000 — after the triggered WO is marked complete, the threshold automatically advances by this amount.
+                        {actionType === "create_work_order" || actionType === "create_wo_request"
+                          ? "e.g. 5000 — after the triggered request/WO is completed, the threshold advances by this amount so the next service fires on time."
+                          : "e.g. 5000 — each time this fires, the threshold advances by this amount so it fires again at the next interval."}
                       </p>
                     </div>
                   )}

@@ -76,6 +76,9 @@ export async function POST(
     .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_payment_intent_id, method")
     .eq("id", paymentId)
     .eq("org_id", profile.org_id)
+    // A soft-deleted payment is gone from the books — refunding it would
+    // move real money against a record nothing else counts.
+    .is("deleted_at", null)
     .single();
   if (paymentErr || !payment) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
 
