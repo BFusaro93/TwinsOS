@@ -121,6 +121,15 @@ export function EquiptDashboard() {
     return { openRequisitions, pendingApproval, openPOs, totalSpendMTD };
   }, [requisitions, purchaseOrders, today]);
 
+  // Repair cost recorded on work orders this month (parts + labor + vendor), same
+  // definition as Reports > Repair Cost — shown beside Parts Spend MTD.
+  const repairsMTD = useMemo(() => {
+    const mtdStart = `${todayIso.slice(0, 7)}-01`;
+    return woCosts
+      .filter((w) => w.costAt.slice(0, 10) >= mtdStart)
+      .reduce((sum, w) => sum + w.partsCents + w.laborCents + w.vendorCents, 0);
+  }, [woCosts, todayIso]);
+
   // ── Maintenance KPIs ────────────────────────────────────────────────────────
   const cmmsKPIs = useMemo(() => {
     const openWorkOrders = workOrders.filter((wo) => wo.status !== "done").length;
@@ -213,7 +222,7 @@ export function EquiptDashboard() {
           <StatCard title="Open Requisitions" value={poKPIs.openRequisitions} icon={FileText} href="/po/requisitions?status=draft,open,pending_approval,approved" />
           <StatCard title="Pending Approval" value={poKPIs.pendingApproval} icon={Clock} href="/po/requisitions?status=pending_approval" />
           <StatCard title="Open Purchase Orders" value={poKPIs.openPOs} icon={ShoppingCart} href="/po/orders?status=requested,pending,approved,ordered,partially_fulfilled" />
-          <StatCard title="Parts Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} icon={DollarSign} href="/po/reports/parts-spend" />
+          <StatCard title="Parts Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} subValue={formatCurrency(repairsMTD)} subLabel="repairs MTD" icon={DollarSign} href="/po/reports/parts-spend" />
         </div>
       </section>
 
