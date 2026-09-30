@@ -29,7 +29,11 @@ import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useAssets } from "@/lib/hooks/use-assets";
-import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
+import { useWOCostSummary } from "@/lib/hooks/use-wo-cost-summary";
+import { usePMOutcomes } from "@/lib/hooks/use-asset-metrics";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd } from "@/lib/time/zone";
+import { countPMOutcomes, summarizePMCompliance } from "@/lib/utils/pm-compliance";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useRecentActivityFeed } from "@/lib/hooks/use-audit-log";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -76,7 +80,11 @@ export function EquiptDashboard() {
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: workOrders = [] } = useWorkOrders();
   const { data: assets = [] } = useAssets();
-  const { data: pmSchedules = [] } = usePMSchedules();
+  // Same 90-day, completed ÷ came-due score as Reports > PM Compliance.
+  const { today: orgToday } = useOrgDates();
+  const pmToday = orgToday();
+  const { data: pmOutcomes = [] } = usePMOutcomes(shiftYmd(pmToday, -90));
+  const { data: woCosts = [] } = useWOCostSummary();
   const { data: products = [] } = useProducts();
   const { data: activityFeed = [] } = useRecentActivityFeed(8);
   const { data: orgSettings } = useOrgSettings();
@@ -125,15 +133,15 @@ export function EquiptDashboard() {
         wo.dueDate !== null &&
         wo.dueDate.slice(0, 10) < todayIso
     ).length;
-    const activePMs = pmSchedules.filter((pm) => pm.isActive);
-    const onTimePMs = activePMs.filter((pm) => pm.nextDueDate.slice(0, 10) >= todayIso).length;
-    const pmComplianceRate =
-      activePMs.length > 0 ? Math.round((onTimePMs / activePMs.length) * 100) : 100;
+    const pmComplianceRate = summarizePMCompliance(
+      countPMOutcomes(pmOutcomes.filter((r) => r.dueOn <= pmToday))
+    ).compliancePct;
     const assetsInService = assets.filter((a) => a.status === "active").length;
     return { openWorkOrders, highPriority, overdueWOs, pmComplianceRate, assetsInService };
-  }, [workOrders, pmSchedules, assets, todayIso]);
+  }, [workOrders, pmOutcomes, pmToday, assets, todayIso]);
 
-  // ── Monthly Parts Spend (last 6 calendar months — maintenance_part line items only) ───────────
+  // ── Monthly spend (last 6 calendar months): parts purchased on POs (maintenance_part lines only)
+  //    beside repair cost recorded on work orders (parts + labor + vendor, same as Reports > Repair Cost) ──
   const monthlySpend = useMemo(() => {
     const months: { key: string; label: string }[] = [];
     for (let i = 5; i >= 0; i--) {
@@ -141,7 +149,8 @@ export function EquiptDashboard() {
       months.push(monthKey(d));
     }
     const spendByMonth: Record<string, number> = {};
-    for (const m of months) spendByMonth[m.key] = 0;
+    const repairsByMonth: Record<string, number> = {};
+    for (const m of months) { spendByMonth[m.key] = 0; repairsByMonth[m.key] = 0; }
 
     purchaseOrders
       .filter((po) => !["canceled", "draft"].includes(po.status))
@@ -153,8 +162,13 @@ export function EquiptDashboard() {
           .forEach((li) => { spendByMonth[mk] += li.quantity * li.unitCost; });
       });
 
-    return months.map(({ key, label }) => ({ month: label, spend: spendByMonth[key] }));
-  }, [purchaseOrders, productCategoryMap, today]);
+    for (const w of woCosts) {
+      const mk = w.costAt.slice(0, 7);
+      if (mk in repairsByMonth) repairsByMonth[mk] += w.partsCents + w.laborCents + w.vendorCents;
+    }
+
+    return months.map(({ key, label }) => ({ month: label, parts: spendByMonth[key], repairs: repairsByMonth[key] }));
+  }, [purchaseOrders, productCategoryMap, today, woCosts]);
 
   // ── WO Trend (last 7 calendar weeks) ────────────────────────────────────────
   const woTrend = useMemo(() => {
@@ -213,12 +227,12 @@ export function EquiptDashboard() {
           <StatCard title="High Priority" value={cmmsKPIs.highPriority} icon={AlertTriangle} href="/cmms/work-orders?priority=high,critical&status=open,in_progress,on_hold" />
           <StatCard title="Overdue WOs" value={cmmsKPIs.overdueWOs} icon={Clock} href="/cmms/work-orders?overdue=1" />
           <StatCard
-            title="PM Compliance"
-            value={`${cmmsKPIs.pmComplianceRate}%`}
+            title="PM Compliance · 90 days"
+            value={cmmsKPIs.pmComplianceRate === null ? "—" : `${cmmsKPIs.pmComplianceRate}%`}
             subValue={cmmsKPIs.assetsInService}
             subLabel="assets in service"
             icon={CheckCircle2}
-            href="/cmms/pm-schedules"
+            href="/equipt/reports"
           />
         </div>
       </section>
@@ -227,7 +241,7 @@ export function EquiptDashboard() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Monthly Spend */}
         <div className="col-span-1 rounded-lg border bg-white p-5 shadow-sm lg:col-span-1">
-          <p className="mb-4 text-sm font-semibold text-slate-700">Monthly Parts Spend</p>
+          <p className="mb-4 text-sm font-semibold text-slate-700">Monthly Spend</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthlySpend} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -244,10 +258,12 @@ export function EquiptDashboard() {
                 tickLine={false}
               />
               <Tooltip
-                formatter={(v: number) => [formatCurrency(v), "Spend"]}
+                formatter={(v: number, name: string) => [formatCurrency(v), name]}
                 contentStyle={{ fontSize: 12, borderRadius: 8 }}
               />
-              <Bar dataKey="spend" fill="#60ab45" radius={[4, 4, 0, 0]} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="parts" name="Parts purchased" fill="#60ab45" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="repairs" name="Repairs (work orders)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

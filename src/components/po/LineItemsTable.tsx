@@ -84,6 +84,8 @@ export function LineItemsTable({
   useEffect(() => { setItems(lineItems); }, [lineItems]);
 
   const { data: projects = [] } = useProjects();
+  // Name lookup must include archived projects, or a line tied to one shows a raw id.
+  const { data: allProjects = [] } = useProjects(true);
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
 
@@ -314,10 +316,10 @@ export function LineItemsTable({
                           onClick={() => onProjectClick(li.projectId!)}
                           className="text-sm text-brand-600 hover:underline"
                         >
-                          {projects.find((p) => p.id === li.projectId)?.name ?? li.projectId}
+                          {allProjects.find((p) => p.id === li.projectId)?.name ?? li.projectId}
                         </button>
                       ) : (
-                        <span>{projects.find((p) => p.id === li.projectId)?.name ?? li.projectId}</span>
+                        <span>{allProjects.find((p) => p.id === li.projectId)?.name ?? li.projectId}</span>
                       )
                     ) : "—"}
                   </TableCell>
