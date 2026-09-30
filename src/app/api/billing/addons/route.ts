@@ -5,6 +5,7 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { isAddonKey, getPriceIdForAddon, addonAppliesToModules } from "@/lib/stripe/addons";
 import { planIncludesAddon, getModulesForPlan, type BundledAddonKey } from "@/lib/stripe/plans";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconcile";
 
 const ToggleAddonSchema = z.object({
   addon: z.string().refine(isAddonKey, { message: "Unknown addon" }),
@@ -58,9 +59,19 @@ export async function POST(request: Request) {
   // everything) gets it free and can't turn it off. Nothing is written:
   // an organization_addons row means a PURCHASED add-on, and writing one here
   // used to leave trial-enabled add-ons free forever after subscribing.
+  //
+  // If the org PURCHASED it on an earlier plan, that purchase is still on the
+  // subscription and still billing — drop the Stripe item and the purchase
+  // row (either toggle direction), since the plan now covers it.
   if (planIncludesAddon(org.plan, addon as BundledAddonKey)) {
-    if (!enabled) {
-      return NextResponse.json({ error: "This add-on is included in your plan and can't be removed" }, { status: 422 });
+    if (org.stripe_subscription_id) {
+      const stripe = getStripe();
+      const subscription = await stripe.subscriptions.retrieve(org.stripe_subscription_id);
+      try {
+        await removePurchasedBundledAddons(stripe, serviceClient, org.id, org.plan, subscription, addon);
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : "Could not remove add-on" }, { status: 500 });
+      }
     }
     return NextResponse.json({ enabled: true, bundled: true });
   }

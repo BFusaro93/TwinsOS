@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (supabase as any)
     .from("product_items")
-    .select("id, name, part_number, unit_cost, category")
+    .select("id, name, part_number, category")
     .eq("org_id", orgId)
     .is("deleted_at", null)
     .in("category", ["stocked_material", "project_material"])
@@ -53,7 +53,9 @@ export async function GET(request: Request) {
       id: row.id,
       name: row.name,
       partNumber: row.part_number,
-      unitCostCents: row.unit_cost,
+      // No unit cost: this list goes to a shared field tablet, which never
+      // shows a price (the request is priced by the office). Returning it
+      // leaked every stocked/project material's cost to any crew login.
       category: row.category,
     }))
   );

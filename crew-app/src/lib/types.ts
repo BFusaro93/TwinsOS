@@ -143,7 +143,7 @@ export interface PickerProduct {
   id: string;
   name: string;
   partNumber: string;
-  unitCostCents: number;
+  // No unit cost — the route never returns prices to a crew device.
   category: 'stocked_material' | 'project_material';
 }
 
@@ -186,7 +186,7 @@ export interface JobProductMaterial {
 
 export type RequisitionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'ordered' | 'closed';
 
-// Mirrors shapeRequisition() (src/app/api/v1/requisitions/shape.ts), as
+// Mirrors shapeCrewRequisition() (the crew requisitions route), as
 // returned by GET/POST /api/crm/crew/visits/:id/requisitions — the "My
 // Requests" status list on the visit screen.
 export interface VisitRequisition {
@@ -195,7 +195,7 @@ export interface VisitRequisition {
   title: string;
   status: RequisitionStatus;
   requestedByName: string;
-  grandTotalCents: number;
+  // No totals/vendor — the crew route returns status-tracking fields only.
   notes: string | null;
   createdAt: string;
   updatedAt: string;

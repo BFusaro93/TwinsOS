@@ -32,7 +32,16 @@ function formatMoney(cents: number): string {
 
 function formatDateStr(iso: string | null | undefined): string {
   if (!iso) return "\u2014";
-  return new Date(iso).toLocaleDateString("en-US", {
+  // A date-only value ("YYYY-MM-DD": due date, PO date, project start/end,
+  // incident date, expense date \u2014 all `date` columns) is a calendar day, not
+  // an instant. new Date("YYYY-MM-DD") parses it as UTC midnight, which
+  // renders as the PREVIOUS day anywhere west of UTC \u2014 build it from its
+  // parts in local time instead. Full timestamps (createdAt) still go
+  // through Date as instants.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const d = ymd ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])) : new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",

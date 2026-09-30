@@ -7,7 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
-import { fetchCallerCrew, resolveCallerCrewId } from "@/lib/supabase/crew-id";
+import {
+  compareCrewVisitRows,
+  effectiveVisitCrewId,
+  fetchCallerCrew,
+  resolveCallerCrewId,
+  selectEffectiveCrewVisits,
+  type VisitCrewRow,
+} from "@/lib/supabase/crew-id";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,7 +74,7 @@ function crewVisitSelect(hidePricing: boolean): string {
   // naming a non-existent column explicitly makes PostgREST 400 the whole
   // request. The visit-level notes_to_client (which does exist) is unaffected.
   const jobCols = [
-    "id", "org_id", "client_id", "property_id", "job_type", "status",
+    "id", "org_id", "client_id", "crew_id", "property_id", "job_type", "status",
     "notes_to_crew", "notes_to_crew_updated_at", "notes",
     "service_address", "service_city", "service_state", "service_zip",
     "budgeted_hours",
@@ -159,7 +166,11 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     materialsUsed:        [],
     clientName:           (client?.display_name as string) ?? null,
     clientPhone:          (client?.primary_phone as string) ?? null,
-    crewId:               row.crew_id as string | null,
+    // The EFFECTIVE crew (visit's own, else the job's) — every crew surface
+    // groups stops and checks ownership on this, so it must never be the raw
+    // visit.crew_id, which is usually NULL. Crew-only mapper; nothing here
+    // writes crewId back.
+    crewId:               effectiveVisitCrewId(row as VisitCrewRow),
     crewName:             (crew?.name as string) ?? null,
     scheduledDate:        row.scheduled_date as string,
     startTime:            row.start_time as string | null,
@@ -215,18 +226,17 @@ export function useMyCrewVisits(date: string) {
       if (!crewId) return [];
       const membership = { crew_id: crewId };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_job_visits")
-        .select(crewVisitSelect(hidePricing))
-        .eq("scheduled_date", date)
-        .eq("crew_id", membership.crew_id)
-        .is("deleted_at", null)
-        .order("priority", { ascending: true })
-        .order("start_time", { ascending: true, nullsFirst: false });
+      // By EFFECTIVE crew: a job-inherited visit (crew_id NULL, job.crew_id =
+      // this crew) is this crew's work too. See selectEffectiveCrewVisits().
+      const { data, error } = await selectEffectiveCrewVisits(
+        supabase,
+        crewVisitSelect(hidePricing),
+        membership.crew_id,
+        (q) => q.eq("scheduled_date", date).is("deleted_at", null)
+      );
 
       if (error) throw error;
-      return (data as Record<string, unknown>[]).map(mapVisit);
+      return [...data].sort(compareCrewVisitRows).map(mapVisit);
     },
   });
 }
@@ -284,26 +294,25 @@ export function useStopDetail(anchorVisitId: string) {
       if (!callerCrewId) return null;
       const crew = { id: callerCrewId };
 
+      // Ownership is by EFFECTIVE crew (visit's own, else the job's), same
+      // as assertCallerOwnsVisit() on the server.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: anchorRow, error: anchorErr } = await (supabase as any)
         .from("crm_job_visits")
         .select(select)
         .eq("id", anchorVisitId)
-        .eq("crew_id", crew.id)
         .is("deleted_at", null)
         .maybeSingle();
       if (anchorErr) throw anchorErr;
-      if (!anchorRow) return null;
+      if (!anchorRow || effectiveVisitCrewId(anchorRow as VisitCrewRow) !== crew.id) return null;
       const anchor = mapVisit(anchorRow as Record<string, unknown>);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: siblingRows, error: siblingErr } = await (supabase as any)
-        .from("crm_job_visits")
-        .select(select)
-        .eq("client_id", anchor.clientId)
-        .eq("scheduled_date", anchor.scheduledDate)
-        .eq("crew_id", crew.id)
-        .is("deleted_at", null);
+      const { data: siblingRows, error: siblingErr } = await selectEffectiveCrewVisits(
+        supabase,
+        select,
+        crew.id,
+        (q) => q.eq("client_id", anchor.clientId).eq("scheduled_date", anchor.scheduledDate).is("deleted_at", null)
+      );
       if (siblingErr) throw siblingErr;
 
       const crewId = anchor.crewId;
@@ -447,6 +456,7 @@ export function useCrewMemberTimesForDate(fromDate: string, toDate?: string) {
       let q = (supabase as any)
         .from("crm_crew_member_times")
         .select("*, crm_crew_members(name, role), crm_job_visits!inner(scheduled_date)")
+        .is("deleted_at", null)
         .order("created_at");
       q = (toDate && toDate !== fromDate)
         ? q.gte("crm_job_visits.scheduled_date", fromDate).lte("crm_job_visits.scheduled_date", toDate)
@@ -485,6 +495,7 @@ export function useCrewMemberTimes(visitId: string) {
         .from("crm_crew_member_times")
         .select("*, crm_crew_members(name, role)")
         .eq("visit_id", visitId)
+        .is("deleted_at", null)
         .order("created_at");
 
       if (error) throw error;

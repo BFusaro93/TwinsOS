@@ -157,7 +157,8 @@ export async function notifyStaffOfNewTicket(
       .from("profiles")
       .select("id, email, name, notification_prefs")
       .eq("id", assigneeId)
-      .single();
+      .neq("status", "inactive")
+      .maybeSingle();
     if (assignee) recipients = [...recipients, assignee];
   }
   // Don't notify the person who created it themselves.
@@ -209,7 +210,8 @@ export async function notifyTicketAssigned(
     .from("profiles")
     .select("id, email, name, notification_prefs")
     .eq("id", assigneeId)
-    .single();
+    .neq("status", "inactive")
+    .maybeSingle();
   if (!assignee) return;
 
   const label = ticketLabel(subject, ticketNumber);
@@ -242,7 +244,8 @@ export async function notifyTicketComment(
     .from("profiles")
     .select("id, email, name, notification_prefs")
     .eq("id", assigneeId)
-    .single();
+    .neq("status", "inactive")
+    .maybeSingle();
   if (!assignee) return;
 
   const label = ticketLabel(subject, ticketNumber);

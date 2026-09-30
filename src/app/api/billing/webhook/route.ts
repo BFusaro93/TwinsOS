@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPlanForPriceId } from "@/lib/stripe/plans";
 import { syncSeatOverage } from "@/lib/stripe/seat-sync";
+import { removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconcile";
 import { logger } from "@/lib/logger";
 import { EMAIL_FROM } from "@/lib/email/send";
 
@@ -240,6 +241,18 @@ async function applySubscriptionToOrg(
       seatsIncludedOverride: org.seats_included_override,
       seatOverageCentsOverride: org.seat_overage_cents_override,
     });
+    // Moving to a plan that bundles an add-on the org had bought separately:
+    // stop billing the standalone add-on.
+    // Best-effort: a retry would replay the same (stale) item list, so a
+    // failure here must not fail the whole event.
+    try {
+      await removePurchasedBundledAddons(stripe, db, org.id, org.plan, subscription);
+    } catch (err) {
+      log.warn("could not remove purchased add-ons now bundled by the plan", {
+        orgId: org.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
 
@@ -261,7 +274,8 @@ async function notifyPaymentFailed(
     .from("profiles")
     .select("email, name")
     .eq("org_id", org.id)
-    .eq("role", "admin");
+    .eq("role", "admin")
+    .neq("status", "inactive");
   const recipients = (admins ?? []).map((a: { email: string | null }) => a.email).filter(Boolean) as string[];
   if (recipients.length === 0) return;
 

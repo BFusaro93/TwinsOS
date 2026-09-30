@@ -113,15 +113,27 @@ async function findInvalidAttachments(
   return invalid;
 }
 
-/** Returns the labels of every required, rule-visible field with no value
- *  in formData — empty when the submission is valid. */
-async function findMissingRequiredFields(
+interface EvaluatedFormRules {
+  /** Field ids hidden by hide_field/show_field rules. */
+  hidden: Set<string>;
+  /** Tags from add_tag/remove_tag rules whose conditions matched. */
+  tagsToAdd: string[];
+  tagsToRemove: string[];
+}
+
+/** Server-side twin of evaluateRules() in src/app/forms/[slug]/page.tsx:
+ *  evaluates the form's Rules against the submitted answers, in one pass, for
+ *  both the hide/show visibility the required-field check needs and the
+ *  add_tag/remove_tag actions. Tag rules are evaluated HERE rather than taken
+ *  from the request — a client-supplied tag list would let an anonymous
+ *  caller add/remove arbitrary client tags. */
+async function evaluateFormRules(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   formId: string,
   formFields: FormFieldRow[],
   formData: Record<string, unknown>
-): Promise<string[]> {
+): Promise<EvaluatedFormRules> {
   const { data: formRules } = await db
     .from("crm_form_rules")
     .select("source_field_id, operator, operand, action, action_value")
@@ -132,6 +144,8 @@ async function findMissingRequiredFields(
 
   const fieldById = new Map(formFields.map((f) => [f.id, f]));
   const hidden = new Set<string>();
+  const tagsToAdd = new Set<string>();
+  const tagsToRemove = new Set<string>();
   for (const rule of (formRules ?? []) as {
     source_field_id: string | null;
     operator: string;
@@ -147,7 +161,19 @@ async function findMissingRequiredFields(
     if (!ruleConditionMatches(raw, rule.operator, rule.operand)) continue;
     if (rule.action === "hide_field" && rule.action_value) hidden.add(rule.action_value);
     if (rule.action === "show_field" && rule.action_value) hidden.delete(rule.action_value);
+    if (rule.action === "add_tag" && rule.action_value) tagsToAdd.add(rule.action_value);
+    if (rule.action === "remove_tag" && rule.action_value) tagsToRemove.add(rule.action_value);
   }
+  return { hidden, tagsToAdd: [...tagsToAdd], tagsToRemove: [...tagsToRemove] };
+}
+
+/** Returns the labels of every required, rule-visible field with no value
+ *  in formData — empty when the submission is valid. */
+function findMissingRequiredFields(
+  formFields: FormFieldRow[],
+  formData: Record<string, unknown>,
+  hidden: Set<string>
+): string[] {
 
   const missing: string[] = [];
   for (const field of formFields) {
@@ -190,11 +216,7 @@ export async function submitFormResponse(
   db: any,
   form: FormRow,
   formData: Record<string, unknown>,
-  referer: string | undefined,
-  /** Tags computed by evaluating the form's Rules (add_tag/remove_tag actions)
-   *  against the submitted answers — merged with the form's own static
-   *  settings.tagsOnSubmit configuration below. */
-  ruleTags?: { add?: string[]; remove?: string[] }
+  referer: string | undefined
 ): Promise<{ ok: true; result: string } | { ok: false; error: string; status?: number }> {
   const { data: formFields } = await db
     .from("crm_form_fields")
@@ -208,8 +230,16 @@ export async function submitFormResponse(
   // required-field/conditional-rule check entirely. Recompute which fields
   // are rule-hidden the same way the client does (evaluateRules), then
   // require every required, non-hidden field to actually have a value.
+  //
+  // The same rule pass yields the add_tag/remove_tag results (ruleTags) used
+  // under "Apply Tags on Submit". Every caller — the public endpoint and the
+  // in-app test submit — gets rule tags from here and only here, so they're
+  // applied exactly once and never from request input.
+  let ruleTags: { add: string[]; remove: string[] } = { add: [], remove: [] };
   if (formFields?.length) {
-    const missing = await findMissingRequiredFields(db, form.id, formFields, formData);
+    const rules = await evaluateFormRules(db, form.id, formFields, formData);
+    ruleTags = { add: rules.tagsToAdd, remove: rules.tagsToRemove };
+    const missing = findMissingRequiredFields(formFields, formData, rules.hidden);
     if (missing.length > 0) {
       return {
         ok: false,
@@ -680,8 +710,8 @@ export async function submitFormResponse(
   // Union the form's static settings.tagsOnSubmit config with whatever the
   // Rules engine computed from this specific submission's answers.
   const tagsOnSubmit = form.settings?.tagsOnSubmit as { add?: string[]; remove?: string[] } | undefined;
-  const tagsToAdd = [...new Set([...(tagsOnSubmit?.add ?? []), ...(ruleTags?.add ?? [])])];
-  const tagsToRemove = [...new Set([...(tagsOnSubmit?.remove ?? []), ...(ruleTags?.remove ?? [])])];
+  const tagsToAdd = [...new Set([...(tagsOnSubmit?.add ?? []), ...ruleTags.add])];
+  const tagsToRemove = [...new Set([...(tagsOnSubmit?.remove ?? []), ...ruleTags.remove])];
   if (relatedClientId && (tagsToAdd.length > 0 || tagsToRemove.length > 0)) {
     if (tagsToAdd.length > 0) {
       const tagInserts = tagsToAdd.map((tag: string) => ({

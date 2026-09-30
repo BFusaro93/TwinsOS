@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { assertOrgWritable } from "@/lib/org-writable";
 
 /**
  * POST /api/users/[userId]/reset-password
@@ -29,6 +30,10 @@ export async function POST(
   if (!callerProfile || callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // Service-role writes below bypass the canceled-org read-only RLS.
+  const readOnly = await assertOrgWritable(supabase, callerProfile.org_id);
+  if (readOnly) return readOnly;
 
   const { data: targetProfile } = await supabase
     .from("profiles")

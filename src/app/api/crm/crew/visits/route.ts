@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
+import {
+  compareCrewVisitRows,
+  effectiveVisitCrewId,
+  selectEffectiveCrewVisits,
+  type VisitCrewRow,
+} from "@/lib/supabase/crew-id";
 import { groupVisitsIntoStops, visitServices } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
@@ -93,10 +99,12 @@ export async function GET(request: Request) {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("crm_job_visits")
-    .select(`
+  // By EFFECTIVE crew — visit.crew_id, else the job's crew. Filtering on the
+  // raw visit.crew_id hid every job-inherited visit (most of them) from the
+  // crew's own day. See selectEffectiveCrewVisits().
+  const { data: unsorted, error } = await selectEffectiveCrewVisits(
+    supabase,
+    `
       id, job_id, client_id, job_service_id, crew_id, scheduled_date,
       start_time, end_time, status, sub_status, priority,
       notes_to_crew, notes_to_client, completion_notes, job_comments,
@@ -105,17 +113,15 @@ export async function GET(request: Request) {
       acknowledged_notes_at, notes_to_crew_updated_at, completed_at, created_at, updated_at,
       clients(display_name, primary_phone, service_address, service_city, service_state, service_zip,
         billing_address, billing_city, billing_state, billing_zip),
-      crm_jobs(job_type, status, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
+      crm_jobs(crew_id, job_type, status, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
         notes_to_crew, notes_to_crew_updated_at,
         client_properties(address, city, state, zip),
         crm_job_services(id, service_name, budgeted_hours, team_size, sort_order))
-    `)
-    .eq("org_id", orgId)
-    .eq("scheduled_date", date)
-    .eq("crew_id", crew.id)
-    .is("deleted_at", null)
-    .order("priority", { ascending: true })
-    .order("start_time", { ascending: true, nullsFirst: false });
+    `,
+    crew.id,
+    (q) => q.eq("org_id", orgId).eq("scheduled_date", date).is("deleted_at", null)
+  );
+  const data = [...unsorted].sort(compareCrewVisitRows);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -137,7 +143,7 @@ export async function GET(request: Request) {
       jobId: row.job_id as string,
       clientId: row.client_id as string,
       jobServiceId: (row.job_service_id as string) ?? null,
-      crewId: row.crew_id as string | null,
+      crewId: effectiveVisitCrewId(row as VisitCrewRow),
       scheduledDate: row.scheduled_date as string,
       startTime: row.start_time as string | null,
       endTime: row.end_time as string | null,
@@ -210,7 +216,7 @@ export async function GET(request: Request) {
       materialsUsed: [],
       clientName: (client?.display_name as string) ?? null,
       clientPhone: (client?.primary_phone as string) ?? null,
-      crewId: row.crew_id as string | null,
+      crewId: effectiveVisitCrewId(row as VisitCrewRow),
       scheduledDate: row.scheduled_date as string,
       startTime: row.start_time as string | null,
       endTime: row.end_time as string | null,

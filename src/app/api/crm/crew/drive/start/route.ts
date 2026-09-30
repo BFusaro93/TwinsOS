@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
+import { closeStaleDriveSegment } from "@/lib/crew/drive-time";
 
 /**
  * POST /api/crm/crew/drive/start
  * Starts a day-level drive-time segment for the caller's own crew (yard to
  * first stop, between stops, or last stop to yard — crm_crew_drive_segments
  * is day-level, not tied to any one crm_job_visits row). Idempotent: if the
- * crew already has an open segment, returns it instead of creating a
- * duplicate (the DB's partial unique index would reject a second one
+ * crew already has an open segment from TODAY (org timezone), returns it
+ * instead of creating a duplicate (the DB's partial unique index would reject a second one
  * anyway — this just avoids surfacing that as a client-facing error on a
  * double-tap/retry).
  */
@@ -29,16 +30,16 @@ export async function POST(request: Request) {
   const crewId = await resolveCallerCrewId(supabase, user.id, orgId);
   if (!crewId) return NextResponse.json({ error: "Not a crew account" }, { status: 403 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
-    .from("crm_crew_drive_segments")
-    .select("*")
-    .eq("crew_id", crewId)
-    .is("ended_at", null)
-    .maybeSingle();
-  if (existing) return NextResponse.json({ segment: existing });
-
+  // Idempotent for TODAY's open segment only. One left open from an earlier
+  // org day (crew never tapped "Arrived") is closed at a capped length and a
+  // fresh segment started — handing it back used to file this morning's drive
+  // under yesterday's work_date, and its eventual close credited the whole
+  // overnight gap as driving. See closeStaleDriveSegment().
   const now = new Date();
+  const stale = await closeStaleDriveSegment(supabase, crewId, orgId, now);
+  if (stale.error) return NextResponse.json({ error: stale.error }, { status: 500 });
+  if (stale.openToday) return NextResponse.json({ segment: stale.openToday });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_crew_drive_segments")

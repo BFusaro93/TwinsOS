@@ -105,6 +105,7 @@ import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
 import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { lineTotalCents } from "@/lib/invoices/auto-invoice-tax";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useConfirm } from "@/components/shared/useConfirm";
@@ -922,13 +923,18 @@ function JobDetailSheet({
       // reaches an actual generated invoice, or a client-facing invoice
       // literally shows raw markup like "<p>...</p>".
       const masterDescription = stripHtml(visit.invoiceDescription || job?.invoiceDescription || "") || null;
-      const svcLineItems = services.map((s) => ({
+      // A visit linked to one service (per-service split / package step)
+      // bills only that service — same as the server auto-invoice — or every
+      // sibling visit would re-bill the whole job.
+      const billedServices = linkedService ? [linkedService] : services;
+      const svcLineItems = billedServices.map((s) => ({
         name: s.serviceName,
         description: masterDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName,
         qty: s.qty ?? 1,
         rateCents: s.rateCents ?? 0,
-        totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),
+        totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1),
         serviceDate,
+        jobServiceId: s.id,
       }));
       // Sweep in unresolved (pending) Products/materials too — mirrors
       // JobDetail.tsx's buildPendingProductLineItems(), which this popup's
@@ -943,26 +949,25 @@ function JobDetailSheet({
             description: p.productName,
             qty: billedQty,
             rateCents: p.unitPriceCents,
-            totalCents: p.unitPriceCents * billedQty,
+            totalCents: lineTotalCents(p.unitPriceCents, billedQty),
             serviceDate,
             productId: p.productId,
             jobProductId: p.id,
           };
         });
       const lineItems = [...svcLineItems, ...productLineItems];
-      const subtotalCents = lineItems.reduce((sum, li) => sum + li.totalCents, 0);
+      // visitId tags the first line so the "already invoiced" check (and
+      // the server auto-invoice's) sees this visit as billed; tax is
+      // resolved inside the hook like the server path.
       const invoice = await createInvoice({
         jobId: visit.jobId,
+        visitId: visit.id,
         clientId: visit.clientId,
         description: masterDescription ?? serviceName,
         invoiceDate: visit.scheduledDate ?? orgToday(),
         lineItems,
-        subtotalCents,
-        taxRateBps: 0,
-        taxCents: 0,
-        totalCents: subtotalCents,
       });
-      toast.success("Invoice created");
+      toast.success(invoice.alreadyInvoiced ? "This visit is already invoiced" : "Invoice created");
       onOpenChange(false);
       router.push(`/crm/accounting/invoices/${invoice.id}`);
     } catch {

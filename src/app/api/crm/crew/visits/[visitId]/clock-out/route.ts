@@ -42,12 +42,12 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_out_at, org_id, crew_id, status, paused_at, break_minutes")
+    .select("clocked_out_at, org_id, crew_id, status, paused_at, break_minutes, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
   if (!existing) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-  if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
   if (existing?.clocked_out_at) {
@@ -131,6 +131,7 @@ export async function POST(
         .from("crm_crew_member_times")
         .select("crew_member_id, clocked_in_at, clocked_out_at, break_minutes, lunch_minutes")
         .eq("visit_id", visitId)
+        .is("deleted_at", null)
         .not("clocked_out_at", "is", null);
 
       let visitLaborCents = 0;

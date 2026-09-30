@@ -3,6 +3,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "@/lib/email/send";
+import { assertOrgWritable } from "@/lib/org-writable";
 
 function escapeHtml(value: string): string {
   return value
@@ -34,6 +35,10 @@ export async function POST(request: Request) {
   if (callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // Service-role writes below bypass the canceled-org read-only RLS.
+  const readOnly = await assertOrgWritable(supabase, callerProfile.org_id);
+  if (readOnly) return readOnly;
 
   // 2. Parse and validate the request body.
   let body: { email?: string; name?: string; role?: string };

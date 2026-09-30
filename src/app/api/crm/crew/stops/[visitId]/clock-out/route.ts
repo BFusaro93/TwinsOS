@@ -3,7 +3,7 @@ import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { allocateStopHours } from "@/lib/utils/visit-hours";
-import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { logger } from "@/lib/logger";
@@ -38,6 +38,7 @@ interface VisitRow {
   break_minutes: number | null;
   start_time: string | null;
   crm_jobs: {
+    crew_id?: string | null;
     property_id: string | null;
     service_address: string | null;
     service_city: string | null;
@@ -49,7 +50,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
   return {
     clientId: row.client_id,
     scheduledDate: row.scheduled_date,
-    crewId: row.crew_id,
+    crewId: effectiveVisitCrewId(row),
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
@@ -59,7 +60,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, job_id, client_id, scheduled_date, crew_id, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
-  crm_jobs(property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
+  crm_jobs(crew_id, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
 
 /**
@@ -99,7 +100,7 @@ export async function POST(
   // Guard against clocking out another crew's visit — RLS on crm_job_visits
   // only checks org_id, not crew_id, so a caller who obtains another crew's
   // visitId could otherwise still act on it. See assertCallerOwnsVisit().
-  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
@@ -119,8 +120,8 @@ export async function POST(
   // anchor so it isn't orphaned in "in_progress" forever.
   //
   // Security: stopKeyForVisit encodes crew_id, so an anchorKey match already
-  // guarantees r.crew_id === anchor.crew_id (whose ownership was verified
-  // above). The clocked_in_at fallback clause does NOT carry that guarantee —
+  // guarantees the two share an effective crew (whose ownership was
+  // verified above). The clocked_in_at fallback clause does NOT carry that guarantee —
   // a mid-stop reassignment can leave a row with a different crew_id than the
   // caller's — so it is intersected with an explicit crew_id check. This
   // means a visit reassigned away from the caller's crew is no longer swept
@@ -128,7 +129,7 @@ export async function POST(
   // resolve) rather than letting the caller mutate another crew's visit.
   const allRows = candidateRows as VisitRow[];
   const stopRows = allRows.filter((r) =>
-    r.crew_id === anchor.crew_id
+    effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor)
     && (
       stopKeyForVisit(toStopKeyInput(r)) === anchorKey
       || (anchor.clocked_in_at && r.clocked_in_at === anchor.clocked_in_at)
@@ -273,6 +274,7 @@ export async function POST(
       .from("crm_crew_member_times")
       .select("crew_member_id, clocked_in_at, clocked_out_at, break_minutes, lunch_minutes")
       .eq("visit_id", anchor.id)
+      .is("deleted_at", null)
       .not("clocked_out_at", "is", null);
 
     let totalLaborCents = 0;

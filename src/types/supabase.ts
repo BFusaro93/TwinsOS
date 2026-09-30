@@ -13612,6 +13612,7 @@ export type Database = {
           pm_schedule_id: string | null
           priority: string
           recurrence_frequency: string | null
+          recurrence_parent_id: string | null
           start_date: string | null
           status: string
           title: string
@@ -13643,6 +13644,7 @@ export type Database = {
           pm_schedule_id?: string | null
           priority?: string
           recurrence_frequency?: string | null
+          recurrence_parent_id?: string | null
           start_date?: string | null
           status?: string
           title: string
@@ -13674,6 +13676,7 @@ export type Database = {
           pm_schedule_id?: string | null
           priority?: string
           recurrence_frequency?: string | null
+          recurrence_parent_id?: string | null
           start_date?: string | null
           status?: string
           title?: string

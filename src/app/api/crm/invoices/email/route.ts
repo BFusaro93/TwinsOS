@@ -100,6 +100,34 @@ export async function POST(req: NextRequest) {
 
   if (invErr || !inv) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
+  // A draft goes out as "sent" below — it must not go out numberless. The
+  // manual save flow assigns the number (useAssignInvoiceNumber), but an
+  // invoice emailed straight from draft never passed through it. Assign
+  // before rendering so the email and PDF carry it. The RPC is idempotent
+  // (returns the existing number) and org-guarded.
+  if (inv.invoice_number == null) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: assignedNumber, error: numErr } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoiceId });
+    if (numErr || assignedNumber == null) {
+      log.error("assign_invoice_number failed before invoice email", { invoiceId, error: numErr?.message });
+      return NextResponse.json({ error: "Could not assign an invoice number — the invoice was not sent." }, { status: 500 });
+    }
+    inv.invoice_number = assignedNumber as number;
+    if (inv.client_id) {
+      // Same timeline entry the manual "assign on save" flow writes.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        org_id: inv.org_id,
+        client_id: inv.client_id,
+        activity_type: "invoice",
+        subject: `Invoice #${assignedNumber}`,
+        amount_cents: inv.total_cents ?? 0,
+        ref_id: invoiceId,
+        ref_table: "crm_invoices",
+      });
+    }
+  }
+
   const toEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
     : (inv.clients?.primary_email ? [inv.clients.primary_email as string] : []);

@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient, type User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import { resolveCallerCrewId } from "@/lib/supabase/crew-id";
+import { resolveCallerCrewId, effectiveVisitCrewId, type VisitCrewRow } from "@/lib/supabase/crew-id";
 
 /**
  * Authenticates a Route Handler request using EITHER the web app's cookie
@@ -49,24 +49,29 @@ export async function getRouteAuth(request: Request): Promise<{
  * for the rules (no soft-deleted crews, oldest row wins, never throws on
  * duplicates). Re-exported here so existing route imports keep working.
  */
-export { resolveCallerCrewId };
+export { resolveCallerCrewId, effectiveVisitCrewId };
+export type { VisitCrewRow };
 
 /**
  * Guards the crew-facing visit-action routes (clock-in/out, photos,
- * requisitions) against one crew acting on another crew's visit. RLS on
- * crm_job_visits only checks org_id, not crew_id, so without this a caller
- * who ever gets hold of another crew's visitId (e.g. a stale id cached
- * before a mid-shift reassignment) could still clock in/out or upload
- * photos to it. Returns true and lets the caller proceed only when the
- * authenticated user resolves to the exact crew this visit is assigned to.
+ * requisitions) against one crew acting on another crew's visit. Returns true
+ * and lets the caller proceed only when the authenticated user resolves to
+ * the visit's EFFECTIVE crew — visit.crew_id, else the job's crew_id (see
+ * effectiveVisitCrewId). Comparing the raw visit.crew_id 403'd every visit
+ * whose crew is inherited from the job, which is most of them.
+ *
+ * Callers must select `crew_id` AND embed `crm_jobs(crew_id)` on the visit so
+ * the fallback can be resolved; passing a row without the embed only matches
+ * a directly-assigned visit (fails closed, never open).
  */
 export async function assertCallerOwnsVisit(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   userId: string,
   orgId: string,
-  visitCrewId: string | null | undefined
+  visit: VisitCrewRow
 ): Promise<boolean> {
   const callerCrewId = await resolveCallerCrewId(supabase, userId, orgId);
+  const visitCrewId = effectiveVisitCrewId(visit);
   return !!callerCrewId && callerCrewId === visitCrewId;
 }

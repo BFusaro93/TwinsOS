@@ -5,6 +5,8 @@ import { mapWorkOrder } from "@/lib/supabase/mappers";
 import type { WorkOrder, WorkOrderStatus } from "@/types/cmms";
 import { setWOPartStock } from "@/lib/inventory/part-stock";
 import { syncPartQtyToProduct } from "@/lib/hooks/use-wo-costs";
+import { toast } from "sonner";
+import { formatDate } from "@/lib/utils";
 
 function patchWOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<WorkOrder>) {
   queryClient.setQueryData<WorkOrder[]>(["work-orders"], (old) =>
@@ -138,6 +140,22 @@ export function useUpdateWorkOrderStatus() {
         }
       }
 
+      // Recurring WOs: the DB trigger trg_work_orders_spawn_next_recurrence
+      // (20260930200000) creates the next occurrence when a recurring WO
+      // reaches done, on every write path (at most one successor per WO).
+      // Note whether a successor already existed so a reopen→re-complete
+      // cycle doesn't announce one that was generated the first time.
+      const findSuccessor = async () => {
+        const { data } = await supabase
+          .from("work_orders")
+          .select("id, work_order_number, due_date")
+          .eq("recurrence_parent_id", id)
+          .is("deleted_at", null)
+          .maybeSingle();
+        return data;
+      };
+      const priorSuccessorId = status === "done" ? (await findSuccessor())?.id ?? null : null;
+
       const { error } = await supabase.from("work_orders").update({ status }).eq("id", id);
       if (error) throw error;
 
@@ -146,9 +164,25 @@ export function useUpdateWorkOrderStatus() {
       // done/skipped (threshold advances) or deleted (re-arms), on every write
       // path — this hook used to do it client-side, only on done, which left
       // rules stuck forever after a skip, a rejected request or a deletion.
+
+      if (status === "done") {
+        const next = await findSuccessor();
+        if (next && next.id !== priorSuccessorId) {
+          return { nextWorkOrder: { id: next.id, workOrderNumber: next.work_order_number, dueDate: next.due_date } };
+        }
+      }
+      return { nextWorkOrder: null };
     },
-    onSuccess: (_, { id, status }) => {
+    onSuccess: (result, { id, status }) => {
       if (status) patchWOCache(queryClient, id, { status });
+      if (result?.nextWorkOrder) {
+        toast.success(
+          result.nextWorkOrder.dueDate
+            ? `Next work order scheduled for ${formatDate(result.nextWorkOrder.dueDate)}`
+            : "Next work order scheduled",
+          { description: result.nextWorkOrder.workOrderNumber }
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });

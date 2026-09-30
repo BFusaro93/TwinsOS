@@ -50,12 +50,47 @@ async function copyTemplatePartsAndDeduct(
   if (insertErr) throw new Error(`Failed to copy parts onto the work order: ${insertErr.message}`);
 
   const short: string[] = [];
-  for (const row of (inserted ?? []) as { id: string; part_id: string | null; part_name: string; quantity: number }[]) {
-    if (!row.part_id) continue;
-    const res = await setWOPartStock(userClient, row.id, row.quantity);
-    if (res.appliedDelta > res.requestedDelta) short.push(row.part_name);
+  const touched: string[] = [];
+  try {
+    for (const row of (inserted ?? []) as { id: string; part_id: string | null; part_name: string; quantity: number }[]) {
+      if (!row.part_id) continue;
+      const res = await setWOPartStock(userClient, row.id, row.quantity);
+      touched.push(row.part_id);
+      if (res.appliedDelta > res.requestedDelta) short.push(row.part_name);
+    }
+  } finally {
+    // Mirror every part whose stock moved (even on a mid-loop failure, before
+    // the caller's rollback) — same as the Costs tab and WO delete.
+    await syncPartsToProducts(userClient, touched);
   }
   return short;
+}
+
+/**
+ * After set_wo_part_stock moves parts.quantity_on_hand, mirror the new value
+ * onto each part's linked product_items row so the Products page stays in
+ * sync — the server-side twin of syncPartQtyToProduct (use-wo-costs.ts),
+ * which the Costs tab and WO delete already call. Best-effort: the stock
+ * move itself already succeeded.
+ */
+async function syncPartsToProducts(userClient: ServerSupabase, partIds: string[]) {
+  for (const partId of new Set(partIds)) {
+    try {
+      const { data: part } = await userClient
+        .from("parts")
+        .select("quantity_on_hand, product_item_id")
+        .eq("id", partId)
+        .single();
+      if (part?.product_item_id) {
+        await userClient
+          .from("product_items")
+          .update({ quantity_on_hand: part.quantity_on_hand })
+          .eq("id", part.product_item_id);
+      }
+    } catch (err) {
+      log.error("failed to sync part quantity to product", { partId, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
 }
 
 /**
@@ -77,11 +112,15 @@ async function rollbackGeneratedWOs(
     .in("work_order_id", workOrderIds)
     .is("deleted_at", null)
     .not("part_id", "is", null);
-  for (const wp of (parts ?? []) as { id: string }[]) {
-    await setWOPartStock(userClient, wp.id, 0).catch((err: unknown) => {
-      log.error("rollback: failed to return part to stock", { woPartId: wp.id, error: err instanceof Error ? err.message : String(err) });
-    });
+  const touched: string[] = [];
+  for (const wp of (parts ?? []) as { id: string; part_id: string }[]) {
+    await setWOPartStock(userClient, wp.id, 0)
+      .then(() => { touched.push(wp.part_id); })
+      .catch((err: unknown) => {
+        log.error("rollback: failed to return part to stock", { woPartId: wp.id, error: err instanceof Error ? err.message : String(err) });
+      });
   }
+  await syncPartsToProducts(userClient, touched);
   await adminClient
     .from("work_orders")
     .update({ deleted_at: new Date().toISOString() })
@@ -138,7 +177,9 @@ export async function POST(
   }
   // The service-role client below bypasses RLS, so the role rules that gate
   // creating work orders must be restated here.
-  if (["viewer", "requestor", "crew"].includes(profile.role as string)) {
+  // purchaser is blocked from writing work_orders by role_write_guard
+  // (20260929140000), so it can't generate them here either.
+  if (["viewer", "requestor", "crew", "purchaser"].includes(profile.role as string)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -163,7 +204,8 @@ export async function POST(
     return NextResponse.json({ error: "This PM schedule is inactive." }, { status: 409 });
   }
 
-  const today = todayInZone(await getOrgTimeZone(userClient, profile.org_id as string));
+  const orgTimeZone = await getOrgTimeZone(userClient, profile.org_id as string);
+  const today = todayInZone(orgTimeZone);
 
   // ── 1b. Paused schedules don't generate ───────────────────────────────────
   // A paused cycle isn't due (and isn't scored — see pm_schedule_pauses), so
@@ -273,7 +315,11 @@ export async function POST(
   const baseNumber = woNumber as string;
   const createdWOIds: string[] = [];
   const shortParts: string[] = [];
-  const dateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // The org's calendar day, not the server's (UTC is already tomorrow after
+  // ~8pm ET). `today` is YYYY-MM-DD; format it as a plain calendar date.
+  const dateLabel = new Date(`${today}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+  });
   const isSingleAsset = scheduleAssets.length === 1;
 
   // Each generated WO is due on the date the schedule said this PM was due,

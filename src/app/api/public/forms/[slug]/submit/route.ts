@@ -41,9 +41,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   // to `form.org_id` (resolved above from the published form, not from the
   // request), so a service-role client here is safe and is what actually
   // lets an anonymous submission do anything beyond inserting its own row.
-  // ruleTags are intentionally NOT forwarded from the request body — they'd
-  // let an anonymous caller add/remove arbitrary client tags; tag rules are
-  // evaluated server-side elsewhere.
+  // Rule-driven tags (add_tag/remove_tag) are evaluated server-side inside
+  // submitFormResponse from the form's own crm_form_rules and these answers.
+  // Any client-sent `ruleTags` is ignored — it would let an anonymous caller
+  // add/remove arbitrary client tags.
   const result = await submitFormResponse(createServiceClient(), form, formData, body.referer);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
 

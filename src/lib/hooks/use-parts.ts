@@ -307,8 +307,10 @@ export function useReceivePartCostLayer() {
       poNumber?: string;
       /** PO line item this receipt is against — when given, the RPC enforces
        *  that cumulative goods_receipt_lines quantity for this line never
-       *  exceeds what was ordered (see the 20260901150000 migration). */
-      poLineItemId?: string;
+       *  exceeds what was ordered (see the 20260901150000 migration).
+       *  Required since 20260930150000: the RPC refuses to add stock that
+       *  no goods receipt on an ordered PO accounts for. */
+      poLineItemId: string;
     }) => {
       const supabase = createClient();
       const { costMethod } = useSettingsStore.getState();
@@ -337,7 +339,7 @@ export function useReceivePartCostLayer() {
         p_received_at: receipt.receivedAt,
         p_po_number: receipt.poNumber ?? "",
         p_cost_method: costMethod,
-        p_po_line_item_id: receipt.poLineItemId ?? null,
+        p_po_line_item_id: receipt.poLineItemId,
       });
       if (updateErr) throw updateErr;
     },

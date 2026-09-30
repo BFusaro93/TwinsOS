@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
-import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 
 interface VisitRow {
   id: string;
@@ -12,21 +12,21 @@ interface VisitRow {
   clocked_in_at: string | null;
   clocked_out_at: string | null;
   paused_at: string | null;
-  crm_jobs: { property_id: string | null; service_address: string | null; service_city: string | null } | null;
+  crm_jobs: { crew_id?: string | null; property_id: string | null; service_address: string | null; service_city: string | null } | null;
 }
 
 function toStopKeyInput(row: VisitRow): StopKeyInput {
   return {
     clientId: row.client_id,
     scheduledDate: row.scheduled_date,
-    crewId: row.crew_id,
+    crewId: effectiveVisitCrewId(row),
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at, clocked_out_at, paused_at, crm_jobs(property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at, clocked_out_at, paused_at, crm_jobs(crew_id, property_id, service_address, service_city)";
 
 /**
  * Pauses every open visit in this stop (lunch, stopping for the day) without
@@ -56,7 +56,7 @@ export async function POST(
   if (anchorErr || !anchorRow) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   const anchor = anchorRow as VisitRow;
 
-  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
@@ -72,7 +72,7 @@ export async function POST(
 
   const anchorKey = stopKeyForVisit(toStopKeyInput(anchor));
   const openIds = (candidateRows as VisitRow[])
-    .filter((r) => r.crew_id === anchor.crew_id)
+    .filter((r) => effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor))
     .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
     .filter((r) => r.clocked_in_at && !r.clocked_out_at && !r.paused_at)
     .map((r) => r.id);

@@ -3,7 +3,30 @@ import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { adminClient } from "@/lib/api/auth";
 import { createRequisitionRecord } from "@/lib/requisitions/create-requisition";
-import { REQUISITION_SELECT, shapeRequisition } from "@/app/api/v1/requisitions/shape";
+
+/**
+ * What a crew device gets back for a requisition: status-tracking fields only.
+ * The office-facing shapeRequisition() carries subtotal/tax/shipping/discount/
+ * grand total and the vendor — none of which a field crew needs, and the rows
+ * are read with the service client, so nothing else would strip them. Crew
+ * never sees pricing here regardless of crew_hide_pricing.
+ */
+const CREW_REQUISITION_SELECT =
+  "id, requisition_number, title, status, requested_by_name, notes, crm_job_id, created_at, updated_at";
+
+function shapeCrewRequisition(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    requisitionNumber: row.requisition_number,
+    title: row.title,
+    status: row.status,
+    requestedByName: row.requested_by_name,
+    notes: row.notes,
+    crmJobId: row.crm_job_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 const Body = z.object({
   productItemId: z.string().uuid(),
@@ -53,13 +76,13 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id")
+    .select("id, job_id, org_id, crew_id, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
   if (visitError) return NextResponse.json({ error: visitError.message }, { status: 500 });
   if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-  if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
@@ -117,7 +140,7 @@ export async function POST(
   );
   if (error || !requisition) return NextResponse.json({ error: error ?? "create failed" }, { status: 500 });
 
-  return NextResponse.json(shapeRequisition(requisition), { status: 201 });
+  return NextResponse.json(shapeCrewRequisition(requisition as Record<string, unknown>), { status: 201 });
 }
 
 /**
@@ -139,13 +162,13 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id")
+    .select("id, job_id, org_id, crew_id, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
   if (visitError) return NextResponse.json({ error: visitError.message }, { status: 500 });
   if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-  if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit.crew_id))) {
+  if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
@@ -156,7 +179,7 @@ export async function GET(
   const db = adminClient();
   const { data, error } = await db
     .from("requisitions")
-    .select(REQUISITION_SELECT)
+    .select(CREW_REQUISITION_SELECT)
     .eq("org_id", visit.org_id as string)
     .eq("crm_job_id", visit.job_id as string)
     .is("deleted_at", null)
@@ -164,5 +187,5 @@ export async function GET(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return NextResponse.json((data ?? []).map((row: any) => shapeRequisition(row)));
+  return NextResponse.json((data ?? []).map((row: any) => shapeCrewRequisition(row)));
 }

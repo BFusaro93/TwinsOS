@@ -50,6 +50,7 @@ import { createClient } from "@/lib/supabase/client";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { lineTotalCents } from "@/lib/invoices/auto-invoice-tax";
 import { toast } from "sonner";
 import {
   CalendarPlus,
@@ -404,7 +405,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           description: p.productName,
           qty: billedQty,
           rateCents: p.unitPriceCents,
-          totalCents: p.unitPriceCents * billedQty,
+          totalCents: lineTotalCents(p.unitPriceCents, billedQty),
           serviceDate,
           productId: p.productId,
           jobProductId: p.id,
@@ -424,32 +425,30 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     try {
       await updateStatus.mutateAsync({ id: job.id, status, scheduledDate: job.scheduledDate ?? "" });
       toast.success(`Marked ${STATUS_LABEL[status] ?? status}`);
-      // Auto-create a draft invoice when a one-time job is completed
+      // Auto-create a draft invoice when a one-time job is completed.
+      // useCreateInvoiceFromJob skips (alreadyInvoiced) when any live invoice
+      // already covers the job or one of its visits — invoiced first, split
+      // per-service visits auto-invoiced on completion, or cancel → reopen →
+      // complete — and resolves tax exactly like the server auto-invoice.
       if (status === "completed" && job.jobType === "one_time") {
         try {
           const today = todayLocalISODate();
           const serviceDate = job.scheduledDate ?? today;
           const svcs = job.services ?? [];
           const productLineItems = buildPendingProductLineItems(serviceDate);
-          const productsSubtotal = productLineItems.reduce((s, li) => s + li.totalCents, 0);
           const svcLineItems = svcs.length > 0
-            ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1), serviceDate }))
+            ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1), serviceDate, jobServiceId: s.id }))
             : productLineItems.length > 0
               ? []
               : [{ name: "Service", description: job.invoiceDescription || "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0, serviceDate }];
-          const subtotal = svcLineItems.reduce((s, li) => s + li.totalCents, 0) + productsSubtotal
-            || (job.rateCents ?? 0);
-          await createInvoice.mutateAsync({
+          const created = await createInvoice.mutateAsync({
             jobId: job.id,
             clientId: job.clientId,
             description: `Service: ${svcs.map((s) => s.serviceName).join(", ") || "Job"}`,
             invoiceDate: today,
             lineItems: [...svcLineItems, ...productLineItems],
-            subtotalCents: subtotal,
-            taxRateBps: 0,
-            taxCents: 0,
-            totalCents: subtotal,
           });
+          if (created.alreadyInvoiced) return;
           toast.success("Invoice created automatically — check Accounting");
         } catch {
           toast.error("Job marked completed, but the automatic invoice failed to create — add one manually");
@@ -582,15 +581,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       const serviceDate = job.scheduledDate ?? today;
       const services = job.services ?? [];
       const productLineItems = buildPendingProductLineItems(serviceDate);
-      const productsSubtotal = productLineItems.reduce((s, li) => s + li.totalCents, 0);
       const svcLineItems = services.length > 0
         ? services.map((s) => ({
             name: s.serviceName,
             description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service",
             qty: s.qty ?? 1,
             rateCents: s.rateCents ?? 0,
-            totalCents: (s.rateCents ?? 0) * (s.qty ?? 1),
+            totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1),
             serviceDate,
+            jobServiceId: s.id,
           }))
         : productLineItems.length > 0
           ? []
@@ -602,20 +601,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               totalCents: job.rateCents ?? 0,
               serviceDate,
             }];
-      const subtotal = svcLineItems.reduce((s, li) => s + li.totalCents, 0) + productsSubtotal
-        || (job.rateCents ?? 0);
       const invoice = await createInvoice.mutateAsync({
         jobId: job.id,
         clientId: job.clientId,
         description: `Service: ${services.map((s) => s.serviceName).join(", ") || "Job"}`,
         invoiceDate: today,
         lineItems: [...svcLineItems, ...productLineItems],
-        subtotalCents: subtotal,
-        taxRateBps: 0,
-        taxCents: 0,
-        totalCents: subtotal,
       });
-      toast.success("Invoice created");
+      toast.success(invoice.alreadyInvoiced ? "This job is already invoiced" : "Invoice created");
       router.push(`/crm/accounting/invoices/${invoice.id}`);
     } catch {
       toast.error("Failed to create invoice");
