@@ -403,7 +403,7 @@ export function ReceiveGoodsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px]">
+      <DialogContent className="sm:max-w-[min(1000px,95vw)]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PackageCheck className="h-5 w-5 text-slate-500" />
@@ -423,7 +423,7 @@ export function ReceiveGoodsDialog({
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Line Items
                 </p>
-                <div className="overflow-hidden rounded-md border">
+                <div className="overflow-x-auto rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 text-xs">
