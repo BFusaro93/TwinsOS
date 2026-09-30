@@ -502,7 +502,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       }}
     />
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col sm:max-w-[900px]">
+      <DialogContent className="flex flex-col sm:max-w-[min(1000px,95vw)]">
         <DialogHeader className="shrink-0">
           <DialogTitle>{isEditing ? "Edit Purchase Order" : "New Purchase Order"}</DialogTitle>
           <DialogDescription>Create a purchase order to send to a vendor.</DialogDescription>
@@ -594,6 +594,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                             <th className="pb-1.5 pr-2 font-medium">
                               Item <span className="text-red-500">*</span>
                             </th>
+                            <th className="w-28 pb-1.5 pr-2 font-medium">Part #</th>
                             <th className="w-20 pb-1.5 pr-2 font-medium">Qty</th>
                             <th className="w-28 pb-1.5 pr-2 font-medium">
                               Unit Cost ($)
@@ -624,6 +625,11 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                                   onCreateNewProduct={() => { setPendingLineItemId(li.id); setProductDialogOpen(true); }}
                                   onCreateNewPart={() => { setPendingLineItemId(li.id); setPartDialogOpen(true); }}
                                 />
+                              </td>
+                              <td className="py-1.5 pr-2 align-top font-mono text-xs text-slate-600">
+                                <span className="inline-block max-w-[7rem] truncate pt-2" title={li.partNumber || undefined}>
+                                  {li.partNumber || "—"}
+                                </span>
                               </td>
                               <td className="py-1.5 pr-2 align-top">
                                 <DecimalInput
@@ -688,7 +694,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                             {hasProjectRow && (
                               <tr className="border-b">
                                 <td className="pb-1.5 pr-2" />
-                                <td colSpan={3} className="pb-1.5 pr-2">
+                                <td colSpan={4} className="pb-1.5 pr-2">
                                   <Select
                                     value={li.projectId}
                                     onValueChange={(val) =>
