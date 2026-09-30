@@ -58,7 +58,7 @@ export function ClientPhotosTab({ clientId, clientName }: Props) {
 
   return (
     <>
-    <div className="flex justify-end">{newJobButton}</div>
+    <div className="mb-3 flex justify-end">{newJobButton}</div>
     <div className="overflow-hidden rounded-lg border bg-white shadow-sm divide-y">
       {jobs.map((job) => {
         const address = [job.address, job.city, job.state].filter(Boolean).join(", ");

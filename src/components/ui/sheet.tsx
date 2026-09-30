@@ -68,6 +68,31 @@ const SheetContent = React.forwardRef<
   const depth = React.useContext(SheetDepthContext)
   const isNested = depth > 0
 
+  // A sheet opened on top of another one is portaled outside the outer sheet's
+  // tree, so the outer sheet's react-remove-scroll lock swallows wheel/touch
+  // scrolling inside it. Native listeners that stop propagation before the
+  // document-level handler fires keep the inner sheet scrollable. Attached from
+  // the ref callback because the content element only exists while open.
+  const cleanup = React.useRef<(() => void) | null>(null)
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      cleanup.current?.()
+      cleanup.current = null
+      if (node && isNested) {
+        const stopProp = (e: Event) => e.stopPropagation()
+        node.addEventListener("wheel", stopProp)
+        node.addEventListener("touchmove", stopProp)
+        cleanup.current = () => {
+          node.removeEventListener("wheel", stopProp)
+          node.removeEventListener("touchmove", stopProp)
+        }
+      }
+      if (typeof ref === "function") ref(node)
+      else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node
+    },
+    [ref, isNested]
+  )
+
   return (
     // SheetDepthContext controls whether nested Radix Sheets skip their own overlay.
     // OverlayLevelContext lets manual-portal panels (WorkOrderDetailPanel etc.) know
@@ -77,7 +102,7 @@ const SheetContent = React.forwardRef<
         <SheetPortal>
           {!isNested && <SheetOverlay />}
           <SheetPrimitive.Content
-            ref={ref}
+            ref={setRefs}
             className={cn(sheetVariants({ side }), className)}
             {...props}
           >
