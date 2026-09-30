@@ -153,11 +153,26 @@ export async function POST(request: Request) {
   // 5. Update profile status to 'invited' — but never downgrade a user who is
   //    already active (re-sending a set-password link to a current teammate
   //    must not relabel them as a pending invite).
+  //    A freshly created invite has no profile yet: the handle_new_user
+  //    trigger only creates one when invited_at is set at INSERT time, which
+  //    generateLink does not guarantee. Create it here so the user shows up in
+  //    the Users list. org_id comes from the caller's session, never the body.
   if (linkData.user && existingStatus !== "active") {
-    await adminClient
-      .from("profiles")
-      .update({ status: "invited" })
-      .eq("id", linkData.user.id);
+    const { error: profileUpsertErr } = await adminClient.from("profiles").upsert(
+      {
+        id: linkData.user.id,
+        org_id: callerProfile.org_id,
+        name,
+        email: email.trim(),
+        role,
+        status: "invited",
+      },
+      { onConflict: "id" }
+    );
+    if (profileUpsertErr) {
+      console.error("profile upsert error:", profileUpsertErr);
+      return NextResponse.json({ error: "Invite sent but the user record could not be created" }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ success: true }, { status: 200 });

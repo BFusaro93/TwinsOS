@@ -25,7 +25,9 @@ export default async function FieldRepairRequestPage() {
 
   if (!user) redirect("/login");
 
-  const orgId = user.user_metadata?.org_id as string | undefined;
+  // Resolve the org from the profile (honors staff impersonation), not
+  // user_metadata — some accounts (e.g. the sandbox admin) have no org_id there.
+  const { data: orgId } = await supabase.rpc("my_org_id");
   if (!orgId) redirect("/login");
 
   const { data: org } = await supabase
