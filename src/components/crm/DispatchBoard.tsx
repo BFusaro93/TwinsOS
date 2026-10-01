@@ -1066,11 +1066,12 @@ function JobDetailSheet({
           </div>
         </SheetHeader>
 
-        {/* Body */}
-        <div className="flex flex-1 overflow-hidden">
+        {/* Body — form and costing panel sit side by side from md up; on a phone
+            they stack and the whole body scrolls as one. */}
+        <div className="flex flex-1 overflow-hidden max-md:flex-col max-md:overflow-y-auto">
 
           {/* Left: form + notes */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto max-md:flex-none max-md:overflow-visible">
 
             {/* Schedule / assign section */}
             <div className="px-5 pt-4 pb-3 border-b space-y-2.5">
@@ -1484,7 +1485,7 @@ function JobDetailSheet({
           </div>
 
           {/* Right: costing panel */}
-          <div className="w-56 shrink-0 border-l bg-slate-50 flex flex-col">
+          <div className="w-56 shrink-0 border-l bg-slate-50 flex flex-col max-md:w-full max-md:border-l-0 max-md:border-t">
             <div className="px-4 pt-4 pb-3 border-b">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
                 Job Costing
@@ -2911,7 +2912,7 @@ function VisitRow({
     <tr
       className={cn(
         "group border-b border-slate-100 text-xs cursor-pointer transition-colors",
-        isDragOver ? "bg-brand-50 border-brand-300" : selected ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-slate-50"
+        isDragOver ? "bg-brand-50 border-brand-300" : selected ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-slate-50"
       )}
       onClick={() => onOpen(visit)}
       draggable={manualRouteMode}
@@ -2921,7 +2922,12 @@ function VisitRow({
     >
       {/* Checkbox */}
       <td className="w-8 px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-        <Checkbox checked={selected} onCheckedChange={() => onToggleSelect(visit.id)} className="h-3.5 w-3.5" />
+        {/* On touch the 14px box was a hard target; the label pads the hit area
+            out to ~42px (negative margin keeps the row height) and is
+            display:contents on desktop so nothing moves there. */}
+        <label className="-m-3.5 flex cursor-pointer items-center justify-center p-3.5 lg:contents">
+          <Checkbox checked={selected} onCheckedChange={() => onToggleSelect(visit.id)} className="h-3.5 w-3.5" />
+        </label>
       </td>
 
       {/* Drag handle + Order — only interactive in Manual Route mode, so
@@ -2968,20 +2974,23 @@ function VisitRow({
 
       {/* Client (+ address below, like the Jobs screen — City/Zip stay in
           their own columns since they're used for routing) */}
-      <td className="min-w-[200px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
+      {/* Below lg the table scrolls sideways inside its own box; the client
+          stays pinned (bg-inherit keeps the selected/hover tint) so you
+          always know which row you're looking at. */}
+      <td className="min-w-[200px] px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:min-w-[160px] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-1">
           {visit.effectiveHighPriority && (
             <span title="High priority" className="shrink-0"><Flame className="h-3 w-3 text-red-500" /></span>
           )}
           <Link
             href={`/crm/clients/${visit.clientId}`}
-            className="block truncate max-w-[200px] font-medium text-brand-600 hover:underline"
+            className="block truncate max-w-[200px] max-lg:max-w-[150px] font-medium text-brand-600 hover:underline"
           >
             {visit.clientName ?? "—"}
           </Link>
         </div>
         {job?.serviceAddress && (
-          <p className="truncate max-w-[200px] text-[10px] text-slate-400">{job.serviceAddress}</p>
+          <p className="truncate max-w-[200px] max-lg:max-w-[150px] text-[10px] text-slate-400">{job.serviceAddress}</p>
         )}
       </td>
 
@@ -4315,20 +4324,20 @@ export function DispatchBoard() {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearPendingOrder(); }} />
 
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-1 shrink-0">
+        <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500 ml-1">
           <span className="font-medium">From</span>
           <Input
             type="date"
             value={selectedDate}
             onChange={(e) => { setSelectedDate(e.target.value); clearPendingOrder(); }}
-            className="h-7 w-36 px-2 text-xs md:text-xs"
+            className="h-7 max-lg:h-10 w-36 max-lg:w-44 px-2 text-xs md:text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); clearPendingOrder(); }}
-            className="h-7 w-36 px-2 text-xs md:text-xs"
+            className="h-7 max-lg:h-10 w-36 max-lg:w-44 px-2 text-xs md:text-xs"
           />
           {endDate && (
             <button
@@ -4341,8 +4350,8 @@ export function DispatchBoard() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          <Button size="sm" variant="outline" className="h-9 text-sm gap-1 px-2.5"
+        <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
+          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-sm gap-1 px-2.5"
             onClick={() => setTeamAssignOpen(true)}
           >
             <Users className="h-4 w-4" />
@@ -4350,7 +4359,7 @@ export function DispatchBoard() {
           </Button>
           <div className="flex items-center shrink-0">
             <Button size="sm" variant="outline"
-              className={cn("h-9 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
+              className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
               onClick={handleOptimizeRoute}
               disabled={optimizing}
             >
@@ -4364,7 +4373,7 @@ export function DispatchBoard() {
               value={routeStrategy}
               onValueChange={(v) => { setRouteStrategy(v as "nearest_first" | "furthest_first"); clearOptimization(); }}
             >
-              <SelectTrigger className={cn("h-9 w-[112px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
+              <SelectTrigger className={cn("h-9 max-lg:h-11 w-[112px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -4373,7 +4382,7 @@ export function DispatchBoard() {
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" variant="outline" className="h-9 text-sm gap-1 px-2.5"
+          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-sm gap-1 px-2.5"
             onClick={() => { setNearbyOpen(true); findNearby(allVisits); }}
             title="Nearby Waiting List"
           >
@@ -4417,7 +4426,7 @@ export function DispatchBoard() {
                 key={key}
                 onClick={() => { if (colFilterKey === key) { setColFilterKey(null); setColFilterValue(""); } else { setColFilterKey(key); setColFilterValue(""); } }}
                 className={cn(
-                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
+                  "rounded px-2 py-0.5 max-lg:py-2 text-xs transition-colors whitespace-nowrap",
                   colFilterKey === key ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
                 )}
               >
@@ -4502,10 +4511,10 @@ export function DispatchBoard() {
         </div>
 
         {/* Action buttons — flush right of filter bar */}
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
           <Button
             size="sm" variant="outline"
-            className={cn("h-7 gap-1.5 px-2.5 text-xs", statsOpen && "border-brand-400 text-brand-700 bg-brand-50")}
+            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", statsOpen && "border-brand-400 text-brand-700 bg-brand-50")}
             onClick={() => setStatsOpen((o) => !o)}
             title="Show crew stats"
           >
@@ -4516,7 +4525,7 @@ export function DispatchBoard() {
             <PopoverTrigger asChild>
               <Button
                 size="sm" variant="outline"
-                className={cn("h-7 gap-1.5 px-2.5 text-xs", callAheadOpen && "border-brand-400 text-brand-700 bg-brand-50")}
+                className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", callAheadOpen && "border-brand-400 text-brand-700 bg-brand-50")}
                 title="Call ahead required"
               >
                 <PhoneCall className="h-3.5 w-3.5" />
@@ -4563,26 +4572,26 @@ export function DispatchBoard() {
           </Popover>
           <Button
             size="sm" variant="outline"
-            className={cn("h-7 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 bg-brand-50")}
+            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 bg-brand-50")}
             onClick={() => setManualRouteMode((m) => !m)}
             title="Enable drag-and-drop and manual # editing to reorder stops"
           >
             <GripVertical className="h-3.5 w-3.5" />
             Manual Route
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse each crew's route order">
+          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse each crew's route order">
             <ArrowUpDown className="h-3.5 w-3.5" />
             Reverse
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group each crew's stops by zip area">
+          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group each crew's stops by zip area">
             <MapPin className="h-3.5 w-3.5" />
             Group Stops
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleExportXLSX} title="Export to Excel">
+          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleExportXLSX} title="Export to Excel">
             <Download className="h-3.5 w-3.5" />
             Export
           </Button>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => setPrintOpen(true)} title="Print route sheets">
+          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={() => setPrintOpen(true)} title="Print route sheets">
             <Printer className="h-3.5 w-3.5" />
             Print
           </Button>
@@ -4599,13 +4608,13 @@ export function DispatchBoard() {
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
           disabled={isLoading}
           title="Refresh"
-          className="h-7 w-7 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-slate-300 hover:text-white transition-colors shrink-0"
+          className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-slate-300 hover:text-white transition-colors shrink-0"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
         </button>
 
         {/* Status filter tabs */}
-        <div className="flex items-center">
+        <div className="flex items-center max-lg:max-w-full max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:[&>*]:shrink-0 max-lg:[&>*]:whitespace-nowrap">
           {FILTER_TABS.map((t) => {
             const cnt = t.value === "all"
               ? allVisits.length
@@ -4615,7 +4624,7 @@ export function DispatchBoard() {
                 key={t.value}
                 onClick={() => setStatusFilter(t.value)}
                 className={cn(
-                  "px-2.5 py-1 text-[10px] font-medium rounded transition-colors",
+                  "px-2.5 py-1 max-lg:py-2.5 text-[10px] font-medium rounded transition-colors",
                   statusFilter === t.value
                     ? "bg-white text-slate-800"
                     : "text-slate-300 hover:text-white"
@@ -4638,7 +4647,7 @@ export function DispatchBoard() {
         {/* Multi-crew filter */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
               <Users className="h-3 w-3" />
               {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
               <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -4665,7 +4674,7 @@ export function DispatchBoard() {
         {/* Tag filter — client tags, "is any of" (OR) */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
               <Tag className="h-3 w-3" />
               {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
               <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -4696,7 +4705,7 @@ export function DispatchBoard() {
             and the existing client priority (Low/Normal/High); any match shows. */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
               <Flame className="h-3 w-3" />
               {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
               <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -4752,7 +4761,7 @@ export function DispatchBoard() {
         {selectedIds.size > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="h-7 flex items-center gap-1.5 rounded bg-brand-600 border border-brand-500 px-2.5 text-[10px] text-white hover:bg-brand-700 transition-colors font-medium">
+              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-brand-600 border border-brand-500 px-2.5 text-[10px] text-white hover:bg-brand-700 transition-colors font-medium">
                 <ListChecks className="h-3 w-3" />
                 Actions ({selectedIds.size})
                 <ChevronDown className="h-2.5 w-2.5 opacity-80" />
@@ -4937,8 +4946,8 @@ export function DispatchBoard() {
           value={search}
           onChange={setSearch}
           placeholder="Search…"
-          className="w-44"
-          inputClassName="h-7 text-xs"
+          className="w-44 max-sm:w-full max-sm:basis-full"
+          inputClassName="h-7 max-lg:h-9 text-xs"
         />
 
         {/* Columns selector — far right of dark bar */}
@@ -4985,7 +4994,7 @@ export function DispatchBoard() {
       )}
 
       {/* Count bar */}
-      <div className="bg-slate-100 border-b px-4 py-1.5 flex items-center gap-4 text-[11px] shrink-0">
+      <div className="bg-slate-100 border-b px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
         <span className="font-semibold text-slate-700">
           {isLoading ? "Loading…" : `${filtered.length} Job${filtered.length !== 1 ? "s" : ""} Total`}
         </span>
@@ -5012,7 +5021,7 @@ export function DispatchBoard() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto overscroll-x-contain bg-white max-lg:min-h-[60dvh]">
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="sticky top-0 z-10 bg-slate-50">
             <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">
@@ -5025,7 +5034,7 @@ export function DispatchBoard() {
               </th>
               <th className="w-10 px-1 py-2.5">#</th>
               <th className="w-8  px-2 py-2.5">St</th>
-              <th className="min-w-[200px] px-2 py-2.5">Client</th>
+              <th className="min-w-[200px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:min-w-[160px] max-lg:bg-slate-50 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
               {isVisible("service")  && <th className="px-2 py-2.5">Service</th>}
               {isVisible("date")     && <th className="px-2 py-2.5">Date</th>}
               {isVisible("city")     && <th className="px-2 py-2.5">City</th>}

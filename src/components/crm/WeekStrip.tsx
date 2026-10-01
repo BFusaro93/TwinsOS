@@ -57,7 +57,10 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border bg-white px-3 py-2 shadow-sm">
+    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-white px-3 py-2 shadow-sm">
+      {/* Prev / days / next stay on one line; on a phone the day buttons
+          shrink to fit instead of pushing the strip wider than the screen. */}
+      <div className="flex min-w-0 max-w-full items-center gap-3 max-sm:gap-1">
       {/* Prev week */}
       <Button
         variant="ghost"
@@ -69,7 +72,7 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
       </Button>
 
       {/* Day buttons */}
-      <div className="flex gap-1">
+      <div className="flex min-w-0 gap-1 max-sm:gap-0.5">
         {days.map((day, i) => {
           const ds = toLocalDateString(day);
           const isSelected = ds === selectedDate;
@@ -79,7 +82,7 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
               key={i}
               onClick={() => onDateChange(ds)}
               className={cn(
-                "flex h-10 w-10 flex-col items-center justify-center rounded-md text-xs font-medium transition-colors",
+                "flex h-10 w-10 min-w-0 shrink flex-col items-center justify-center rounded-md text-xs font-medium transition-colors",
                 isSelected
                   ? "bg-brand-500 text-white"
                   : isToday
@@ -103,9 +106,10 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
       >
         <ChevronRight className="h-4 w-4" />
       </Button>
+      </div>
 
       {/* Date display */}
-      <div className="ml-2 flex items-center gap-2 border-l pl-3">
+      <div className="ml-2 flex items-center gap-2 border-l pl-3 max-sm:ml-0 max-sm:border-l-0 max-sm:pl-0">
         <input
           type="date"
           value={selectedDate}

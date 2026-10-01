@@ -931,7 +931,7 @@ export function SnowDispatchBoard() {
       <div className="flex flex-wrap items-center gap-3 px-4 shrink-0">
         <Snowflake className="h-4 w-4 text-brand-500" />
         <Select value={effectiveEventId} onValueChange={setSelectedEventId}>
-          <SelectTrigger className="h-9 w-64 text-sm"><SelectValue placeholder="Select a storm event…" /></SelectTrigger>
+          <SelectTrigger className="h-9 max-lg:h-11 w-64 max-w-full text-sm"><SelectValue placeholder="Select a storm event…" /></SelectTrigger>
           <SelectContent>
             {events.map((e) => (
               <SelectItem key={e.id} value={e.id}>{e.name} — {e.eventDate}</SelectItem>
@@ -939,7 +939,7 @@ export function SnowDispatchBoard() {
           </SelectContent>
         </Select>
         {canManage && (
-          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setNewEventOpen(true)}>
+          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setNewEventOpen(true)}>
             <Plus className="h-3.5 w-3.5" />New Storm Event
           </Button>
         )}
@@ -949,7 +949,7 @@ export function SnowDispatchBoard() {
             {canManage ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
+                  <button className={cn("h-7 max-lg:h-9 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
                     {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
                     <ChevronDown className="h-3 w-3" />
                   </button>
@@ -961,7 +961,7 @@ export function SnowDispatchBoard() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <span className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
+              <span className={cn("h-7 max-lg:h-9 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
                 {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
               </span>
             )}
@@ -974,21 +974,21 @@ export function SnowDispatchBoard() {
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             onClick={() => { void refetchEvents(); void refetchVisits(); }}
-            className="h-9 w-9 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:text-slate-800"
+            className="h-9 w-9 max-lg:h-11 max-lg:w-11 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:text-slate-800"
             title="Refresh"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
           {canManage && (
-            <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setCrewAssignOpen(true)} disabled={!activeEvent}>
+            <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setCrewAssignOpen(true)} disabled={!activeEvent}>
               <Users className="h-3.5 w-3.5" />Team Assign
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setPrintOpen(true)} disabled={!activeEvent}>
+          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setPrintOpen(true)} disabled={!activeEvent}>
             <Printer className="h-3.5 w-3.5" />Print
           </Button>
           {canManage && (
-            <Button size="sm" className="h-9 text-xs gap-1.5" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
+            <Button size="sm" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
               <Plus className="h-3.5 w-3.5" />Add Jobs
             </Button>
           )}
@@ -997,7 +997,7 @@ export function SnowDispatchBoard() {
 
       {/* Selected-visit actions */}
       {selectedVisitIds.size > 0 && (
-        <div className="mx-4 flex items-center gap-2 rounded border bg-brand-50 px-3 py-2 shrink-0">
+        <div className="mx-4 flex flex-wrap items-center gap-2 rounded border bg-brand-50 px-3 py-2 shrink-0">
           <ListChecks className="h-4 w-4 text-brand-600" />
           <span className="text-xs font-medium text-brand-700">{selectedVisitIds.size} selected</span>
           {canManage && (
@@ -1010,7 +1010,7 @@ export function SnowDispatchBoard() {
       )}
 
       {/* Visit table */}
-      <div className="flex-1 overflow-auto bg-white mx-4 rounded-lg border shadow-sm">
+      <div className="flex-1 overflow-auto overscroll-x-contain bg-white mx-4 rounded-lg border shadow-sm max-lg:min-h-[60dvh]">
         {!activeEvent ? (
           <p className="py-20 text-center text-sm text-slate-400">
             {eventsLoading ? "Loading…" : "No storm events yet — create one to start dispatching."}
@@ -1021,7 +1021,7 @@ export function SnowDispatchBoard() {
               <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">
                 <th className="w-8 px-2 py-2.5" />
                 <th className="w-8 px-2 py-2.5">St</th>
-                <th className="min-w-[140px] px-2 py-2.5">Client</th>
+                <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
                 <th className="px-2 py-2.5">Address</th>
                 <th className="px-2 py-2.5">Trigger</th>
                 <th className="px-2 py-2.5">Crew</th>
@@ -1048,14 +1048,17 @@ export function SnowDispatchBoard() {
                   {visits.map((v) => (
                     <tr
                       key={v.id}
-                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      className="border-b border-slate-100 bg-white hover:bg-slate-50 cursor-pointer"
                       onClick={() => setSelectedJobId(v.jobId)}
                     >
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox checked={selectedVisitIds.has(v.id)} onCheckedChange={() => toggleSelect(v.id)} className="h-3.5 w-3.5" />
+                        {/* ~42px touch target on phones; display:contents on desktop */}
+                        <label className="-m-3.5 flex cursor-pointer items-center justify-center p-3.5 lg:contents">
+                          <Checkbox checked={selectedVisitIds.has(v.id)} onCheckedChange={() => toggleSelect(v.id)} className="h-3.5 w-3.5" />
+                        </label>
                       </td>
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
-                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
                         <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 hover:underline">{v.clientName ?? "—"}</Link>
                       </td>
                       <td className="px-2 py-2 text-slate-500">{v.job?.serviceAddress ?? "—"}</td>
