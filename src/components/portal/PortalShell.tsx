@@ -78,7 +78,7 @@ export default function PortalShell({ branding, clientName, children }: PortalSh
     .join("") || "?";
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-dvh flex flex-col bg-slate-50">
       {/* Top Nav */}
       <header className="bg-white/95 backdrop-blur border-b border-slate-200 sticky top-0 z-30">
         <div className="h-1 bg-gradient-to-r from-brand-700 via-brand-500 to-brand-300" />

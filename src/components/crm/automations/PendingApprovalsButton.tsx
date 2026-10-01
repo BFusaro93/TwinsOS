@@ -45,7 +45,7 @@ export function PendingApprovalsButton() {
             <SheetTitle>Pending Approvals</SheetTitle>
           </SheetHeader>
 
-          <ScrollArea className="mt-4 h-[calc(100vh-8rem)] pr-3">
+          <ScrollArea className="mt-4 h-[calc(100dvh-8rem)] pr-3">
             {count === 0 ? (
               <p className="py-8 text-center text-sm text-slate-400">Nothing waiting on approval.</p>
             ) : (

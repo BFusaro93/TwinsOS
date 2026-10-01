@@ -613,7 +613,7 @@ export default function ProposalPage() {
   // ── Loading / error states ──────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
       </div>
     );
@@ -621,7 +621,7 @@ export default function ProposalPage() {
 
   if (error && !accepted) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="flex min-h-dvh items-center justify-center px-4">
         <div className="max-w-sm text-center">
           <p className="text-lg font-semibold text-slate-700">{error}</p>
           <p className="mt-2 text-sm text-slate-500">If you think this is a mistake, please contact us directly.</p>
@@ -738,7 +738,7 @@ export default function ProposalPage() {
     }
 
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="flex min-h-dvh items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: brand + "20" }}>
             <CheckCircle2 className="h-8 w-8" style={{ color: brand }} />

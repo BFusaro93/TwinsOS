@@ -85,7 +85,7 @@ export default function PortalRegisterPage() {
 
   if (step === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
       </div>
     );
@@ -93,7 +93,7 @@ export default function PortalRegisterPage() {
 
   if (step === "invalid") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+      <div className="min-h-dvh flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-center">
           <XCircle className="h-10 w-10 text-red-400 mx-auto mb-3" />
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Invite Invalid</h2>
@@ -108,7 +108,7 @@ export default function PortalRegisterPage() {
 
   if (step === "linked") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+      <div className="min-h-dvh flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-center">
           <CheckCircle2 className="h-10 w-10 text-brand-500 mx-auto mb-3" />
           <h2 className="text-lg font-semibold text-slate-900 mb-1">This Company Was Added</h2>
@@ -126,7 +126,7 @@ export default function PortalRegisterPage() {
 
   if (step === "done") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+      <div className="min-h-dvh flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-center">
           <CheckCircle2 className="h-10 w-10 text-brand-500 mx-auto mb-3" />
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Account Created!</h2>
@@ -137,7 +137,7 @@ export default function PortalRegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-dvh flex flex-col items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-2">
           <BrandMark variant="color" className="h-12 w-12 rounded-xl" />

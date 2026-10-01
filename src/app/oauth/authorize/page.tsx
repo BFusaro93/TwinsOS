@@ -84,7 +84,7 @@ export default async function OAuthAuthorizePage({
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-4">
+    <div className="mx-auto flex min-h-dvh max-w-lg items-center justify-center px-4">
       <div className="w-full rounded-lg border bg-white p-6 shadow-sm">
         <h1 className="text-lg font-semibold text-slate-900">Connect {client.client_name}</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -116,7 +116,7 @@ export default async function OAuthAuthorizePage({
 
 function ErrorScreen({ message }: { message: string }) {
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-4">
+    <div className="mx-auto flex min-h-dvh max-w-lg items-center justify-center px-4">
       <div className="w-full rounded-lg border border-red-200 bg-red-50 p-6">
         <h1 className="text-lg font-semibold text-red-800">Can&apos;t authorize this request</h1>
         <p className="mt-1 text-sm text-red-700">{message}</p>

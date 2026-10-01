@@ -323,7 +323,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-dvh">
         <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
       </div>
     );
@@ -331,7 +331,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
   if (!stop || !anchor) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-3">
+      <div className="flex flex-col items-center justify-center h-dvh gap-3">
         <p className="text-slate-500">Job not found</p>
         <Button variant="outline" onClick={() => router.push("/crm/crew")}>Back</Button>
       </div>

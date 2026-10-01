@@ -16,7 +16,7 @@ export default function GlobalError({ error, reset }: Props) {
   return (
     <html>
       <body>
-        <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", padding: "32px", textAlign: "center", fontFamily: "sans-serif" }}>
+        <div style={{ display: "flex", minHeight: "100dvh", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", padding: "32px", textAlign: "center", fontFamily: "sans-serif" }}>
           <h2 style={{ fontSize: "18px", fontWeight: 600, color: "#1e293b" }}>Something went wrong</h2>
           <p style={{ fontSize: "14px", color: "#64748b", maxWidth: "360px" }}>
             {error.message || "An unexpected error occurred."}

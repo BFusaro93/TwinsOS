@@ -240,7 +240,7 @@ export function PortalForm({
 
   if (!portalEnabled) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
         <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
           <AlertCircle className="h-12 w-12 text-slate-300" />
           <h1 className="text-xl font-semibold text-slate-700">Portal Unavailable</h1>
@@ -257,7 +257,7 @@ export function PortalForm({
 
   if (submitted) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
         <div className="flex w-full max-w-md flex-col items-center gap-5 text-center">
           <div
             className="flex h-16 w-16 items-center justify-center rounded-full"
@@ -298,7 +298,7 @@ export function PortalForm({
   // ── Form ─────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-dvh bg-slate-50">
       {/* Header */}
       <div className="border-b bg-white shadow-sm">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-6 py-4">

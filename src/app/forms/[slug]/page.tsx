@@ -822,7 +822,7 @@ function Shell({
   description?: string;
 }) {
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-4">
+    <div className="min-h-dvh bg-slate-50 py-12 px-4">
       <div className="mx-auto max-w-lg">
         <div className="mb-8 flex items-center gap-2">
           <BrandMark variant="color" className="h-8 w-8 rounded-md" />

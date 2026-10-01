@@ -38,7 +38,7 @@ export default async function RequestIndexPage() {
 
   // Not logged in or org slug not found — show instructions.
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
       <div className="flex w-full max-w-md flex-col items-center gap-5 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
           <ClipboardList className="h-7 w-7 text-slate-400" />
