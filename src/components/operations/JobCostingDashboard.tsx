@@ -160,7 +160,8 @@ function InputsForm({ inputs, setInputs, compact }: InputsFormProps) {
   const set = <K extends keyof Inputs>(k: K) => (v: number) =>
     setInputs({ ...inputs, [k]: v });
   const [showBurden, setShowBurden] = useState(true);
-  const burdenTotal = inputs.ficaPct + inputs.workCompPct + inputs.suiPct + inputs.fuiPct + inputs.pfmlPct;
+  const burden = compute(inputs);
+  const burdenTotal = burden.burdenPct;
 
   return (
     <div className="space-y-5">
@@ -187,9 +188,16 @@ function InputsForm({ inputs, setInputs, compact }: InputsFormProps) {
           <div className="grid grid-cols-2 gap-3">
             <NumInput compact={compact} label="FICA %" value={inputs.ficaPct} onChange={set("ficaPct")} suffix="%" step={0.01} hint="Social Security (6.2%) + Medicare (1.45%) = 7.65%" />
             <NumInput compact={compact} label="Work Comp %" value={inputs.workCompPct} onChange={set("workCompPct")} suffix="%" step={0.01} />
-            <NumInput compact={compact} label="SUI %" value={inputs.suiPct} onChange={set("suiPct")} suffix="%" step={0.01} hint="State Unemployment Insurance" />
-            <NumInput compact={compact} label="FUI %" value={inputs.fuiPct} onChange={set("fuiPct")} suffix="%" step={0.01} hint="Federal Unemployment Insurance" />
+            <NumInput compact={compact} label="SUI %" value={inputs.suiPct} onChange={set("suiPct")} suffix="%" step={0.01} hint="State Unemployment Insurance rate. It only applies up to the wage base below." />
+            <NumInput compact={compact} label="FUI %" value={inputs.fuiPct} onChange={set("fuiPct")} suffix="%" step={0.01} hint="Federal Unemployment Insurance rate. It only applies up to the wage base below." />
+            <NumInput compact={compact} label="SUI wage base ($/employee)" value={inputs.suiWageBase} onChange={set("suiWageBase")} prefix="$" step={500} hint="Taxable wages per employee in this period (MA: first $15,000 per year). 0 = no cap, SUI % applies to all wages." />
+            <NumInput compact={compact} label="FUI wage base ($/employee)" value={inputs.fuiWageBase} onChange={set("fuiWageBase")} prefix="$" step={500} hint="Federal: first $7,000 per employee per year. 0 = no cap." />
             <NumInput compact={compact} label="PFML %" value={inputs.pfmlPct} onChange={set("pfmlPct")} suffix="%" step={0.01} hint="Paid Family & Medical Leave — employer portion" />
+            {(inputs.suiWageBase > 0 || inputs.fuiWageBase > 0) && (
+              <p className="col-span-2 text-[11px] text-slate-500">
+                After wage-base caps: SUI {fmtPct(burden.suiEffectivePct)} and FUI {fmtPct(burden.fuiEffectivePct)} of total wages.
+              </p>
+            )}
           </div>
         )}
       </div>

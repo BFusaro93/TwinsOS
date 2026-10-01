@@ -313,6 +313,13 @@ export function ProjectsGuide() {
             <strong>Update</strong> to save changes back to the scenario you loaded.
           </li>
           <li>
+            SUI and FUI only apply to each employee&apos;s first dollars of wages (for example
+            Massachusetts SUI is the first $15,000 per year, and federal FUI the first $7,000). Enter
+            the <strong>SUI wage base</strong> and <strong>FUI wage base</strong> (taxable wages per
+            employee in the scenario&apos;s period) and the calculator applies the rate only up to that
+            base, showing the resulting effective rate. Leave them at 0 to apply the rate to all wages.
+          </li>
+          <li>
             Changes to organization settings, including these labor rates, are recorded. Admins and
             managers can see who changed what, and when, under Settings &rarr; Organization &rarr;
             Change history.

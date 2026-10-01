@@ -11,6 +11,14 @@ export interface Inputs {
   suiPct: number;
   fuiPct: number;
   pfmlPct: number;
+  /** Unemployment taxes only apply to each employee's first $X of wages
+   *  (e.g. MA SUI $15,000, FUTA $7,000). These are the taxable wages per
+   *  employee within the scenario's period; 0 = no cap, rate applies to all
+   *  wages. For a part-year scenario enter the base still available in that
+   *  period, or total taxable wages ÷ headcount when turnover means more
+   *  distinct employees than the modeled headcount. */
+  suiWageBase: number;
+  fuiWageBase: number;
   ohPayroll: number;
   otherOH: number;
   liabilities: number;
@@ -30,6 +38,8 @@ export const BLANK_INPUTS: Inputs = {
   suiPct: 0,
   fuiPct: 0,
   pfmlPct: 0,
+  suiWageBase: 0,
+  fuiWageBase: 0,
   ohPayroll: 0,
   otherOH: 0,
   liabilities: 0,
@@ -72,6 +82,10 @@ export interface Computed {
   billableHours: number;
   totalDirectLabor: number;
   burdenPct: number;
+  /** SUI / FUI as a share of ALL wages after applying the wage-base caps
+   *  (equals the entered rate when no cap is set). */
+  suiEffectivePct: number;
+  fuiEffectivePct: number;
   burdenAmount: number;
   totalLaborCost: number;
   totalOverhead: number;
@@ -97,12 +111,22 @@ export function compute(i: Inputs): Computed {
   const totalHours = totalRegHours + totalOTHours;
   const billableHours = totalHours * (1 - i.nonBillablePct / 100); // for display only
 
-  const burdenPct = i.ficaPct + i.workCompPct + i.suiPct + i.fuiPct + i.pfmlPct;
-
   // Blended wage: weight OT and regular rates by OT_hrs/Reg_hrs (Excel B11/B12 formula)
   const otPct  = totalRegHours > 0 ? totalOTHours / totalRegHours : 0;
   const regPct = 1 - otPct;
   const blendedWage = i.fieldEmpWage * 1.5 * otPct + i.fieldEmpWage * regPct;
+
+  // Unemployment taxes stop at a per-employee wage base, so as a share of all
+  // wages they are rate × min(1, base ÷ wages per employee). Wages per
+  // employee come from the field crew; the same effective rates are applied
+  // to OH payroll (a close approximation — it has few, high-paid people).
+  const wagesPerEmployee = i.numFieldEmp > 0 ? blendedWage * (i.fieldHrsReg + i.fieldHrsOT) : 0;
+  const capShare = (base: number) =>
+    base > 0 && wagesPerEmployee > 0 ? Math.min(1, base / wagesPerEmployee) : 1;
+  const suiEffectivePct = i.suiPct * capShare(i.suiWageBase);
+  const fuiEffectivePct = i.fuiPct * capShare(i.fuiWageBase);
+
+  const burdenPct = i.ficaPct + i.workCompPct + suiEffectivePct + fuiEffectivePct + i.pfmlPct;
   const laborPerHour = blendedWage * (1 + burdenPct / 100);
 
   // Total direct labor (for display summary rows)
@@ -134,7 +158,7 @@ export function compute(i: Inputs): Computed {
 
   return {
     totalRegHours, totalOTHours, totalHours, billableHours,
-    totalDirectLabor, burdenPct, burdenAmount, totalLaborCost,
+    totalDirectLabor, burdenPct, suiEffectivePct, fuiEffectivePct, burdenAmount, totalLaborCost,
     totalOverhead, laborPerHour,
     ohPayrollPerHour, otherOHPerHour, liabilitiesPerHour,
     ohPerHour, baseBreakEven, loadedLaborRate, nonBillablePerHour, breakEven, bidRate, profitPerHour,
