@@ -631,9 +631,9 @@ export function WorkOrderListPage() {
       <PageHeader
         title="Work Orders"
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            {/* View toggles */}
-            <div className="flex items-center rounded-md border bg-white shadow-sm">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+            {/* View toggles — scrolls inside its own box on a narrow phone */}
+            <div className="flex max-w-full items-center overflow-x-auto rounded-md border bg-white shadow-sm [&>*]:shrink-0">
               <Button
                 variant="ghost"
                 size="sm"

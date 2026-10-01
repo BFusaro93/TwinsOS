@@ -254,7 +254,7 @@ export function MyDay() {
                   <Link
                     key={t.id}
                     href={`/crm/tickets?open=${t.id}`}
-                    className="flex items-center gap-3 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
                   >
                     <span className="font-mono text-[11px] text-slate-400 shrink-0">
                       #{t.ticketNumber}
@@ -262,16 +262,16 @@ export function MyDay() {
                     <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-600 shrink-0">
                       Open
                     </span>
-                    <span className="flex-1 truncate text-sm text-slate-700">
+                    <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
                       {t.subject ?? "(no subject)"}
                     </span>
                     {t.clientName && (
-                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] truncate">
+                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
                         {t.clientName}
                       </span>
                     )}
                     {t.category && (
-                      <span className="max-w-[140px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
+                      <span className="max-w-[140px] max-sm:max-w-[72px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
                         {t.category}
                       </span>
                     )}
@@ -306,7 +306,7 @@ export function MyDay() {
                   <Link
                     key={e.id}
                     href={`/crm/estimates/${e.id}`}
-                    className="flex items-center gap-3 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
                   >
                     <span className="font-mono text-[11px] text-slate-400 shrink-0">
                       #{e.estimateNumber}
@@ -317,11 +317,11 @@ export function MyDay() {
                     )}>
                       {e.stage}
                     </span>
-                    <span className="flex-1 truncate text-sm text-slate-700">
+                    <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
                       {e.description || "(no description)"}
                     </span>
                     {e.clientName && (
-                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] truncate">
+                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
                         {e.clientName}
                       </span>
                     )}
@@ -356,14 +356,14 @@ export function MyDay() {
                   <Link
                     key={a.id}
                     href="/crm/communication/automations"
-                    className="flex items-center gap-3 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
                   >
                     <Inbox className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                    <span className="flex-1 truncate text-sm text-slate-700">
+                    <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
                       {a.subject}
                     </span>
                     {a.clientName && (
-                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] truncate">
+                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
                         {a.clientName}
                       </span>
                     )}

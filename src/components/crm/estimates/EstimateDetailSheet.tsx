@@ -77,7 +77,7 @@ export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
 
       {/* Panel */}
       <div
-        className="fixed right-0 top-0 bottom-0 z-50 flex shadow-2xl"
+        className="fixed right-0 top-0 bottom-0 z-50 flex max-w-[100vw] shadow-2xl"
         style={{ width }}
       >
         {/* Drag handle + close */}

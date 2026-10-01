@@ -287,7 +287,7 @@ export function RolesList() {
       </div>
 
       {/* Dark toolbar */}
-      <div className="border-b bg-[#4a4a4a] px-4 py-2 flex items-center gap-3">
+      <div className="border-b bg-[#4a4a4a] px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex items-center">
           {TAB_FILTERS.map((t) => (
             <button

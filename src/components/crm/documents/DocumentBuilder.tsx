@@ -550,7 +550,7 @@ export function DocumentBuilder({ template }: Props) {
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b bg-[#4a4a4a] px-4 py-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b bg-[#4a4a4a] px-4 py-2">
         <span className="text-sm font-medium text-white">{template.name}</span>
         <span className={cn(
           "ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",

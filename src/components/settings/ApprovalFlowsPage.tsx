@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { GripVertical, Plus, Pencil, Trash2, Save, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Plus, Pencil, Trash2, Save, X } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -236,6 +236,8 @@ function SortableStepRow({
   peopleCount,
   onEdit,
   onDelete,
+  onMove,
+  isLast,
 }: {
   step: ApprovalFlowStep;
   index: number;
@@ -245,6 +247,9 @@ function SortableStepRow({
   peopleCount: number;
   onEdit: () => void;
   onDelete: () => void;
+  /** Tap alternative to the drag handle, which is hidden below md. */
+  onMove: (direction: -1 | 1) => void;
+  isLast: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: step.id,
@@ -295,7 +300,27 @@ function SortableStepRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 text-slate-400 hover:text-slate-700"
+          aria-label="Move step up"
+          disabled={index === 0}
+          className="h-7 w-7 text-slate-400 hover:text-slate-700 max-md:h-10 max-md:w-10 md:hidden"
+          onClick={() => onMove(-1)}
+        >
+          <ChevronUp className="h-4 w-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label="Move step down"
+          disabled={isLast}
+          className="h-7 w-7 text-slate-400 hover:text-slate-700 max-md:h-10 max-md:w-10 md:hidden"
+          onClick={() => onMove(1)}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-slate-400 hover:text-slate-700 max-md:h-10 max-md:w-10"
           onClick={onEdit}
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -303,7 +328,7 @@ function SortableStepRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 text-slate-400 hover:text-red-500"
+          className="h-7 w-7 text-slate-400 hover:text-red-500 max-md:h-10 max-md:w-10"
           onClick={onDelete}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -403,6 +428,16 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
     setDirty(true);
   }
 
+  function moveStep(id: string, direction: -1 | 1) {
+    setSteps((prev) => {
+      const from = prev.findIndex((s) => s.id === id);
+      const to = from + direction;
+      if (from === -1 || to < 0 || to >= prev.length) return prev;
+      return arrayMove(prev, from, to).map((s, i) => ({ ...s, order: i + 1 }));
+    });
+    setDirty(true);
+  }
+
   function roleLabelFor(requiredRole: ApprovalFlowStep["requiredRole"]) {
     return isCrmEstimate
       ? crmRoles.find((r) => r.id === requiredRole)?.name ?? "Unknown role"
@@ -474,6 +509,8 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
                     peopleCount={peopleWithRoleCount(step.requiredRole)}
                     onEdit={() => setEditingId(step.id)}
                     onDelete={() => handleDelete(step.id)}
+                    onMove={(dir) => moveStep(step.id, dir)}
+                    isLast={i === steps.length - 1}
                   />
                 )}
 
