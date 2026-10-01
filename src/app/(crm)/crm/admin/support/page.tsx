@@ -137,8 +137,8 @@ export default function Page() {
         <p>
           Set it directly in Settings (Equipt → General → Finance, or Landscapt → Estimates → Labor Rates),
           or use the <strong>Job Costing Calculator</strong> (Tools) and click{" "}
-          <strong>&quot;Set as project rate&quot;</strong> to save its computed Break Even rate as your
-          org&apos;s Break-Even Labor Rate.
+          <strong>&quot;Set as project rates&quot;</strong> to save its computed Break Even rate and LLR as your
+          org&apos;s Break-Even Labor Rate and Loaded Labor Rate.
         </p>
         <Callout>
           <strong>Don&apos;t double-count overhead.</strong> The Job Costing Calculator&apos;s Break Even
