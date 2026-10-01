@@ -1739,25 +1739,39 @@ export function usePayments(clientId?: string, opts?: { projectId?: string | nul
       const invoiceJoin = projectId
         ? "crm_invoices!inner(invoice_number, project_id)"
         : "crm_invoices(invoice_number, project_id)";
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("crm_payments")
-        .select(`*, clients(display_name, billing_address), ${invoiceJoin}`)
-        .is("deleted_at", null)
-        .order("payment_date", { ascending: false })
-        // Tiebreaker: payments share dates, and range paging needs a total order.
-        .order("id", { ascending: false });
-      if (clientId) q = q.eq("client_id", clientId);
-      if (projectId) q = q.eq("crm_invoices.project_id", projectId);
-      // PostgREST caps a plain select at 1000 rows — page through.
+      // Builders are mutable, so each page gets its own.
+      const buildQuery = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("crm_payments")
+          .select(`*, clients(display_name, billing_address), ${invoiceJoin}`, { count: "exact" })
+          .is("deleted_at", null)
+          .order("payment_date", { ascending: false })
+          // Tiebreaker: payments share dates, and range paging needs a total order.
+          .order("id", { ascending: false });
+        if (clientId) q = q.eq("client_id", clientId);
+        if (projectId) q = q.eq("crm_invoices.project_id", projectId);
+        return q;
+      };
+      // PostgREST caps a plain select at 1000 rows. Fetch page one with the
+      // total count, then the remaining pages in parallel — a sequential
+      // loop of identical requests is what Sentry flags as an N+1 (LANDSCAPT-8).
       const pageSize = 1000;
+      const first = await buildQuery().range(0, pageSize - 1);
+      if (first.error) throw first.error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows: any[] = [];
-      for (let from = 0; ; from += pageSize) {
-        const { data, error } = await q.range(from, from + pageSize - 1);
-        if (error) throw error;
-        rows.push(...(data ?? []));
-        if (!data || data.length < pageSize) break;
+      const rows: any[] = [...(first.data ?? [])];
+      const total: number = first.count ?? rows.length;
+      if (rows.length === pageSize && total > pageSize) {
+        const offsets: number[] = [];
+        for (let from = pageSize; from < total; from += pageSize) offsets.push(from);
+        const pages = await Promise.all(
+          offsets.map((from) => buildQuery().range(from, from + pageSize - 1))
+        );
+        for (const page of pages) {
+          if (page.error) throw page.error;
+          rows.push(...(page.data ?? []));
+        }
       }
       return rows.map(mapPaymentFull) as CRMPayment[];
     },
