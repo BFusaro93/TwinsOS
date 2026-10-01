@@ -11,14 +11,13 @@ import {
   compareCrewVisitRows,
   effectiveVisitCrewId,
   fetchCallerCrew,
-  resolveCallerCrewId,
   selectEffectiveCrewVisits,
   type VisitCrewRow,
 } from "@/lib/supabase/crew-id";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-async function getAuthContext() {
+async function loadAuthContext() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
@@ -42,6 +41,59 @@ async function getAuthContext() {
     orgId: profile.org_id as string,
     hidePricing: org?.crew_hide_pricing === true,
   };
+}
+
+type AuthContext = Awaited<ReturnType<typeof loadAuthContext>>;
+type CallerCrew = { id: string; name: string; color: string | null };
+
+// /crm/crew mounts five of these hooks at once. Each used to run the
+// auth + profile + org lookups (and the crew lookup) itself, so one page load
+// fired the same requests over and over (Sentry LANDSCAPT-8 "N+1 API Call").
+// Share the in-flight promise for a few seconds instead; a rejection is never
+// cached, and any auth change drops it.
+const AUTH_CONTEXT_TTL_MS = 5_000;
+let authContextCache: {
+  at: number;
+  context: Promise<AuthContext>;
+  crew?: Promise<CallerCrew | null>;
+} | null = null;
+let authListenerAttached = false;
+
+function getAuthContextEntry() {
+  if (!authListenerAttached) {
+    authListenerAttached = true;
+    createClient().auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
+        authContextCache = null;
+      }
+    });
+  }
+  if (!authContextCache || Date.now() - authContextCache.at > AUTH_CONTEXT_TTL_MS) {
+    const context = loadAuthContext();
+    const entry = { at: Date.now(), context } as NonNullable<typeof authContextCache>;
+    context.catch(() => {
+      if (authContextCache === entry) authContextCache = null;
+    });
+    authContextCache = entry;
+  }
+  return authContextCache;
+}
+
+function getAuthContext() {
+  return getAuthContextEntry().context;
+}
+
+/** The caller's crew (id, name, color), looked up once per auth-context window. */
+async function getCallerCrew(): Promise<CallerCrew | null> {
+  const entry = getAuthContextEntry();
+  const { supabase, userId, orgId } = await entry.context;
+  if (!entry.crew) {
+    entry.crew = fetchCallerCrew<CallerCrew>(supabase, userId, orgId, "id, name, color");
+    entry.crew.catch(() => {
+      entry.crew = undefined;
+    });
+  }
+  return entry.crew;
 }
 
 /**
@@ -222,7 +274,7 @@ export function useMyCrewVisits(date: string) {
       const { supabase, userId, orgId, hidePricing } = await getAuthContext();
 
       // Crew accounts log in as the crew itself — find the crew by user_id on crm_crews
-      const crewId = await resolveCallerCrewId(supabase, userId, orgId);
+      const crewId = (await getCallerCrew())?.id ?? null;
       if (!crewId) return [];
       const membership = { crew_id: crewId };
 
@@ -290,7 +342,7 @@ export function useStopDetail(anchorVisitId: string) {
       // visit by id, so a crew account could deep-link
       // /crm/crew/stops/<any visit id> and pull up another crew's stop —
       // client, address, notes and (before the select was narrowed) pricing.
-      const callerCrewId = await resolveCallerCrewId(supabase, userId, orgId);
+      const callerCrewId = (await getCallerCrew())?.id ?? null;
       if (!callerCrewId) return null;
       const crew = { id: callerCrewId };
 
@@ -524,10 +576,8 @@ export function useMyCrewInfo() {
   return useQuery({
     queryKey: ["my-crew-info"],
     queryFn: async () => {
-      const { supabase, userId, orgId } = await getAuthContext();
-      const crew = await fetchCallerCrew<{ id: string; name: string; color: string | null }>(
-        supabase, userId, orgId, "id, name, color"
-      );
+      const { supabase } = await getAuthContext();
+      const crew = await getCallerCrew();
 
       if (!crew) return null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -566,8 +616,8 @@ export function useCrewDriveToday(date: string) {
   return useQuery<{ segments: CrewDriveSegment[]; openSegment: CrewDriveSegment | null; totalMinutes: number }>({
     queryKey: ["crew-drive-today", date],
     queryFn: async () => {
-      const { supabase, userId, orgId } = await getAuthContext();
-      const crew = await fetchCallerCrew(supabase, userId, orgId);
+      const { supabase } = await getAuthContext();
+      const crew = await getCallerCrew();
       if (!crew) return { segments: [], openSegment: null, totalMinutes: 0 };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
