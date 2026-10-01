@@ -123,7 +123,7 @@ GRANT EXECUTE ON FUNCTION public.set_default_job_costing_scenario(uuid) TO authe
 
 -- ── Audit ────────────────────────────────────────────────────────────────────
 -- Scenario inputs drive the rates saved to projects, so who changed them and
--- when matters. Dedicated small function (see 20260930150000 for why).
+-- when matters. Dedicated small function (see 20261001000000 for why).
 CREATE OR REPLACE FUNCTION public.fn_audit_job_costing_scenario()
  RETURNS trigger
  LANGUAGE plpgsql

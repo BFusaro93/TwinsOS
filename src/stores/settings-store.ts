@@ -328,11 +328,11 @@ interface SettingsState {
   portalEnabled: boolean;
   setPortalEnabled: (enabled: boolean) => void;
 
-  /** Breakeven labor rate in cents per hour — full rate (burdened wages + non-billable uplift + fixed OH recovery). Used in Projects net profit and Job Costing. Default $69.27. */
+  /** Breakeven labor rate in cents per hour — full rate (burdened wages + non-billable uplift + fixed OH recovery). Used in Projects net profit and Job Costing. Default $0 until the org sets it. */
   breakevenLaborRateCents: number;
   setBreakevenLaborRateCents: (cents: number) => void;
 
-  /** Burdened-only labor rate in cents per hour — wages + burden + non-billable uplift, WITHOUT fixed overhead recovery. Shows net profit excluding OH. Default $52.00. */
+  /** Burdened-only labor rate in cents per hour — wages + burden + non-billable uplift, WITHOUT fixed overhead recovery. Shows net profit excluding OH. Default $0 until the org sets it. */
   burdenedLaborRateCents: number;
   setBurdenedLaborRateCents: (cents: number) => void;
 
@@ -604,10 +604,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   portalEnabled: true,
   setPortalEnabled: (enabled) => set({ portalEnabled: enabled }),
 
-  breakevenLaborRateCents: 6927,
+  // 0, not another org's rate: these were Twins' own numbers ($69.27 / $52.00)
+  // and every new org inherited them into its project snapshots.
+  breakevenLaborRateCents: 0,
   setBreakevenLaborRateCents: (cents) => set({ breakevenLaborRateCents: cents }),
 
-  burdenedLaborRateCents: 5200,
+  burdenedLaborRateCents: 0,
   setBurdenedLaborRateCents: (cents) => set({ burdenedLaborRateCents: cents }),
 
   loadFromRemote: (data) =>
