@@ -117,3 +117,66 @@
     display: grid;
   }
 }
+
+/* ── Mobile / touch ───────────────────────────────────────────────────────
+   Pinch-zoom stays enabled (accessibility) — none of the below blocks it. */
+
+/* Removes the ~300ms double-tap-to-zoom delay on tappable controls without
+   touching pinch-zoom. */
+/* `.touch-none` is excluded: dnd-kit drag handles (estimate line items,
+   approval flows) rely on touch-action:none to start a touch drag. */
+:is(a, button, [role="button"], [role="tab"], [role="menuitem"], [role="option"], summary, label, select, input, textarea):not(.touch-none) {
+  touch-action: manipulation;
+}
+
+/* iOS Safari zooms the page whenever a focused field computes below 16px
+   (our compact toolbars use text-xs/text-sm everywhere). Force 16px on phones
+   and touch tablets. This sits outside @layer on purpose: unlayered rules beat
+   Tailwind's layered utilities, so it wins over text-xs / md:text-sm without
+   needing !important. Desktop (>= 1024px with a mouse) is untouched. */
+@media (max-width: 1023.98px), (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Notch / home-bar insets. All of these resolve to 0 on a normal browser or
+   desktop, so they only matter in landscape on a notched phone and in the
+   installed (standalone) app, where viewport-fit=cover lets the page run
+   edge to edge. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Installed app: no browser chrome, so keep an accidental overscroll from
+   rubber-banding the fixed shell sideways. Vertical pull-to-refresh is left
+   alone — with no reload button it is the only way to refresh. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-x: none;
+  }
+}
+
+/* Touch-sized controls. The app is dense (h-7 / h-8 / h-9 toolbar buttons,
+   text-xs tabs) which is fine under a mouse but far below a comfortable tap
+   target on a phone. Raise only the minimum height/width, only below lg or on
+   a touch-only device, and only for controls that are actually compact — so
+   desktop layout is untouched. Native checkboxes can't take padding, so they
+   just get bigger. */
+@media (max-width: 1023.98px), (hover: none) and (pointer: coarse) {
+  :is(button, a, [role="button"]):where(.h-5, .h-6, .h-7, .h-8, .h-9, .py-0\.5, .py-1) {
+    min-height: 40px;
+  }
+  :is(button, [role="button"]):where(.w-5, .w-6, .w-7, .w-8, .w-9) {
+    min-width: 40px;
+  }
+  input[type="checkbox"]:not([class*="sr-only"]),
+  input[type="radio"] {
+    width: 22px;
+    height: 22px;
+  }
+}

@@ -17,7 +17,7 @@ export function AskAIButton() {
         type="button"
         onClick={() => setOpen(true)}
         title="Ask AI"
-        className="fixed bottom-20 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-700 text-white shadow-lg transition-colors hover:bg-emerald-600 print:hidden"
+        className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-[calc(1.25rem+env(safe-area-inset-right))] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-700 text-white shadow-lg transition-colors hover:bg-emerald-600 print:hidden"
       >
         <Sparkles className="h-5 w-5" />
         <span className="sr-only">Ask AI</span>

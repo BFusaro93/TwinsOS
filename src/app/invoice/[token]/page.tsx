@@ -121,7 +121,7 @@ export default function PublicInvoicePage() {
 
   if (loadError) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+      <div className="flex min-h-dvh items-center justify-center bg-slate-50 p-6">
         <p className="text-sm text-slate-500">{loadError}</p>
       </div>
     );
@@ -129,7 +129,7 @@ export default function PublicInvoicePage() {
 
   if (!invoice) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex min-h-dvh items-center justify-center bg-slate-50">
         <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
       </div>
     );
@@ -139,7 +139,7 @@ export default function PublicInvoicePage() {
   const canPay = invoice.balanceCents > 0 && invoice.status !== "void" && hasPublishableKey();
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10">
+    <div className="min-h-dvh bg-slate-50 py-10">
       <div className="mx-auto max-w-2xl rounded-lg border bg-white p-8 shadow-sm">
         <div className="mb-6 flex items-start justify-between">
           <div>

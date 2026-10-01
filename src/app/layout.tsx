@@ -24,11 +24,18 @@ const ORGANIZATION_JSON_LD = {
 // nothing, which is why the served HTML carried Next's default viewport
 // tag and no theme-color at all.
 //
-// Deliberately NOT carrying over the old `maximum-scale=1`: it was never
-// actually in effect, and switching it on now would newly block pinch-zoom.
+// Pinch-zoom is deliberately left enabled (WCAG 1.4.4) — never add
+// `maximum-scale` or `user-scalable=no` here. iOS's focus auto-zoom is
+// stopped instead by keeping form fields at 16px on touch (see globals.css),
+// and the double-tap delay by `touch-action: manipulation`.
+//
+// `viewportFit: "cover"` lets the page extend under the notch / home bar so
+// the standalone (home-screen) app is edge to edge; the shell pads itself
+// with env(safe-area-inset-*) so nothing interactive sits under them.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
   colorScheme: "dark light",
   themeColor: "#ffffff",
 };
@@ -54,6 +61,17 @@ export const metadata: Metadata = {
     description: "CRM, field service, work orders, purchasing & asset management",
     images: [DEFAULT_OG_IMAGE],
   },
+  // Home-screen launch on iOS (Android reads manifest.ts). No service worker
+  // on purpose — installability doesn't need one and we don't want stale
+  // cached app shells.
+  appleWebApp: {
+    capable: true,
+    title: "Landscapt",
+    statusBarStyle: "default",
+  },
+  // Next emits the modern `mobile-web-app-capable`; older iOS only reads the
+  // apple-prefixed one, so ship both.
+  other: { "apple-mobile-web-app-capable": "yes" },
   icons: {
     // One entry, one static .ico carrying 16/32/48/128/256 frames. Earlier
     // versions listed a per-size PNG for each, but that only ever existed

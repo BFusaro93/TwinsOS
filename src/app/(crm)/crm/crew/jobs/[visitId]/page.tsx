@@ -20,7 +20,7 @@ export default function LegacyCrewJobDetailRedirect({ params }: { params: Promis
   }, [router, visitId]);
 
   return (
-    <div className="flex items-center justify-center h-screen">
+    <div className="flex items-center justify-center h-dvh">
       <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
     </div>
   );

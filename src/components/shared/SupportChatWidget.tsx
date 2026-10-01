@@ -62,7 +62,7 @@ export function SupportChatWidget() {
           type="button"
           onClick={() => handleOpen(true)}
           title="Continue chat with support"
-          className="fixed bottom-36 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-white shadow-lg transition-colors hover:bg-brand-600 print:hidden"
+          className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] right-[calc(1.25rem+env(safe-area-inset-right))] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-white shadow-lg transition-colors hover:bg-brand-600 print:hidden"
         >
           <MessageCircle className="h-5 w-5" />
           {hasUnread && (

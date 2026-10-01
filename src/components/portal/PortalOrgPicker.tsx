@@ -37,7 +37,7 @@ export function PortalOrgPicker({ options }: { options: OrgOption[] }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-dvh flex flex-col items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 text-center">
           <h1 className="text-xl font-bold text-slate-900">Choose a Company</h1>

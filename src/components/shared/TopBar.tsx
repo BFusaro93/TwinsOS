@@ -30,6 +30,7 @@ import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
 import { HelpMenu } from "@/components/shared/HelpMenu";
 import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
 import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
+import { StandaloneBackButton } from "@/components/shared/StandaloneBackButton";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -272,7 +273,8 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
     <>
     <EditProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     <ImpersonationBanner />
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
+    <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-4 border-b bg-white px-4 pt-[env(safe-area-inset-top)]">
+      <StandaloneBackButton />
       {sidebarToggle && (
         <>
           {/* Hamburger — opens the drawer sidebar. Shown wherever the sidebar

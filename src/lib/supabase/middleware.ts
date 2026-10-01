@@ -65,6 +65,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/compare/") ||
     pathname === "/sitemap.xml" ||
     pathname === "/robots.txt" ||
+    pathname === "/manifest.webmanifest" || // PWA manifest — fetched without credentials
     pathname === "/llms.txt";
 
   // A client-portal login is an ordinary Supabase user, so the signed-in check

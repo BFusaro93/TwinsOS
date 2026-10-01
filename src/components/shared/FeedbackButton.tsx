@@ -16,7 +16,7 @@ export function FeedbackButton() {
         type="button"
         onClick={() => setOpen(true)}
         title="Send Feedback"
-        className="fixed bottom-5 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg transition-colors hover:bg-slate-700 print:hidden"
+        className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-[calc(1.25rem+env(safe-area-inset-right))] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg transition-colors hover:bg-slate-700 print:hidden"
       >
         <MessageSquarePlus className="h-5 w-5" />
         <span className="sr-only">Send Feedback</span>
