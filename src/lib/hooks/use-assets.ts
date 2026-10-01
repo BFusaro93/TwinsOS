@@ -192,6 +192,7 @@ export function useBulkImportAssets() {
       const inserts = rows
         .filter((r) => r.name?.trim() && r.assetTag?.trim())
         .map((r) => ({
+          statusProvided: !!r.status?.trim(),
           name: r.name.trim(),
           asset_tag: r.assetTag.trim(),
           equipment_number: r.equipmentNumber?.trim() || null,
@@ -213,12 +214,12 @@ export function useBulkImportAssets() {
 
       // Insert one-by-one; on duplicate asset_tag, update the existing row
       let count = 0;
-      for (const row of inserts) {
+      for (const { statusProvided, ...row } of inserts) {
         const { error } = await supabase.from("assets").insert(row);
         if (error?.code === "23505") {
           const { data: { user } } = await supabase.auth.getUser();
           const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-          await supabase.from("assets").update({
+          const { error: updateErr } = await supabase.from("assets").update({
             name: row.name,
             equipment_number: row.equipment_number,
             asset_type: row.asset_type,
@@ -228,13 +229,16 @@ export function useBulkImportAssets() {
             serial_number: row.serial_number,
             license_plate: row.license_plate,
             location: row.location,
-            status: row.status,
+            // A blank status cell must not reset an in_shop/out_of_service
+            // asset to "active" when a CSV is re-imported to update other fields.
+            ...(statusProvided ? { status: row.status } : {}),
             purchase_vendor_name: row.purchase_vendor_name,
             purchase_date: row.purchase_date,
             purchase_price: row.purchase_price,
             payment_method: row.payment_method,
             finance_institution: row.finance_institution,
           }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
+          if (updateErr) throw updateErr;
         } else if (error) {
           throw error;
         }

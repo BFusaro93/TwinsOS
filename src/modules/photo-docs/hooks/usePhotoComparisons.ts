@@ -48,7 +48,11 @@ export function useJobPhotoComparisons(photoJobId: string) {
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const comparisons = ((data ?? []) as Record<string, any>[]).map((row) => {
+      // The embedded before/after photos are not filtered by deleted_at — drop
+      // comparisons whose photo was soft-deleted instead of showing it.
+      const comparisons = ((data ?? []) as Record<string, any>[])
+        .filter((row) => row.before_photo && row.after_photo && !row.before_photo.deleted_at && !row.after_photo.deleted_at)
+        .map((row) => {
         const comparison = mapComparison(row);
         const beforePhoto = row.before_photo ? mapPhotoRow(row.before_photo) : undefined;
         const afterPhoto = row.after_photo ? mapPhotoRow(row.after_photo) : undefined;

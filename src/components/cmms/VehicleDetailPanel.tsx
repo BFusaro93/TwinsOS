@@ -49,17 +49,25 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 type ReminderStatus = "overdue" | "due-soon" | "ok" | "unset";
 
+/** Whole days from local today to a YYYY-MM-DD due date. `new Date("YYYY-MM-DD")`
+ *  parses as UTC midnight, which in US timezones is the previous evening locally
+ *  and made a service due today read as 1 day overdue. */
+function daysUntilDate(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [y, m, d] = dateStr.slice(0, 10).split("-").map(Number);
+  const due = new Date(y, (m ?? 1) - 1, d ?? 1);
+  return Math.round((due.getTime() - today.getTime()) / 86400000);
+}
+
 function getReminderStatus(
   dateStr: string | null,
   dueMileage?: number | null,
   currentMiles?: number | null,
 ): ReminderStatus {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
   const dateStatus: ReminderStatus = (() => {
     if (!dateStr) return "unset";
-    const diffDays = Math.floor((new Date(dateStr).getTime() - today.getTime()) / 86400000);
+    const diffDays = daysUntilDate(dateStr);
     if (diffDays < 0) return "overdue";
     if (diffDays <= 30) return "due-soon";
     return "ok";
@@ -79,10 +87,7 @@ function getReminderStatus(
 }
 
 function daysUntil(dateStr: string): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(dateStr);
-  const diff = Math.floor((due.getTime() - today.getTime()) / 86400000);
+  const diff = daysUntilDate(dateStr);
   if (diff < 0) return `${Math.abs(diff)} day${Math.abs(diff) !== 1 ? "s" : ""} overdue`;
   if (diff === 0) return "Due today";
   if (diff === 1) return "Due tomorrow";

@@ -146,7 +146,7 @@ export async function enrollClientInSequence(
 ): Promise<string | null> {
   const { data: firstEvent } = await supabase
     .from("crm_sequence_events")
-    .select("event_type, config")
+    .select("event_type, config, position")
     .eq("sequence_id", params.sequenceId)
     .eq("is_active", true)
     .is("deleted_at", null)
@@ -171,7 +171,10 @@ export async function enrollClientInSequence(
       invoice_id: params.invoiceId ?? null,
       meeting_id: params.meetingId ?? null,
       enrolled_at: new Date().toISOString(),
-      next_event_position: firstEvent?.event_type === "wait" ? 1 : 0,
+      // Start at the first ACTIVE step's real position (positions can have
+      // gaps from deleted/deactivated steps), past it when it's a wait whose
+      // delay is already baked into next_fire_at.
+      next_event_position: (firstEvent?.position ?? 0) + (firstEvent?.event_type === "wait" ? 1 : 0),
       next_fire_at: nextFireAt,
     })
     .select("id")

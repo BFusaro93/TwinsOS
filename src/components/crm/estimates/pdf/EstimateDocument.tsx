@@ -119,7 +119,9 @@ function bpsToPercent(bps: number): string {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
+  // Date-only values (valid until, installment due dates) are anchored at noon
+  // so a non-UTC runtime can't shift them onto the previous day.
+  const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 

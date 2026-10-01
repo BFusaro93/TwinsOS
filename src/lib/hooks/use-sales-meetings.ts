@@ -48,8 +48,9 @@ export function useSalesReps() {
         .order("first_name", { ascending: true });
       if (error) throw error;
       return data.map((row): SalesRepOption => ({
-        id: row.id,
-        name: `${row.first_name} ${row.last_name}`.trim(),
+        // View columns are all nullable in the generated types.
+        id: row.id ?? "",
+        name: `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim(),
         mapIconColor: row.map_icon_color,
       }));
     },

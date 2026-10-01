@@ -4,6 +4,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getPublishedProposal } from "@/lib/estimates/proposal-content";
 import PortalEstimatesPage from "@/components/portal/PortalEstimatesPage";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 interface LineItemRow {
   id: string;
@@ -114,5 +116,9 @@ export default async function EstimatesPage() {
     };
   }));
 
-  return <PortalEstimatesPage estimates={normalized} />;
+  // "Valid until" is a calendar date: expiry is judged on the org's day, the
+  // same rule the accept route enforces (isEstimatePastValidUntil).
+  const today = todayInZone(await getOrgTimeZone(service, ctx.orgId));
+
+  return <PortalEstimatesPage estimates={normalized} today={today} />;
 }

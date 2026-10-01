@@ -11,7 +11,10 @@ function fmt(cents: number) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // Date-only values (valid until) must not go through UTC parsing, which
+  // shifts them a day earlier for US viewers.
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(iso.slice(0, 10)) && iso.length === 10 ? new Date(iso + "T00:00:00") : new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -404,7 +407,7 @@ function RequestChangesDialog({ estimate, onClose, onSent }: RequestChangesDialo
   );
 }
 
-export default function PortalEstimatesPage({ estimates: initial }: { estimates: Estimate[] }) {
+export default function PortalEstimatesPage({ estimates: initial, today }: { estimates: Estimate[]; today: string }) {
   const [estimates, setEstimates] = useState(initial);
   const [signing, setSigning] = useState<Estimate | null>(null);
   const [declining, setDeclining] = useState<Estimate | null>(null);
@@ -428,7 +431,7 @@ export default function PortalEstimatesPage({ estimates: initial }: { estimates:
           // Only an estimate still awaiting a decision can expire — a decided
           // one (accepted/invoiced/declined) keeps its outcome badge.
           const decided = ["accepted", "invoiced", "lost", "declined"].includes(est.status);
-          const expired = est.expires_at && new Date(est.expires_at) < new Date() && !decided;
+          const expired = est.expires_at && est.expires_at.slice(0, 10) < today && !decided;
           const displayStatus = expired ? STATUS_CONFIG.expired : cfg;
           const canAct = actionable && !expired;
 

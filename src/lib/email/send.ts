@@ -251,7 +251,7 @@ export function buildCanSpamFooter(
     : "";
   return `
     <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;line-height:1.5">
-      <p style="margin:0 0 4px">${orgName}${addressLine ? ` &middot; ${addressLine}` : ""}</p>
+      <p style="margin:0 0 4px">${escapeHtml(orgName)}${addressLine ? ` &middot; ${escapeHtml(addressLine)}` : ""}</p>
       <p style="margin:0"><a href="${unsubscribeUrl}" style="color:#94a3b8;text-decoration:underline">Unsubscribe from marketing emails</a></p>
     </div>
   `;
@@ -264,6 +264,8 @@ interface SendClientEmailOpts {
   from?: string;
   /** See resolveReplyTo — where a customer's reply should land. */
   replyTo?: string | null;
+  /** Marketing mail: adds RFC 8058 List-Unsubscribe / one-click headers. */
+  unsubscribeUrl?: string | null;
 }
 
 /** Thin, single call site for outbound client emails — keeps `from` and error handling consistent. */
@@ -275,6 +277,14 @@ export async function sendClientEmail(opts: SendClientEmailOpts): Promise<{ rese
     subject: opts.subject,
     html: opts.html,
     ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+    ...(opts.unsubscribeUrl
+      ? {
+          headers: {
+            "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
+        }
+      : {}),
   });
   if (error) {
     throw new Error(error.message ?? "Failed to send email");

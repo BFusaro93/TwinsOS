@@ -311,6 +311,7 @@ export async function sendCampaignEmails(
         html,
         from: orgEmailFrom(org?.name as string | null | undefined),
         replyTo,
+        unsubscribeUrl,
       });
       delivered += 1;
       await db.from("client_activity").insert({

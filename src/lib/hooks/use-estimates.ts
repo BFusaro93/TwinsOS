@@ -180,11 +180,21 @@ export function useEstimates(clientId?: string) {
         .from("estimates")
         .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
         .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        // Tiebreaker: range paging needs a total order.
+        .order("id", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data.map(mapEstimate)) as Estimate[];
+      // PostgREST caps a plain select at 1000 rows — page through.
+      const pageSize = 1000;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await q.range(from, from + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+      }
+      return rows.map(mapEstimate) as Estimate[];
     },
   });
 }

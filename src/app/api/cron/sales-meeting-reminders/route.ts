@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { escapeHtml } from "@/lib/utils/escape-html";
 
 /**
  * GET /api/cron/sales-meeting-reminders — called every 15 minutes by Vercel
@@ -145,8 +146,8 @@ export async function GET(request: Request) {
             subject: `Meeting in ${REMINDER_LEAD_MINUTES} minutes — ${clientName}`,
             html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
               <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Upcoming Sales Meeting</h2>
-              <p style="margin:0 0 4px;color:#475569">Hi ${repName || "there"},</p>
-              <p style="margin:0 0 24px;color:#475569"><strong>${meeting.title}</strong> with ${clientName} starts at <strong>${timeStr}</strong>${meeting.location ? ` at ${meeting.location}` : ""}.</p>
+              <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(repName || "there")},</p>
+              <p style="margin:0 0 24px;color:#475569"><strong>${escapeHtml(String(meeting.title ?? ""))}</strong> with ${escapeHtml(clientName)} starts at <strong>${timeStr}</strong>${meeting.location ? ` at ${escapeHtml(String(meeting.location))}` : ""}.</p>
               <a href="${meetingUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Calendar</a>
             </div>`,
           });

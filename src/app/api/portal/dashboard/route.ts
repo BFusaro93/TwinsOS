@@ -19,7 +19,7 @@ export async function GET() {
       .select("id, invoice_number, total_cents, balance_cents, due_date, status, created_at")
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
-      .in("status", ["printed", "sent", "partial", "overdue"])
+      .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
       .is("deleted_at", null)
       .order("due_date", { ascending: true })
       .limit(10),

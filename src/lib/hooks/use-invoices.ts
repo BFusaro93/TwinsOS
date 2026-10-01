@@ -249,9 +249,18 @@ export function useInvoices(
       if (clientIds.length === 1) q = q.eq("client_id", clientIds[0]);
       else if (clientIds.length > 1) q = q.in("client_id", clientIds);
       if (projectId) q = q.eq("project_id", projectId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data.map(mapInvoice) as CRMInvoice[];
+      // PostgREST caps a plain select at 1000 rows — page through so a large
+      // org's oldest invoices don't silently drop off the list.
+      const pageSize = 1000;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await q.range(from, from + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+      }
+      return rows.map(mapInvoice) as CRMInvoice[];
     },
     // An explicit null project means "this project can't own invoices yet" --
     // don't fetch the client's whole ledger just to throw it away.
@@ -598,7 +607,7 @@ export function useBulkImportInvoices() {
         const { data: invoiceNumber } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("crm_invoice_line_items").insert({
+        const { error: itemErr } = await (supabase as any).from("crm_invoice_line_items").insert({
           invoice_id: invoice.id,
           description: r.description.trim(),
           qty: 1,
@@ -606,6 +615,9 @@ export function useBulkImportInvoices() {
           total_cents: amountCents,
           is_taxable: taxCents > 0,
         });
+        // An invoice header with no line item would recalculate to $0 on its
+        // first edit — surface the failure instead of importing it silently.
+        if (itemErr) throw itemErr;
 
         // Log to the client's activity timeline (same as useAssignInvoiceNumber).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1281,15 +1293,19 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
   if (error) throwIfLockedInvoiceError(error);
 
   // Recalculate invoice totals from remaining line items
-  const { data: inv } = await supabase
+  // Both reads must succeed: a swallowed failure would recompute the invoice
+  // from zero line items and write a $0 total over the real one.
+  const { data: inv, error: invReadErr } = await supabase
     .from("crm_invoices")
     .select("amount_paid_cents, tax_rate_bps, discount_cents, client_id")
     .eq("id", invoiceId)
     .single();
-  const { data: items } = await supabase
+  if (invReadErr) throw invReadErr;
+  const { data: items, error: itemsReadErr } = await supabase
     .from("crm_invoice_line_items")
     .select("total_cents, discount_cents, is_taxable")
     .eq("invoice_id", invoiceId);
+  if (itemsReadErr) throw itemsReadErr;
 
   // Net of each line's own discount — matches useUpdateInvoiceFinancials'
   // netLineCents so a delete recomputes the same way an edit would.
@@ -1382,11 +1398,12 @@ export function useUpdateInvoiceFinancials() {
       const totalCents = afterDiscount + taxCents;
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: inv } = await (supabase as any)
+      const { data: inv, error: invReadErr } = await (supabase as any)
         .from("crm_invoices")
         .select("amount_paid_cents, client_id")
         .eq("id", id)
         .single();
+      if (invReadErr) throw invReadErr;
       const paid = inv?.amount_paid_cents ?? 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patch: Record<string, any> = {
@@ -1727,12 +1744,22 @@ export function usePayments(clientId?: string, opts?: { projectId?: string | nul
         .from("crm_payments")
         .select(`*, clients(display_name, billing_address), ${invoiceJoin}`)
         .is("deleted_at", null)
-        .order("payment_date", { ascending: false });
+        .order("payment_date", { ascending: false })
+        // Tiebreaker: payments share dates, and range paging needs a total order.
+        .order("id", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
       if (projectId) q = q.eq("crm_invoices.project_id", projectId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data.map(mapPaymentFull) as CRMPayment[];
+      // PostgREST caps a plain select at 1000 rows — page through.
+      const pageSize = 1000;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await q.range(from, from + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+      }
+      return rows.map(mapPaymentFull) as CRMPayment[];
     },
     enabled: projectId !== null,
   });

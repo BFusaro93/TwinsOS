@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -72,6 +73,7 @@ async function uploadFilesToVehicle(
   vehicleId: string,
   files: File[],
   uploaderName: string,
+  orgId: string,
 ): Promise<{ succeeded: number; failed: number }> {
   const supabase = createClient();
   let succeeded = 0;
@@ -80,7 +82,10 @@ async function uploadFilesToVehicle(
   await Promise.all(
     files.map(async (file) => {
       try {
-        const storagePath = `vehicle/${vehicleId}/${Date.now()}-${file.name}`;
+        // org_id must be the first path segment (attachments bucket INSERT
+        // policy) and the key must be storage-safe; file_name keeps the
+        // original for display.
+        const storagePath = `${orgId}/vehicle/${vehicleId}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
 
         let uploadError: { message: string } | null = null;
         try {
@@ -194,10 +199,11 @@ export function VehicleBulkImportDialog({
     const { data: { user } } = await supabase.auth.getUser();
     const { data: profile } = await supabase
       .from("profiles")
-      .select("name")
+      .select("name, org_id")
       .eq("id", user?.id ?? "")
       .single();
     const uploaderName = profile?.name ?? user?.email ?? "Unknown";
+    if (!profile?.org_id) return;
 
     setIsUploading(true);
 
@@ -214,6 +220,7 @@ export function VehicleBulkImportDialog({
         group.vehicleId!,
         group.files,
         uploaderName,
+        profile.org_id,
       );
 
       setGroups((prev) =>
