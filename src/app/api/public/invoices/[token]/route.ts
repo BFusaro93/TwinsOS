@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { signPhotoPaths, type PhotoBucket } from "@/lib/invoices/photos";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("public-invoice");
 
 // Public route — no auth. Uses service role to read across RLS, but every
 // query below is scoped by the token-resolved invoice/org id, never by
@@ -76,7 +80,31 @@ export async function GET(
       totalCents: (li.total_cents as number) ?? 0,
     }));
 
+  // Photos attached to this invoice. Scoped by the token-resolved invoice AND
+  // org; signed at read time with a short expiry (never stored).
+  const { data: photoRows, error: photoErr } = await supabase
+    .from("invoice_photos")
+    .select("bucket, storage_path, caption")
+    .eq("invoice_id", shareToken.invoice_id)
+    .eq("org_id", shareToken.org_id)
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(12);
+  if (photoErr) log.error("photo load failed", { invoiceId: shareToken.invoice_id, error: photoErr.message });
+  const safePhotoRows = ((photoRows ?? []) as { bucket: PhotoBucket; storage_path: string; caption: string | null }[])
+    .filter((r) => r.storage_path.startsWith(`${shareToken.org_id}/`));
+  const photoUrls = await signPhotoPaths(
+    supabase as unknown as SupabaseClient,
+    safePhotoRows.map((r) => ({ bucket: r.bucket, path: r.storage_path })),
+    900
+  );
+  const photos = safePhotoRows
+    .map((r) => ({ url: photoUrls.get(`${r.bucket}:${r.storage_path}`) ?? null, caption: r.caption }))
+    .filter((p): p is { url: string; caption: string | null } => !!p.url);
+
   return NextResponse.json({
+    photos,
     invoiceNumber: inv.invoice_number,
     description: inv.description,
     invoiceDate: inv.invoice_date,

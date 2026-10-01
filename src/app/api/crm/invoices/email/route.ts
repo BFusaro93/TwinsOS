@@ -9,6 +9,7 @@ import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
+import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
@@ -376,6 +377,7 @@ export async function POST(req: NextRequest) {
     balanceCents: (inv.balance_cents as number) ?? 0,
     lineItems: pdfLineItems,
     statement,
+    photos: includePdf ? await loadInvoicePhotosForPdf(inv.id as string, inv.org_id as string) : [],
   };
   const orgPdfData: OrgPDFData = {
     name: orgName,

@@ -23,6 +23,8 @@ import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-te
 import { MERGE_TAGS_BY_TYPE } from "@/types/crm-documents";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
+import { InvoicePhotosPanel } from "@/components/crm/invoices/InvoicePhotosPanel";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // Exported so bulk-send flows (InvoicesList's "Email Selected") send the
 // same default content a single manual send would, when no org default
@@ -68,6 +70,7 @@ export function InvoiceEmailDialog({
   const templates = allDocTemplates.filter((t) => t.docType === "invoice_email" && t.status === "active");
   const { data: pdfTemplates = [] } = useInvoicePDFTemplates();
 
+  const { can } = usePermissions();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
   const [pdfTemplateId, setPdfTemplateId] = useState<string>("");
@@ -289,6 +292,17 @@ export function InvoiceEmailDialog({
             <Paperclip className="h-3.5 w-3.5" />
             Attach the invoice PDF to this email
           </label>
+
+          {/* Photos included in the PDF and on the online invoice page. Chosen
+              here at send time; also manageable from the invoice's Photos tab. */}
+          <details className="rounded border bg-slate-50/50 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium text-slate-600">
+              Photos to include (PDF and online invoice)
+            </summary>
+            <div className="mt-3 max-h-[40vh] overflow-y-auto">
+              {open && <InvoicePhotosPanel invoiceId={invoiceId} canEdit={can("acct_send_invoices") || can("acct_add_modify_invoices")} />}
+            </div>
+          </details>
         </div>
 
         <DialogFooter>

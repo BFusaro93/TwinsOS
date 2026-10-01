@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
+import { heicToJpeg, isHeic, HEIC_MAX_BYTES, HEIC_ERROR_MESSAGE } from "@/lib/utils/convert-heic";
 
 /**
  * Storage for visit photos goes through the service client, AFTER the caller
@@ -74,7 +75,11 @@ export async function POST(
   // When clientId is present the path is fully deterministic for that queue item, so a retried
   // upload (after a flaky partial-success) reuses the same object/row instead of creating a
   // duplicate photo — no new column needed, just keying the existing path off the client id.
-  const rawExt = file.name.split(".").pop() ?? "jpg";
+  const convertHeic = isHeic(file);
+  if (convertHeic && file.size > HEIC_MAX_BYTES) {
+    return NextResponse.json({ error: "HEIC photos must be 15MB or smaller" }, { status: 400 });
+  }
+  const rawExt = convertHeic ? "jpg" : (file.name.split(".").pop() ?? "jpg");
   const ext = SAFE_PATH_SEGMENT.test(rawExt) ? rawExt : "jpg";
   const storagePath = `${visit.org_id}/visit-photos/${visitId}/${clientId ?? Date.now()}.${ext}`;
 
@@ -91,10 +96,19 @@ export async function POST(
     }
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
+  let contentType = file.type;
+  if (convertHeic) {
+    try {
+      buffer = await heicToJpeg(buffer);
+      contentType = "image/jpeg";
+    } catch {
+      return NextResponse.json({ error: HEIC_ERROR_MESSAGE }, { status: 422 });
+    }
+  }
 
   const { error: uploadError } = await photoStorage()
-    .upload(storagePath, buffer, { contentType: file.type, upsert: !!clientId });
+    .upload(storagePath, buffer, { contentType, upsert: !!clientId });
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 

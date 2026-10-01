@@ -106,10 +106,12 @@ export function usePhotoUpload(projectId: string) {
             try {
               workingFile = await convertHeicToJpeg(workingFile);
             } catch (convErr) {
-              log.warn("HEIC conversion failed; uploading original", {
+              // Never store an unreadable HEIC: fail this file with a clear message.
+              log.warn("HEIC conversion failed", {
                 fileName: inp.file.name,
                 error: convErr instanceof Error ? convErr.message : String(convErr),
               });
+              throw new Error(`Could not read "${inp.file.name}". Export it as JPEG and try again.`);
             }
           }
 
@@ -148,7 +150,7 @@ export function usePhotoUpload(projectId: string) {
             uploaded_by_name: currentUser.name,
             display_name: inp.displayName ?? null,
             storage_path: path,
-            file_name: inp.file.name,
+            file_name: isHeicMimeType(effectiveType) ? workingFile.name : inp.file.name,
             file_size: compressed.size,
             mime_type: uploadContentType,
             width: dims?.width ?? null,
