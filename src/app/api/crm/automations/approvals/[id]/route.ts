@@ -75,6 +75,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: true, action: "rejected" });
   }
 
+  // Suppression can change while a step sits in the queue (unsubscribe link,
+  // hard bounce). The queued content was vetted at queue time only, so
+  // re-check before the send — SMS consent is re-checked inside sendClientSms.
+  if (approval.channel !== "sms" && approval.client_id) {
+    const { data: recipient } = await db
+      .from("clients")
+      .select("do_not_market, email_bounced_at")
+      .eq("id", approval.client_id)
+      .maybeSingle();
+    if (recipient?.do_not_market || recipient?.email_bounced_at) {
+      return NextResponse.json(
+        { error: "Client has opted out of marketing emails or their address has bounced — reject this step instead" },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Claim the decision BEFORE sending so two people clicking Approve (or a
+  // double-submit) can't both pass the pending check above and send twice.
+  const { data: claimed } = await db
+    .from("crm_sequence_step_approvals")
+    .update({ status: "approved", decided_by: user.id, decided_at: nowIso })
+    .eq("id", id)
+    .eq("status", "pending")
+    .select("id");
+  if (!claimed || claimed.length === 0) {
+    return NextResponse.json({ error: "Already decided" }, { status: 409 });
+  }
+
   // Approve: send the already-resolved content, then advance the enrollment
   // exactly like a normal (non-approval) step of that channel would.
   const sendResult =
@@ -99,6 +128,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           replyTo: approval.reply_to ?? undefined,
         });
   if (!sendResult.ok) {
+    // Nothing went out — hand the approval back so it can be retried.
+    await db
+      .from("crm_sequence_step_approvals")
+      .update({ status: "pending", decided_by: null, decided_at: null })
+      .eq("id", id)
+      .eq("status", "approved");
     return NextResponse.json({ error: sendResult.reason }, { status: 502 });
   }
 
@@ -129,11 +164,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .from("crm_sequence_enrollments")
     .update({ awaiting_approval: false, updated_at: nowIso })
     .eq("id", approval.enrollment_id);
-
-  await db
-    .from("crm_sequence_step_approvals")
-    .update({ status: "approved", decided_by: user.id, decided_at: nowIso })
-    .eq("id", id);
 
   await logSequenceExecution(db, {
     orgId: approval.org_id, enrollmentId: approval.enrollment_id, sequenceId: approval.sequence_id,

@@ -165,6 +165,15 @@ export async function POST(request: Request) {
   const matchedIds = orgMatches.map((c) => c.id);
   const orgId = orgMatches[0].org_id;
 
+  // Apply STOP before the duplicate-delivery check below: that check keys off
+  // the timeline row, which is written first — a run that died after logging
+  // but before flipping the flag would otherwise make every Twilio retry ack
+  // as "already handled" and the opt-out would never land. Idempotent, so
+  // re-applying on a genuine duplicate is harmless.
+  if (OPT_OUT_KEYWORDS.has(keyword)) {
+    await supabase.from("clients").update({ sms_opt_in: false }).eq("org_id", orgId).in("id", matchedIds);
+  }
+
   // Twilio retries a webhook on timeouts/5xx, so the same MessageSid can arrive
   // more than once. If we already filed it, ack without re-logging or opening
   // a second ticket / re-appending the comment.
@@ -201,9 +210,7 @@ export async function POST(request: Request) {
   }
   if (activityErr) log.error("failed to log inbound sms", { error: activityErr.message });
 
-  if (OPT_OUT_KEYWORDS.has(keyword)) {
-    await supabase.from("clients").update({ sms_opt_in: false }).eq("org_id", orgId).in("id", matchedIds);
-  } else if (OPT_IN_KEYWORDS.has(keyword)) {
+  if (OPT_IN_KEYWORDS.has(keyword)) {
     await supabase
       .from("clients")
       .update({ sms_opt_in: true, sms_opt_in_at: new Date().toISOString(), sms_opt_in_source: "keyword" })

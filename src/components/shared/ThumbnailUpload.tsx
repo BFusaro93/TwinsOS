@@ -70,7 +70,10 @@ export function ThumbnailUpload({ imageUrl, alt, size = "md", onUpload }: Thumbn
     try {
       const supabase = createClient();
       const orgPrefix = await getStorageOrgPrefix(supabase);
-      const ext = file.name.split(".").pop() ?? "jpg";
+      // A name with no dot (or odd characters after the last one) would land in
+      // the storage key verbatim and trip Storage's "Invalid key" validation.
+      const rawExt = file.name.includes(".") ? (file.name.split(".").pop() ?? "") : "";
+      const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt.toLowerCase() : "jpg";
       const path = `${orgPrefix}/thumbnails/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
       const { error: uploadError } = await supabase.storage

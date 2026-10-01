@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { createServiceClient } from "@/lib/supabase/server";
 
 async function getSupabase() {
   const cookieStore = await cookies();
@@ -48,11 +49,16 @@ export async function POST(
   // the crew-app photos route).
   const rawExt = file.name.split(".").pop() ?? "jpg";
   const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "jpg";
-  const storagePath = `estimate-photos/${estimate.org_id}/${estimateId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  // org_id MUST be the first segment (attachments bucket INSERT policy checks
+  // storage.foldername(name)[1]); the old estimate-photos/{org}/... layout was
+  // rejected. Storage goes through the service client after the estimate was
+  // read through the caller's RLS: the bucket's SELECT policy only exposes
+  // objects with a public.attachments row, so a user-scoped createSignedUrl
+  // for an estimate_photos object always returned null.
+  const storagePath = `${estimate.org_id}/estimate-photos/${estimateId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: uploadError } = await (supabase as any).storage
+  const { error: uploadError } = await createServiceClient().storage
     .from("attachments")
     .upload(storagePath, buffer, { contentType: file.type, upsert: false });
 
@@ -99,11 +105,17 @@ export async function GET(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Signed URLs are generated at read time — storage paths never leave the DB raw
+  const storage = createServiceClient().storage;
   const photosWithUrls = await Promise.all(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (data as any[]).map(async (photo) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: signed } = await (supabase as any).storage
+      // Rows were read through RLS; only sign paths inside the row's own org.
+      const inOrg =
+        typeof photo.storage_path === "string" &&
+        (photo.storage_path.startsWith(`${photo.org_id}/`) ||
+          photo.storage_path.startsWith(`estimate-photos/${photo.org_id}/`));
+      if (!inOrg) return { ...photo, signedUrl: null };
+      const { data: signed } = await storage
         .from("attachments")
         .createSignedUrl(photo.storage_path, 3600);
       return { ...photo, signedUrl: signed?.signedUrl ?? null };

@@ -79,7 +79,10 @@ export function useDeletePhoto(projectId: string) {
       const { error } = await db.from("job_photos").update({ deleted_at: new Date().toISOString() }).eq("id", photoId);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["job-photos", projectId] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["job-photos", projectId] });
+      qc.invalidateQueries({ queryKey: ["photo-comparisons", projectId] });
+    },
   });
 }
 

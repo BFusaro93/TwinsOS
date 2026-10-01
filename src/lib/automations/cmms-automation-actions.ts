@@ -1,4 +1,5 @@
 import type { createClient } from "@supabase/supabase-js";
+import { escapeHtml } from "@/lib/utils/escape-html";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -140,8 +141,8 @@ export async function executeAction(
                 subject,
                 html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
                   <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
-                  <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
-                  <p style="margin:0 0 24px;color:#475569">Automation <strong>${auto.name}</strong> created: <strong>${mr.request_number} — ${acTitle}</strong>.</p>
+                  <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(p.name ?? "there")},</p>
+                  <p style="margin:0 0 24px;color:#475569">Automation <strong>${escapeHtml(auto.name)}</strong> created: <strong>${escapeHtml(`${mr.request_number} — ${acTitle}`)}</strong>.</p>
                   <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
                 </div>`,
               })

@@ -177,9 +177,10 @@ export async function POST(
   let resolvedBody = resolveMergeTags(body.bodyHtml, htmlMergeVars);
 
   // Footer only on commercial mail — see the purpose note above.
+  let unsubscribeUrl: string | null = null;
   if (isMarketing) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
-    const unsubscribeUrl = `${appUrl}/api/crm/unsubscribe/${client.unsubscribe_token}`;
+    unsubscribeUrl = `${appUrl}/api/crm/unsubscribe/${client.unsubscribe_token}`;
     resolvedBody += buildCanSpamFooter(
       org?.name ?? "Your Service Provider",
       org?.address ?? null,
@@ -203,6 +204,7 @@ export async function POST(
       // name on the shared domain; this one was still arriving as "Landscapt".
       from: orgEmailFrom(org?.name),
       replyTo,
+      unsubscribeUrl,
     });
     resendId = sent.resendId;
   } catch (err) {

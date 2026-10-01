@@ -2,6 +2,7 @@ import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPa
 import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { fetchCardExpiryContext, type CardExpiryContext } from "./card-expiry-context";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
@@ -174,7 +175,7 @@ async function runClaimedStep(
   enrollment: DueEnrollmentRow
 ): Promise<ProcessOutcome> {
   const nowIso = new Date().toISOString();
-  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position } = enrollment;
+  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id } = enrollment;
 
   const { data: events } = await adminClient
     .from("crm_sequence_events")
@@ -184,7 +185,23 @@ async function runClaimedStep(
     .is("deleted_at", null)
     .order("position", { ascending: true });
 
-  const currentEvent = (events ?? []).find((e: { position: number }) => e.position === next_event_position);
+  // Positions aren't guaranteed contiguous: deleting or deactivating a step
+  // leaves a gap, and events is already filtered to active, non-deleted rows
+  // in position order. Requiring an exact match completed the enrollment (and
+  // silently dropped every remaining step) whenever the step it pointed at
+  // was removed — e.g. the sequence's first step deleted, or the step after a
+  // wait deactivated. Take the next active step at or after the pointer.
+  const currentEvent = (events ?? []).find((e: { position: number }) => e.position >= enrollment.next_event_position);
+  const next_event_position: number = currentEvent?.position ?? enrollment.next_event_position;
+  // Re-point the enrollment at the step actually being run so anything that
+  // later advances "past next_event_position" (the approval route) skips the
+  // right step instead of re-selecting this one.
+  if (currentEvent && currentEvent.position !== enrollment.next_event_position) {
+    await adminClient
+      .from("crm_sequence_enrollments")
+      .update({ next_event_position: currentEvent.position })
+      .eq("id", enrollId);
+  }
 
   if (!currentEvent) {
     await adminClient
@@ -258,10 +275,15 @@ async function runClaimedStep(
     // "Send Mon-Fri only" — defer to the next weekday rather than skipping
     // the step outright; the enrollment just gets re-checked then.
     if (eventConfig.send_weekdays_only) {
-      const day = new Date().getDay(); // 0 = Sun, 6 = Sat
+      // Weekday on the ORG's calendar — the server runs UTC, where Friday
+      // evening is already "Saturday" and Sunday evening is already Monday.
+      const weekdayName = new Intl.DateTimeFormat("en-US", {
+        weekday: "short",
+        timeZone: await getOrgTimeZone(adminClient, orgId),
+      }).format(new Date());
+      const day = weekdayName === "Sun" ? 0 : weekdayName === "Sat" ? 6 : 1; // 0 = Sun, 6 = Sat
       if (day === 0 || day === 6) {
-        const d = new Date();
-        d.setDate(d.getDate() + (day === 0 ? 1 : 2));
+        const d = new Date(Date.now() + (day === 0 ? 1 : 2) * 86400000);
         await adminClient
           .from("crm_sequence_enrollments")
           .update({ next_fire_at: d.toISOString(), updated_at: nowIso })

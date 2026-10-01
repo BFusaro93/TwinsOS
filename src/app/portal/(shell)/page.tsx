@@ -38,7 +38,7 @@ export default async function PortalHomePage() {
       .select("id, invoice_number, total_cents, balance_cents, due_date, status")
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
-      .in("status", ["printed", "sent", "partial", "overdue"])
+      .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
       // A fully-paid (or $0) invoice can still sit in "printed"/"sent";
       // it isn't outstanding and mustn't flag the account as past due.
       .gt("balance_cents", 0)

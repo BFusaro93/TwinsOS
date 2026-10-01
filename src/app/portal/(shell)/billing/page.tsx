@@ -22,16 +22,35 @@ export default async function BillingPage() {
 
   const supabase = createServiceClient();
 
-  const { data: invoices, error } = await supabase
-    .from("crm_invoices")
-    .select("id, invoice_number, total_cents, balance_cents, amount_paid_cents, due_date, status, created_at")
-    .eq("client_id", ctx.clientId)
-    .eq("org_id", ctx.orgId)
-    // Drafts are unfinished staff work — never shown to the customer.
-    .neq("status", "draft")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(50) as { data: InvoiceRow[] | null; error: unknown };
+  const cols = "id, invoice_number, total_cents, balance_cents, amount_paid_cents, due_date, status, created_at";
+  // Recent history is capped, but anything still owing is always included —
+  // otherwise a customer with 50+ newer invoices could not see (or pay) an
+  // older unpaid one.
+  const [recentRes, owingRes] = await Promise.all([
+    supabase
+      .from("crm_invoices")
+      .select(cols)
+      .eq("client_id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
+      // Drafts are unfinished staff work — never shown to the customer.
+      .neq("status", "draft")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(50) as unknown as Promise<{ data: InvoiceRow[] | null; error: unknown }>,
+    supabase
+      .from("crm_invoices")
+      .select(cols)
+      .eq("client_id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
+      .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
+      .gt("balance_cents", 0)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false }) as unknown as Promise<{ data: InvoiceRow[] | null; error: unknown }>,
+  ]);
+  const error = recentRes.error ?? owingRes.error;
+  const merged = new Map<string, InvoiceRow>();
+  for (const inv of [...(recentRes.data ?? []), ...(owingRes.data ?? [])]) merged.set(inv.id, inv);
+  const invoices = [...merged.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   if (error) console.error("[portal/billing]", error);
 

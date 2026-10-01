@@ -162,14 +162,16 @@ async function syncOrg(
     if (meters_value === null) continue;
 
     const miles = parseFloat((meters_value * 0.000621371).toFixed(2));
-    const source = obd ? "OBD" : "GPS";
+    const source = obd !== undefined ? "OBD" : "GPS";
 
     // Match Samsara vehicle → Equipt vehicle (by samsara_vehicle_id first, then name).
-    const dbVehicle = (dbVehicles ?? []).find(
-      (v) =>
-        (v.samsara_vehicle_id && v.samsara_vehicle_id === sv.id) ||
-        v.name.trim().toLowerCase() === sv.name.trim().toLowerCase()
-    );
+    // An explicit samsara_vehicle_id link must win over a name match; a single
+    // find() with an OR returned whichever vehicle came first in the list.
+    const dbVehicle =
+      (dbVehicles ?? []).find((v) => v.samsara_vehicle_id && v.samsara_vehicle_id === sv.id) ??
+      (dbVehicles ?? []).find(
+        (v) => !v.samsara_vehicle_id && v.name.trim().toLowerCase() === (sv.name ?? "").trim().toLowerCase()
+      );
 
     if (!dbVehicle) {
       detail.push(`No match for Samsara vehicle "${sv.name}" (${sv.id})`);

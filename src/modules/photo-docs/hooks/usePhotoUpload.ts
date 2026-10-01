@@ -56,7 +56,10 @@ export function usePhotoUpload(projectId: string) {
         .eq("id", currentUser.id)
         .single();
       const orgId = profile?.org_id;
-      if (!orgId) throw new Error("No org_id found");
+      if (!orgId) {
+        setUploading(false);
+        throw new Error("No org_id found");
+      }
 
       for (let i = 0; i < inputs.length; i++) {
         const inp = inputs[i];

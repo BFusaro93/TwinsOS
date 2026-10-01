@@ -35,7 +35,7 @@ export interface UploadResult {
 // "Screenshot 2026-09-02 at 10.41.05 AM.png" — trip its "Invalid key"
 // validation). Sanitize just the object key; the original name is kept
 // as-is in the `attachments.file_name` column for display/download.
-function sanitizeStorageFileName(name: string): string {
+export function sanitizeStorageFileName(name: string): string {
   const lastDot = name.lastIndexOf(".");
   const base = lastDot > 0 ? name.slice(0, lastDot) : name;
   const ext = lastDot > 0 ? name.slice(lastDot) : "";
