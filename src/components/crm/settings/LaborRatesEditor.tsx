@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useSettingsStore } from "@/stores/settings-store";
+import { ApplyRatesToProjectsDialog } from "@/components/shared/ApplyRatesToProjectsDialog";
 
 // Same org-level customizations.breakevenLaborRateCents / burdenedLaborRateCents
 // fields the Equipt settings page (Settings → General → Finance) edits —
@@ -22,6 +23,7 @@ export function LaborRatesEditor() {
   const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
   const [burdenedDraft, setBurdenedDraft] = useState((burdenedLaborRateCents / 100).toFixed(2));
   const seeded = useRef(false);
+  const [ratesPrompt, setRatesPrompt] = useState<{ full: number; burdened: number } | null>(null);
 
   useEffect(() => {
     if (!remoteSettings || seeded.current) return;
@@ -75,7 +77,10 @@ export function LaborRatesEditor() {
             onClick={() => {
               const cents = Math.round((parseFloat(breakevenDraft) || 0) * 100);
               setBreakevenLaborRateCents(cents);
-              updateOrgSettings({ customizations: { breakevenLaborRateCents: cents } });
+              updateOrgSettings(
+                { customizations: { breakevenLaborRateCents: cents } },
+                { onSuccess: () => setRatesPrompt({ full: cents, burdened: burdenedLaborRateCents }) },
+              );
             }}
           >
             Save
@@ -105,13 +110,27 @@ export function LaborRatesEditor() {
             onClick={() => {
               const cents = Math.round((parseFloat(burdenedDraft) || 0) * 100);
               setBurdenedLaborRateCents(cents);
-              updateOrgSettings({ customizations: { burdenedLaborRateCents: cents } });
+              updateOrgSettings(
+                { customizations: { burdenedLaborRateCents: cents } },
+                { onSuccess: () => setRatesPrompt({ full: breakevenLaborRateCents, burdened: cents }) },
+              );
             }}
           >
             Save
           </Button>
         </div>
       </div>
+
+      {ratesPrompt && (
+        <ApplyRatesToProjectsDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setRatesPrompt(null);
+          }}
+          laborRateCents={ratesPrompt.full}
+          burdenedRateCents={ratesPrompt.burdened}
+        />
+      )}
     </div>
   );
 }

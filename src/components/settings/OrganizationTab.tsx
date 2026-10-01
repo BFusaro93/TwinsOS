@@ -8,6 +8,8 @@ import { SettingRow } from "@/components/settings/settings-ui";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { DEFAULT_TIME_ZONE, SELECTABLE_TIME_ZONES } from "@/lib/time/zone";
+import { ApplyRatesToProjectsDialog } from "@/components/shared/ApplyRatesToProjectsDialog";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 
 // General organization settings — name, address, tax rate, and labor rates.
 // Branding (logo/accent color) lives in BrandingTab; the maintenance-request
@@ -30,6 +32,8 @@ export function OrganizationTab() {
   const { data: remoteSettings } = useOrgSettings();
   const { mutate: updateOrgSettings, isPending: savingSettings } = useUpdateOrgSettings();
   const [addressSaved, setAddressSaved] = useState(false);
+  // After a labor rate is saved: offer to also update open projects.
+  const [ratesPrompt, setRatesPrompt] = useState<{ full: number; burdened: number } | null>(null);
 
   const [taxDraft, setTaxDraft] = useState(taxRatePercent);
   const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
@@ -310,7 +314,10 @@ export function OrganizationTab() {
                 onClick={() => {
                   const cents = Math.round((parseFloat(breakevenDraft) || 0) * 100);
                   setBreakevenLaborRateCents(cents);
-                  updateOrgSettings({ customizations: { breakevenLaborRateCents: cents } });
+                  updateOrgSettings(
+                    { customizations: { breakevenLaborRateCents: cents } },
+                    { onSuccess: () => setRatesPrompt({ full: cents, burdened: burdenedLaborRateCents }) },
+                  );
                 }}
               >
                 Save
@@ -339,7 +346,10 @@ export function OrganizationTab() {
                 onClick={() => {
                   const cents = Math.round((parseFloat(burdenedDraft) || 0) * 100);
                   setBurdenedLaborRateCents(cents);
-                  updateOrgSettings({ customizations: { burdenedLaborRateCents: cents } });
+                  updateOrgSettings(
+                    { customizations: { burdenedLaborRateCents: cents } },
+                    { onSuccess: () => setRatesPrompt({ full: breakevenLaborRateCents, burdened: cents }) },
+                  );
                 }}
               >
                 Save
@@ -348,6 +358,33 @@ export function OrganizationTab() {
           </SettingRow>
         </div>
       </div>
+
+      {/* Change history — every edit to these settings (who, when, old → new). */}
+      {remoteSettings?.id && (
+        <div className="rounded-lg border bg-white shadow-sm">
+          <div className="px-6 py-4">
+            <h3 className="text-sm font-semibold text-slate-900">Change history</h3>
+            <p className="text-xs text-slate-500">
+              Every change to these organization settings, including labor rates. Visible to admins and managers.
+            </p>
+          </div>
+          <Separator />
+          <div className="max-h-96 overflow-y-auto">
+            <AuditTrailTab recordType="organization" recordId={remoteSettings.id} />
+          </div>
+        </div>
+      )}
+
+      {ratesPrompt && (
+        <ApplyRatesToProjectsDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setRatesPrompt(null);
+          }}
+          laborRateCents={ratesPrompt.full}
+          burdenedRateCents={ratesPrompt.burdened}
+        />
+      )}
     </div>
   );
 }

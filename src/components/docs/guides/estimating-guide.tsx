@@ -333,7 +333,7 @@ export function EstimatingGuide() {
         <p>
           Both the breakeven labor rate and the per-cost-type overhead percentages are org-wide
           settings, not per-estimate &mdash; the breakeven rate is set from Equipt&rsquo;s Job
-          Costing bid-rate calculator (&ldquo;Set as project rate&rdquo;), and overhead percentages
+          Costing bid-rate calculator (&ldquo;Set as project rates&rdquo;), and overhead percentages
           live in the org&rsquo;s overhead settings.
         </p>
       </Section>

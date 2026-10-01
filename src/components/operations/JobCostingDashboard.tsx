@@ -1,173 +1,34 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import {
+  useJobCostingScenarios,
+  useCreateJobCostingScenario,
+  useUpdateJobCostingScenario,
+  useDeleteJobCostingScenario,
+  useSetDefaultJobCostingScenario,
+  type JobCostingScenario,
+} from "@/lib/hooks/use-job-costing-scenarios";
+import { compute, BLANK_INPUTS, inputsEqual, type Inputs } from "@/lib/job-costing-calc";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
 import {
   DollarSign, Users, Clock, TrendingUp,
-  Plus, Trash2, Copy, ChevronDown, ChevronUp, Info, Pencil, X, Check,
+  Plus, Trash2, Copy, ChevronDown, ChevronUp, Info, Pencil, X, Check, Star,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ApplyRatesToProjectsDialog } from "@/components/shared/ApplyRatesToProjectsDialog";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Inputs {
-  fieldEmpWage: number;
-  fieldHrsReg: number;
-  fieldHrsOT: number;
-  numFieldEmp: number;
-  ficaPct: number;
-  workCompPct: number;
-  suiPct: number;
-  fuiPct: number;
-  pfmlPct: number;
-  ohPayroll: number;
-  otherOH: number;
-  liabilities: number;
-  nonBillablePct: number;
-  profitPct: number;
-}
-
-interface Scenario {
-  id: string;
-  name: string;
-  inputs: Inputs;
-}
+// The rate math lives in @/lib/job-costing-calc. Inputs and scenarios are
+// per-org data (job_costing_scenarios); a new org starts with none and a blank
+// form, and marks one scenario as the default that this screen loads.
 
 type Tab = "calculator" | "scenarios";
-
-// ── Default inputs (2026 Landscape Season) ────────────────────────────────────
-
-const DEFAULT_INPUTS: Inputs = {
-  fieldEmpWage: 23,
-  fieldHrsReg: 1280,
-  fieldHrsOT: 320,
-  numFieldEmp: 30,
-  ficaPct: 7.65,
-  workCompPct: 2.5,
-  suiPct: 5.67,
-  fuiPct: 0.6,
-  pfmlPct: 0,
-  ohPayroll: 170166,
-  otherOH: 467139,
-  liabilities: 305836,
-  nonBillablePct: 20,
-  profitPct: 20,
-};
-
-const PRESET_SCENARIOS: Scenario[] = [
-  {
-    id: "2026-landscape",
-    name: "2026 Budget — Landscape Season",
-    inputs: { ...DEFAULT_INPUTS },
-  },
-  {
-    id: "2026-full-year",
-    name: "2026 Budget — Full Year",
-    inputs: {
-      ...DEFAULT_INPUTS,
-      ohPayroll: 170166,
-      otherOH: 703012,
-      liabilities: 459054,
-    },
-  },
-  {
-    id: "2025-actual",
-    name: "2025 Actual",
-    inputs: {
-      ...DEFAULT_INPUTS,
-      fieldEmpWage: 22.81,
-      numFieldEmp: 25,
-      ohPayroll: 90175,
-      otherOH: 609377,
-      liabilities: 391500,
-    },
-  },
-];
-
-// ── Core calculation engine ───────────────────────────────────────────────────
-// Formula:
-//   1. Blended wage  = OT_wage × (OT_hrs/Reg_hrs) + Reg_wage × (1 − OT_hrs/Reg_hrs)
-//   2. Labor/hr      = blended_wage × (1 + burden%)
-//   3. OH total      = ohPayroll + otherOH + liabilities + ohPayroll × burden%
-//   4. OH/hr         = OH total ÷ (reg_hrs + OT_hrs)
-//   5. Break-even    = (OH/hr + Labor/hr) ÷ (1 − nonBillable%)  ← true cost coverage
-//   6. Bid rate      = break-even ÷ (1 − profit%)               ← true profit margin
-
-interface Computed {
-  totalRegHours: number;
-  totalOTHours: number;
-  totalHours: number;
-  billableHours: number;
-  totalDirectLabor: number;
-  burdenPct: number;
-  burdenAmount: number;
-  totalLaborCost: number;
-  totalOverhead: number;
-  laborPerHour: number;
-  ohPayrollPerHour: number;
-  otherOHPerHour: number;
-  liabilitiesPerHour: number;
-  ohPerHour: number;
-  baseBreakEven: number;
-  nonBillablePerHour: number;
-  breakEven: number;
-  bidRate: number;
-  profitPerHour: number;
-}
-
-function compute(i: Inputs): Computed {
-  const totalRegHours = i.numFieldEmp * i.fieldHrsReg;
-  const totalOTHours = i.numFieldEmp * i.fieldHrsOT;
-  const totalHours = totalRegHours + totalOTHours;
-  const billableHours = totalHours * (1 - i.nonBillablePct / 100); // for display only
-
-  const burdenPct = i.ficaPct + i.workCompPct + i.suiPct + i.fuiPct + i.pfmlPct;
-
-  // Blended wage: weight OT and regular rates by OT_hrs/Reg_hrs (Excel B11/B12 formula)
-  const otPct  = totalRegHours > 0 ? totalOTHours / totalRegHours : 0;
-  const regPct = 1 - otPct;
-  const blendedWage = i.fieldEmpWage * 1.5 * otPct + i.fieldEmpWage * regPct;
-  const laborPerHour = blendedWage * (1 + burdenPct / 100);
-
-  // Total direct labor (for display summary rows)
-  const totalDirectLabor = totalHours * blendedWage;
-  const burdenAmount = totalDirectLabor * (burdenPct / 100);
-  const totalLaborCost = totalDirectLabor + burdenAmount;
-
-  // Overhead: includes burden on admin payroll (Excel H8 = H5 × burden%)
-  const ohPayrollBurden = i.ohPayroll * (burdenPct / 100);
-  const totalOverhead = i.ohPayroll + i.otherOH + i.liabilities + ohPayrollBurden;
-
-  // OH/hr spreads over regular hours only — overhead is fixed and doesn't scale
-  // with OT. Dividing by all hours would dilute OH as OT increases, which would
-  // incorrectly lower the bid rate when workers do more overtime.
-  const ohPerHour         = totalRegHours > 0 ? totalOverhead / totalRegHours : 0;
-  const ohPayrollPerHour  = totalRegHours > 0 ? (i.ohPayroll + ohPayrollBurden) / totalRegHours : 0;
-  const otherOHPerHour    = totalRegHours > 0 ? i.otherOH / totalRegHours : 0;
-  const liabilitiesPerHour = totalRegHours > 0 ? i.liabilities / totalRegHours : 0;
-
-  // Break-even: divide by (1 − nonBillable%) so billable hours fully cover all costs
-  const baseBreakEven = laborPerHour + ohPerHour;
-  const breakEven = i.nonBillablePct < 100 ? baseBreakEven / (1 - i.nonBillablePct / 100) : 0;
-  const nonBillablePerHour = breakEven - baseBreakEven;
-
-  // Bid rate: divide by (1 − profit%) so profit% is true margin (profit ÷ revenue)
-  const bidRate = i.profitPct < 100 ? breakEven / (1 - i.profitPct / 100) : 0;
-  const profitPerHour = bidRate - breakEven;
-
-  return {
-    totalRegHours, totalOTHours, totalHours, billableHours,
-    totalDirectLabor, burdenPct, burdenAmount, totalLaborCost,
-    totalOverhead, laborPerHour,
-    ohPayrollPerHour, otherOHPerHour, liabilitiesPerHour,
-    ohPerHour, baseBreakEven, nonBillablePerHour, breakEven, bidRate, profitPerHour,
-  };
-}
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 
@@ -352,25 +213,64 @@ function InputsForm({ inputs, setInputs, compact }: InputsFormProps) {
 
 // ── Calculator Tab ─────────────────────────────────────────────────────────────
 
-function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: Inputs) => void }) {
-  const c = useMemo(() => compute(inputs), [inputs]);
-  const { breakevenLaborRateCents, setBreakevenLaborRateCents } = useSettingsStore();
-  const { mutate: updateOrgSettings } = useUpdateOrgSettings();
-  const [savedBreakEven, setSavedBreakEven] = useState(false);
+interface CalculatorTabProps {
+  inputs: Inputs;
+  setInputs: (i: Inputs) => void;
+  /** Name of the scenario the form was loaded from, if any. */
+  scenarioName: string | null;
+  /** The org has no scenarios saved yet — the form starts blank. */
+  noScenarios: boolean;
+  /** The form differs from the loaded scenario. */
+  dirty: boolean;
+  onUpdateScenario: () => void;
+  updatingScenario: boolean;
+}
 
-  const handleSaveBreakEven = useCallback(() => {
-    const cents = Math.round(c.breakEven * 100);
-    setBreakevenLaborRateCents(cents);
-    updateOrgSettings({ customizations: { breakevenLaborRateCents: cents } });
-    setSavedBreakEven(true);
-    setTimeout(() => setSavedBreakEven(false), 2000);
-  }, [c.breakEven, setBreakevenLaborRateCents, updateOrgSettings]);
+function CalculatorTab({
+  inputs, setInputs, scenarioName, noScenarios, dirty, onUpdateScenario, updatingScenario,
+}: CalculatorTabProps) {
+  const c = useMemo(() => compute(inputs), [inputs]);
+  const {
+    breakevenLaborRateCents, setBreakevenLaborRateCents,
+    burdenedLaborRateCents, setBurdenedLaborRateCents,
+  } = useSettingsStore();
+  const { mutate: updateOrgSettings } = useUpdateOrgSettings();
+  const [savedRates, setSavedRates] = useState(false);
+  // After the rates are saved: offer to also update open projects.
+  const [ratesPrompt, setRatesPrompt] = useState<{ full: number; burdened: number } | null>(null);
+
+  const breakEvenCents = Math.round(c.breakEven * 100);
+  const llrCents = Math.round(c.loadedLaborRate * 100);
+  const alreadyUsing = breakEvenCents === breakevenLaborRateCents && llrCents === burdenedLaborRateCents;
+  const hasRates = breakEvenCents > 0;
+
+  // Saves BOTH org rates from this calculation: Break-Even (labor + overhead,
+  // grossed up for non-billable time) and LLR (burdened labor grossed up for
+  // non-billable time, no overhead). New projects snapshot these; existing
+  // projects only change if the user opts in via the dialog.
+  const handleSaveRates = useCallback(() => {
+    setBreakevenLaborRateCents(breakEvenCents);
+    setBurdenedLaborRateCents(llrCents);
+    updateOrgSettings(
+      { customizations: { breakevenLaborRateCents: breakEvenCents, burdenedLaborRateCents: llrCents } },
+      {
+        onSuccess: () => {
+          setSavedRates(true);
+          setTimeout(() => setSavedRates(false), 2000);
+          setRatesPrompt({ full: breakEvenCents, burdened: llrCents });
+        },
+      },
+    );
+  }, [breakEvenCents, llrCents, setBreakevenLaborRateCents, setBurdenedLaborRateCents, updateOrgSettings]);
+
+  // Per billable hour; guarded so the blank form doesn't produce NaN.
+  const perBillable = (n: number) => (c.billableHours > 0 ? parseFloat((n / c.billableHours).toFixed(2)) : 0);
 
   const breakdownData = [
     {
       name: "Bid Rate",
-      "Direct Labor": parseFloat((c.totalDirectLabor / c.billableHours).toFixed(2)),
-      "Payroll Burden": parseFloat((c.burdenAmount / c.billableHours).toFixed(2)),
+      "Direct Labor": perBillable(c.totalDirectLabor),
+      "Payroll Burden": perBillable(c.burdenAmount),
       "OH Payroll": parseFloat(c.ohPayrollPerHour.toFixed(2)),
       "Other OH": parseFloat(c.otherOHPerHour.toFixed(2)),
       "Liabilities": parseFloat(c.liabilitiesPerHour.toFixed(2)),
@@ -379,8 +279,8 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
   ];
 
   const pieData = [
-    { name: "Direct Labor", value: c.billableHours > 0 ? c.totalDirectLabor / c.billableHours : 0, color: "#60ab45" },
-    { name: "Payroll Burden", value: c.billableHours > 0 ? c.burdenAmount / c.billableHours : 0, color: "#86efac" },
+    { name: "Direct Labor", value: perBillable(c.totalDirectLabor), color: "#60ab45" },
+    { name: "Payroll Burden", value: perBillable(c.burdenAmount), color: "#86efac" },
     { name: "OH Payroll", value: c.ohPayrollPerHour, color: "#93c5fd" },
     { name: "Other OH", value: c.otherOHPerHour, color: "#818cf8" },
     { name: "Liabilities", value: c.liabilitiesPerHour, color: "#a78bfa" },
@@ -389,6 +289,35 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
 
   return (
     <div className="space-y-6">
+      {noScenarios ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-4 text-sm text-slate-600">
+          <p className="font-medium text-slate-800">No scenarios yet</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Enter your numbers below and click <strong>Save as Scenario</strong>. Then open the Scenarios tab and set one as
+            the default — it will load here every time.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-slate-500">
+            {scenarioName ? <>Scenario: <strong className="text-slate-800">{scenarioName}</strong></> : "No default scenario selected — set one on the Scenarios tab"}
+          </span>
+          {scenarioName && dirty && (
+            <>
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Unsaved changes</span>
+              <button
+                type="button"
+                onClick={onUpdateScenario}
+                disabled={updatingScenario}
+                className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {updatingScenario ? "Saving…" : `Update “${scenarioName}”`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* KPI Row */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -415,12 +344,14 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">Labor {fmtDollar(c.laborPerHour)} + OH {fmtDollar(c.ohPerHour)}</p>
+          <p className="mt-1 text-xs text-slate-500">LLR {fmtDollar(c.loadedLaborRate)} (labor only, no overhead)</p>
           <button
             type="button"
-            onClick={handleSaveBreakEven}
-            className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700"
+            onClick={handleSaveRates}
+            disabled={!hasRates}
+            className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:text-slate-300"
           >
-            {savedBreakEven ? "✓ Saved as project rate" : Math.round(c.breakEven * 100) === breakevenLaborRateCents ? `Using this rate (${fmtDollar(c.breakEven)}/hr)` : `Set as project rate`}
+            {savedRates ? "✓ Saved as project rates" : alreadyUsing ? "Using these rates" : "Set as project rates"}
           </button>
         </div>
 
@@ -478,6 +409,7 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
               <ResultRow label={`Non-billable uplift (${fmtPct(inputs.nonBillablePct)} of hrs)`} value={`+${fmtDollar(c.nonBillablePerHour)}`} muted />
               <div className="my-1 border-t border-slate-100" />
               <ResultRow label="Break-Even Rate" value={fmtDollar(c.breakEven)} bold />
+              <ResultRow label="Loaded Labor Rate (LLR) — labor only, no overhead" value={fmtDollar(c.loadedLaborRate)} muted />
               <ResultRow label={`Profit (${fmtPct(inputs.profitPct)} of revenue)`} value={`+${fmtDollar(c.profitPerHour)}`} muted />
               <div className="my-2 border-t-2 border-slate-200" />
               <ResultRow label="Bid Rate" value={fmtDollar(c.bidRate)} highlight bold />
@@ -545,52 +477,119 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
           </div>
         </div>
       </div>
+
+      {ratesPrompt && (
+        <ApplyRatesToProjectsDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setRatesPrompt(null);
+          }}
+          laborRateCents={ratesPrompt.full}
+          burdenedRateCents={ratesPrompt.burdened}
+        />
+      )}
     </div>
   );
 }
 
 // ── Scenarios Tab ──────────────────────────────────────────────────────────────
 
+/** Name field that edits locally and saves on blur / Enter — saving per
+ *  keystroke would fire (and audit) a write for every character typed. */
+function ScenarioNameInput({ name, onCommit }: { name: string; onCommit: (name: string) => void }) {
+  const [draft, setDraft] = useState(name);
+  useEffect(() => setDraft(name), [name]);
+
+  function commit() {
+    const next = draft.trim();
+    if (!next) { setDraft(name); return; }
+    if (next !== name) onCommit(next);
+  }
+
+  return (
+    <input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      className="flex-1 rounded border border-transparent bg-transparent text-sm font-semibold text-slate-800 hover:border-slate-200 focus:border-brand-300 focus:outline-none focus:ring-1 focus:ring-brand-300 px-1 py-0.5"
+    />
+  );
+}
+
 function ScenariosTab({
   scenarios,
-  setScenarios,
   onLoad,
+  isLoading,
 }: {
-  scenarios: Scenario[];
-  setScenarios: (s: Scenario[]) => void;
-  onLoad: (inputs: Inputs) => void;
+  scenarios: JobCostingScenario[];
+  onLoad: (s: JobCostingScenario) => void;
+  isLoading: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<Inputs>(DEFAULT_INPUTS);
+  const [editDraft, setEditDraft] = useState<Inputs>(BLANK_INPUTS);
+  const create = useCreateJobCostingScenario();
+  const update = useUpdateJobCostingScenario();
+  const remove = useDeleteJobCostingScenario();
+  const setDefault = useSetDefaultJobCostingScenario();
 
-  function startEdit(s: Scenario) {
+  const errMsg = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
+
+  function startEdit(s: JobCostingScenario) {
     setEditDraft({ ...s.inputs });
     setEditingId(s.id);
   }
 
-  function saveEdit(id: string) {
-    setScenarios(scenarios.map((s) => s.id === id ? { ...s, inputs: editDraft } : s));
-    setEditingId(null);
+  async function saveEdit(id: string) {
+    try {
+      await update.mutateAsync({ id, inputs: editDraft });
+      setEditingId(null);
+      toast.success("Scenario saved");
+    } catch (e) {
+      toast.error(errMsg(e, "Failed to save scenario"));
+    }
   }
 
-  function cancelEdit() { setEditingId(null); }
-
-  function addScenario() {
-    const s: Scenario = { id: crypto.randomUUID(), name: "New Scenario", inputs: { ...DEFAULT_INPUTS } };
-    setScenarios([...scenarios, s]);
-    startEdit(s.id as unknown as Scenario & string);
-    // use a timeout to let state settle
-    setEditingId(s.id);
-    setEditDraft({ ...DEFAULT_INPUTS });
+  async function addScenario() {
+    try {
+      const id = await create.mutateAsync({ name: "New Scenario", inputs: BLANK_INPUTS });
+      setEditDraft({ ...BLANK_INPUTS });
+      setEditingId(id);
+    } catch (e) {
+      toast.error(errMsg(e, "Failed to create scenario"));
+    }
   }
 
-  function deleteScenario(id: string) {
-    if (editingId === id) setEditingId(null);
-    setScenarios(scenarios.filter((s) => s.id !== id));
+  async function deleteScenario(s: JobCostingScenario) {
+    const note = s.isDefault ? " It is the default, so the calculator will start blank until you pick another." : "";
+    if (!window.confirm(`Delete “${s.name}”?${note}`)) return;
+    try {
+      if (editingId === s.id) setEditingId(null);
+      await remove.mutateAsync(s.id);
+    } catch (e) {
+      toast.error(errMsg(e, "Failed to delete scenario"));
+    }
   }
 
-  function updateName(id: string, name: string) {
-    setScenarios(scenarios.map((s) => (s.id === id ? { ...s, name } : s)));
+  async function renameScenario(id: string, name: string) {
+    try {
+      await update.mutateAsync({ id, name });
+    } catch (e) {
+      toast.error(errMsg(e, "Failed to rename scenario"));
+    }
+  }
+
+  async function makeDefault(s: JobCostingScenario) {
+    try {
+      // Clicking the current default clears it.
+      await setDefault.mutateAsync(s.isDefault ? null : s.id);
+      if (!s.isDefault) {
+        onLoad(s);
+        toast.success(`“${s.name}” is now the default scenario`);
+      }
+    } catch (e) {
+      toast.error(errMsg(e, "Failed to set default scenario"));
+    }
   }
 
   const chartData = scenarios.map((s) => {
@@ -603,8 +602,18 @@ function ScenariosTab({
     };
   });
 
+  if (isLoading) {
+    return <p className="text-sm text-slate-500">Loading scenarios…</p>;
+  }
+
   return (
     <div className="space-y-6">
+      {scenarios.length === 0 && (
+        <p className="text-sm text-slate-500">
+          No scenarios yet. Create one to save a set of inputs, then use the star to make it the default shown on the Rate Calculator.
+        </p>
+      )}
+
       {scenarios.length > 1 && (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="mb-1 text-sm font-semibold text-slate-800">Scenario Comparison</h3>
@@ -633,11 +642,12 @@ function ScenariosTab({
             <div key={s.id} className={`rounded-xl border bg-white shadow-sm transition-all ${isEditing ? "border-brand-300 ring-1 ring-brand-300" : "border-slate-200"}`}>
               {/* Card header */}
               <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
-                <input
-                  value={s.name}
-                  onChange={(e) => updateName(s.id, e.target.value)}
-                  className="flex-1 rounded border border-transparent bg-transparent text-sm font-semibold text-slate-800 hover:border-slate-200 focus:border-brand-300 focus:outline-none focus:ring-1 focus:ring-brand-300 px-1 py-0.5"
-                />
+                <ScenarioNameInput name={s.name} onCommit={(name) => renameScenario(s.id, name)} />
+                {s.isDefault && (
+                  <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                    Default
+                  </span>
+                )}
                 <div className="flex shrink-0 items-center gap-1">
                   {isEditing ? (
                     <>
@@ -645,22 +655,27 @@ function ScenariosTab({
                         className="rounded p-1.5 text-brand-600 hover:bg-brand-50">
                         <Check className="h-3.5 w-3.5" />
                       </button>
-                      <button type="button" onClick={cancelEdit} title="Cancel"
+                      <button type="button" onClick={() => setEditingId(null)} title="Cancel"
                         className="rounded p-1.5 text-slate-400 hover:bg-slate-100">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </>
                   ) : (
                     <>
+                      <button type="button" onClick={() => makeDefault(s)} disabled={setDefault.isPending}
+                        title={s.isDefault ? "Default scenario — click to clear" : "Set as the default scenario"}
+                        className={`rounded p-1.5 hover:bg-amber-50 ${s.isDefault ? "text-amber-500" : "text-slate-400 hover:text-amber-500"}`}>
+                        <Star className={`h-3.5 w-3.5 ${s.isDefault ? "fill-current" : ""}`} />
+                      </button>
                       <button type="button" onClick={() => startEdit(s)} title="Edit inputs"
                         className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
-                      <button type="button" onClick={() => { onLoad(s.inputs); }} title="Load into calculator"
+                      <button type="button" onClick={() => onLoad(s)} title="Load into calculator"
                         className="rounded p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-600">
                         <Copy className="h-3.5 w-3.5" />
                       </button>
-                      <button type="button" onClick={() => deleteScenario(s.id)} title="Delete"
+                      <button type="button" onClick={() => deleteScenario(s)} title="Delete"
                         className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -679,9 +694,9 @@ function ScenariosTab({
                 /* ── Inline editor ── */
                 <div className="max-h-[480px] overflow-y-auto p-4">
                   <InputsForm inputs={editDraft} setInputs={setEditDraft} compact />
-                  <button type="button" onClick={() => saveEdit(s.id)}
-                    className="mt-4 w-full rounded-md bg-brand-500 py-2 text-sm font-medium text-white hover:bg-brand-600">
-                    Save Changes
+                  <button type="button" onClick={() => saveEdit(s.id)} disabled={update.isPending}
+                    className="mt-4 w-full rounded-md bg-brand-500 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+                    {update.isPending ? "Saving…" : "Save Changes"}
                   </button>
                 </div>
               ) : (
@@ -690,6 +705,7 @@ function ScenariosTab({
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Labor/hr</span><span className="font-medium text-slate-700">{fmtDollar(c.laborPerHour)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Fixed OH/reg hr</span><span className="font-medium text-slate-700">{fmtDollar(c.ohPerHour)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Break-even</span><span className="font-medium text-slate-700">{fmtDollar(c.breakEven)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">LLR</span><span className="font-medium text-slate-700">{fmtDollar(c.loadedLaborRate)}</span></div>
                   <div className="my-1.5 border-t border-slate-100" />
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Employees</span><span className="font-medium text-slate-700">{s.inputs.numFieldEmp}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Wage</span><span className="font-medium text-slate-700">{fmtDollar(s.inputs.fieldEmpWage)}/hr</span></div>
@@ -705,8 +721,8 @@ function ScenariosTab({
         })}
 
         {/* Add scenario */}
-        <button type="button" onClick={addScenario}
-          className="flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 transition-colors hover:border-brand-300 hover:text-brand-500">
+        <button type="button" onClick={addScenario} disabled={create.isPending}
+          className="flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 transition-colors hover:border-brand-300 hover:text-brand-500 disabled:opacity-50">
           <Plus className="h-6 w-6" />
           <span className="text-sm font-medium">New Scenario</span>
         </button>
@@ -719,18 +735,62 @@ function ScenariosTab({
 
 export function JobCostingDashboard() {
   const [tab, setTab] = useState<Tab>("calculator");
-  const [inputs, setInputs] = useState<Inputs>(DEFAULT_INPUTS);
-  const [scenarios, setScenarios] = useState<Scenario[]>(PRESET_SCENARIOS);
+  // The calculator form. Starts blank; replaced by the org's default scenario
+  // once it loads (and again whenever the user loads or defaults a scenario).
+  const [inputs, setInputs] = useState<Inputs>(BLANK_INPUTS);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const { data: scenarios = [], isLoading } = useJobCostingScenarios();
+  const createScenario = useCreateJobCostingScenario();
+  const updateScenario = useUpdateJobCostingScenario();
+
+  const defaultScenario = scenarios.find((s) => s.isDefault) ?? null;
+  const activeScenario = scenarios.find((s) => s.id === activeId) ?? null;
+
+  // First load only: show the default scenario, unless the user already started
+  // typing before the list arrived.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || isLoading) return;
+    seeded.current = true;
+    if (defaultScenario && inputsEqual(inputs, BLANK_INPUTS)) {
+      setInputs(defaultScenario.inputs);
+      setActiveId(defaultScenario.id);
+    }
+  }, [isLoading, defaultScenario, inputs]);
+
+  const loadScenario = useCallback((s: JobCostingScenario) => {
+    setInputs(s.inputs);
+    setActiveId(s.id);
+    setTab("calculator");
+  }, []);
+
+  const dirty = activeScenario != null && !inputsEqual(inputs, activeScenario.inputs);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "calculator", label: "Rate Calculator" },
     { id: "scenarios", label: `Scenarios (${scenarios.length})` },
   ];
 
-  function handleSaveScenario() {
-    const s: Scenario = { id: crypto.randomUUID(), name: "New Scenario", inputs: { ...inputs } };
-    setScenarios([...scenarios, s]);
-    setTab("scenarios");
+  async function handleSaveScenario() {
+    try {
+      const id = await createScenario.mutateAsync({ name: "New Scenario", inputs: { ...inputs } });
+      setActiveId(id);
+      setTab("scenarios");
+      toast.success("Scenario saved — rename it, or star it to make it the default");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save scenario");
+    }
+  }
+
+  async function handleUpdateScenario() {
+    if (!activeScenario) return;
+    try {
+      await updateScenario.mutateAsync({ id: activeScenario.id, inputs: { ...inputs } });
+      toast.success(`“${activeScenario.name}” updated`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update scenario");
+    }
   }
 
   return (
@@ -740,8 +800,8 @@ export function JobCostingDashboard() {
         description="Calculate hourly bid rates from labor, overhead, and profit targets"
         action={
           tab === "calculator" ? (
-            <button type="button" onClick={handleSaveScenario}
-              className="flex items-center gap-1.5 rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">
+            <button type="button" onClick={handleSaveScenario} disabled={createScenario.isPending}
+              className="flex items-center gap-1.5 rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
               <Plus className="h-4 w-4" />
               Save as Scenario
             </button>
@@ -758,10 +818,19 @@ export function JobCostingDashboard() {
         ))}
       </div>
 
-      {tab === "calculator" && <CalculatorTab inputs={inputs} setInputs={setInputs} />}
+      {tab === "calculator" && (
+        <CalculatorTab
+          inputs={inputs}
+          setInputs={setInputs}
+          scenarioName={activeScenario?.name ?? null}
+          noScenarios={!isLoading && scenarios.length === 0}
+          dirty={dirty}
+          onUpdateScenario={handleUpdateScenario}
+          updatingScenario={updateScenario.isPending}
+        />
+      )}
       {tab === "scenarios" && (
-        <ScenariosTab scenarios={scenarios} setScenarios={setScenarios}
-          onLoad={(i) => { setInputs(i); setTab("calculator"); }} />
+        <ScenariosTab scenarios={scenarios} onLoad={loadScenario} isLoading={isLoading} />
       )}
     </div>
   );

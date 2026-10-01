@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSettingsStore } from "@/stores/settings-store";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, ExternalLink, Download, Building2, Camera, Archive, ArchiveRestore } from "lucide-react";
+import { Pencil, Trash2, Plus, ExternalLink, Download, Building2, Camera, Archive, ArchiveRestore, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { printProject } from "@/lib/print";
 import { formatCurrency, formatDate, formatAddress } from "@/lib/utils";
@@ -1025,10 +1025,13 @@ function RateField({
   label,
   valueCents,
   onSave,
+  locked = false,
 }: {
   label: string;
   valueCents: number;
   onSave: (cents: number) => void;
+  /** Completed projects: rates are frozen (also enforced by a DB trigger). */
+  locked?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -1061,6 +1064,18 @@ function RateField({
         />
         <span className="text-xs text-slate-400">/hr</span>
       </div>
+    );
+  }
+
+  if (locked) {
+    return (
+      <span
+        className="flex items-center gap-1 px-1 text-sm font-medium text-slate-900"
+        title={`${label} is locked because this project is complete. Reopen the project to change it.`}
+      >
+        {formatCurrency(valueCents)}/hr
+        <Lock className="h-3 w-3 text-slate-300" />
+      </span>
     );
   }
 
@@ -1225,6 +1240,7 @@ function DetailsTab({
               label="Break-Even Rate"
               valueCents={effectiveFullRate}
               onSave={(cents) => onUpdateRates(cents, effectiveBurdenedRate)}
+              locked={status === "complete"}
             />
           </div>
           <div className="text-slate-500">Loaded Labor Rate (LLR)</div>
@@ -1232,6 +1248,7 @@ function DetailsTab({
             label="Loaded Labor Rate (LLR)"
             valueCents={effectiveBurdenedRate}
             onSave={(cents) => onUpdateRates(effectiveFullRate, cents)}
+            locked={status === "complete"}
           />
         </div>
       </div>

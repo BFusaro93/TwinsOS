@@ -42,7 +42,9 @@ export type AuditRecordType =
   | "overhead_settings"
   | "crew"
   | "schedule"
-  | "automation";
+  | "automation"
+  | "organization"
+  | "job_costing_scenario";
 
 export interface AuditEntry extends BaseRecord {
   recordType: AuditRecordType;

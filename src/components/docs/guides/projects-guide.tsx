@@ -289,18 +289,33 @@ export function ProjectsGuide() {
             Payroll Burden, OH Payroll, Other OH, Liabilities, and Profit per hour.
           </li>
           <li>
-            Clicking <strong>&quot;Set as project rate&quot;</strong> next to the Break-Even figure
-            saves that number as the org&apos;s default labor rate (<code>breakevenLaborRateCents</code>{" "}
-            in org settings). Every project&apos;s Details tab uses this org-level rate for its labor
-            cost and net-profit math, unless that specific project has its own rate saved (projects
-            snapshot a rate at creation and allow editing it per-project from the Details tab).
+            Clicking <strong>&quot;Set as project rates&quot;</strong> saves two org-wide rates at once:
+            the <strong>Break-Even Rate</strong> (<code>breakevenLaborRateCents</code>) and the{" "}
+            <strong>Loaded Labor Rate (LLR)</strong> (<code>burdenedLaborRateCents</code>). LLR is
+            burdened labor plus the non-billable uplift, with no overhead recovery, and is shown on the
+            Rate Calculator under the Break-Even card. The same two rates can be edited directly in
+            Settings.
           </li>
           <li>
-            The <strong>Scenarios</strong> tab lets you save named input sets (e.g. &quot;2026 Budget —
-            Landscape Season,&quot; &quot;2025 Actual&quot;) and reload them into the calculator. These
-            scenarios live only in the page&apos;s local state for the current session — they are not
-            saved to the database, so they reset on reload rather than persisting like a project or
-            PO would.
+            Each project stores its own copy of both rates, taken when the project is created. Saving
+            new org rates therefore only affects <em>new</em> projects. After saving you are asked
+            whether to also update open projects (sold, scheduled, in progress or on hold); you can
+            decline. <strong>Completed projects are locked</strong> &mdash; their rates cannot be
+            edited or bulk-updated, and show a lock icon on the Details tab. Reopen a project to change
+            its rates.
+          </li>
+          <li>
+            The <strong>Scenarios</strong> tab holds your saved input sets (e.g. &quot;2026 Budget
+            &mdash; Landscape Season&quot;). They are saved to your organization. A new organization
+            starts with no scenarios and a blank calculator; star one scenario to make it the{" "}
+            <strong>default</strong>, and the Rate Calculator loads it each time it opens. Use{" "}
+            <strong>Save as Scenario</strong> to store the current inputs, or{" "}
+            <strong>Update</strong> to save changes back to the scenario you loaded.
+          </li>
+          <li>
+            Changes to organization settings, including these labor rates, are recorded. Admins and
+            managers can see who changed what, and when, under Settings &rarr; Organization &rarr;
+            Change history.
           </li>
         </ul>
         <Callout>
