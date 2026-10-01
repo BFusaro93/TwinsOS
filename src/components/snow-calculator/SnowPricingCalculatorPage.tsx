@@ -6,6 +6,7 @@ import { formatCurrency } from "@/components/calculators/shared";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useSettingsStore } from "@/stores/settings-store";
+import { toast } from "sonner";
 import { downloadCSV } from "@/lib/csv";
 import type { SnowPricingPdfData } from "./SnowPricingPdfDocument";
 
@@ -361,7 +362,12 @@ export function SnowPricingCalculatorPage() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Chrome can cancel the download if the blob URL is revoked in the same
+      // tick as the click, so give it time to start.
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err) {
+      // Previously swallowed (unhandled rejection), so a failure looked like a dead button.
+      toast.error(`Couldn't generate the PDF: ${err instanceof Error ? err.message : "unknown error"}`);
     } finally {
       setExportingPdf(false);
     }
