@@ -151,7 +151,7 @@ export function SalesMeetingsCalendar() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <WeekStrip selectedDate={selectedDate} onDateChange={setSelectedDate} />
           <div className="flex rounded-lg border bg-white p-0.5 shadow-sm">
             {VIEW_OPTIONS.map((opt) => (

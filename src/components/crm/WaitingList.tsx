@@ -614,10 +614,10 @@ export function WaitingList() {
       />
 
       {/* Date window */}
-      <div className="flex items-center gap-3 rounded-lg border bg-white px-4 py-2.5 shadow-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-white px-4 py-2.5 shadow-sm">
         <ListOrdered className="h-4 w-4 shrink-0 text-slate-400" />
         <span className="text-sm font-medium text-slate-700">Date Window</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={startDate}

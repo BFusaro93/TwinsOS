@@ -70,9 +70,12 @@ function NumInput({ label, value, onChange, prefix, suffix, step = 1, min = 0, m
       <label className={`mb-1 flex items-center gap-1 font-medium text-slate-600 ${compact ? "text-[11px]" : "text-xs"}`}>
         {label}
         {hint && (
-          <span className="group relative cursor-help">
+          // Focusable so a tap reveals the hint on touch (hover never fires there).
+          // On a phone the bubble is pinned to the screen edges instead of
+          // hanging off the icon, where it ran past the right edge.
+          <span className="group relative cursor-help" tabIndex={0}>
             <Info className="h-3 w-3 text-slate-400" />
-            <span className="pointer-events-none absolute left-4 top-0 z-10 w-44 rounded-md border border-slate-200 bg-white p-2 text-[10px] text-slate-600 opacity-0 shadow-md transition-opacity group-hover:opacity-100">
+            <span className="pointer-events-none invisible absolute left-4 top-0 z-10 w-44 rounded-md border border-slate-200 bg-white p-2 text-[10px] text-slate-600 opacity-0 shadow-md transition-opacity group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 max-sm:fixed max-sm:inset-x-4 max-sm:left-4 max-sm:top-auto max-sm:w-auto">
               {hint}
             </span>
           </span>
@@ -319,7 +322,7 @@ function CalculatorTab({
       )}
 
       {/* KPI Row */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div>
