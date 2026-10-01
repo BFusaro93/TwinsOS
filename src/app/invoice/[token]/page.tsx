@@ -30,6 +30,7 @@ interface PublicInvoice {
   clientName: string | null;
   lineItems: { name: string | null; description: string; qty: number; rateCents: number; totalCents: number }[];
   org: { name: string; brandColor: string; logoUrl: string | null };
+  photos?: { url: string; caption: string | null }[];
 }
 
 interface CreateIntentResult {
@@ -212,6 +213,21 @@ export default function PublicInvoicePage() {
             <span>Balance Due</span><span>{cents(invoice.balanceCents)}</span>
           </div>
         </div>
+
+        {invoice.photos && invoice.photos.length > 0 && (
+          <div className="mt-8">
+            <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Photos</p>
+            <div className="grid grid-cols-2 gap-3">
+              {invoice.photos.map((p, i) => (
+                <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt={p.caption ?? `Invoice photo ${i + 1}`} loading="lazy" className="h-40 w-full rounded-md border object-cover" />
+                  {p.caption && <p className="mt-1 text-center text-xs text-slate-500">{p.caption}</p>}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {paySucceeded ? (
           <div className="mt-8 flex flex-col items-center gap-2 rounded-md border border-green-200 bg-green-50 py-6 text-center">

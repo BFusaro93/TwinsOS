@@ -21,6 +21,13 @@ export interface InvoicePDFLineItem {
   totalCents: number;
 }
 
+/** A photo embedded on the invoice's photo page(s). dataUri is base64 —
+ *  signed storage URLs expire, so images are inlined at render time. */
+export interface InvoicePDFPhoto {
+  caption: string | null;
+  dataUri: string;
+}
+
 export interface InvoicePDFData {
   invoiceNumber: number;
   description: string | null;
@@ -29,6 +36,8 @@ export interface InvoicePDFData {
   poNumber: string | null;
   terms: string | null;
   notes: string | null;
+  /** Photos attached to the invoice (max 12). Rendered after the invoice page. */
+  photos?: InvoicePDFPhoto[];
 
   clientName: string | null;
   clientAddress: string | null;
@@ -864,7 +873,60 @@ function StatementInvoiceLayout({
 // Add a new `case` here (and a matching sibling layout component above) when
 // adding a new visual template — the DB only stores the layoutKey string.
 
+const PHOTOS_PER_PAGE = 4;
+
+const SP = StyleSheet.create({
+  page: { fontFamily: "Helvetica", fontSize: 9, color: "#1e293b", paddingTop: 40, paddingBottom: 60, paddingHorizontal: 40, backgroundColor: "#ffffff" },
+  heading: { fontSize: 14, fontFamily: "Helvetica-Bold", color: "#0f172a", marginBottom: 4 },
+  sub: { fontSize: 8, color: "#64748b", marginBottom: 14 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  cell: { width: "48%", marginBottom: 6 },
+  image: { width: "100%", height: 200, objectFit: "cover", borderRadius: 4 },
+  caption: { marginTop: 4, fontSize: 8, color: "#64748b", textAlign: "center" },
+  footer: { position: "absolute", bottom: 24, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between" },
+  footerText: { fontSize: 7, color: "#94a3b8" },
+});
+
+function InvoicePhotoPages({ invoice, org }: { invoice: InvoicePDFData; org: OrgPDFData }) {
+  const photos = invoice.photos ?? [];
+  if (photos.length === 0) return null;
+  const pages: InvoicePDFPhoto[][] = [];
+  for (let i = 0; i < photos.length; i += PHOTOS_PER_PAGE) pages.push(photos.slice(i, i + PHOTOS_PER_PAGE));
+  return (
+    <>
+      {pages.map((chunk, pageIdx) => (
+        <Page key={pageIdx} size="LETTER" style={SP.page}>
+          <Text style={SP.heading}>Photos</Text>
+          <Text style={SP.sub}>Invoice #{invoice.invoiceNumber}</Text>
+          <View style={SP.grid}>
+            {chunk.map((photo, i) => (
+              <View key={i} style={SP.cell} wrap={false}>
+                {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                <Image src={photo.dataUri} style={SP.image} />
+                {photo.caption ? <Text style={SP.caption}>{photo.caption}</Text> : null}
+              </View>
+            ))}
+          </View>
+          <View style={SP.footer} fixed>
+            <Text style={SP.footerText}>{org.name}{org.phone ? ` · ${org.phone}` : ""}</Text>
+            <Text style={SP.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+          </View>
+        </Page>
+      ))}
+    </>
+  );
+}
+
 function renderLayout(layoutKey: InvoicePDFLayoutKey, invoice: InvoicePDFData, org: OrgPDFData) {
+  return (
+    <>
+      {renderInvoicePages(layoutKey, invoice, org)}
+      <InvoicePhotoPages invoice={invoice} org={org} />
+    </>
+  );
+}
+
+function renderInvoicePages(layoutKey: InvoicePDFLayoutKey, invoice: InvoicePDFData, org: OrgPDFData) {
   switch (layoutKey) {
     case "compact":
       return <CompactInvoiceLayout invoice={invoice} org={org} />;

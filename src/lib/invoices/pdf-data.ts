@@ -5,6 +5,7 @@ import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/component
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
+import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 
 // Shared by the single-invoice and bulk PDF routes — extracted from the
 // route handler so both can build the same per-invoice data shape and only
@@ -15,7 +16,10 @@ async function buildInvoicePDFData(
   supabase: any,
   invoiceId: string,
   orgId: string,
-  userId: string | null
+  userId: string | null,
+  // Photos are embedded for single-invoice PDFs; bulk "Print Selected" skips
+  // them so a large batch can't balloon (each invoice may carry up to 12).
+  includePhotos = true
 ): Promise<{ invoice: InvoicePDFData; org: OrgPDFData; layoutKey: InvoicePDFLayoutKey } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: inv, error: invErr } = await (supabase as any)
@@ -119,6 +123,7 @@ async function buildInvoicePDFData(
     balanceCents: (inv.balance_cents as number) ?? 0,
     lineItems,
     statement,
+    photos: includePhotos ? await loadInvoicePhotosForPdf(inv.id as string, inv.org_id as string) : [],
   };
 
   const orgData: OrgPDFData = {
@@ -161,7 +166,7 @@ export async function renderInvoicesPDF(
   userId: string | null
 ): Promise<Buffer | null> {
   const items = (
-    await Promise.all(invoiceIds.map((id) => buildInvoicePDFData(supabase, id, orgId, userId)))
+    await Promise.all(invoiceIds.map((id) => buildInvoicePDFData(supabase, id, orgId, userId, false)))
   ).filter((x): x is { invoice: InvoicePDFData; org: OrgPDFData; layoutKey: InvoicePDFLayoutKey } => x !== null);
   if (items.length === 0) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

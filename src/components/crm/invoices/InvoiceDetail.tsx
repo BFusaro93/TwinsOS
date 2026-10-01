@@ -57,6 +57,7 @@ import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
 import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { InvoicePhotosPanel } from "@/components/crm/invoices/InvoicePhotosPanel";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
 import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
@@ -613,7 +614,7 @@ export function InvoiceDetail({
   const { data: connectStatus } = useConnectStatus();
   const cardPaymentsReady = connectStatus?.chargesEnabled ?? false;
 
-  const [activeTab, setActiveTab] = useState<"invoice" | "audit">("invoice");
+  const [activeTab, setActiveTab] = useState<"invoice" | "photos" | "audit">("invoice");
   const [lineItemPickerOpen, setLineItemPickerOpen] = useState(false);
   const [lineItemSearch, setLineItemSearch] = useState("");
   const lineItemSearchRef = useRef<HTMLInputElement>(null);
@@ -1059,7 +1060,7 @@ export function InvoiceDetail({
 
       {/* Tabs */}
       <div className="flex border-b bg-white px-8">
-        {(["invoice", "audit"] as const).map((tab) => (
+        {(["invoice", "photos", "audit"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1070,12 +1071,16 @@ export function InvoiceDetail({
                 : "border-transparent text-slate-500 hover:text-slate-800"
             )}
           >
-            {tab === "audit" ? "Audit Trail" : "Invoice"}
+            {tab === "audit" ? "Audit Trail" : tab === "photos" ? "Photos" : "Invoice"}
           </button>
         ))}
       </div>
 
-      {activeTab === "audit" ? (
+      {activeTab === "photos" ? (
+        <div className="flex-1 overflow-auto bg-white px-8 py-5">
+          <InvoicePhotosPanel invoiceId={invoice.id} canEdit={can("acct_add_modify_invoices") || can("acct_send_invoices")} />
+        </div>
+      ) : activeTab === "audit" ? (
         <div className="flex-1 overflow-auto bg-white">
           <AuditTrailTab recordType="invoice" recordId={invoice.id} />
         </div>

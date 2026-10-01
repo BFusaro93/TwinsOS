@@ -9979,6 +9979,82 @@ export type Database = {
           },
         ]
       }
+      invoice_photos: {
+        Row: {
+          bucket: string
+          caption: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          file_name: string
+          id: string
+          invoice_id: string
+          mime_type: string | null
+          org_id: string
+          sort_order: number
+          source: string
+          source_id: string | null
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          bucket?: string
+          caption?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          file_name?: string
+          id?: string
+          invoice_id: string
+          mime_type?: string | null
+          org_id?: string
+          sort_order?: number
+          source: string
+          source_id?: string | null
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          bucket?: string
+          caption?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          file_name?: string
+          id?: string
+          invoice_id?: string
+          mime_type?: string | null
+          org_id?: string
+          sort_order?: number
+          source?: string
+          source_id?: string | null
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_photos_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "crm_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_photos_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_photos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_share_tokens: {
         Row: {
           created_at: string
