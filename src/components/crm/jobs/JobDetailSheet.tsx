@@ -65,7 +65,7 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing, initialTab
   return createPortal(
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={() => onOpenChange(false)} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 flex shadow-2xl" style={{ width }}>
+      <div className="fixed right-0 top-0 bottom-0 z-50 flex max-w-[100vw] shadow-2xl" style={{ width }}>
         <div
           className="flex w-8 cursor-ew-resize flex-col items-center bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0 border-r border-slate-200"
           onMouseDown={startDrag}
