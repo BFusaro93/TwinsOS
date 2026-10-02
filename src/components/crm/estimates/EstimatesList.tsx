@@ -331,6 +331,7 @@ export function EstimatesList({ clientId }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Estimates"
+                hideImport={!canAdd}
                 templateColumns={ESTIMATE_TEMPLATE_COLUMNS}
                 templateFilename="estimates-template.csv"
                 requiredColumns={["clientName", "description"]}
