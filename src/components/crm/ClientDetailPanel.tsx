@@ -102,6 +102,7 @@ import {
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
+import { isValidEmail } from "@/lib/utils/email";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract, InvoiceStatus } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
@@ -871,6 +872,14 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       toast.error("Source is required");
       return;
     }
+    if (form.primaryEmail.trim() && !isValidEmail(form.primaryEmail)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    if (form.billingEmail.trim() && !isValidEmail(form.billingEmail)) {
+      toast.error("Enter a valid billing email address");
+      return;
+    }
     try {
       const serviceAddr = {
         serviceAddress: form.serviceAddress || null,
@@ -1533,6 +1542,7 @@ function ContactDialog({
 
   async function handleSave() {
     if (!firstName.trim()) { toast.error("First name is required"); return; }
+    if (email.trim() && !isValidEmail(email)) { toast.error("Enter a valid email address"); return; }
     const validPhones = phones.filter((p) => p.phone.trim());
     const payload = {
       firstName: firstName.trim(),

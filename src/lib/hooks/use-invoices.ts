@@ -1388,6 +1388,10 @@ export function useUpdateInvoiceFinancials() {
       // discount is a separate reduction stacked on top of that.
       const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
       const subtotalCents = lineItems.reduce((s, li) => s + netLineCents(li), 0);
+      // A discount can't be negative (that would add to the bill) or exceed
+      // the subtotal (negative invoice), and a tax rate can't leave 0–100%.
+      discountCents = Math.min(Math.max(0, discountCents), Math.max(0, subtotalCents));
+      taxRateBps = Math.min(Math.max(0, taxRateBps), 10000);
       const afterDiscount = subtotalCents - discountCents;
       // Tax only applies to taxable line items, net of the document-level
       // discount (matches the PO module's taxableAfterDiscount pattern) —

@@ -196,6 +196,7 @@ function LineItemRow({
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
   const [rateStr, setRateStr] = useState(() => (item.rateCents / 100).toFixed(2));
+  const [qtyStr, setQtyStr] = useState(() => String(item.qty));
   // Bumped on every keystroke. A save that started BEFORE later edits must not
   // clear `dirty` when it lands (that let the refetch-sync effect below wipe a
   // rate the user was still typing — D-15's "typed values lost").
@@ -211,6 +212,7 @@ function LineItemRow({
     if (!dirty) {
       setRow(item);
       setRateStr((item.rateCents / 100).toFixed(2));
+      setQtyStr(String(item.qty));
     }
   }, [item, dirty]);
 
@@ -383,9 +385,14 @@ function LineItemRow({
       {/* Qty */}
       <td className="w-14 px-2 py-2 align-middle">
         <input
-          type="number"
-          value={row.qty}
-          onChange={(e) => update("qty", Number(e.target.value))}
+          type="number" min="0" step="any"
+          value={qtyStr}
+          onChange={(e) => {
+            // Keep the raw text so typing "0." or clearing the box doesn't
+            // snap to "0"/"03"; quantity itself never goes below zero.
+            setQtyStr(e.target.value);
+            update("qty", Math.max(0, Number(e.target.value) || 0));
+          }}
           onBlur={save}
           disabled={locked}
           className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
@@ -713,9 +720,12 @@ export function InvoiceDetail({
   // use-invoices.ts's useUpdateInvoiceFinancials for why (charging tax on
   // the pre-discount amount overcharges the customer).
   const taxableSubtotal = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
-  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
+  // Mirrors the clamp in useUpdateInvoiceFinancials: removing lines after
+  // entering a discount must not push the preview total negative.
+  const appliedDiscountCents = Math.min(Math.max(0, discountCents), Math.max(0, subtotal));
+  const taxableBase = Math.max(0, taxableSubtotal - appliedDiscountCents);
   const previewTax = hasTax ? Math.round((taxableBase * taxRateBps) / 10000) : 0;
-  const previewTotal = subtotal - discountCents + previewTax;
+  const previewTotal = subtotal - appliedDiscountCents + previewTax;
   const previewBalance = Math.max(0, previewTotal - invoice.amountPaidCents);
 
   function applyNamedDiscount(discountId: string) {
@@ -821,8 +831,9 @@ export function InvoiceDetail({
       const netLine = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
       const savedSubtotal = savedLines.reduce((s, li) => s + netLine(li), 0);
       const savedTaxable = savedLines.filter((li) => li.isTaxable).reduce((s, li) => s + netLine(li), 0);
-      const savedTax = Math.round((Math.max(0, savedTaxable - discountCents) * taxRateBps) / 10000);
-      const savedTotal = savedSubtotal - discountCents + savedTax;
+      const savedDiscount = Math.min(Math.max(0, discountCents), Math.max(0, savedSubtotal));
+      const savedTax = Math.round((Math.max(0, savedTaxable - savedDiscount) * taxRateBps) / 10000);
+      const savedTotal = savedSubtotal - savedDiscount + savedTax;
 
       // If this is a fresh draft (no number yet), assign one now
       if (invoice!.invoiceNumber == null) {
@@ -1222,7 +1233,7 @@ export function InvoiceDetail({
                                 re-formatting mid-keystroke (D-19). */}
                             <CurrencyInput
                               cents={taxRateBps}
-                              onChange={setTaxRateBps}
+                              onChange={(bps) => setTaxRateBps(Math.min(10000, Math.max(0, bps)))}
                               className="h-7 w-24 text-right text-xs"
                               disabled={invoice.locked}
                               aria-label="Tax rate percent"
@@ -1247,7 +1258,16 @@ export function InvoiceDetail({
                           type="number" step="0.01" min="0"
                           value={discountStr}
                           onChange={(e) => handleDiscountStrChange(e.target.value)}
-                          onBlur={() => setDiscountCents(Math.round((parseFloat(discountStr) || 0) * 100))}
+                          onBlur={() => {
+                            // No negative discounts, and never more than the subtotal.
+                            const cents = Math.min(
+                              Math.max(0, Math.round((parseFloat(discountStr) || 0) * 100)),
+                              Math.max(0, subtotal),
+                            );
+                            setDiscountCents(cents);
+                            setDiscountStr((cents / 100).toFixed(2));
+                            if (discountType === "flat") setDiscountValue(cents);
+                          }}
                           className="h-7 w-24 text-right text-xs"
                           disabled={invoice.locked}
                         />
@@ -1463,10 +1483,10 @@ export function InvoiceDetail({
                   <span className="text-slate-400">Subtotal</span>
                   <span className="tabular-nums font-medium">{formatCurrency(subtotal)}</span>
                 </div>
-                {discountCents > 0 && (
+                {appliedDiscountCents > 0 && (
                   <div className="flex justify-between gap-8">
                     <span className="text-slate-400">Discount</span>
-                    <span className="tabular-nums text-red-500">−{formatCurrency(discountCents)}</span>
+                    <span className="tabular-nums text-red-500">−{formatCurrency(appliedDiscountCents)}</span>
                   </div>
                 )}
                 {hasTax && (

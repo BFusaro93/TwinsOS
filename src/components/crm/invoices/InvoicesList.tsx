@@ -623,7 +623,7 @@ export function InvoicesList({ clientId }: Props) {
       {!clientId && (
         <PageHeader
           title="Invoices"
-          description={!isLoading ? `${allInvoices.length} invoices` : undefined}
+          description={!isLoading ? `${counts.all} invoice${counts.all === 1 ? "" : "s"}${counts.uninvoiced > 0 ? ` · ${counts.uninvoiced} uninvoiced` : ""}` : undefined}
           action={
             <PermissionGate permission="acct_add_modify_invoices">
               <div className="flex flex-wrap items-center gap-2">
@@ -934,12 +934,13 @@ export function InvoicesList({ clientId }: Props) {
                           <td key={col.key} className="px-4 py-3 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
                             <Link
                               href={`/crm/clients/${inv.clientId}`}
+                              title={inv.clientName ?? undefined}
                               className="block font-medium text-brand-600 hover:underline truncate"
                             >
                               {inv.clientName}
                             </Link>
                             {inv.clientAddress && (
-                              <p className="text-[10px] text-slate-400 truncate">{inv.clientAddress}</p>
+                              <p className="text-[10px] text-slate-400 truncate" title={inv.clientAddress}>{inv.clientAddress}</p>
                             )}
                           </td>
                         );
