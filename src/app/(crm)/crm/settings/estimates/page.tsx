@@ -1,6 +1,9 @@
 "use client";
 
 import { toast } from "sonner";
+import { ClipboardSignature } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import Link from "next/link";
 import { EstimateTemplatesList } from "@/components/crm/estimates/EstimateTemplatesList";
 import { EstimateDisplaySettingsPanel } from "@/components/crm/estimates/EstimateDisplaySettingsPanel";
@@ -44,6 +47,17 @@ function ClientViewDefaultsPanel() {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function EstimateSettingsPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  if (!permissionsLoading && !can("accounting_settings")) {
+    return (
+      <EmptyState
+        icon={ClipboardSignature}
+        title="No access"
+        description="You don't have permission to view Estimate Settings."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col p-6">
       <div className="mb-6">
