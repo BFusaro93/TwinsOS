@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { parsePositiveQty } from "@/lib/utils/quantity";
 import {
   Dialog,
   DialogContent,
@@ -994,7 +995,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     {showCompleteBy ? (
                       <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 px-1.5 text-xs" />
                     ) : (
-                      <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateQty(i, parseFloat(e.target.value) || 1)} className="h-7 text-xs" />
+                      <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateQty(i, parsePositiveQty(e.target.value))} className="h-7 text-xs" />
                     )}
                     <DecimalInput
                       min={0}
@@ -1066,7 +1067,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         {productCatalog.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Input type="number" min="0" step="0.01" value={row.qty} onChange={(e) => updateProductRow(i, { qty: parseFloat(e.target.value) || 1 })} className="h-7 text-xs" />
+                    <Input type="number" min="0" step="0.01" value={row.qty} onChange={(e) => updateProductRow(i, { qty: parsePositiveQty(e.target.value) })} className="h-7 text-xs" />
                     <DecimalInput
                       min={0}
                       className="h-7 text-xs"

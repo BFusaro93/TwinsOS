@@ -17,10 +17,13 @@ export function formatAddress(address: string, city: string, state: string, zip:
 }
 
 export function formatCurrency(cents: number): string {
+  // Round to whole cents first so -0 and sub-cent negatives print "$0.00",
+  // not "-$0.00".
+  const rounded = Math.round(cents);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(cents / 100);
+  }).format(rounded === 0 ? 0 : rounded / 100);
 }
 
 export function formatDate(isoString: string | null | undefined): string {
