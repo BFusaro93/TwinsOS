@@ -81,6 +81,10 @@ export interface CRMInvoice {
   clientId: string;
   estimateId: string | null;
   crmJobId: string | null;
+  /** Contract that auto-generated this invoice, if any. */
+  contractId?: string | null;
+  /** That contract's billing frequency — null for invoices not tied to a contract. */
+  billingFrequency?: string | null;
   /** Project this invoice bills against — derived from crmJobId by a DB trigger when unset. */
   projectId: string | null;
   salesRepId: string | null;
@@ -122,6 +126,10 @@ export interface CRMInvoice {
   clientAutopayEnabled?: boolean;
   /** clients.balance_outstanding_cents — the same true balance (net of credits and prepayments) the client card shows. Only joined by the list query. */
   clientBalanceOutstandingCents?: number | null;
+  /** Unapplied prepayments on the client's account (clients.balance_prepay_cents). */
+  clientPrepayCents?: number | null;
+  /** Unapplied credits on the client's account (clients.balance_credits_cents). */
+  clientCreditsCents?: number | null;
   /** A Stripe charge is in flight against this invoice but hasn't settled — an
    * ACH debit takes days. Nothing is written to crm_payments until it settles
    * (that table only holds settled money), so without this the invoice looks
