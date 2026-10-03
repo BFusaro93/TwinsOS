@@ -81,6 +81,10 @@ export interface CRMInvoice {
   clientId: string;
   estimateId: string | null;
   crmJobId: string | null;
+  /** Contract that auto-generated this invoice, if any. */
+  contractId?: string | null;
+  /** That contract's billing frequency — null for invoices not tied to a contract. */
+  billingFrequency?: string | null;
   /** Project this invoice bills against — derived from crmJobId by a DB trigger when unset. */
   projectId: string | null;
   salesRepId: string | null;
