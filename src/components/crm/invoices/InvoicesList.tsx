@@ -306,15 +306,13 @@ export function InvoicesList({ clientId }: Props) {
 
   const allInvoices = invoices ?? [];
 
-  // A client's total open receivable across every invoice (drafts and voids
-  // aren't owed), so each row can show what the account owes in total next to
-  // what this one invoice owes.
+  // The client's true account balance — the same maintained
+  // clients.balance_outstanding_cents the client card shows, so it's net of
+  // credits and prepayments (negative = the client is in credit) rather than
+  // a sum of this list's open invoices.
   const accountBalanceByClient = useMemo(() => {
     const m = new Map<string, number>();
-    for (const i of allInvoices) {
-      if (i.status === "draft" || i.status === "void") continue;
-      m.set(i.clientId, (m.get(i.clientId) ?? 0) + i.balanceCents);
-    }
+    for (const i of allInvoices) m.set(i.clientId, i.clientBalanceOutstandingCents ?? 0);
     return m;
   }, [allInvoices]);
 
@@ -1048,8 +1046,8 @@ export function InvoicesList({ clientId }: Props) {
                       case "accountBalance": {
                         const acct = accountBalanceByClient.get(inv.clientId) ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", acct > 0 ? "text-red-600" : "text-slate-500")}>
-                            {formatCurrency(acct)}
+                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", acct > 0 ? "text-red-600" : acct < 0 ? "text-green-600" : "text-slate-500")}>
+                            {acct < 0 ? "−" : ""}{formatCurrency(Math.abs(acct))}
                           </td>
                         );
                       }
