@@ -62,6 +62,9 @@ function voidBlockedReason(inv: CRMInvoice): string | null {
   return null;
 }
 
+/** Available from the Columns menu but not shown until asked for. */
+const HIDDEN_BY_DEFAULT = ["credits"];
+
 const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "number",      label: "Invoice #",  locked: true },
   { key: "status",      label: "Status" },
@@ -71,7 +74,11 @@ const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "total",       label: "Total" },
   { key: "balance",     label: "Balance" },
   { key: "accountBalance", label: "Account Balance" },
+  { key: "prepay",      label: "Prepay" },
+  { key: "credits",     label: "Credits" },
   { key: "paymentType", label: "Payment Type" },
+  { key: "delivery",    label: "Sent / Printed" },
+  { key: "frequency",   label: "Frequency" },
 ];
 
 // What's shown in the Status column: a past-due non-draft reads "overdue" even
@@ -89,6 +96,27 @@ function paymentTypeLabel(inv: CRMInvoice): string {
   if (inv.clientSavedPaymentMethodType === "card") return "Credit Card";
   if (inv.clientSavedPaymentMethodType === "us_bank_account") return "ACH";
   return inv.preferredPaymentMethod ?? inv.clientDefaultPaymentMethod ?? "";
+}
+
+/** Where the invoice stands on getting to the client: drafts show the queue
+ * they're waiting in (the To Email / To Print tabs), everything issued shows
+ * Sent or Printed. */
+function deliveryLabel(inv: CRMInvoice): string {
+  if (inv.status === "void") return "—";
+  if (inv.status === "printed") return "Printed";
+  if (inv.status !== "draft") return "Sent";
+  const d = inv.clientInvoiceDelivery ?? "email";
+  return d === "print" ? "To Print" : d === "both" ? "To Email & Print" : "To Email";
+}
+
+const FREQUENCY_LABEL: Record<string, string> = {
+  weekly: "Weekly", biweekly: "Bi-weekly", monthly: "Monthly",
+  quarterly: "Quarterly", annual: "Annual", one_time: "One-time",
+};
+/** A contract's billing cadence; an invoice with no contract is a one-off. */
+function frequencyLabel(inv: CRMInvoice): string {
+  if (!inv.contractId) return "One-time";
+  return FREQUENCY_LABEL[inv.billingFrequency ?? "monthly"] ?? "Monthly";
 }
 
 const STATUS_COLOR: Record<InvoiceStatus, string> = {
@@ -163,6 +191,8 @@ function isChargeableBy(i: CRMInvoice, method: "card" | "us_bank_account") {
     i.status !== "draft" &&
     i.status !== "void" &&
     i.balanceCents > 0 &&
+    // A chargeback is open: if it's won the funds come back, so re-charging now would collect twice.
+    !i.openDisputePaymentId &&
     i.clientSavedPaymentMethodType === method &&
     i.clientAutopayEnabled !== false
   );
@@ -301,7 +331,7 @@ export function InvoicesList({ clientId }: Props) {
   const [sortKey, setSortKey] = useState<string>("number");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [visibleKeys, setVisibleKeys] = useState<string[]>(
-    INVOICE_COLUMNS.map((c) => c.key)
+    INVOICE_COLUMNS.map((c) => c.key).filter((k) => !HIDDEN_BY_DEFAULT.includes(k))
   );
 
   const allInvoices = invoices ?? [];
@@ -379,9 +409,13 @@ export function InvoicesList({ clientId }: Props) {
         case "due":     av = a.dueDate ?? "9999-99-99"; bv = b.dueDate ?? "9999-99-99"; break;
         case "total":   av = a.totalCents; bv = b.totalCents; break;
         case "balance": av = a.balanceCents; bv = b.balanceCents; break;
+        case "credits": av = a.clientCreditsCents ?? 0; bv = b.clientCreditsCents ?? 0; break;
+        case "prepay": av = a.clientPrepayCents ?? 0; bv = b.clientPrepayCents ?? 0; break;
         case "accountBalance": av = accountBalanceByClient.get(a.clientId) ?? 0; bv = accountBalanceByClient.get(b.clientId) ?? 0; break;
         case "status":  av = effectiveStatus(a); bv = effectiveStatus(b); break;
         case "paymentType": av = paymentTypeLabel(a).toLowerCase(); bv = paymentTypeLabel(b).toLowerCase(); break;
+        case "delivery": av = deliveryLabel(a); bv = deliveryLabel(b); break;
+        case "frequency": av = frequencyLabel(a); bv = frequencyLabel(b); break;
       }
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
@@ -922,8 +956,8 @@ export function InvoicesList({ clientId }: Props) {
                 />
               </th>
               {visibleColumns.map((col) => {
-                const sortable = ["number","status","client","date","due","total","balance","accountBalance","paymentType"].includes(col.key);
-                const isRight = col.key === "total" || col.key === "balance" || col.key === "accountBalance";
+                const sortable = ["number","status","client","date","due","total","balance","accountBalance","prepay","credits","paymentType","delivery","frequency"].includes(col.key);
+                const isRight = col.key === "total" || col.key === "balance" || col.key === "accountBalance" || col.key === "prepay" || col.key === "credits";
                 return (
                   <th
                     key={col.key}
@@ -1051,12 +1085,32 @@ export function InvoicesList({ clientId }: Props) {
                           </td>
                         );
                       }
+                      case "prepay": {
+                        const prepay = inv.clientPrepayCents ?? 0;
+                        return (
+                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", prepay > 0 ? "text-blue-600" : "text-slate-400")}>
+                            {formatCurrency(prepay)}
+                          </td>
+                        );
+                      }
+                      case "credits": {
+                        const credits = inv.clientCreditsCents ?? 0;
+                        return (
+                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", credits > 0 ? "text-green-600" : "text-slate-400")}>
+                            {formatCurrency(credits)}
+                          </td>
+                        );
+                      }
                       case "paymentType":
                         return (
                           <td key={col.key} className="px-4 py-3 text-xs text-slate-500">
                             {paymentTypeLabel(inv) || "—"}
                           </td>
                         );
+                      case "delivery":
+                        return <td key={col.key} className="px-4 py-3 text-xs text-slate-500">{deliveryLabel(inv)}</td>;
+                      case "frequency":
+                        return <td key={col.key} className="px-4 py-3 text-xs text-slate-500">{frequencyLabel(inv)}</td>;
                       default: return null;
                     }
                   })}

@@ -18,7 +18,7 @@ import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
-import { useCreatePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
+import { useCreatePurchaseOrder, usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useUpdateRequisitionStatus } from "@/lib/hooks/use-requisitions";
 import type { Requisition, LineItem, PurchaseOrder } from "@/types";
 import { computeSalesTax } from "@/lib/utils/po-tax";
@@ -65,6 +65,7 @@ export function SplitToPOsDialog({
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
   const { mutateAsync: createPO } = useCreatePurchaseOrder();
+  const { refetch: refetchPurchaseOrders } = usePurchaseOrders();
   const { mutateAsync: syncRequisition } = useUpdateRequisitionStatus();
   // POs already created for a vendor group in this dialog session, keyed by
   // the group's vendor + line ids. A retry after a mid-loop failure skips
@@ -142,6 +143,21 @@ export function SplitToPOsDialog({
     });
 
     try {
+      // The in-memory map is lost if the dialog was closed and reopened after a
+      // partial failure, which would re-create the first vendor's PO. The POs
+      // themselves record their source requisition, so re-seed the map from the
+      // live POs already created for this requisition (one PO per vendor group).
+      const { data: latestPOs = [] } = await refetchPurchaseOrders();
+      const existing = latestPOs.filter(
+        (po) => po.requisitionId === requisition.id && po.status !== "canceled"
+      );
+      for (const plan of plans) {
+        if (createdMap.has(plan.key)) continue;
+        const planVendorId = plan.group.vendorId === "none" ? "" : plan.group.vendorId;
+        const already = existing.find((po) => (po.vendorId || "") === planVendorId);
+        if (already) createdMap.set(plan.key, already);
+      }
+
       for (const plan of plans) {
         if (createdMap.has(plan.key)) continue;
         const { group, lineItems, subtotal, discountCost, shippingCost } = plan;
