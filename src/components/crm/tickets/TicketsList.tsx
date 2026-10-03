@@ -571,9 +571,10 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
         switch (activeColFilter) {
           case "subject":  return (t.subject ?? "").toLowerCase().includes(fv);
           case "client":   return (t.clientName ?? "").toLowerCase().includes(fv);
-          case "category": return (t.category ?? "").toLowerCase().includes(fv);
-          case "assigned": return (t.assignedTo ?? "").toLowerCase().includes(fv);
-          case "priority": return t.priority.toLowerCase().includes(fv);
+          // Category, Assignment and Priority are picked from a list (exact match).
+          case "category": return (t.category ?? "") === colFilterValue;
+          case "assigned": return colFilterValue === "unassigned" ? !t.assignedToId : t.assignedToId === colFilterValue;
+          case "priority": return t.priority === colFilterValue;
           default:         return true;
         }
       });
@@ -747,13 +748,36 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
           ))}
           {activeColFilter && (
             <>
-              <Input
-                autoFocus
-                value={colFilterValue}
-                onChange={(e) => setColFilterValue(e.target.value)}
-                placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
-                className="ml-2 h-6 w-48 text-xs"
-              />
+              {activeColFilter === "category" || activeColFilter === "assigned" || activeColFilter === "priority" ? (
+                <select
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  aria-label={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}`}
+                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
+                >
+                  <option value="">Select…</option>
+                  {/* Org categories plus any a ticket still carries from a retired one. */}
+                  {activeColFilter === "category" && Array.from(new Set([...categories, ...all.map((t) => t.category).filter((c): c is string => !!c)])).map((c) => <option key={c} value={c}>{c}</option>)}
+                  {activeColFilter === "assigned" && (
+                    <>
+                      <option value="unassigned">Unassigned</option>
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </>
+                  )}
+                  {activeColFilter === "priority" && PRIORITY_OPTIONS.filter((o) => o.value !== "all").map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
+                  className="ml-2 h-6 w-48 text-xs"
+                />
+              )}
               <button
                 onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
                 className="text-slate-400 hover:text-slate-600"

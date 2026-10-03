@@ -509,13 +509,8 @@ export function WaitingList() {
           case "client":  return (job.clientName ?? "").toLowerCase().includes(v);
           case "city":    return (job.serviceCity ?? "").toLowerCase().includes(v);
           case "zip":     return (job.serviceZip ?? "").toLowerCase().includes(v);
-          case "crew": {
-            // Match on either the full crew name or its abbreviated team code,
-            // same as the Dispatch Board's Crew text filter.
-            const code = job.crewId ? crewCodeById.get(job.crewId) ?? "" : "";
-            const name = job.crewName ?? "";
-            return name.toLowerCase().includes(v) || code.toLowerCase().includes(v);
-          }
+          // The value is a crew id picked from the list ("none" = no crew).
+          case "crew":    return colFilterValue === "none" ? !job.crewId : job.crewId === colFilterValue;
           default:        return true;
         }
       });
@@ -708,13 +703,29 @@ export function WaitingList() {
 
           {activeColFilter && (
             <>
-              <Input
-                autoFocus
-                value={colFilterValue}
-                onChange={(e) => setColFilterValue(e.target.value)}
-                placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
-                className="ml-2 h-6 w-48 text-xs"
-              />
+              {activeColFilter === "crew" ? (
+                <select
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  aria-label="Filter by Crew"
+                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
+                >
+                  <option value="">Select a crew…</option>
+                  <option value="none">Unassigned</option>
+                  {(crews ?? []).filter((c) => c.isActive !== false).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}{c.code ? ` (${c.code})` : ""}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
+                  className="ml-2 h-6 w-48 text-xs"
+                />
+              )}
               <button
                 onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
                 className="text-slate-400 hover:text-slate-600"

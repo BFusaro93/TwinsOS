@@ -3937,15 +3937,10 @@ export function DispatchBoard() {
         case "date":    if ((v.scheduledDate ?? "") !== colFilterValue) return false; break;
         case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
         case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
+        // The value is a crew id picked from the list ("none" = no crew).
         case "crew": {
-          // Match on either the full crew name or its abbreviated team code
-          // (Settings > Team) — the Assigned column shows the code, so typing
-          // what's actually on screen (e.g. "MAINT1") must match too, not
-          // just the underlying full name ("Maintenance 1").
           const effId = effectiveCrewIdOf(v);
-          const code = effId ? crewCodeById.get(effId) ?? "" : "";
-          const name = v.crewUnassigned ? "" : (v.crewName ?? v.job?.crewName ?? "");
-          if (!name.toLowerCase().includes(q) && !code.toLowerCase().includes(q)) return false;
+          if (colFilterValue === "none" ? !!effId : effId !== colFilterValue) return false;
           break;
         }
       }
@@ -4511,13 +4506,29 @@ export function DispatchBoard() {
           {/* Other filters: text input */}
           {colFilterKey && colFilterKey !== "service" && colFilterKey !== "date" && (
             <>
-              <Input
-                autoFocus
-                value={colFilterValue}
-                onChange={(e) => setColFilterValue(e.target.value)}
-                placeholder={`Filter by ${colFilterKey}…`}
-                className="ml-2 h-6 w-44 text-xs"
-              />
+              {colFilterKey === "crew" ? (
+                <select
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  aria-label="Filter by Crew"
+                  className="ml-2 h-6 w-44 rounded-md border border-input bg-background px-1 text-xs"
+                >
+                  <option value="">Select a crew…</option>
+                  <option value="none">Unassigned</option>
+                  {(crews ?? []).filter((c) => c.isActive !== false).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}{c.code ? ` (${c.code})` : ""}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  placeholder={`Filter by ${colFilterKey}…`}
+                  className="ml-2 h-6 w-44 text-xs"
+                />
+              )}
               <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
                 <XIcon className="h-3.5 w-3.5" />
               </button>

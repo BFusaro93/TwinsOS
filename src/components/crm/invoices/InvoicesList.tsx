@@ -10,6 +10,9 @@ import {
   useBulkImportInvoices,
   voidBlockedMessage,
 } from "@/lib/hooks/use-invoices";
+import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
+import { AmountFilter } from "@/components/shared/AmountFilter";
+import { inDateRange, matchesAmount } from "@/lib/utils/column-filters";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -325,9 +328,6 @@ export function InvoicesList({ clientId }: Props) {
   const [search, setSearch] = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
-  // The Date filter is an inclusive range of invoice dates (YYYY-MM-DD), not free text.
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -388,21 +388,16 @@ export function InvoicesList({ clientId }: Props) {
           (i.clientName ?? "").toLowerCase().includes(q)
       );
     }
-    if (activeFilterKey === "date" && (dateFrom || dateTo)) {
-      list = list.filter((i) => {
-        const d = (i.invoiceDate ?? "").slice(0, 10);
-        return !!d && (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo);
-      });
-    }
-    if (activeFilterKey && activeFilterKey !== "date" && filterValue.trim()) {
+    if (activeFilterKey && filterValue.trim()) {
       const fv = filterValue.toLowerCase();
       list = list.filter((i) => {
         switch (activeFilterKey) {
           case "invoice_number": return String(i.invoiceNumber).includes(fv);
+          case "date":           return inDateRange(i.invoiceDate, filterValue);
           case "client":         return (i.clientName ?? "").toLowerCase().includes(fv);
           case "payment_method": return paymentTypeLabel(i).toLowerCase() === fv;
           case "status":         return effectiveStatus(i) === fv;
-          case "balance":        return String(i.balanceCents / 100).includes(fv);
+          case "balance":        return matchesAmount(i.balanceCents, filterValue);
           default:               return true;
         }
       });
@@ -441,7 +436,7 @@ export function InvoicesList({ clientId }: Props) {
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
-  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, dateFrom, dateTo, sortKey, sortDir, accountBalanceByClient]);
+  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir, accountBalanceByClient]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -769,8 +764,8 @@ export function InvoicesList({ clientId }: Props) {
             <button
               key={key}
               onClick={() => {
-                if (activeFilterKey === key) { setActiveFilterKey(null); setFilterValue(""); setDateFrom(""); setDateTo(""); }
-                else { setActiveFilterKey(key); setFilterValue(""); setDateFrom(""); setDateTo(""); }
+                if (activeFilterKey === key) { setActiveFilterKey(null); setFilterValue(""); }
+                else { setActiveFilterKey(key); setFilterValue(""); }
               }}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
@@ -798,26 +793,9 @@ export function InvoicesList({ clientId }: Props) {
                   ))}
                 </select>
               ) : activeFilterKey === "date" ? (
-                <div className="ml-2 flex items-center gap-1 text-xs text-slate-500">
-                  <Input
-                    autoFocus
-                    type="date"
-                    value={dateFrom}
-                    max={dateTo || undefined}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    aria-label="Invoice date from"
-                    className="h-6 w-36 text-xs"
-                  />
-                  <span>to</span>
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    min={dateFrom || undefined}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    aria-label="Invoice date to"
-                    className="h-6 w-36 text-xs"
-                  />
-                </div>
+                <DateRangeFilter value={filterValue} onChange={setFilterValue} label="Invoice date" />
+              ) : activeFilterKey === "balance" ? (
+                <AmountFilter value={filterValue} onChange={setFilterValue} label="Balance" />
               ) : (
                 <Input
                   autoFocus
@@ -827,7 +805,7 @@ export function InvoicesList({ clientId }: Props) {
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); setDateFrom(""); setDateTo(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>
@@ -998,7 +976,7 @@ export function InvoicesList({ clientId }: Props) {
                   </th>
                 );
               })}
-              <th className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6" />
+              <th className="w-0 p-0" />
             </tr>
           </thead>
           <tbody>
@@ -1143,8 +1121,10 @@ export function InvoicesList({ clientId }: Props) {
                       default: return null;
                     }
                   })}
-                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                  {/* Zero-width cell: the hover actions float over the row's right edge so
+                      they don't reserve a blank column beside the data. */}
+                  <td className="relative w-0 p-0">
+                    <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-md bg-white/95 px-1 opacity-0 shadow-sm group-hover:opacity-100">
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenInvoiceId(inv.id)}>
                         <FileText className="mr-1 h-3 w-3" /> Open
                       </Button>
