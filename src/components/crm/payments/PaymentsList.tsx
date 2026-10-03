@@ -436,6 +436,10 @@ export function AddPaymentDialog({
       toast.error("Client and amount are required");
       return;
     }
+    if (!(amountCents > 0)) {
+      toast.error("Payment amount must be greater than $0.00");
+      return;
+    }
     if (isCreditMode && !memo.trim()) {
       toast.error("A reason is required for an account credit");
       return;

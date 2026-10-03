@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { parsePositiveQty } from "@/lib/utils/quantity";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -517,7 +518,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       await updateJobService.mutateAsync({
         id: editingSvcId,
         patch: {
-          qty: parseFloat(svcQty) || 1,
+          qty: parsePositiveQty(svcQty),
           rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null,
           budgeted_hours: parseFloat(svcBHrs) || 0,
         },
@@ -538,7 +539,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         jobId: job.id,
         serviceId: svc.id,
         serviceName: svc.name,
-        qty: parseFloat(newSvcQty) || 1,
+        qty: parsePositiveQty(newSvcQty),
         rateCents: newSvcRate ? Math.round(parseFloat(newSvcRate) * 100) : (svc.defaultRateCents ?? null),
         budgetedHours: parseFloat(newSvcBHrs) || 0,
         budgetMethod: svc.budgetMethod,
