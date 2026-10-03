@@ -117,6 +117,7 @@ export function ServicesList({ onAdd, onEdit }: Props) {
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <ImportExportMenu
             entityLabel="Services"
+            hideImport={!canAdd || !canEdit}
             templateColumns={SERVICE_TEMPLATE_COLUMNS}
             templateFilename="services-template.csv"
             requiredColumns={["name"]}

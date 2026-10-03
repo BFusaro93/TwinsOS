@@ -2352,99 +2352,103 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       {/* Right — Estimates + Contracts */}
       <div className="flex flex-col bg-white divide-y">
         {/* Estimates */}
-        <div className="flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className="font-semibold text-sm text-white">Open Estimates</span>
-              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
-              <button
-                className="text-[11px] text-white/70 hover:text-white"
-                onClick={() => setAllEstimatesOpen(true)}
-              >
-                {/* Accepted and lost estimates drop out of this column, so the
-                    total tells you there's more behind "All". */}
-                All ({(estimates ?? []).length})
-              </button>
-            </div>
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
-              onClick={() => setNewEstimateOpen(true)}>
-              <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
-            </Button>
-          </div>
-
-          <div className="divide-y">
-            {openEstimates.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-slate-400 text-center">No open estimates</p>
-            ) : (
-              openEstimates.map((est) => (
-                <button key={est.id} className="w-full text-left px-4 py-3 hover:bg-slate-50"
-                  onClick={() => setSelectedEstimateId(est.id)}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <Badge variant="outline" className="text-[10px] capitalize mb-1">
-                        {est.stage}
-                      </Badge>
-                      <p className="truncate text-xs text-slate-700">{est.description}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-xs font-semibold text-slate-700">
-                        {formatCurrency(est.totalCents)}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        {new Date(est.estimateDate).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Contracts */}
-        <div className="flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className="font-semibold text-sm text-white">Contracts</span>
-              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
-              <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
-            </div>
-            <PermissionGate permission="client_add_contract">
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
-                onClick={() => setAddingContract(true)}>
-                <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
-              </Button>
-            </PermissionGate>
-          </div>
-
-          <div className="divide-y">
-            {(contracts ?? []).length === 0 ? (
-              <p className="px-4 py-6 text-xs text-slate-400 text-center">No contracts</p>
-            ) : (
-              (contracts ?? []).map((contract) => (
-                <div
-                  key={contract.id}
-                  className={`px-4 py-3 hover:bg-slate-50 ${can("contract_edit") ? "cursor-pointer" : ""}`}
-                  onClick={can("contract_edit") ? () => setEditingContract(contract) : undefined}
+        {can("estimate_list") && (
+          <div className="flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="font-semibold text-sm text-white">Open Estimates</span>
+                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
+                <button
+                  className="text-[11px] text-white/70 hover:text-white"
+                  onClick={() => setAllEstimatesOpen(true)}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-xs font-semibold text-slate-700">{contract.title}</p>
-                    <Badge variant="secondary" className="shrink-0 text-[10px]">
-                      {formatCurrency(contract.monthlyAmountCents)}/mo
-                    </Badge>
-                  </div>
-                  {(contract.startDate || contract.endDate) && (
-                    <p className="text-[10px] text-slate-400">
-                      {contract.startDate ? new Date(contract.startDate).toLocaleDateString() : "—"}
-                      {" – "}
-                      {contract.endDate ? new Date(contract.endDate).toLocaleDateString() : "ongoing"}
-                    </p>
-                  )}
-                </div>
-              ))
-            )}
+                  {/* Accepted and lost estimates drop out of this column, so the
+                      total tells you there's more behind "All". */}
+                  All ({(estimates ?? []).length})
+                </button>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
+                onClick={() => setNewEstimateOpen(true)}>
+                <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
+              </Button>
+            </div>
+
+            <div className="divide-y">
+              {openEstimates.length === 0 ? (
+                <p className="px-4 py-6 text-xs text-slate-400 text-center">No open estimates</p>
+              ) : (
+                openEstimates.map((est) => (
+                  <button key={est.id} className="w-full text-left px-4 py-3 hover:bg-slate-50"
+                    onClick={() => setSelectedEstimateId(est.id)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <Badge variant="outline" className="text-[10px] capitalize mb-1">
+                          {est.stage}
+                        </Badge>
+                        <p className="truncate text-xs text-slate-700">{est.description}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs font-semibold text-slate-700">
+                          {formatCurrency(est.totalCents)}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {new Date(est.estimateDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+
+        )}
+        {/* Contracts */}
+        {can("contract_list") && (
+          <div className="flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="font-semibold text-sm text-white">Contracts</span>
+                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
+                <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
+              </div>
+              <PermissionGate permission="client_add_contract">
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
+                  onClick={() => setAddingContract(true)}>
+                  <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
+                </Button>
+              </PermissionGate>
+            </div>
+
+            <div className="divide-y">
+              {(contracts ?? []).length === 0 ? (
+                <p className="px-4 py-6 text-xs text-slate-400 text-center">No contracts</p>
+              ) : (
+                (contracts ?? []).map((contract) => (
+                  <div
+                    key={contract.id}
+                    className={`px-4 py-3 hover:bg-slate-50 ${can("contract_edit") ? "cursor-pointer" : ""}`}
+                    onClick={can("contract_edit") ? () => setEditingContract(contract) : undefined}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-xs font-semibold text-slate-700">{contract.title}</p>
+                      <Badge variant="secondary" className="shrink-0 text-[10px]">
+                        {formatCurrency(contract.monthlyAmountCents)}/mo
+                      </Badge>
+                    </div>
+                    {(contract.startDate || contract.endDate) && (
+                      <p className="text-[10px] text-slate-400">
+                        {contract.startDate ? new Date(contract.startDate).toLocaleDateString() : "—"}
+                        {" – "}
+                        {contract.endDate ? new Date(contract.endDate).toLocaleDateString() : "ongoing"}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <NewEstimateDialog

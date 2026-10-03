@@ -85,6 +85,10 @@ export function MyDay() {
   // its queries) for logins that hold neither permission.
   const { can, isLoading: permsLoading } = usePermissions();
   const showRevenueSnapshot = !permsLoading && canViewRevenueSnapshot(can);
+  // Every widget below reads data the role may not be allowed to open from the
+  // sidebar (RLS only checks CRM access), so each one follows the same key as
+  // its destination page.
+  const allow = (key: string) => !permsLoading && can(key);
 
   // "My Day" is the org's day — a manager opening this from another timezone
   // must see the same day the crews are working.
@@ -138,92 +142,102 @@ export function MyDay() {
           </h1>
           <p className="text-sm text-slate-400 mt-0.5 min-h-5">{greetingBar?.date ?? ""}</p>
         </div>
-        <Link
-          href="/crm/tickets"
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add Ticket
-        </Link>
+        <PermissionGate permission="tickets_view_modify">
+          <Link
+            href="/crm/tickets"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Ticket
+          </Link>
+        </PermissionGate>
       </div>
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Open Tickets */}
-        <Link href="/crm/tickets?status=open" className={KPI_CARD_CLASS}>
-          <div className="flex items-start justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Open Tickets</span>
-            <Ticket className="h-4 w-4 text-orange-400" />
-          </div>
-          {ticketsLoading ? (
-            <Skeleton className="h-8 w-16 mb-1" />
-          ) : (
-            <p className="text-3xl font-bold text-slate-900">{(openTickets ?? []).length}</p>
-          )}
-          <div className="text-xs text-slate-400 mt-1">
-            {ticketsLoading ? <Skeleton className="h-3 w-20" /> : `${overdueCount} overdue`}
-          </div>
-        </Link>
+        {allow("tickets_view_modify") && (
+          <Link href="/crm/tickets?status=open" className={KPI_CARD_CLASS}>
+            <div className="flex items-start justify-between mb-2">
+              <span className="text-xs font-medium text-slate-500">Open Tickets</span>
+              <Ticket className="h-4 w-4 text-orange-400" />
+            </div>
+            {ticketsLoading ? (
+              <Skeleton className="h-8 w-16 mb-1" />
+            ) : (
+              <p className="text-3xl font-bold text-slate-900">{(openTickets ?? []).length}</p>
+            )}
+            <div className="text-xs text-slate-400 mt-1">
+              {ticketsLoading ? <Skeleton className="h-3 w-20" /> : `${overdueCount} overdue`}
+            </div>
+          </Link>
+        )}
 
         {/* Pending Estimates */}
-        <Link href="/crm/estimates?stage=draft,quote,sent" className={KPI_CARD_CLASS}>
-          <div className="flex items-start justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Pending Estimates</span>
-            <ClipboardSignature className="h-4 w-4 text-blue-400" />
-          </div>
-          {estimatesLoading ? (
-            <Skeleton className="h-8 w-16 mb-1" />
-          ) : (
-            <p className="text-3xl font-bold text-slate-900">{pendingEstimates.length}</p>
-          )}
-          <div className="text-xs text-slate-400 mt-1">
+        {allow("estimate_list") && (
+          <Link href="/crm/estimates?stage=draft,quote,sent" className={KPI_CARD_CLASS}>
+            <div className="flex items-start justify-between mb-2">
+              <span className="text-xs font-medium text-slate-500">Pending Estimates</span>
+              <ClipboardSignature className="h-4 w-4 text-blue-400" />
+            </div>
             {estimatesLoading ? (
-              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              `${formatCurrency(pipelineValueCents)} pipeline`
+              <p className="text-3xl font-bold text-slate-900">{pendingEstimates.length}</p>
             )}
-          </div>
-        </Link>
+            <div className="text-xs text-slate-400 mt-1">
+              {estimatesLoading ? (
+                <Skeleton className="h-3 w-24" />
+              ) : (
+                `${formatCurrency(pipelineValueCents)} pipeline`
+              )}
+            </div>
+          </Link>
+        )}
 
         {/* Outstanding Invoices */}
-        <Link href="/crm/accounting/invoices?filter=open" className={KPI_CARD_CLASS}>
-          <div className="flex items-start justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Outstanding Invoices</span>
-            <Receipt className="h-4 w-4 text-red-400" />
-          </div>
-          {invoicesLoading ? (
-            <Skeleton className="h-8 w-16 mb-1" />
-          ) : (
-            <p className="text-3xl font-bold text-slate-900">{outstandingInvoices.length}</p>
-          )}
-          <div className="text-xs text-slate-400 mt-1">
+        {allow("acct_view_invoice_list") && (
+          <Link href="/crm/accounting/invoices?filter=open" className={KPI_CARD_CLASS}>
+            <div className="flex items-start justify-between mb-2">
+              <span className="text-xs font-medium text-slate-500">Outstanding Invoices</span>
+              <Receipt className="h-4 w-4 text-red-400" />
+            </div>
             {invoicesLoading ? (
-              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              `${formatCurrency(totalBalanceCents)} outstanding`
+              <p className="text-3xl font-bold text-slate-900">{outstandingInvoices.length}</p>
             )}
-          </div>
-        </Link>
+            <div className="text-xs text-slate-400 mt-1">
+              {invoicesLoading ? (
+                <Skeleton className="h-3 w-24" />
+              ) : (
+                `${formatCurrency(totalBalanceCents)} outstanding`
+              )}
+            </div>
+          </Link>
+        )}
 
         {/* Active Clients */}
-        <Link href="/crm/clients?status=active" className={KPI_CARD_CLASS}>
-          <div className="flex items-start justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Active Clients</span>
-            <UserRound className="h-4 w-4 text-green-400" />
-          </div>
-          {clientsLoading ? (
-            <Skeleton className="h-8 w-16 mb-1" />
-          ) : (
-            <p className="text-3xl font-bold text-slate-900">{activeClients.length}</p>
-          )}
-          <div className="text-xs text-slate-400 mt-1">
+        {allow("client_list") && (
+          <Link href="/crm/clients?status=active" className={KPI_CARD_CLASS}>
+            <div className="flex items-start justify-between mb-2">
+              <span className="text-xs font-medium text-slate-500">Active Clients</span>
+              <UserRound className="h-4 w-4 text-green-400" />
+            </div>
             {clientsLoading ? (
-              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              `${newThisMonth} added this month`
+              <p className="text-3xl font-bold text-slate-900">{activeClients.length}</p>
             )}
-          </div>
-        </Link>
+            <div className="text-xs text-slate-400 mt-1">
+              {clientsLoading ? (
+                <Skeleton className="h-3 w-24" />
+              ) : (
+                `${newThisMonth} added this month`
+              )}
+            </div>
+          </Link>
+        )}
       </div>
 
       {showRevenueSnapshot && <RevenueSnapshot />}
@@ -236,202 +250,210 @@ export function MyDay() {
         {/* Left column */}
         <div className="flex min-w-0 flex-col gap-4">
           {/* Open Tickets */}
-          <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <SectionHeader title="Open Tickets" href="/crm/tickets?status=open" />
-            <div className="mt-3">
-              {ticketsLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                ))
-              ) : recentTickets.length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-400">
-                  No open tickets — you&apos;re all caught up!
-                </p>
-              ) : (
-                recentTickets.map((t) => (
-                  <Link
-                    key={t.id}
-                    href={`/crm/tickets?open=${t.id}`}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
-                  >
-                    <span className="font-mono text-[11px] text-slate-400 shrink-0">
-                      #{t.ticketNumber}
-                    </span>
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-600 shrink-0">
-                      Open
-                    </span>
-                    <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
-                      {t.subject ?? "(no subject)"}
-                    </span>
-                    {t.clientName && (
-                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
-                        {t.clientName}
+          {allow("tickets_view_modify") && (
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <SectionHeader title="Open Tickets" href="/crm/tickets?status=open" />
+              <div className="mt-3">
+                {ticketsLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  ))
+                ) : recentTickets.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">
+                    No open tickets — you&apos;re all caught up!
+                  </p>
+                ) : (
+                  recentTickets.map((t) => (
+                    <Link
+                      key={t.id}
+                      href={`/crm/tickets?open=${t.id}`}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                    >
+                      <span className="font-mono text-[11px] text-slate-400 shrink-0">
+                        #{t.ticketNumber}
                       </span>
-                    )}
-                    {t.category && (
-                      <span className="max-w-[140px] max-sm:max-w-[72px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
-                        {t.category}
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-600 shrink-0">
+                        Open
                       </span>
-                    )}
-                    {t.dueDate && (
-                      <span className={cn(
-                        "text-[11px] shrink-0",
-                        t.dueDate < today ? "text-red-500 font-medium" : "text-slate-400"
-                      )}>
-                        {formatDate(t.dueDate)}
+                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
+                        {t.subject ?? "(no subject)"}
                       </span>
-                    )}
-                  </Link>
-                ))
-              )}
+                      {t.clientName && (
+                        <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
+                          {t.clientName}
+                        </span>
+                      )}
+                      {t.category && (
+                        <span className="max-w-[140px] max-sm:max-w-[72px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
+                          {t.category}
+                        </span>
+                      )}
+                      {t.dueDate && (
+                        <span className={cn(
+                          "text-[11px] shrink-0",
+                          t.dueDate < today ? "text-red-500 font-medium" : "text-slate-400"
+                        )}>
+                          {formatDate(t.dueDate)}
+                        </span>
+                      )}
+                    </Link>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Recent Estimates */}
-          <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <SectionHeader title="Recent Estimates" href="/crm/estimates" />
-            <div className="mt-3">
-              {estimatesLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                ))
-              ) : recentEstimates.length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-400">No estimates yet</p>
-              ) : (
-                recentEstimates.map((e) => (
-                  <Link
-                    key={e.id}
-                    href={`/crm/estimates/${e.id}`}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
-                  >
-                    <span className="font-mono text-[11px] text-slate-400 shrink-0">
-                      #{e.estimateNumber}
-                    </span>
-                    <span className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize shrink-0",
-                      STAGE_COLOR[e.stage]
-                    )}>
-                      {e.stage}
-                    </span>
-                    <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
-                      {e.description || "(no description)"}
-                    </span>
-                    {e.clientName && (
-                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
-                        {e.clientName}
+          {allow("estimate_list") && (
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <SectionHeader title="Recent Estimates" href="/crm/estimates" />
+              <div className="mt-3">
+                {estimatesLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  ))
+                ) : recentEstimates.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">No estimates yet</p>
+                ) : (
+                  recentEstimates.map((e) => (
+                    <Link
+                      key={e.id}
+                      href={`/crm/estimates/${e.id}`}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                    >
+                      <span className="font-mono text-[11px] text-slate-400 shrink-0">
+                        #{e.estimateNumber}
                       </span>
-                    )}
-                    <span className="text-sm font-medium text-slate-700 shrink-0">
-                      {e.totalCents > 0 ? formatCurrency(e.totalCents) : "—"}
-                    </span>
-                    <span className="text-[11px] text-slate-400 shrink-0">
-                      {formatDate(e.estimateDate)}
-                    </span>
-                  </Link>
-                ))
-              )}
+                      <span className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize shrink-0",
+                        STAGE_COLOR[e.stage]
+                      )}>
+                        {e.stage}
+                      </span>
+                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
+                        {e.description || "(no description)"}
+                      </span>
+                      {e.clientName && (
+                        <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
+                          {e.clientName}
+                        </span>
+                      )}
+                      <span className="text-sm font-medium text-slate-700 shrink-0">
+                        {e.totalCents > 0 ? formatCurrency(e.totalCents) : "—"}
+                      </span>
+                      <span className="text-[11px] text-slate-400 shrink-0">
+                        {formatDate(e.estimateDate)}
+                      </span>
+                    </Link>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Automations Pending Approval */}
-          <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <SectionHeader title="Automations Pending Approval" href="/crm/communication/automations" />
-            <div className="mt-3">
-              {approvalsLoading ? (
-                Array.from({ length: 2 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                ))
-              ) : (pendingApprovals ?? []).length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-400">
-                  Nothing waiting on approval.
-                </p>
-              ) : (
-                pendingApprovals!.slice(0, 5).map((a) => (
-                  <Link
-                    key={a.id}
-                    href="/crm/communication/automations"
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
-                  >
-                    <Inbox className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                    <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
-                      {a.subject}
-                    </span>
-                    {a.clientName && (
-                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
-                        {a.clientName}
+          {allow("automation_view") && (
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <SectionHeader title="Automations Pending Approval" href="/crm/communication/automations" />
+              <div className="mt-3">
+                {approvalsLoading ? (
+                  Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  ))
+                ) : (pendingApprovals ?? []).length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">
+                    Nothing waiting on approval.
+                  </p>
+                ) : (
+                  pendingApprovals!.slice(0, 5).map((a) => (
+                    <Link
+                      key={a.id}
+                      href="/crm/communication/automations"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                    >
+                      <Inbox className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
+                        {a.subject}
                       </span>
-                    )}
-                    <span className="text-[11px] text-slate-400 shrink-0">
-                      {formatDate(a.createdAt)}
-                    </span>
-                  </Link>
-                ))
-              )}
+                      {a.clientName && (
+                        <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
+                          {a.clientName}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-400 shrink-0">
+                        {formatDate(a.createdAt)}
+                      </span>
+                    </Link>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right column */}
         <div className="flex min-w-0 flex-col gap-4">
           {/* Outstanding Invoices */}
-          <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices?filter=open" />
-            <div className="mt-3">
-              {invoicesLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                ))
-              ) : topOutstandingInvoices.length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-400">No outstanding invoices</p>
-              ) : (
-                topOutstandingInvoices.map((inv) => (
-                  <Link
-                    key={inv.id}
-                    href={`/crm/accounting/invoices/${inv.id}`}
-                    className="flex flex-col gap-0.5 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[11px] text-slate-400">
-                        #{inv.invoiceNumber}
-                      </span>
-                      <span className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
-                        INVOICE_STATUS_COLOR[inv.status]
-                      )}>
-                        {inv.status}
-                      </span>
+          {allow("acct_view_invoice_list") && (
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices?filter=open" />
+              <div className="mt-3">
+                {invoicesLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
+                      <Skeleton className="h-4 w-full" />
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-slate-700 truncate">
-                        {inv.clientName ?? "—"}
-                      </span>
-                      <span className="text-sm font-semibold text-red-500 shrink-0">
-                        {formatCurrency(inv.balanceCents)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-400">
-                        Total: {formatCurrency(inv.totalCents)}
-                      </span>
-                      {inv.dueDate && (
-                        <span className="text-[11px] text-slate-400">
-                          Due {formatDate(inv.dueDate)}
+                  ))
+                ) : topOutstandingInvoices.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">No outstanding invoices</p>
+                ) : (
+                  topOutstandingInvoices.map((inv) => (
+                    <Link
+                      key={inv.id}
+                      href={`/crm/accounting/invoices/${inv.id}`}
+                      className="flex flex-col gap-0.5 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[11px] text-slate-400">
+                          #{inv.invoiceNumber}
                         </span>
-                      )}
-                    </div>
-                  </Link>
-                ))
-              )}
+                        <span className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                          INVOICE_STATUS_COLOR[inv.status]
+                        )}>
+                          {inv.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-700 truncate">
+                          {inv.clientName ?? "—"}
+                        </span>
+                        <span className="text-sm font-semibold text-red-500 shrink-0">
+                          {formatCurrency(inv.balanceCents)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-slate-400">
+                          Total: {formatCurrency(inv.totalCents)}
+                        </span>
+                        {inv.dueDate && (
+                          <span className="text-[11px] text-slate-400">
+                            Due {formatDate(inv.dueDate)}
+                          </span>
+                        )}
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Quick Actions */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
@@ -446,27 +468,33 @@ export function MyDay() {
                   New Client
                 </Link>
               </PermissionGate>
-              <Link
-                href="/crm/estimates"
-                className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <ClipboardSignature className="h-4 w-4 text-blue-500" />
-                New Estimate
-              </Link>
-              <Link
-                href="/crm/tickets"
-                className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <Ticket className="h-4 w-4 text-orange-500" />
-                New Ticket
-              </Link>
-              <Link
-                href="/crm/accounting/invoices"
-                className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <Receipt className="h-4 w-4 text-red-500" />
-                New Invoice
-              </Link>
+              <PermissionGate permission="estimate_add">
+                <Link
+                  href="/crm/estimates"
+                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <ClipboardSignature className="h-4 w-4 text-blue-500" />
+                  New Estimate
+                </Link>
+              </PermissionGate>
+              <PermissionGate permission="tickets_view_modify">
+                <Link
+                  href="/crm/tickets"
+                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Ticket className="h-4 w-4 text-orange-500" />
+                  New Ticket
+                </Link>
+              </PermissionGate>
+              <PermissionGate permission="acct_view_invoice_list">
+                <Link
+                  href="/crm/accounting/invoices"
+                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Receipt className="h-4 w-4 text-red-500" />
+                  New Invoice
+                </Link>
+              </PermissionGate>
             </div>
           </div>
         </div>

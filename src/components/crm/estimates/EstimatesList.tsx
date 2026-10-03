@@ -331,6 +331,7 @@ export function EstimatesList({ clientId }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Estimates"
+                hideImport={!canAdd}
                 templateColumns={ESTIMATE_TEMPLATE_COLUMNS}
                 templateFilename="estimates-template.csv"
                 requiredColumns={["clientName", "description"]}
@@ -711,11 +712,14 @@ export function EstimatesList({ clientId }: Props) {
                       }
                     })}
                     <td className="px-3 py-2.5">
-                      <Link href={`/crm/estimates/${e.id}`}>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs opacity-0 group-hover:opacity-100">
-                          <FileText className="mr-1 h-3.5 w-3.5" /> Open
-                        </Button>
-                      </Link>
+                      {/* The builder is edit-only, so a view-only role would land on "No access". */}
+                      {canEdit && (
+                        <Link href={`/crm/estimates/${e.id}`}>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs opacity-0 group-hover:opacity-100">
+                            <FileText className="mr-1 h-3.5 w-3.5" /> Open
+                          </Button>
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 );

@@ -903,6 +903,9 @@ function EmployeeDetail({
   onEdit: () => void;
 }) {
   const name = `${employee.firstName} ${employee.lastName}`;
+  // The assigned role is crm_role_id; user_role is a legacy free-text title.
+  const { data: allRoles } = useRoles();
+  const roleName = allRoles?.find((r) => r.id === employee.crmRoleId)?.name ?? employee.userRole;
   return (
     <div className="flex h-full flex-col overflow-auto">
       {/* Top card */}
@@ -998,7 +1001,7 @@ function EmployeeDetail({
         )}
 
         <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">App Access</p>
-        <DetailRow label="Landscapt Role" value={employee.userRole} />
+        <DetailRow label="Landscapt Role" value={roleName} />
         <DetailRow label="Sales Rep" value={employee.isSalesRep ? "Yes" : null} />
         <DetailRow label="Show in Calendar" value={employee.showInCalendar ? "Yes" : "No"} />
         <DetailRow label="Time Clock" value={

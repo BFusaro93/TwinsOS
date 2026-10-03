@@ -67,7 +67,7 @@ export function useSnowJobs() {
         .from("crm_jobs")
         .select(`
           *,
-          clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+          clients(display_name, status, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
           client_properties(address, city, state, zip),
           crm_crews(name),
           crm_job_services(*)
@@ -82,8 +82,11 @@ export function useSnowJobs() {
         .neq("status", "hold")
         .order("priority", { ascending: true });
       if (error) throw error;
+      // A lead (or closed-lost lead) can't have jobs — crm_jobs_reject_lead_client
+      // blocks new ones — so a job that predates that guard, or whose client
+      // was moved back to a lead, must not be offered for dispatch or billed.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data.map((row: any) => ({
+      return (data.filter((row: any) => !["lead", "lost"].includes(row.clients?.status)).map((row: any) => ({
         ...mapJob({
           ...row,
           // Same resolution order as the main dispatch board, the crew app and
