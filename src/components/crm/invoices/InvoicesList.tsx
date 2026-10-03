@@ -325,6 +325,9 @@ export function InvoicesList({ clientId }: Props) {
   const [search, setSearch] = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
+  // The Date filter is an inclusive range of invoice dates (YYYY-MM-DD), not free text.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -385,12 +388,17 @@ export function InvoicesList({ clientId }: Props) {
           (i.clientName ?? "").toLowerCase().includes(q)
       );
     }
-    if (activeFilterKey && filterValue.trim()) {
+    if (activeFilterKey === "date" && (dateFrom || dateTo)) {
+      list = list.filter((i) => {
+        const d = (i.invoiceDate ?? "").slice(0, 10);
+        return !!d && (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo);
+      });
+    }
+    if (activeFilterKey && activeFilterKey !== "date" && filterValue.trim()) {
       const fv = filterValue.toLowerCase();
       list = list.filter((i) => {
         switch (activeFilterKey) {
           case "invoice_number": return String(i.invoiceNumber).includes(fv);
-          case "date":           return (i.invoiceDate ?? "").includes(fv);
           case "client":         return (i.clientName ?? "").toLowerCase().includes(fv);
           case "payment_method": return paymentTypeLabel(i).toLowerCase() === fv;
           case "status":         return effectiveStatus(i) === fv;
@@ -433,7 +441,7 @@ export function InvoicesList({ clientId }: Props) {
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
-  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir, accountBalanceByClient]);
+  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, dateFrom, dateTo, sortKey, sortDir, accountBalanceByClient]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -761,8 +769,8 @@ export function InvoicesList({ clientId }: Props) {
             <button
               key={key}
               onClick={() => {
-                if (activeFilterKey === key) { setActiveFilterKey(null); setFilterValue(""); }
-                else { setActiveFilterKey(key); setFilterValue(""); }
+                if (activeFilterKey === key) { setActiveFilterKey(null); setFilterValue(""); setDateFrom(""); setDateTo(""); }
+                else { setActiveFilterKey(key); setFilterValue(""); setDateFrom(""); setDateTo(""); }
               }}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
@@ -789,6 +797,27 @@ export function InvoicesList({ clientId }: Props) {
                     <option key={o} value={o}>{o}</option>
                   ))}
                 </select>
+              ) : activeFilterKey === "date" ? (
+                <div className="ml-2 flex items-center gap-1 text-xs text-slate-500">
+                  <Input
+                    autoFocus
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo || undefined}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    aria-label="Invoice date from"
+                    className="h-6 w-36 text-xs"
+                  />
+                  <span>to</span>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    aria-label="Invoice date to"
+                    className="h-6 w-36 text-xs"
+                  />
+                </div>
               ) : (
                 <Input
                   autoFocus
@@ -798,7 +827,7 @@ export function InvoicesList({ clientId }: Props) {
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); setDateFrom(""); setDateTo(""); }} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>
