@@ -199,6 +199,7 @@ export function mapInvoice(row: any): CRMInvoice {
     clientSavedPaymentMethodType: row.clients?.saved_payment_method_type ?? null,
     clientSavedPaymentMethodSummary: row.clients?.saved_payment_method_summary ?? null,
     clientAutopayEnabled: row.clients?.autopay_enabled ?? true,
+    clientBalanceOutstandingCents: row.clients?.balance_outstanding_cents ?? null,
     pendingPaymentCents: row.pending_payment_cents ?? null,
     pendingPaymentMethod: row.pending_payment_method ?? null,
     pendingPaymentAt: row.pending_payment_at ?? null,
@@ -236,7 +237,7 @@ export function useInvoices(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, balance_outstanding_cents, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
         .is("deleted_at", null)
         // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
         // Without a tiebreaker Postgres returns tied rows in physical heap
@@ -1227,6 +1228,10 @@ export function useUpdateInvoiceFinancials() {
       // discount is a separate reduction stacked on top of that.
       const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
       const subtotalCents = lineItems.reduce((s, li) => s + netLineCents(li), 0);
+      // A discount can't be negative (that would add to the bill) or exceed
+      // the subtotal (negative invoice), and a tax rate can't leave 0–100%.
+      discountCents = Math.min(Math.max(0, discountCents), Math.max(0, subtotalCents));
+      taxRateBps = Math.min(Math.max(0, taxRateBps), 10000);
       const afterDiscount = subtotalCents - discountCents;
       // Tax only applies to taxable line items, net of the document-level
       // discount (matches the PO module's taxableAfterDiscount pattern) —

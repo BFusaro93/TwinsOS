@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isValidEmail } from "@/lib/utils/email";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
     if (!displayName.trim()) { toast.error("Display name is required"); return; }
     if (rf.isRequired("primary_phone") && !primaryPhone.trim()) { toast.error("Phone is required"); return; }
     if (rf.isRequired("primary_email") && !primaryEmail.trim()) { toast.error("Email is required"); return; }
+    if (primaryEmail.trim() && !isValidEmail(primaryEmail)) { toast.error("Enter a valid email address"); return; }
     if (rf.isRequired("service_address") && !serviceAddress.trim()) { toast.error("Service address is required"); return; }
     try {
       const client = await createClient({

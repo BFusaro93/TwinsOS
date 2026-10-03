@@ -120,6 +120,8 @@ export interface CRMInvoice {
   clientSavedPaymentMethodType?: "card" | "us_bank_account" | null;
   clientSavedPaymentMethodSummary?: string | null;
   clientAutopayEnabled?: boolean;
+  /** clients.balance_outstanding_cents — the same true balance (net of credits and prepayments) the client card shows. Only joined by the list query. */
+  clientBalanceOutstandingCents?: number | null;
   /** A Stripe charge is in flight against this invoice but hasn't settled — an
    * ACH debit takes days. Nothing is written to crm_payments until it settles
    * (that table only holds settled money), so without this the invoice looks

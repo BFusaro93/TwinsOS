@@ -70,8 +70,26 @@ const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "due",         label: "Due" },
   { key: "total",       label: "Total" },
   { key: "balance",     label: "Balance" },
+  { key: "accountBalance", label: "Account Balance" },
   { key: "paymentType", label: "Payment Type" },
 ];
+
+// What's shown in the Status column: a past-due non-draft reads "overdue" even
+// though the stored status is still sent/viewed/partial.
+function effectiveStatus(inv: CRMInvoice): InvoiceStatus {
+  return isInvoiceOverdue(inv) && inv.status !== "draft" ? "overdue" : inv.status;
+}
+
+const STATUS_FILTER_OPTIONS: InvoiceStatus[] = ["draft", "printed", "sent", "viewed", "partial", "overdue", "paid", "void"];
+
+/** Payment type for display/filter: an autopay card/bank on file is the most
+ * concrete answer (it's what puts the invoice in the To Charge queues), then
+ * the invoice's own preference, then the client's default. */
+function paymentTypeLabel(inv: CRMInvoice): string {
+  if (inv.clientSavedPaymentMethodType === "card") return "Credit Card";
+  if (inv.clientSavedPaymentMethodType === "us_bank_account") return "ACH";
+  return inv.preferredPaymentMethod ?? inv.clientDefaultPaymentMethod ?? "";
+}
 
 const STATUS_COLOR: Record<InvoiceStatus, string> = {
   draft:   "bg-slate-100 text-slate-600",
@@ -280,13 +298,28 @@ export function InvoicesList({ clientId }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
-  const [sortKey, setSortKey] = useState<string>("date");
+  const [sortKey, setSortKey] = useState<string>("number");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [visibleKeys, setVisibleKeys] = useState<string[]>(
     INVOICE_COLUMNS.map((c) => c.key)
   );
 
   const allInvoices = invoices ?? [];
+
+  // The client's true account balance — the same maintained
+  // clients.balance_outstanding_cents the client card shows, so it's net of
+  // credits and prepayments (negative = the client is in credit) rather than
+  // a sum of this list's open invoices.
+  const accountBalanceByClient = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of allInvoices) m.set(i.clientId, i.clientBalanceOutstandingCents ?? 0);
+    return m;
+  }, [allInvoices]);
+
+  const paymentTypeOptions = useMemo(
+    () => Array.from(new Set(allInvoices.map(paymentTypeLabel).filter(Boolean))).sort(),
+    [allInvoices],
+  );
 
   // Deep-link support for "just generated these N invoices" flows (e.g. Snow
   // Invoicing's "View Invoices" action) — scopes the list to exactly those
@@ -329,8 +362,8 @@ export function InvoicesList({ clientId }: Props) {
           case "invoice_number": return String(i.invoiceNumber).includes(fv);
           case "date":           return (i.invoiceDate ?? "").includes(fv);
           case "client":         return (i.clientName ?? "").toLowerCase().includes(fv);
-          case "payment_method": return (i.preferredPaymentMethod ?? "").toLowerCase().includes(fv);
-          case "status":         return i.status.toLowerCase().includes(fv);
+          case "payment_method": return paymentTypeLabel(i).toLowerCase() === fv;
+          case "status":         return effectiveStatus(i) === fv;
           case "balance":        return String(i.balanceCents / 100).includes(fv);
           default:               return true;
         }
@@ -346,6 +379,9 @@ export function InvoicesList({ clientId }: Props) {
         case "due":     av = a.dueDate ?? "9999-99-99"; bv = b.dueDate ?? "9999-99-99"; break;
         case "total":   av = a.totalCents; bv = b.totalCents; break;
         case "balance": av = a.balanceCents; bv = b.balanceCents; break;
+        case "accountBalance": av = accountBalanceByClient.get(a.clientId) ?? 0; bv = accountBalanceByClient.get(b.clientId) ?? 0; break;
+        case "status":  av = effectiveStatus(a); bv = effectiveStatus(b); break;
+        case "paymentType": av = paymentTypeLabel(a).toLowerCase(); bv = paymentTypeLabel(b).toLowerCase(); break;
       }
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
@@ -363,7 +399,7 @@ export function InvoicesList({ clientId }: Props) {
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
-  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir]);
+  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir, accountBalanceByClient]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -623,7 +659,7 @@ export function InvoicesList({ clientId }: Props) {
       {!clientId && (
         <PageHeader
           title="Invoices"
-          description={!isLoading ? `${allInvoices.length} invoices` : undefined}
+          description={!isLoading ? `${counts.all} invoice${counts.all === 1 ? "" : "s"}${counts.uninvoiced > 0 ? ` · ${counts.uninvoiced} uninvoiced` : ""}` : undefined}
           action={
             <PermissionGate permission="acct_add_modify_invoices">
               <div className="flex flex-wrap items-center gap-2">
@@ -706,13 +742,28 @@ export function InvoicesList({ clientId }: Props) {
           ))}
           {activeFilterKey && (
             <>
-              <Input
-                autoFocus
-                value={filterValue}
-                onChange={(e) => setFilterValue(e.target.value)}
-                placeholder={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}…`}
-                className="ml-2 h-6 w-48 text-xs"
-              />
+              {activeFilterKey === "status" || activeFilterKey === "payment_method" ? (
+                <select
+                  autoFocus
+                  value={filterValue}
+                  onChange={(e) => setFilterValue(e.target.value)}
+                  aria-label={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}`}
+                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs capitalize"
+                >
+                  <option value="">Select…</option>
+                  {(activeFilterKey === "status" ? STATUS_FILTER_OPTIONS : paymentTypeOptions).map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  autoFocus
+                  value={filterValue}
+                  onChange={(e) => setFilterValue(e.target.value)}
+                  placeholder={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}…`}
+                  className="ml-2 h-6 w-48 text-xs"
+                />
+              )}
               <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -871,8 +922,8 @@ export function InvoicesList({ clientId }: Props) {
                 />
               </th>
               {visibleColumns.map((col) => {
-                const sortable = ["number","client","date","due","total","balance"].includes(col.key);
-                const isRight = col.key === "total" || col.key === "balance";
+                const sortable = ["number","status","client","date","due","total","balance","accountBalance","paymentType"].includes(col.key);
+                const isRight = col.key === "total" || col.key === "balance" || col.key === "accountBalance";
                 return (
                   <th
                     key={col.key}
@@ -934,12 +985,13 @@ export function InvoicesList({ clientId }: Props) {
                           <td key={col.key} className="px-4 py-3 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
                             <Link
                               href={`/crm/clients/${inv.clientId}`}
+                              title={inv.clientName ?? undefined}
                               className="block font-medium text-brand-600 hover:underline truncate"
                             >
                               {inv.clientName}
                             </Link>
                             {inv.clientAddress && (
-                              <p className="text-[10px] text-slate-400 truncate">{inv.clientAddress}</p>
+                              <p className="text-[10px] text-slate-400 truncate" title={inv.clientAddress}>{inv.clientAddress}</p>
                             )}
                           </td>
                         );
@@ -991,10 +1043,18 @@ export function InvoicesList({ clientId }: Props) {
                             {formatCurrency(inv.balanceCents)}
                           </td>
                         );
+                      case "accountBalance": {
+                        const acct = accountBalanceByClient.get(inv.clientId) ?? 0;
+                        return (
+                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", acct > 0 ? "text-red-600" : acct < 0 ? "text-green-600" : "text-slate-500")}>
+                            {acct < 0 ? "−" : ""}{formatCurrency(Math.abs(acct))}
+                          </td>
+                        );
+                      }
                       case "paymentType":
                         return (
                           <td key={col.key} className="px-4 py-3 text-xs text-slate-500">
-                            {inv.preferredPaymentMethod ?? inv.clientDefaultPaymentMethod ?? "—"}
+                            {paymentTypeLabel(inv) || "—"}
                           </td>
                         );
                       default: return null;
