@@ -253,11 +253,11 @@ export type Database = {
           entity_type: string
           flow_step_id: string | null
           id: string
+          last_notified_at: string | null
           order: number
           org_id: string
           status: string
           updated_at: string
-          last_notified_at: string | null
         }
         Insert: {
           approver_id?: string | null
@@ -272,11 +272,11 @@ export type Database = {
           entity_type: string
           flow_step_id?: string | null
           id?: string
+          last_notified_at?: string | null
           order?: number
           org_id?: string
           status?: string
           updated_at?: string
-          last_notified_at?: string | null
         }
         Update: {
           approver_id?: string | null
@@ -291,11 +291,11 @@ export type Database = {
           entity_type?: string
           flow_step_id?: string | null
           id?: string
+          last_notified_at?: string | null
           order?: number
           org_id?: string
           status?: string
           updated_at?: string
-          last_notified_at?: string | null
         }
         Relationships: [
           {
@@ -4725,6 +4725,7 @@ export type Database = {
           locked: boolean
           locked_at: string | null
           notes: string | null
+          open_dispute_payment_id: string | null
           org_id: string
           pdf_template_id: string | null
           pending_payment_at: string | null
@@ -4746,7 +4747,6 @@ export type Database = {
           terms: string | null
           total_cents: number
           updated_at: string
-          open_dispute_payment_id: string | null
         }
         Insert: {
           amount_paid_cents?: number
@@ -4770,6 +4770,7 @@ export type Database = {
           locked?: boolean
           locked_at?: string | null
           notes?: string | null
+          open_dispute_payment_id?: string | null
           org_id?: string
           pdf_template_id?: string | null
           pending_payment_at?: string | null
@@ -4791,7 +4792,6 @@ export type Database = {
           terms?: string | null
           total_cents?: number
           updated_at?: string
-          open_dispute_payment_id?: string | null
         }
         Update: {
           amount_paid_cents?: number
@@ -4815,6 +4815,7 @@ export type Database = {
           locked?: boolean
           locked_at?: string | null
           notes?: string | null
+          open_dispute_payment_id?: string | null
           org_id?: string
           pdf_template_id?: string | null
           pending_payment_at?: string | null
@@ -4836,7 +4837,6 @@ export type Database = {
           terms?: string | null
           total_cents?: number
           updated_at?: string
-          open_dispute_payment_id?: string | null
         }
         Relationships: [
           {
@@ -4907,6 +4907,20 @@ export type Database = {
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "rpt_estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_open_dispute_payment_id_fkey"
+            columns: ["open_dispute_payment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_open_dispute_payment_id_fkey"
+            columns: ["open_dispute_payment_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_payments"
             referencedColumns: ["id"]
           },
           {
