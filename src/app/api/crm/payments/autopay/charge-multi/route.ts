@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
@@ -95,6 +96,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "An allocation amount exceeds that invoice's balance" }, { status: 400 });
     }
   }
+
+  // Settle each invoice with any deposit/credit the client already holds, then
+  // charge only what is still owed. Otherwise the card pays money the client has
+  // already paid and the deposit sits unused.
+  try {
+    for (const a of allocations) {
+      a.amountCents = await applyCreditBeforeCharge(supabase, {
+        id: a.invoiceId,
+        client_id: clientId,
+        balance_cents: a.amountCents,
+      });
+    }
+  } catch {
+    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
+  }
+  const stillOwed = allocations.filter((a) => a.amountCents > 0);
+  if (stillOwed.length === 0) {
+    return NextResponse.json({ error: "Every selected invoice was paid from the client's existing credit — nothing to charge." }, { status: 409 });
+  }
+  allocations.splice(0, allocations.length, ...stillOwed);
 
   const encoded = encodeAllocations(allocations);
   if (encoded.length > MAX_ALLOCATION_METADATA_LENGTH) {

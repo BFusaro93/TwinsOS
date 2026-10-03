@@ -2,6 +2,7 @@ import { sendClientSms } from "@/lib/sms/send";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import type { CardExpiryContext } from "./card-expiry-context";
+import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-vars";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -23,20 +24,11 @@ export async function resolveSmsStepContent(
     cardExpiryContext?: CardExpiryContext | null;
   }
 ): Promise<ResolvedSmsContent | { error: string }> {
-  const { data: client } = await supabase
-    .from("clients")
-    .select("display_name, primary_phone, sms_opt_in")
-    .eq("id", params.clientId)
-    .single();
+  const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
+  const client = loaded?.client;
 
   if (!client?.primary_phone) return { error: "client has no primary_phone" };
   if (!client.sms_opt_in) return { error: "client has not opted in to SMS" };
-
-  const { data: orgRow } = await supabase
-    .from("organizations")
-    .select("name")
-    .eq("id", params.orgId)
-    .single();
 
   let meetingDate = "";
   let meetingTime = "";
@@ -62,30 +54,24 @@ export async function resolveSmsStepContent(
     }
   }
 
-  const clientDisplayName = (client.display_name as string) ?? "";
-  const clientFirstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
-  const orgName = (orgRow?.name as string) ?? "Your Service Provider";
-
-  const mergeTags: Record<string, string> = {
-    "[clientfirstname]": clientFirstName,
-    "[clientfullname]": clientDisplayName,
-    "[companyname]": orgName,
+  // Same shared vocabulary as emails; SMS is plain text so raw (unescaped) values.
+  const extras: Record<string, string> = {
     "[meetingdate]": meetingDate,
     "[meetingtime]": meetingTime,
     "[meetinglocation]": meetingLocation,
   };
   if (params.cardExpiryContext) {
-    mergeTags["[creditcardending]"] = params.cardExpiryContext.last4;
-    mergeTags["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
+    extras["[creditcardending]"] = params.cardExpiryContext.last4;
+    extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
+  const vars = await buildAutomationMergeVars(supabase, {
+    orgId: params.orgId, client, extras, escapeHtml: (t) => t,
+  });
   const resolve = (template: string) =>
     template.replace(/\[(\w+)\]/gi, (match) => {
       const key = match.toLowerCase();
-      if (key in mergeTags) return mergeTags[key];
-      // Same reasoning as sequence-email.ts's resolver: a recognized
-      // Documents merge tag this narrower automation resolver doesn't know
-      // how to fill in degrades to blank instead of shipping literal
-      // "[tag]" text to a real client's phone.
+      if (key in vars.text) return vars.text[key] ?? "";
+      // Recognized Documents tag we can't fill degrades to blank, not literal "[tag]".
       return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
     });
 

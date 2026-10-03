@@ -78,10 +78,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Tickets are not enabled for this portal" }, { status: 403 });
   }
 
-  const { subject, body, category } = await req.json();
+  const payload = await req.json().catch(() => null) as { subject?: unknown; body?: unknown; category?: unknown } | null;
+  const subject = typeof payload?.subject === "string" ? payload.subject : "";
+  const body = typeof payload?.body === "string" ? payload.body : null;
+  const category = typeof payload?.category === "string" ? payload.category : "";
 
-  if (!subject?.trim()) {
+  if (!subject.trim()) {
     return NextResponse.json({ error: "Subject is required" }, { status: 400 });
+  }
+  if (subject.trim().length > 200) {
+    return NextResponse.json({ error: "Subject must be 200 characters or fewer" }, { status: 400 });
+  }
+  if (body && body.trim().length > 5000) {
+    return NextResponse.json({ error: "Description must be 5000 characters or fewer" }, { status: 400 });
   }
 
   const allowedCategories = await getEffectiveTicketCategories(supabase, ctx.orgId, settings?.portal_ticket_categories);
@@ -112,7 +121,7 @@ export async function POST(req: Request) {
     .single();
 
   if (error || !ticket) {
-    console.error("[portal/tickets] Failed to create ticket:", error);
+    log.error("failed to create ticket", { error: error?.message });
     return NextResponse.json({ error: "Failed to create ticket" }, { status: 500 });
   }
 

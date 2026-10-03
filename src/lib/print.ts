@@ -1090,7 +1090,7 @@ export function printRouteSheets(
   // column put every one of those stops on a single "Unassigned" sheet and left
   // the crew actually running them with no route sheet — resolve the same way
   // the board's own contract does (DispatchBoard's effectiveCrewId).
-  const effectiveCrewIdOf = (v: CRMJobVisit) => v.crewId ?? v.job?.crewId ?? null;
+  const effectiveCrewIdOf = (v: CRMJobVisit) => (v.crewUnassigned ? null : v.crewId ?? v.job?.crewId ?? null);
   const byCrew = crews
     .map((c) => ({ crew: c, visits: visits.filter((v) => effectiveCrewIdOf(v) === c.id) }))
     .filter((x) => x.visits.length > 0);

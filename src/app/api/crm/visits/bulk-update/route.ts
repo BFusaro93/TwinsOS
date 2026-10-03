@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
 import {
   INVOICED_VISIT_LOCKED_CODE,
@@ -15,8 +16,10 @@ const BulkUpdateSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
   updates: z.object({
     scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    status: z.string().optional(),
+    status: z.enum(VISIT_STATUS_VALUES).optional(),
     crew_id: z.string().uuid().nullable().optional(),
+    /** Per-visit "no crew" override (wins over the job's crew). Cleared by an explicit crew_id. */
+    crew_unassigned: z.boolean().optional(),
     priority: z.number().int().optional(),
     skip_reason: z.string().max(500).nullable().optional(),
   }),
@@ -94,7 +97,13 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
     .from("crm_job_visits")
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update({
+      ...updates,
+      // An explicit crew and "unassigned" are mutually exclusive.
+      ...(updates.crew_id ? { crew_unassigned: false } : {}),
+      ...(updates.crew_unassigned ? { crew_id: null } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .in("id", ids);
 
   if (error) {
@@ -104,6 +113,8 @@ export async function POST(request: Request) {
       { status: isLocked ? 409 : 500 }
     );
   }
+
+  await reopenOneTimeJobsForVisits(supabase, before, updates.status);
 
   // One lightweight client-timeline row per moved / newly-dispatched visit
   // ("Visit moved 9/7 → 9/8"). No notifications; best-effort.

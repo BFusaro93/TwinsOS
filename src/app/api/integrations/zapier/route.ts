@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient, generateZapierApiKey } from "@/lib/integrations/zapier";
 
 /**
  * POST /api/integrations/zapier — (re)generates the org's Zapier API key.
- * Session-authenticated, admin-only. Returns the plaintext key once; after
- * this it's only readable via the masked integrations row (RLS-scoped,
- * read directly by the Settings UI via use-integrations.ts).
+ * Session-authenticated, admin-only. Returns the plaintext key once; only the SHA-256 hash
+ * and a display prefix are stored, so it can never be shown again.
  */
 export async function POST() {
   const supabase = await createServerClient();
@@ -27,18 +27,19 @@ export async function POST() {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
 
-  const apiKey = generateZapierApiKey();
+  const { key: apiKey, keyHash, keyPrefix } = generateZapierApiKey();
   const db = adminClient();
 
   const { error } = await db
     .from("integrations")
     .upsert(
-      { org_id: profile.org_id, provider: "zapier", api_key: apiKey, enabled: true },
+      { org_id: profile.org_id, provider: "zapier", api_key: null, api_key_hash: keyHash, api_key_prefix: keyPrefix, enabled: true },
       { onConflict: "org_id,provider" }
     );
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    logger.child("zapier-key").error("key upsert failed", { error: error.message });
+    return NextResponse.json({ error: "Failed to generate key" }, { status: 500 });
   }
 
   return NextResponse.json({ apiKey });

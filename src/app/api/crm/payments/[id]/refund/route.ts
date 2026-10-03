@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
+import { syncEstimateDepositWithPayment } from "@/lib/stripe/record-estimate-deposit";
 
 const log = logger.child("crm payments refund");
 
@@ -167,6 +168,15 @@ export async function POST(
 
   // Nothing new to record — a retried request, or the webhook got here first
   // (and wrote its own activity entry).
+  // A refunded proposal deposit must stop showing as collected on its estimate.
+  if (payment.stripe_payment_intent_id) {
+    try {
+      await syncEstimateDepositWithPayment(db, profile.org_id, payment.stripe_payment_intent_id);
+    } catch (err) {
+      log.error("failed to sync estimate deposit after refund", { error: err, paymentId });
+    }
+  }
+
   if (appliedCents <= 0) return NextResponse.json({ ok: true });
 
   // The refund reversal — refunded_amount_cents, the allocation rows, and each

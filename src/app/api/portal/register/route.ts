@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { PortalInviteRow } from "@/lib/portal/portal-db";
 
@@ -97,7 +98,8 @@ export async function POST(req: Request) {
       await releaseClaim();
       // Lost a race with another registration for the same email.
       if (authErr?.message?.includes("already registered")) return signInRequired();
-      return NextResponse.json({ error: authErr?.message ?? "Registration failed" }, { status: 500 });
+      logger.child("portal-register").error("createUser failed", { error: authErr?.message });
+      return NextResponse.json({ error: "Registration failed" }, { status: 500 });
     }
     userId = authData.user.id;
   }

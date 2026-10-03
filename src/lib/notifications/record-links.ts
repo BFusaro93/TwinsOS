@@ -22,6 +22,6 @@ const RECORD_PATHS: Record<string, (id: string) => string> = {
 /** Path for a record, or null when the type is unknown or the id is missing. */
 export function recordPath(recordType: string | null | undefined, id: string | null | undefined): string | null {
   if (!recordType || !id) return null;
-  const build = RECORD_PATHS[recordType];
-  return build ? build(id) : null;
+  if (!Object.prototype.hasOwnProperty.call(RECORD_PATHS, recordType)) return null;
+  return RECORD_PATHS[recordType](encodeURIComponent(id));
 }

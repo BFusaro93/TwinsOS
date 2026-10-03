@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
-import { submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
+import { MAX_CHANGE_REQUEST_MESSAGE_CHARS, submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
@@ -112,15 +112,23 @@ export async function POST(
       .eq("org_id", ctx.orgId)
       .single() as { data: { display_name: string } | null };
 
-    await submitEstimateChangeRequest(supabase, {
-      orgId: estimate.org_id,
-      estimateId: estimate.id,
-      clientId: estimate.client_id,
-      estimateNumber: estimate.estimate_number,
-      message: message!.trim(), // guarded above: request_changes requires a non-empty message
-      requesterName: client?.display_name ?? ctx.email,
-      requesterEmail: ctx.email,
-    });
+    if (message!.length > MAX_CHANGE_REQUEST_MESSAGE_CHARS) {
+      return NextResponse.json({ error: "Message is too long" }, { status: 400 });
+    }
+    try {
+      await submitEstimateChangeRequest(supabase, {
+        orgId: estimate.org_id,
+        estimateId: estimate.id,
+        clientId: estimate.client_id,
+        estimateNumber: estimate.estimate_number,
+        message: message!.trim(), // guarded above: request_changes requires a non-empty message
+        requesterName: client?.display_name ?? ctx.email,
+        requesterEmail: ctx.email,
+      });
+    } catch (err) {
+      log.error("failed to save change request", { estimateId: id, error: err instanceof Error ? err.message : err });
+      return NextResponse.json({ error: "Failed to send your request. Please try again." }, { status: 500 });
+    }
     return NextResponse.json({ success: true, status: "sent" });
   }
 
@@ -222,6 +230,85 @@ export async function POST(
     return NextResponse.json({ error: "Estimate is no longer actionable" }, { status: 409 });
   }
 
+  // Undo a claimed acceptance when a later step fails, so the client can
+  // retry instead of being left with an 'accepted' estimate that is only half
+  // split / priced on the wrong scope (mirrors rollbackAcceptance in
+  // api/public/proposals/[token]/accept). Only lines this request moved are
+  // reset, and the stage goes back to 'sent' only if it is still the
+  // 'accepted' this request set.
+  const rollbackAcceptance = async (touchedLineIds: string[]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
+    if (touchedLineIds.length) {
+      await sb
+        .from("estimate_line_items")
+        .update({ status: "quote" })
+        .eq("estimate_id", id)
+        .eq("org_id", ctx.orgId)
+        .in("id", touchedLineIds)
+        .in("status", ["won", "lost"]);
+    }
+    await sb
+      .from("estimates")
+      .update({
+        stage: "sent",
+        portal_accepted_at: null,
+        portal_signature_name: null,
+        portal_user_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("org_id", ctx.orgId)
+      .eq("stage", "accepted");
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await recalcEstimateTotals(supabase as any, id);
+    } catch (err) {
+      log.error("failed to recalc totals after acceptance rollback", {
+        estimateId: id,
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  };
+
+  // Per-line-item accept/reject — computed above. Both updates stay
+  // conditioned on status 'quote' so nothing staff already decided changes.
+  if (action === "accept") {
+    for (const [ids, status] of [[wonIds, "won"], [lostIds, "lost"]] as const) {
+      if (!ids.length) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineErr } = await (supabase as any)
+        .from("estimate_line_items")
+        .update({ status })
+        .eq("estimate_id", id)
+        .eq("org_id", ctx.orgId)
+        .eq("status", "quote")
+        .in("id", ids)
+        .is("deleted_at", null);
+      if (lineErr) {
+        log.error("failed to split line items on portal acceptance", { estimateId: id, status, error: lineErr });
+        await rollbackAcceptance([...wonIds, ...lostIds]);
+        return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
+      }
+    }
+
+    // Line items are now split into won/lost — recompute the estimate's
+    // stored totals down to just the won subset (same as the token-based
+    // public proposal accept route), so downstream invoicing/job-conversion
+    // reflects what was actually accepted.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await recalcEstimateTotals(supabase as any, id);
+    } catch (err) {
+      log.error("failed to recalc totals on portal acceptance", {
+        estimateId: id,
+        error: err instanceof Error ? err.message : err,
+      });
+      await rollbackAcceptance([...wonIds, ...lostIds]);
+      return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: client } = await (supabase as any)
     .from("clients")
@@ -239,40 +326,7 @@ export async function POST(
     decision: action === "accept" ? "accepted" : "rejected",
   });
 
-  // Per-line-item accept/reject — computed above. Both updates stay
-  // conditioned on status 'quote' so nothing staff already decided changes.
   if (action === "accept") {
-    if (wonIds.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from("estimate_line_items")
-        .update({ status: "won" })
-        .eq("estimate_id", id)
-        .eq("org_id", ctx.orgId)
-        .eq("status", "quote")
-        .in("id", wonIds)
-        .is("deleted_at", null);
-    }
-    if (lostIds.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from("estimate_line_items")
-        .update({ status: "lost" })
-        .eq("estimate_id", id)
-        .eq("org_id", ctx.orgId)
-        .eq("status", "quote")
-        .in("id", lostIds)
-        .is("deleted_at", null);
-    }
-  }
-
-  if (action === "accept") {
-    // Line items are now split into won/lost — recompute the estimate's
-    // stored totals down to just the won subset (same as the token-based
-    // public proposal accept route), so downstream invoicing/job-conversion
-    // reflects what was actually accepted.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await recalcEstimateTotals(supabase as any, id);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await recordAcceptedVersion(supabase as any, id, signatureName!.trim(), "client_portal");
   }

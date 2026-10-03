@@ -5320,6 +5320,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           crew_id: string | null
+          crew_unassigned: boolean
           deleted_at: string | null
           dispatched_at: string | null
           end_time: string | null
@@ -5367,6 +5368,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           crew_id?: string | null
+          crew_unassigned?: boolean
           deleted_at?: string | null
           dispatched_at?: string | null
           end_time?: string | null
@@ -5414,6 +5416,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           crew_id?: string | null
+          crew_unassigned?: boolean
           deleted_at?: string | null
           dispatched_at?: string | null
           end_time?: string | null
@@ -8610,6 +8613,7 @@ export type Database = {
         Row: {
           cost_type: string
           created_at: string
+          deleted_at: string | null
           description: string
           estimate_id: string
           id: string
@@ -8625,6 +8629,7 @@ export type Database = {
         Insert: {
           cost_type?: string
           created_at?: string
+          deleted_at?: string | null
           description: string
           estimate_id: string
           id?: string
@@ -8640,6 +8645,7 @@ export type Database = {
         Update: {
           cost_type?: string
           created_at?: string
+          deleted_at?: string | null
           description?: string
           estimate_id?: string
           id?: string
@@ -10011,6 +10017,8 @@ export type Database = {
       integrations: {
         Row: {
           api_key: string | null
+          api_key_hash: string | null
+          api_key_prefix: string | null
           config: Json
           created_at: string
           enabled: boolean
@@ -10023,6 +10031,8 @@ export type Database = {
         }
         Insert: {
           api_key?: string | null
+          api_key_hash?: string | null
+          api_key_prefix?: string | null
           config?: Json
           created_at?: string
           enabled?: boolean
@@ -10035,6 +10045,8 @@ export type Database = {
         }
         Update: {
           api_key?: string | null
+          api_key_hash?: string | null
+          api_key_prefix?: string | null
           config?: Json
           created_at?: string
           enabled?: boolean

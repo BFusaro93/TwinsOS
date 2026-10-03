@@ -247,7 +247,7 @@ export function ReportTable({
   // overwriting that column's total.
   const totalsLabelIdx = totalsLabelIndex(displayColumns, sectionKey);
 
-  const truncated = !!result.truncated && result.totalCount !== undefined;
+  const truncated = !!result.truncated;
 
   return (
     <div className="flex flex-col gap-2">
@@ -259,8 +259,10 @@ export function ReportTable({
           >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              Showing the first {result.rowCount.toLocaleString()} of{" "}
-              {result.totalCount!.toLocaleString()} rows — totals below cover only these rows.
+              {result.totalCount !== undefined
+                ? `Showing the first ${result.rowCount.toLocaleString()} of ${result.totalCount.toLocaleString()} rows`
+                : `Partial — first ${result.rowCount.toLocaleString()} rows`}
+              {" "}— totals and calculated-column sorting cover only these rows.
               Narrow the filters to see everything.
             </span>
           </div>

@@ -211,9 +211,30 @@ async function applySubscriptionToOrg(
         Date.now() + CANCELED_ACCESS_DAYS * 24 * 60 * 60 * 1000
       ).toISOString();
     }
-  } else if (plan) {
-    patch.plan = plan;
-    patch.canceled_access_ends_at = null;
+  } else {
+    // A late non-downgrade event for an OLD subscription id must not overwrite
+    // an org that has since moved to a different, still-live subscription.
+    // (If the stored subscription is itself canceled/ended — a genuine
+    // resubscribe — or the org has none, the event applies.)
+    const currentQuery = db
+      .from("organizations")
+      .select("stripe_subscription_id, stripe_subscription_status");
+    const { data: current } =
+      "id" in lookup
+        ? await currentQuery.eq("id", lookup.id).maybeSingle()
+        : await currentQuery.eq("stripe_customer_id", lookup.stripeCustomerId).maybeSingle();
+    if (
+      current?.stripe_subscription_id &&
+      current.stripe_subscription_id !== subscription.id &&
+      current.stripe_subscription_status &&
+      !DOWNGRADE_STATUSES.has(current.stripe_subscription_status)
+    ) {
+      return;
+    }
+    if (plan) {
+      patch.plan = plan;
+      patch.canceled_access_ends_at = null;
+    }
   }
 
   const query = db

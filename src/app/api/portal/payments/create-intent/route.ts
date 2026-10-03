@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { logger } from "@/lib/logger";
+import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
@@ -7,6 +11,11 @@ import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
+
+const log = logger.child("portal create-intent");
+
+// Stripe rejects charges under 50 cents.
+const STRIPE_MIN_CHARGE_CENTS = 50;
 
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
@@ -20,6 +29,11 @@ export async function POST(request: Request) {
 
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Fails open if the limiter errors. Keyed per portal client.
+  if (!(await checkAuthRateLimit(`portal-pay-intent:${ctx.clientId}`, 20, 600))) {
+    return NextResponse.json({ error: "Too many attempts. Please wait a few minutes and try again." }, { status: 429 });
+  }
 
   const body = await request.json();
   const parsed = CreateIntentSchema.safeParse(body);
@@ -46,6 +60,17 @@ export async function POST(request: Request) {
   }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
+  }
+  // Settle with any credit/deposit already on the account first so the card
+  // only pays what is still owed. Service role: portal customers have no
+  // profile, so the user-session RPC guard would reject them.
+  try {
+    invoice.balance_cents = await applyCreditBeforeCharge(createServiceClient(), invoice);
+  } catch {
+    return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
+  }
+  if (invoice.balance_cents <= 0) {
+    return NextResponse.json({ error: "Your account credit has paid this invoice in full — no card payment needed. Refresh to see it." }, { status: 409 });
   }
 
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
@@ -77,8 +102,16 @@ export async function POST(request: Request) {
         )
       : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 
+  if (totalChargeCents < STRIPE_MIN_CHARGE_CENTS) {
+    return NextResponse.json(
+      { error: "The remaining balance is below the $0.50 minimum for online payments. Please contact us to settle it." },
+      { status: 400 }
+    );
+  }
+
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
+  try {
   if (paymentMethod === "us_bank_account") {
     if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
       return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
@@ -138,4 +171,7 @@ export async function POST(request: Request) {
     feeCents,
     totalChargeCents,
   });
+  } catch (err) {
+    return stripeErrorResponse(err, log, { invoiceId: invoice.id, connectedAccountId: org.stripe_connect_account_id });
+  }
 }

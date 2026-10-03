@@ -297,6 +297,8 @@ export interface CRMJobVisit {
   clientPriority?: string | null
   clientTags?: string[]
   crewId: string | null
+  /** Per-visit "no crew" override: pins the visit to unassigned even when its job has a crew. */
+  crewUnassigned?: boolean
   crewName?: string | null
   scheduledDate: string
   startTime: string | null

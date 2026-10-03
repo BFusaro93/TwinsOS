@@ -27,7 +27,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at, clocked_out_at, paused_at, break_minutes, crm_jobs(crew_id, property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, break_minutes, crm_jobs(crew_id, property_id, service_address, service_city)";
 
 /**
  * Resumes every paused visit in this stop — rolls the elapsed break time

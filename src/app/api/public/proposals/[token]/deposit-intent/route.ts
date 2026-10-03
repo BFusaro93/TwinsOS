@@ -126,7 +126,17 @@ export async function POST(
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
 
-  const depositCents = estimate.deposit_required_cents ?? 0;
+  // A deposit is a down payment on the job, so it can never be more than the
+  // proposal's current total (e.g. staff later cut scope below a fixed-dollar
+  // deposit). The client's un-submitted line selection isn't known here, so
+  // this clamps to the whole-estimate total; the accept route separately
+  // rejects a claimed deposit above the ACCEPTED total.
+  const depositCents = Math.min(
+    estimate.deposit_required_cents ?? 0,
+    estimate.total_cents != null && estimate.total_cents > 0
+      ? estimate.total_cents
+      : (estimate.deposit_required_cents ?? 0),
+  );
   if (depositCents <= 0) {
     return NextResponse.json({ error: "This proposal has no deposit due" }, { status: 400 });
   }

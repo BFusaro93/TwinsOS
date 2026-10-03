@@ -40,6 +40,22 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { submitWorkRequest } from "@/lib/field/submit-work-request";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
+import { z } from "zod";
+
+// Length caps on every free-text field — this endpoint is public.
+const optionalText = (max: number) => z.string().max(max).optional();
+const BodySchema = z.object({
+  orgSlug: z.string().trim().min(1).max(100),
+  requestedBy: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(300),
+  description: optionalText(5000),
+  priority: optionalText(20),
+  equipment: optionalText(200),
+  assetId: z.string().uuid().optional(),
+  equipmentType: optionalText(100),
+  repairCategory: optionalText(100),
+});
 
 // Twins' own operating org — see src/lib/hooks/use-internal-org.ts. The
 // webhook-secret Turnstile bypass below is scoped to this org only, so a
@@ -66,13 +82,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const orgSlug     = (body.orgSlug     as string | undefined)?.trim();
-  const requestedBy = (body.requestedBy as string | undefined)?.trim();
-  const title       = (body.title       as string | undefined)?.trim();
-
-  if (!orgSlug)     return NextResponse.json({ error: "orgSlug is required" },     { status: 400 });
-  if (!requestedBy) return NextResponse.json({ error: "requestedBy is required" }, { status: 400 });
-  if (!title)       return NextResponse.json({ error: "title is required" },       { status: 400 });
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  // Drop null/empty optionals so they don't fail the type checks below.
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (v !== null && v !== "") cleaned[k] = v;
+  }
+  const parsed = BodySchema.safeParse(cleaned);
+  if (!parsed.success) {
+    const field = parsed.error.issues[0]?.path[0];
+    const missing = parsed.error.issues[0]?.code === "invalid_type" && cleaned[String(field)] === undefined;
+    return NextResponse.json(
+      { error: missing ? `${String(field)} is required` : `Invalid or too long: ${String(field ?? "body")}` },
+      { status: 400 }
+    );
+  }
+  const { orgSlug, requestedBy, title } = parsed.data;
 
   // Service-role client (bypasses RLS — safe for server-side only)
   const supabase = createClient<Database>(
@@ -102,6 +129,13 @@ export async function POST(req: NextRequest) {
   // (Microsoft Forms → this webhook) can't solve a browser challenge, so it
   // authenticates instead with a shared secret header — see isTrustedWebhook.
   if (!isTrustedWebhook(req, org.id)) {
+    // Per-IP-per-org throttle: Turnstile is opt-in, so without this an
+    // unauthenticated caller could flood an org's request queue and the
+    // admin notification emails.
+    const allowed = await checkAuthRateLimit(`workreq:${orgSlug}:${getClientIp(req)}`, 10, 600);
+    if (!allowed) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
     const forwardedFor = req.headers.get("x-forwarded-for");
     const turnstileResult = await verifyTurnstileToken(
       body.turnstileToken as string | undefined,
@@ -119,12 +153,12 @@ export async function POST(req: NextRequest) {
       {
         requestedBy,
         title,
-        description: body.description as string | undefined,
-        priority: body.priority as string | undefined,
-        equipment: body.equipment as string | undefined,
-        assetId: body.assetId as string | undefined,
-        equipmentType: body.equipmentType as string | undefined,
-        repairCategory: body.repairCategory as string | undefined,
+        description: parsed.data.description,
+        priority: parsed.data.priority,
+        equipment: parsed.data.equipment,
+        assetId: parsed.data.assetId,
+        equipmentType: parsed.data.equipmentType,
+        repairCategory: parsed.data.repairCategory,
         hasRepairTag: body.hasRepairTag,
       },
       { createdBy: null, requestedById: null }

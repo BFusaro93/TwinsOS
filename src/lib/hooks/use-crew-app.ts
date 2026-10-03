@@ -8,7 +8,9 @@ import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
 import {
-  compareCrewVisitRows,
+  crewVisitComparator,
+  fetchRememberedRouteOrder,
+  selectCarriedOverClockedInVisits,
   effectiveVisitCrewId,
   fetchCallerCrew,
   selectEffectiveCrewVisits,
@@ -138,7 +140,7 @@ function crewVisitSelect(hidePricing: boolean): string {
   const visitCols = [
     "id", "org_id", "job_id", "client_id", "job_service_id",
     "storm_event_id", "snow_depth_inches", "temperature", "asset_type",
-    "crew_id", "scheduled_date", "start_time", "end_time",
+    "crew_id", "crew_unassigned", "scheduled_date", "start_time", "end_time",
     "status", "sub_status", "completion_notes", "actual_hours", "completed_at",
     "priority", "notes_to_crew", "notes_to_client", "invoice_description",
     "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
@@ -267,9 +269,9 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
 // ── useMyCrewVisits ───────────────────────────────────────────────────────────
 // Returns today's visits for the crew the logged-in user belongs to.
 
-export function useMyCrewVisits(date: string) {
+export function useMyCrewVisits(date: string, includeCarryOver = false) {
   return useQuery<CRMJobVisit[]>({
-    queryKey: ["crew-app-visits", date],
+    queryKey: ["crew-app-visits", date, includeCarryOver],
     queryFn: async () => {
       const { supabase, userId, orgId, hidePricing } = await getAuthContext();
 
@@ -280,15 +282,32 @@ export function useMyCrewVisits(date: string) {
 
       // By EFFECTIVE crew: a job-inherited visit (crew_id NULL, job.crew_id =
       // this crew) is this crew's work too. See selectEffectiveCrewVisits().
+      const select = crewVisitSelect(hidePricing);
       const { data, error } = await selectEffectiveCrewVisits(
         supabase,
-        crewVisitSelect(hidePricing),
+        select,
         membership.crew_id,
         (q) => q.eq("scheduled_date", date).is("deleted_at", null)
       );
 
       if (error) throw error;
-      return [...data].sort(compareCrewVisitRows).map(mapVisit);
+
+      // Stops still clocked into from an earlier day stay on the list (callers
+      // pass includeCarryOver only when `date` is the org's today) so the crew
+      // can clock out after org-midnight.
+      let carried: Record<string, unknown>[] = [];
+      if (includeCarryOver) {
+        const res = await selectCarriedOverClockedInVisits(supabase, select, membership.crew_id, date);
+        if (!res.error) {
+          const todayIds = new Set(data.map((r) => r.id as string));
+          carried = res.data.filter((r) => !todayIds.has(r.id as string));
+        }
+      }
+
+      // Remembered route order as the tiebreaker after priority — same rule as
+      // the dispatch board and /api/crm/crew/visits.
+      const cmp = crewVisitComparator(await fetchRememberedRouteOrder(supabase, membership.crew_id, [date]));
+      return [...carried.sort(cmp), ...[...data].sort(cmp)].map(mapVisit);
     },
   });
 }
@@ -298,8 +317,8 @@ export function useMyCrewVisits(date: string) {
 // tablet's list — a pure client-side transform of useMyCrewVisits, sharing
 // its cache entry rather than issuing a second fetch.
 
-export function useMyCrewStops(date: string) {
-  const query = useMyCrewVisits(date);
+export function useMyCrewStops(date: string, includeCarryOver = false) {
+  const query = useMyCrewVisits(date, includeCarryOver);
   const stops: Stop[] = query.data ? groupVisitsIntoStops(query.data) : [];
   return { ...query, data: stops };
 }

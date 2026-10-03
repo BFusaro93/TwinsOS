@@ -61,6 +61,30 @@ async function claimEnrollmentStep(adminClient: AnyClient, enrollment: DueEnroll
   return ((data ?? []) as unknown[]).length > 0;
 }
 
+/**
+ * True when this enrollment's step already has a "<channel>_sent" row in the
+ * execution log. That row is written right after the provider accepts the
+ * message and BEFORE the enrollment is advanced, so if a run dies (or the
+ * advance write fails) between send and advance, the re-claimed step finds the
+ * marker and only advances — it never sends the same email/SMS twice.
+ * Returns null when the lookup itself failed (caller must not send blind).
+ */
+async function stepAlreadySent(
+  adminClient: AnyClient,
+  enrollId: string,
+  eventId: string,
+  action: "email_sent" | "sms_sent"
+): Promise<boolean | null> {
+  const { count, error } = await adminClient
+    .from("crm_sequence_execution_log")
+    .select("id", { count: "exact", head: true })
+    .eq("enrollment_id", enrollId)
+    .eq("event_id", eventId)
+    .eq("action", action);
+  if (error) return null;
+  return (count ?? 0) > 0;
+}
+
 interface SendFailureContext {
   orgId: string;
   enrollId: string;
@@ -184,6 +208,38 @@ async function runClaimedStep(
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("position", { ascending: true });
+
+  // Disabling (or deleting) a sequence/automation must stop work already in
+  // flight, not just block new enrollments — otherwise a client enrolled
+  // before the switch-off keeps getting emails/texts. Checked at execution
+  // time, per step. The enrollment ends via stopped_at (the existing
+  // "ended without finishing" state) so it no longer occupies the slot.
+  const { data: seqRow } = await adminClient
+    .from("crm_automation_sequences")
+    .select("is_active, deleted_at, crm_automations(is_active, deleted_at)")
+    .eq("id", sequence_id)
+    .maybeSingle();
+  const parentRaw = seqRow?.crm_automations as
+    | { is_active: boolean; deleted_at: string | null }
+    | { is_active: boolean; deleted_at: string | null }[]
+    | null
+    | undefined;
+  const parent = Array.isArray(parentRaw) ? parentRaw[0] : parentRaw;
+  if (
+    !seqRow ||
+    seqRow.is_active === false || seqRow.deleted_at ||
+    (parent && (parent.is_active === false || parent.deleted_at))
+  ) {
+    await adminClient
+      .from("crm_sequence_enrollments")
+      .update({ stopped_at: nowIso, updated_at: nowIso })
+      .eq("id", enrollId);
+    await logSequenceExecution(adminClient, {
+      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+      action: "stopped_sequence_inactive", detail: "sequence or automation was disabled/deleted",
+    });
+    return { fired: { enrollmentId: enrollId, action: "stopped (sequence/automation inactive)" } };
+  }
 
   // Positions aren't guaranteed contiguous: deleting or deactivating a step
   // leaves a gap, and events is already filtered to active, non-deleted rows
@@ -355,6 +411,17 @@ async function runClaimedStep(
       return { fired: { enrollmentId: enrollId, action: "awaiting approval" } };
     }
 
+    const emailSentBefore = await stepAlreadySent(adminClient, enrollId, currentEvent.id, "email_sent");
+    if (emailSentBefore === null) {
+      return { skipped: { enrollmentId: enrollId, reason: "could not verify prior send; will retry after lease" } };
+    }
+    if (emailSentBefore) {
+      const action = await advanceEnrollmentPastStep(adminClient, {
+        enrollmentId: enrollId, events: events ?? [], completedPosition: next_event_position, nowIso,
+      });
+      return { fired: { enrollmentId: enrollId, action: `email already sent (recovered) → ${action}` } };
+    }
+
     const sendResult = await sendResolvedSequenceEmail(adminClient, {
       orgId,
       clientId: client_id ?? null,
@@ -374,16 +441,17 @@ async function runClaimedStep(
       return handleSendFailure(adminClient, failureCtx, sendResult.reason, sendResult.permanent === true);
     }
 
+    // Record the "sent" marker BEFORE advancing (see stepAlreadySent).
+    await logSequenceExecution(adminClient, {
+      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+      eventId: currentEvent.id, eventType: "email", action: "email_sent",
+      detail: `${built.subject} → ${built.toEmails.join(", ")}`,
+    });
     const action = await advanceEnrollmentPastStep(adminClient, {
       enrollmentId: enrollId,
       events: events ?? [],
       completedPosition: next_event_position,
       nowIso,
-    });
-    await logSequenceExecution(adminClient, {
-      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-      eventId: currentEvent.id, eventType: "email", action: "email_sent",
-      detail: `${built.subject} → ${built.toEmails.join(", ")}`,
     });
     return { fired: { enrollmentId: enrollId, action: `email sent → ${action}` } };
   }
@@ -435,6 +503,17 @@ async function runClaimedStep(
       return { fired: { enrollmentId: enrollId, action: "awaiting approval" } };
     }
 
+    const smsSentBefore = await stepAlreadySent(adminClient, enrollId, currentEvent.id, "sms_sent");
+    if (smsSentBefore === null) {
+      return { skipped: { enrollmentId: enrollId, reason: "could not verify prior send; will retry after lease" } };
+    }
+    if (smsSentBefore) {
+      const action = await advanceEnrollmentPastStep(adminClient, {
+        enrollmentId: enrollId, events: events ?? [], completedPosition: next_event_position, nowIso,
+      });
+      return { fired: { enrollmentId: enrollId, action: `sms already sent (recovered) → ${action}` } };
+    }
+
     const sendResult = await sendResolvedSequenceSms(adminClient, {
       orgId,
       clientId: client_id ?? null,
@@ -445,16 +524,16 @@ async function runClaimedStep(
       return handleSendFailure(adminClient, failureCtx, sendResult.reason, sendResult.permanent === true);
     }
 
+    await logSequenceExecution(adminClient, {
+      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+      eventId: currentEvent.id, eventType: "text_message", action: "sms_sent",
+      detail: `${built.bodyText} → ${built.toPhone}`,
+    });
     const action = await advanceEnrollmentPastStep(adminClient, {
       enrollmentId: enrollId,
       events: events ?? [],
       completedPosition: next_event_position,
       nowIso,
-    });
-    await logSequenceExecution(adminClient, {
-      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-      eventId: currentEvent.id, eventType: "text_message", action: "sms_sent",
-      detail: `${built.bodyText} → ${built.toPhone}`,
     });
     return { fired: { enrollmentId: enrollId, action: `sms sent → ${action}` } };
   }

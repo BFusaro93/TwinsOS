@@ -36,7 +36,7 @@ export async function POST(
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
     .select(`
-      clocked_in_at, org_id, crew_id, status,
+      clocked_in_at, org_id, crew_id, crew_unassigned, status,
       notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
       crm_jobs(crew_id, notes_to_crew, notes_to_crew_updated_at)
     `)

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
+import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet, logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 
 /**
@@ -32,6 +32,8 @@ import { processEnrollmentImmediately } from "@/lib/automations/sequence-process
 /** Lead time for a trigger saved without a "minutes before" value. */
 const DEFAULT_LEAD_MINUTES = 60;
 
+export const maxDuration = 300;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
 
@@ -56,10 +58,22 @@ async function handleRun(request: Request) {
 
   const now = new Date();
 
-  const { data: triggers } = await supabase
-    .from("crm_sequence_triggers")
-    .select("id, sequence_id, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
-    .eq("trigger_type", "sales_meeting_reminder");
+  // Page through every org's triggers — a single select silently truncates
+  // at 1000 rows. Ordered by id so the pages split stably.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const triggers: any[] = [];
+  for (let from = 0; ; ) {
+    const { data: page, error: trigErr } = await supabase
+      .from("crm_sequence_triggers")
+      .select("id, sequence_id, config, crm_automation_sequences(is_active, deleted_at, allow_reentry, reentry_after_minutes, crm_automations(is_active, deleted_at, org_id))")
+      .eq("trigger_type", "sales_meeting_reminder")
+      .order("id")
+      .range(from, from + 999);
+    if (trigErr) return NextResponse.json({ error: trigErr.message }, { status: 500 });
+    if (!page || page.length === 0) break;
+    triggers.push(...page);
+    from += page.length;
+  }
 
   let enrolled = 0;
 
@@ -68,7 +82,7 @@ async function handleRun(request: Request) {
     const seq = trigger.crm_automation_sequences as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const auto = seq?.crm_automations as any;
-    if (!seq?.is_active || !auto?.is_active) continue;
+    if (!seq?.is_active || !auto?.is_active || seq.deleted_at || auto.deleted_at) continue;
 
     const orgId = auto.org_id as string;
     const configured = Number((trigger.config as { minutes?: number } | null)?.minutes);
@@ -78,7 +92,7 @@ async function handleRun(request: Request) {
 
     const { data: meetings } = await supabase
       .from("crm_sales_meetings")
-      .select("id, client_id")
+      .select("id, client_id, scheduled_at")
       .eq("org_id", orgId)
       .eq("status", "scheduled")
       .is("deleted_at", null)
@@ -96,7 +110,7 @@ async function handleRun(request: Request) {
       // changes, so without allow_reentry a prior enrollment row —
       // regardless of its status — permanently blocks re-enrollment for
       // this meeting+sequence.
-      const eligible = await isEligibleForEnrollment(supabase, {
+      let eligible = await isEligibleForEnrollment(supabase, {
         sequenceId: trigger.sequence_id,
         clientId,
         estimateId: null,
@@ -104,6 +118,15 @@ async function handleRun(request: Request) {
         allowReentry: seq.allow_reentry ?? false,
         reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
       });
+      // A rescheduled meeting is a new occurrence: dedupe is keyed on
+      // meeting_id, so without this the reminder never re-fires for the new
+      // time. Each enrollment logs the scheduled_at it was created for; if the
+      // latest FINISHED enrollment recorded a different time, re-enroll.
+      // (Enrollments with no recorded time — pre-dating this — keep the old
+      // behavior. In-flight enrollments are never duplicated.)
+      if (!eligible && (await meetingRescheduledSinceEnrollment(supabase, trigger.sequence_id, meeting.id, meeting.scheduled_at as string))) {
+        eligible = true;
+      }
       if (!eligible) continue;
 
       const enrollmentId = await enrollClientInSequence(supabase, {
@@ -114,10 +137,47 @@ async function handleRun(request: Request) {
       });
       if (enrollmentId) {
         enrolled++;
+        await logSequenceExecution(supabase, {
+          orgId, enrollmentId, sequenceId: trigger.sequence_id, clientId,
+          action: "meeting_scheduled_at", detail: new Date(meeting.scheduled_at as string).toISOString(),
+        });
         await processEnrollmentImmediately(supabase, enrollmentId);
       }
     }
   }
 
   return NextResponse.json({ enrolled });
+}
+
+/**
+ * True when the most recent enrollment for (sequence, meeting) has FINISHED
+ * (completed/stopped) and was created for a different scheduled_at than the
+ * meeting has now. Returns false when it can't tell.
+ */
+async function meetingRescheduledSinceEnrollment(
+  supabase: AdminClient,
+  sequenceId: string,
+  meetingId: string,
+  scheduledAt: string
+): Promise<boolean> {
+  const { data: latest } = await supabase
+    .from("crm_sequence_enrollments")
+    .select("id, completed_at, stopped_at")
+    .eq("sequence_id", sequenceId)
+    .eq("meeting_id", meetingId)
+    .is("deleted_at", null)
+    .order("enrolled_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!latest || (!latest.completed_at && !latest.stopped_at)) return false;
+  const { data: logRow } = await supabase
+    .from("crm_sequence_execution_log")
+    .select("detail")
+    .eq("enrollment_id", latest.id)
+    .eq("action", "meeting_scheduled_at")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!logRow?.detail) return false;
+  return new Date(logRow.detail as string).getTime() !== new Date(scheduledAt).getTime();
 }

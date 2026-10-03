@@ -15,12 +15,25 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts } from "@/lib/hooks/use-products";
 import { formatCurrency } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 
-function monthKey(date: Date): { key: string; label: string } {
+// Month buckets are plain "YYYY-MM" strings on the ORG's calendar (not the
+// viewer's laptop clock and not UTC), so a PO dated/created near month end
+// lands in the same month the rest of the app shows it in.
+function monthKeyFromYmd(ymd: string): { key: string; label: string } {
+  const key = ymd.slice(0, 7);
+  const [y, m] = key.split("-").map(Number);
   return {
-    key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
-    label: date.toLocaleString("en-US", { month: "short", year: "2-digit" }),
+    key,
+    // Date.UTC + timeZone UTC: the label is derived from the key alone.
+    label: new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" }),
   };
+}
+
+function shiftMonthKey(key: string, delta: number): string {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function BreakdownTable({
@@ -52,13 +65,26 @@ function BreakdownTable({
 export default function PartsSpendReportPage() {
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: products = [] } = useProducts();
-  const today = useMemo(() => new Date(), []);
+  const { today: orgToday, toISODate } = useOrgDates();
+  const currentMonthKey = orgToday().slice(0, 7);
+
+  // poDate is a calendar date; createdAt is an instant, so convert it to the
+  // org's calendar day before bucketing.
+  const poMonth = (po: { poDate?: string | null; createdAt: string }) =>
+    po.poDate ? po.poDate.slice(0, 7) : toISODate(new Date(po.createdAt)).slice(0, 7);
 
   const productCategoryMap = useMemo(() => {
     const map = new Map<string, string>();
     products.forEach((p) => map.set(p.id, p.category));
     return map;
   }, [products]);
+
+  // Part-only lines (no catalog product, linked straight to a part) are
+  // maintenance parts too; a line with neither is Uncategorized and excluded.
+  const isMaintenancePartLine = (li: { productItemId?: string | null; partId?: string | null }) => {
+    if (li.productItemId) return productCategoryMap.get(li.productItemId) === "maintenance_part";
+    return !!li.partId;
+  };
 
   // Only POs actually placed with the vendor count as spend — "requested"/
   // "pending"/"approved" haven't been ordered yet, and "rejected"/"canceled"
@@ -73,23 +99,24 @@ export default function PartsSpendReportPage() {
   // ── Monthly trend (last 12 months, maintenance_part line items only) ────────
   const monthlyTrend = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) =>
-      monthKey(new Date(today.getFullYear(), today.getMonth() - (11 - i), 1))
+      monthKeyFromYmd(`${shiftMonthKey(currentMonthKey, i - 11)}-01`)
     );
     const spendByMonth: Record<string, number> = {};
     for (const m of months) spendByMonth[m.key] = 0;
 
     orderedPOs.forEach((po) => {
-      const mk = (po.poDate ?? po.createdAt).slice(0, 7);
+      const mk = poMonth(po);
       if (!(mk in spendByMonth)) return;
       po.lineItems
-        .filter((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
-        .forEach((li) => { spendByMonth[mk] += li.quantity * li.unitCost; });
+        .filter(isMaintenancePartLine)
+        .forEach((li) => { spendByMonth[mk] += Math.round(li.quantity * li.unitCost); });
     });
 
     return months.map(({ key, label }) => ({ key, month: label, spend: spendByMonth[key] }));
-  }, [orderedPOs, productCategoryMap, today]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedPOs, productCategoryMap, currentMonthKey, toISODate]);
 
-  const [selectedMonth, setSelectedMonth] = useState(() => monthKey(today).key);
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonthKey);
   const selectedLabel = monthlyTrend.find((m) => m.key === selectedMonth)?.month ?? selectedMonth;
 
   // ── By vendor / by part breakdown for the selected month ────────────────────
@@ -98,12 +125,12 @@ export default function PartsSpendReportPage() {
     const byPart = new Map<string, number>();
 
     orderedPOs
-      .filter((po) => (po.poDate ?? po.createdAt).slice(0, 7) === selectedMonth)
+      .filter((po) => poMonth(po) === selectedMonth)
       .forEach((po) => {
         po.lineItems
-          .filter((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
+          .filter(isMaintenancePartLine)
           .forEach((li) => {
-            const lineTotal = li.quantity * li.unitCost;
+            const lineTotal = Math.round(li.quantity * li.unitCost);
             if (lineTotal === 0) return;
             byVendor.set(po.vendorName, (byVendor.get(po.vendorName) ?? 0) + lineTotal);
             const partKey = li.productItemName || li.partNumber || "Unknown part";
@@ -118,7 +145,8 @@ export default function PartsSpendReportPage() {
     const total = vendorRows.reduce((s, r) => s + r.cents, 0);
 
     return { vendorRows, partRows: toSortedRows(byPart), total };
-  }, [orderedPOs, productCategoryMap, selectedMonth]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedPOs, productCategoryMap, selectedMonth, toISODate]);
 
   return (
     <div className="flex h-full flex-col overflow-auto">

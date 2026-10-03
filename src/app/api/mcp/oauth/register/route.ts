@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { OAuthClientMetadataSchema, type OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { adminClient } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 
 const log = logger.child("mcp-oauth-register");
 
@@ -14,6 +15,11 @@ const log = logger.child("mcp-oauth-register");
  * since Claude's connector authenticates via PKCE instead.
  */
 export async function POST(request: Request) {
+  // Public + unauthenticated insert — cap registrations per IP.
+  if (!(await checkAuthRateLimit(`mcp-register:ip:${getClientIp(request)}`, 20, 3600))) {
+    return NextResponse.json({ error: "temporarily_unavailable", error_description: "Too many registrations" }, { status: 429 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -29,6 +35,16 @@ export async function POST(request: Request) {
     );
   }
   const metadata = parsed.data;
+  if (
+    metadata.redirect_uris.length > 10 ||
+    metadata.redirect_uris.some((u) => String(u).length > 2000) ||
+    (metadata.client_name ?? "").length > 200
+  ) {
+    return NextResponse.json(
+      { error: "invalid_client_metadata", error_description: "Too many or too long redirect_uris / client_name" },
+      { status: 400 }
+    );
+  }
 
   const clientId = randomUUID();
   const db = adminClient();

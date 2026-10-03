@@ -9,6 +9,7 @@ import {
   SAMPLE_MERGE_VALUES,
 } from "@/lib/utils/document-template-renderer";
 import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
+import { sanitizeImageBlocks } from "@/lib/documents/sanitize-image-blocks";
 import type { BlockType } from "@/types/crm-documents";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 
@@ -68,10 +69,12 @@ export async function POST(
 
   let attachments: Array<{ filename: string; content: Buffer }> | undefined;
   if (template.include_pdf) {
-    const sortedBlocks = [...body.blocks].sort((a, b) => a.orderIndex - b.orderIndex).map((b) => ({
-      ...b,
-      content: b.content ? resolveMergeTags(b.content, mergeVars) : b.content,
-    }));
+    const sortedBlocks = await sanitizeImageBlocks(
+      [...body.blocks].sort((a, b) => a.orderIndex - b.orderIndex).map((b) => ({
+        ...b,
+        content: b.content ? resolveMergeTags(b.content, mergeVars) : b.content,
+      })),
+    );
     const pdfBuffer = await renderToBuffer(
       createElement(DocumentTemplatePdf, { blocks: sortedBlocks, title: template.name })
     );

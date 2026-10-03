@@ -169,8 +169,19 @@ export function buildClientMergeVars(
   // them; fall back to splitting display_name for callers that don't (or
   // for clients that only ever had a free-text display name).
   const rawDisplayName = client.displayName ?? "";
-  const rawFirstName = client.firstName ?? rawDisplayName.split(" ")[0] ?? rawDisplayName;
-  const rawLastName = client.lastName ?? rawDisplayName.split(" ").slice(1).join(" ");
+  // "Smith, John" display names (last-first) must not yield first name
+  // "Smith," — read them as last, first when the real columns are absent.
+  const commaIdx = rawDisplayName.indexOf(",");
+  const commaForm = commaIdx > 0
+    ? { last: rawDisplayName.slice(0, commaIdx).trim(), first: rawDisplayName.slice(commaIdx + 1).trim() }
+    : null;
+  const rawFirstName = client.firstName?.trim()
+    || (commaForm ? commaForm.first.split(" ")[0] : null)
+    || rawDisplayName.split(" ")[0]
+    || rawDisplayName;
+  const rawLastName = client.lastName?.trim()
+    || (commaForm ? commaForm.last : null)
+    || rawDisplayName.split(" ").slice(1).join(" ");
   const balance = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
     .format((client.balanceOutstandingCents ?? 0) / 100);
 

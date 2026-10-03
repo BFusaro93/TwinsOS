@@ -47,7 +47,17 @@ export async function submitWorkRequest(
   input: WorkRequestInput,
   attribution: { createdBy: string | null; requestedById: string | null }
 ): Promise<{ requestNumber: string; id: string }> {
-  const requestNumber = `MR-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+  // Atomic per-org counter — the old `Date.now()` suffix collided whenever two
+  // requests landed in the same few-ms window (or 100s later, wrapping at 5 digits).
+  const { data: numberData, error: numberErr } = await supabase.rpc("next_entity_number", {
+    p_entity_type: "maintenance_request",
+    p_prefix: "MR",
+    p_org_id_override: org.id,
+  });
+  if (numberErr || typeof numberData !== "string") {
+    throw new Error(numberErr?.message ?? "Failed to allocate request number");
+  }
+  const requestNumber: string = numberData;
 
   // The public route resolves org from a slug and calls this with a
   // service-role client (bypasses RLS) — input.assetId is caller-supplied

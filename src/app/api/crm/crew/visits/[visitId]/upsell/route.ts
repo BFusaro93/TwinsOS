@@ -2,14 +2,12 @@ import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { logger } from "@/lib/logger";
+import { validateImageUpload } from "@/lib/utils/image-upload";
 
 /** Categorises the ticket so the office can filter for these, and so ticket
  *  automations (which match on category) can fire on them. */
 const UPSELL_CATEGORY = "Upsell";
 
-/** Same charset guard the crew photo route uses — both end up in a storage
- *  path inside the shared "attachments" bucket. */
-const SAFE_PATH_SEGMENT = /^[a-zA-Z0-9_-]{1,100}$/;
 
 /**
  * POST /api/crm/crew/visits/[visitId]/upsell
@@ -34,7 +32,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, org_id, job_id, client_id, crew_id, scheduled_date, crm_jobs(crew_id, job_number, service_address, service_city)")
+    .select("id, org_id, job_id, client_id, crew_id, crew_unassigned, scheduled_date, crm_jobs(crew_id, job_number, service_address, service_city)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -128,10 +126,13 @@ export async function POST(
   // A photo is most of the value here — the office can price from it without a
   // second trip out. Non-fatal: a failed upload must not lose the suggestion.
   let photoAttached = false;
-  if (file && file.size > 0) {
+  const upsellImage = file && file.size > 0 ? validateImageUpload(file) : null;
+  if (file && upsellImage && !upsellImage.ok) {
+    logger.warn("[crew/upsell] photo rejected", { ticketId: ticket.id, error: upsellImage.error });
+  }
+  if (file && upsellImage?.ok) {
     try {
-      const rawExt = file.name.split(".").pop() ?? "jpg";
-      const ext = SAFE_PATH_SEGMENT.test(rawExt) ? rawExt : "jpg";
+      const ext = upsellImage.ext;
       // org_id MUST be the first path segment: the storage policy
       // org_members_upload_attachments checks
       // storage.foldername(name)[1] = the caller's org_id, so a path led by a
@@ -142,7 +143,7 @@ export async function POST(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: uploadError } = await (supabase as any).storage
         .from("attachments")
-        .upload(storagePath, buffer, { contentType: file.type });
+        .upload(storagePath, buffer, { contentType: upsellImage.contentType });
       if (uploadError) throw new Error(uploadError.message);
 
       // record_type 'ticket' is already allowed, so AttachmentsSection on the
@@ -155,7 +156,7 @@ export async function POST(
         record_id: ticket.id,
         file_name: file.name,
         file_size: file.size,
-        file_type: file.type,
+        file_type: upsellImage.contentType,
         storage_path: storagePath,
         uploaded_by_name: spotter,
       });

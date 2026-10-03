@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
+import { validateImageUpload } from "@/lib/utils/image-upload";
 import { heicToJpeg, isHeic, HEIC_MAX_BYTES, HEIC_ERROR_MESSAGE } from "@/lib/utils/convert-heic";
 
 /**
@@ -37,7 +38,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, org_id, crew_id, crm_jobs(crew_id)")
+    .select("job_id, org_id, crew_id, crew_unassigned, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -67,6 +68,8 @@ export async function POST(
   const clientId = rawClientId && SAFE_PATH_SEGMENT.test(rawClientId) ? rawClientId : null;
 
   if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
+  const imageCheck = validateImageUpload(file);
+  if (!imageCheck.ok) return NextResponse.json({ error: imageCheck.error }, { status: 400 });
 
   // Upload to Supabase Storage under {orgId}/visit-photos/{visitId}/{clientId-or-timestamp}.{ext}.
   // org_id MUST be the first segment — the bucket's INSERT policy
@@ -79,8 +82,8 @@ export async function POST(
   if (convertHeic && file.size > HEIC_MAX_BYTES) {
     return NextResponse.json({ error: "HEIC photos must be 15MB or smaller" }, { status: 400 });
   }
-  const rawExt = convertHeic ? "jpg" : (file.name.split(".").pop() ?? "jpg");
-  const ext = SAFE_PATH_SEGMENT.test(rawExt) ? rawExt : "jpg";
+  // Extension comes from the validated MIME type, never from the file name.
+  const ext = convertHeic ? "jpg" : imageCheck.ext;
   const storagePath = `${visit.org_id}/visit-photos/${visitId}/${clientId ?? Date.now()}.${ext}`;
 
   if (clientId) {
@@ -97,7 +100,7 @@ export async function POST(
   }
 
   let buffer: Buffer = Buffer.from(await file.arrayBuffer());
-  let contentType = file.type;
+  let contentType = imageCheck.contentType;
   if (convertHeic) {
     try {
       buffer = await heicToJpeg(buffer);
@@ -146,7 +149,7 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_id, crm_jobs(crew_id)")
+    .select("org_id, crew_id, crew_unassigned, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();

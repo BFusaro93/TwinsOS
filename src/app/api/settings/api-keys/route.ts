@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateApiKey } from "@/lib/api/auth";
 import { isKnownScope } from "@/lib/api/scopes";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
+
+const log = logger.child("settings-api-keys");
 
 const createKeySchema = z.object({
   name: z.string().min(1).max(100),
@@ -34,7 +37,8 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("request failed", { error: error.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return NextResponse.json({ keys: data });
@@ -90,7 +94,8 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "create failed" }, { status: 500 });
+    log.error("request failed", { error: error?.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return NextResponse.json({ ...data, apiKey: key });

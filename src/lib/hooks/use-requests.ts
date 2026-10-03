@@ -153,6 +153,44 @@ export function useUpdateRequestStatus() {
   });
 }
 
+/**
+ * Atomically claims a request for conversion: flips status to 'converted' only
+ * if the row is still in the status we just read (compare-and-set). A second
+ * concurrent conversion (double-click, two tabs) matches zero rows and throws,
+ * so only one work order is ever created. Returns the status to restore if the
+ * work-order creation then fails.
+ */
+export function useClaimRequestForConversion() {
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }): Promise<{ previousStatus: MaintenanceRequestStatus }> => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: current, error: readErr } = await (supabase as any)
+        .from("maintenance_requests")
+        .select("status")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .single();
+      if (readErr) throw readErr;
+      if (current.status === "converted") {
+        throw new Error("This request has already been converted to a work order.");
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: claimed, error } = await (supabase as any)
+        .from("maintenance_requests")
+        .update({ status: "converted" })
+        .eq("id", id)
+        .eq("status", current.status)
+        .select("id");
+      if (error) throw error;
+      if (!claimed || claimed.length === 0) {
+        throw new Error("This request was just changed or converted by someone else. Refresh and try again.");
+      }
+      return { previousStatus: current.status as MaintenanceRequestStatus };
+    },
+  });
+}
+
 export function useConvertRequestToWO() {
   const queryClient = useQueryClient();
   return useMutation({

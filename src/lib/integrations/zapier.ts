@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { postJsonToPublicUrl } from "@/lib/net/ssrf-guard";
@@ -75,13 +75,19 @@ export function adminClient(): AdminClient {
   );
 }
 
-export function generateZapierApiKey(): string {
-  return `zap_${randomBytes(24).toString("hex")}`;
+export function hashZapierApiKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+/** New key plus the hash/prefix to persist. Plaintext is returned to the admin once and never stored. */
+export function generateZapierApiKey(): { key: string; keyHash: string; keyPrefix: string } {
+  const key = `zap_${randomBytes(24).toString("hex")}`;
+  return { key, keyHash: hashZapierApiKey(key), keyPrefix: key.slice(0, 12) };
 }
 
 /**
  * Resolves the calling org from the `Authorization: Bearer <key>` header
- * against integrations.api_key (provider = 'zapier'). Mirrors the CRON_SECRET
+ * against integrations.api_key_hash (provider = 'zapier'). Mirrors the CRON_SECRET
  * bearer-token pattern used elsewhere (e.g. samsara/sync) but keyed per-org
  * instead of a single shared secret, since each org issues its own key.
  */
@@ -95,13 +101,26 @@ export async function authenticateZapierRequest(
   const key = match[1].trim();
   if (!key) return null;
 
-  const { data } = await db
+  let { data } = await db
     .from("integrations")
     .select("id, org_id")
     .eq("provider", "zapier")
-    .eq("api_key", key)
+    .eq("api_key_hash", hashZapierApiKey(key))
     .eq("enabled", true)
     .maybeSingle();
+
+  if (!data) {
+    // Transitional: rows not yet hashed/cleared still match on plaintext.
+    // Remove once 20261011000100_zapier_clear_plaintext_key.sql is applied.
+    const legacy = await db
+      .from("integrations")
+      .select("id, org_id")
+      .eq("provider", "zapier")
+      .eq("api_key", key)
+      .eq("enabled", true)
+      .maybeSingle();
+    data = legacy.data;
+  }
 
   if (!data) return null;
   return { orgId: data.org_id as string, integrationId: data.id as string };

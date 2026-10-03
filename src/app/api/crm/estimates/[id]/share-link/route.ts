@@ -39,7 +39,7 @@ export async function GET(
   // RLS scopes this to the caller's org — a foreign estimate reads as 404.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est } = await (supabase as any)
-    .from("estimates").select("id").eq("id", estimateId).maybeSingle();
+    .from("estimates").select("id").eq("id", estimateId).is("deleted_at", null).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
   const live = await findLiveShareToken(supabase, estimateId);
@@ -80,8 +80,15 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est } = await (supabase as any)
-    .from("estimates").select("id, org_id, approval_status").eq("id", estimateId).maybeSingle();
+    .from("estimates").select("id, org_id, approval_status, stage").eq("id", estimateId).is("deleted_at", null).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
+
+  // A lost estimate must not hand out a live link (the public accept route
+  // would refuse it anyway, but the client would see a dead proposal). Draft
+  // behaviour is intentionally unchanged.
+  if (est.stage === "lost") {
+    return NextResponse.json({ error: "This estimate is marked lost — reopen it before sharing a proposal link." }, { status: 409 });
+  }
 
   // Handing out the link is sending it, so the approval gate applies here
   // exactly as in send-email (it was only enforced by the browser).

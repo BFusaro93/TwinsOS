@@ -6,6 +6,7 @@ import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/auto
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import {
   lineTotalCents,
   resolveAutoInvoiceTaxRateBps,
@@ -128,7 +129,7 @@ type JobRow = {
   po_number: string | null;
   sales_rep_id: string | null;
   crm_job_services: JobServiceRow[] | null;
-  clients: { invoice_frequency: string | null; default_tax_rate_bps: number | null } | null;
+  clients: { invoice_frequency: string | null; default_tax_rate_bps: number | null; default_terms: string | null } | null;
 };
 
 type AutoInvoiceLine = {
@@ -183,7 +184,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps)")
+    .select("id, job_type, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -229,7 +230,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 2. Auto-invoice ───────────────────────────────────────────────────────
   // Create a draft invoice for any completed visit whose job has no contract.
   // Jobs linked to a contract are billed on the contract's billing cycle instead.
-  // Snow jobs are excluded — they're billed exclusively through the dedicated
+  // Project jobs are excluded too (milestone-billed). Snow jobs are excluded — they're billed exclusively through the dedicated
   // Snow Invoicing page (per-inch/hourly rates this flat auto-invoice can't
   // compute).
   try {
@@ -239,19 +240,44 @@ export async function applyVisitCompletionSideEffects(
       result.invoiceSkipReason = "contract";
     } else if (j.job_type === "snow") {
       result.invoiceSkipReason = "snow";
+    } else if (j.job_type === "project") {
+      // Project jobs are billed through their milestone schedule. Auto-invoicing
+      // the visit as well would bill the full line value on top of the milestones.
+      result.invoiceSkipReason = "project";
     } else {
       // Idempotency: a visit that already produced an invoice line must never
       // be billed twice, whichever completion path (office, crew, backfill)
       // gets here second.
+      // A line on a void / soft-deleted invoice no longer bills the client, so
+      // it doesn't count (cancel -> reopen -> complete must re-invoice). The
+      // unique visit_id constraint still blocks a second tagged line, so the
+      // dead line's tag is released first (best-effort; if it can't be freed
+      // the new line is simply left untagged).
+      let tagVisit = true;
       const { data: existingLine } = await supabase
         .from("crm_invoice_line_items")
-        .select("id, invoice_id")
+        .select("id, invoice_id, crm_invoices(status, deleted_at)")
         .eq("visit_id", visitId)
         .limit(1)
         .maybeSingle();
       if (existingLine) {
-        result.invoiceSkipReason = "already_invoiced";
-        result.invoiceId = (existingLine as { invoice_id: string }).invoice_id;
+        const parent = (existingLine as unknown as {
+          crm_invoices: { status: string; deleted_at: string | null } | null;
+        }).crm_invoices;
+        const parentLive = !!parent && parent.deleted_at == null && parent.status !== "void";
+        if (parentLive) {
+          result.invoiceSkipReason = "already_invoiced";
+          result.invoiceId = (existingLine as { invoice_id: string }).invoice_id;
+        } else {
+          const { error: freeErr } = await supabase
+            .from("crm_invoice_line_items")
+            .update({ visit_id: null })
+            .eq("id", (existingLine as { id: string }).id);
+          if (freeErr) {
+            log.error("could not free visit tag on dead invoice line", { visitId, error: freeErr.message });
+            tagVisit = false;
+          }
+        }
       }
 
       // One-time and waiting-list jobs used to be exactly one visit, so we guarded
@@ -266,6 +292,7 @@ export async function applyVisitCompletionSideEffects(
           .select("id")
           .eq("crm_job_id", j.id)
           .is("deleted_at", null)
+          .neq("status", "void")
           // limit(1): with two invoices on the job, maybeSingle() errors and
           // returns null data — which read as "not invoiced" and billed again.
           .limit(1)
@@ -347,11 +374,21 @@ export async function applyVisitCompletionSideEffects(
         // material silently never reaches the customer's invoice. Flipping
         // 'used' -> 'invoiced' does NOT double-decrement stock, because
         // set_job_product_status treats both as used states.
-        const { data: pendingProductRows } = await supabase
+        // Per-service visits: only sweep this visit's own service's materials (plus
+        // job-level ones with no service), or the first visit to complete bills every
+        // service's materials.
+        let productQuery = supabase
           .from("crm_job_products")
           .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents")
-          .eq("job_id", j.id)
+          .eq("job_id", j.id);
+        if (visitJobServiceId) {
+          productQuery = productQuery.or(`job_service_id.eq.${visitJobServiceId},job_service_id.is.null`);
+        }
+        const { data: pendingProductRows } = await productQuery
           .in("status", ["pending", "used"])
+          // A row already linked to a line (even if the status flip below failed)
+          // is billed; sweeping it again would invoice the same material twice.
+          .is("invoice_line_item_id", null)
           .is("deleted_at", null);
         type PendingProductRow = {
           id: string;
@@ -398,7 +435,7 @@ export async function applyVisitCompletionSideEffects(
             is_taxable: li.is_taxable,
             product_id: li.productId ?? null,
             sort_order: sortOffset + i,
-            visit_id: i === 0 ? visitId : null,
+            visit_id: i === 0 && tagVisit ? visitId : null,
           }));
 
         // Mirrors useCreateInvoiceFromJob's productLinks step: link each
@@ -414,14 +451,26 @@ export async function applyVisitCompletionSideEffects(
             .filter((x): x is { li: AutoInvoiceLine; insertedId: string } => !!x.li.jobProductId && !!x.insertedId);
           await Promise.all(
             links.map(async ({ li, insertedId }) => {
-              await supabase
+              // Errors must not be swallowed: an unlinked row stays 'pending' and
+              // the next completed visit would bill the same material again. The
+              // link write happens first and is what the sweep above keys on.
+              const { error: linkErr } = await supabase
                 .from("crm_job_products")
                 .update({ invoice_line_item_id: insertedId })
                 .eq("id", li.jobProductId as string);
-              await supabase.rpc("set_job_product_status", {
+              if (linkErr) {
+                log.error("job product link failed", { jobProductId: li.jobProductId, error: linkErr.message });
+                return;
+              }
+              const { error: statusErr } = await supabase.rpc("set_job_product_status", {
                 p_job_product_id: li.jobProductId,
                 p_new_status: "invoiced",
               });
+              // e.g. insufficient stock raises; the row stays linked (so it is not
+              // re-billed) but not 'invoiced', surfaced here for follow-up.
+              if (statusErr) {
+                log.error("job product status flip failed", { jobProductId: li.jobProductId, error: statusErr.message });
+              }
             })
           );
         }
@@ -453,6 +502,15 @@ export async function applyVisitCompletionSideEffects(
               .eq("status", "draft")
               .eq("locked", false)
               .is("deleted_at", null)
+              // Only fold into drafts this auto path itself created: job-linked,
+              // never contract / project / estimate invoices, and at the same
+              // tax rate (increment_invoice_totals re-taxes at the existing
+              // invoice's rate).
+              .not("crm_job_id", "is", null)
+              .is("contract_id", null)
+              .is("project_id", null)
+              .is("estimate_id", null)
+              .eq("tax_rate_bps", taxRateBps)
               .gte("invoice_date", period.start)
               .lte("invoice_date", period.end)
               .order("invoice_date", { ascending: true })
@@ -491,6 +549,16 @@ export async function applyVisitCompletionSideEffects(
             result.invoiced = true;
             result.invoiceId = invoiceId;
           } else {
+            const { data: orgTermsRow } = await supabase
+              .from("organizations")
+              .select("default_billing_terms")
+              .eq("id", orgId)
+              .maybeSingle();
+            const invoiceTerms = resolveInvoiceTerms(
+              j.clients?.default_terms,
+              (orgTermsRow as { default_billing_terms: string | null } | null)?.default_billing_terms,
+            );
+            const newInvoiceDate = visitDate ?? today;
             const { data: newInvoice, error: invErr } = await supabase
               .from("crm_invoices")
               .insert({
@@ -499,7 +567,9 @@ export async function applyVisitCompletionSideEffects(
                 crm_job_id: j.id,
                 sales_rep_id: j.sales_rep_id ?? null,
                 description: visitInvoiceDescription ?? j.invoice_description ?? "Service",
-                invoice_date: visitDate ?? today,
+                invoice_date: newInvoiceDate,
+                terms: invoiceTerms,
+                due_date: computeDueDate(newInvoiceDate, invoiceTerms),
                 status: "draft",
                 subtotal_cents: subtotal,
                 tax_rate_bps: taxRateBps,

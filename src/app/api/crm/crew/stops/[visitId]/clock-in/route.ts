@@ -49,7 +49,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at,
+  id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
   crm_jobs(crew_id, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
 `;

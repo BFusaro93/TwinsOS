@@ -330,7 +330,7 @@ export async function POST(req: NextRequest) {
   const pdfLineItems: InvoicePDFLineItem[] = lineItems.map((li) => ({
     name: li.name,
     description: li.description ?? "",
-    qty: Number(li.qty) || 1,
+    qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
     rateCents: li.rate_cents ?? 0,
     totalCents: li.total_cents ?? 0,
   }));

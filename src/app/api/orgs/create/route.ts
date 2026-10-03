@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { randomBytes } from "crypto";
 import { isBillablePlan } from "@/lib/stripe/plans";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("orgs-create");
+const MAX_COMPANY_NAME = 120;
 
 const TRIAL_DAYS = 30;
 
@@ -20,6 +26,13 @@ const TRIAL_DAYS = 30;
  * first login. See (home)/home/page.tsx and SubscriptionTab's autoSubscribe.
  */
 export async function POST(request: Request) {
+  // Unauthenticated + service-role insert: throttle per IP so it can't be
+  // used to mass-create tenants.
+  const allowed = await checkAuthRateLimit(`org-create:ip:${getClientIp(request)}`, 5, 3600);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+  }
+
   let body: { companyName?: string; plan?: string };
   try {
     body = await request.json();
@@ -27,9 +40,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const companyName = body.companyName?.trim();
+  const companyName = typeof body?.companyName === "string" ? body.companyName.trim() : "";
   if (!companyName) {
     return NextResponse.json({ error: "Company name is required" }, { status: 400 });
+  }
+  if (companyName.length > MAX_COMPANY_NAME) {
+    return NextResponse.json({ error: `Company name must be ${MAX_COMPANY_NAME} characters or fewer` }, { status: 400 });
   }
 
   const pendingPlan = body.plan && isBillablePlan(body.plan) ? body.plan : null;
@@ -46,8 +62,9 @@ export async function POST(request: Request) {
   const baseSlug = companyName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-  const slug = `${baseSlug}-${Math.random().toString(36).slice(2, 7)}`;
+    .replace(/^-|-$/g, "")
+    .slice(0, 50);
+  const slug = `${baseSlug || "org"}-${randomBytes(4).toString("hex")}`;
 
   const { data: org, error: orgErr } = await adminClient
     .from("organizations")
@@ -63,10 +80,8 @@ export async function POST(request: Request) {
     .single();
 
   if (orgErr || !org) {
-    return NextResponse.json(
-      { error: orgErr?.message ?? "Failed to create organization" },
-      { status: 500 }
-    );
+    log.error("organization insert failed", { error: orgErr?.message });
+    return NextResponse.json({ error: "Failed to create organization" }, { status: 500 });
   }
 
   return NextResponse.json({ orgId: org.id }, { status: 200 });

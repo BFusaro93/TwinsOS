@@ -46,7 +46,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, cn, relativeTime, formatDateShort, formatHours } from "@/lib/utils";
-import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { useOrgDates, useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
@@ -189,8 +190,9 @@ function formatTimeShort(value: string): string {
  * the totals row resolve crews the same way the table does.
  */
 export function effectiveCrewId(
-  v: { crewId: string | null; job?: { crewId?: string | null } | null }
+  v: { crewId: string | null; crewUnassigned?: boolean | null; job?: { crewId?: string | null } | null }
 ): string | null {
+  if (v.crewUnassigned) return null;
   return v.crewId ?? v.job?.crewId ?? null;
 }
 
@@ -483,6 +485,7 @@ function exportCellValue(
     case "zip":      return job?.serviceZip ?? "";
     case "assigned": {
       const crewId = effectiveCrewId(visit);
+      if (visit.crewUnassigned) return "";
       return (crewId && ctx.crewCodeById.get(crewId)) || visit.crewName || job?.crewName || "";
     }
     case "last_svc": return job?.lastServiceDate ?? "";
@@ -587,7 +590,7 @@ function JobDetailSheet({
 }) {
   // Fallback service/invoice date when a visit has no scheduled_date: the
   // org's day, never the browser's.
-  const { today: orgToday } = useOrgDates();
+  const { today: orgToday, timeZone: orgTz } = useOrgDates();
   const { mutateAsync: updateVisit } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
@@ -650,7 +653,7 @@ function JobDetailSheet({
   const [skipReason,  setSkipReason]  = useState(visit.skipReason ?? "");
   useEffect(() => { setSkipReason(visit.skipReason ?? ""); }, [visit.id, visit.skipReason]);
   const [subStatus,   setSubStatus]   = useState(visit.subStatus ?? "");
-  const [crewId,      setCrewId]      = useState(visit.crewId ?? job?.crewId ?? "");
+  const [crewId,      setCrewId]      = useState(effectiveCrewId({ ...visit, job }) ?? "");
   const [startTime,   setStartTime]   = useState(visit.startTime ?? "");
   const [endTime,     setEndTime]     = useState(visit.endTime ?? "");
   // Same fallback the dispatch board row uses (computeActualHours) — an
@@ -679,7 +682,7 @@ function JobDetailSheet({
   const [saving, setSaving] = useState(false);
 
   // Sync crewId when the visit prop updates (e.g. after drag-assign or propagate)
-  useEffect(() => { setCrewId(visit.crewId ?? job?.crewId ?? ""); }, [visit.id, visit.crewId, job?.crewId]);
+  useEffect(() => { setCrewId(effectiveCrewId({ crewId: visit.crewId, crewUnassigned: visit.crewUnassigned, job }) ?? ""); }, [visit.id, visit.crewId, visit.crewUnassigned, job?.crewId]);
   // Same for Start/End — otherwise an edit made elsewhere (e.g. the dispatch
   // board row's own inline Start/End inputs) never shows up here.
   useEffect(() => { setStartTime(visit.startTime ?? ""); }, [visit.id, visit.startTime]);
@@ -716,8 +719,8 @@ function JobDetailSheet({
   const endHasMultipleTimes   = distinctOutsForSheet.size > 1;
   // Same real-punch-vs-displayed divergence check as the row — see VisitRow's
   // startPunchDiffers comment for why this is the one case worth surfacing.
-  const startClockTime = isoToDateAndTime(visit.clockedInAt, visit.scheduledDate).time;
-  const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate).time;
+  const startClockTime = isoToDateAndTime(visit.clockedInAt, visit.scheduledDate, orgTz).time;
+  const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate, orgTz).time;
   const startPunchDiffers = startClockTime !== "" && startClockTime !== (startTime || "").slice(0, 5);
   const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endTime   || "").slice(0, 5);
 
@@ -741,7 +744,7 @@ function JobDetailSheet({
     // window, so nothing else stops the same crew being entered on two
     // stops at once — warn (don't block) so the dispatcher can catch a
     // fat-fingered entry or genuinely decide it's fine.
-    const overlapCrewId = visit.crewId ?? job?.crewId ?? null;
+    const overlapCrewId = effectiveCrewId({ ...visit, job });
     const conflictWith = findOverlappingCrewVisit(
       allVisits,
       { id: visit.id, crewId: overlapCrewId, scheduledDate: visit.scheduledDate },
@@ -753,7 +756,7 @@ function JobDetailSheet({
     // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
     // app and report date-filters agree with whatever the dispatcher enters.
     const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
-    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
+    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value, orgTz) : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = { [field]: value || null, [clockField]: clockIso };
     // A genuine change means any actual_hours override measured before this
@@ -829,6 +832,10 @@ function JobDetailSheet({
       status,
       sub_status: subStatus || null,
       crew_id: crewId || null,
+      // Emptying the crew picker on a visit that HAD an effective crew is a
+      // deliberate per-visit unassign (crew_id NULL alone would inherit the
+      // job's crew again). An explicit crew clears the flag server-side.
+      ...(!crewId && effectiveCrewId({ ...visit, job }) ? { crew_unassigned: true } : {}),
       start_time: startTime || null,
       end_time: endTime || null,
       actual_hours: actualHours ? parseFloat(actualHours) : null,
@@ -936,12 +943,12 @@ function JobDetailSheet({
         serviceDate,
         jobServiceId: s.id,
       }));
-      // Sweep in unresolved (pending) Products/materials too — mirrors
+      // Sweep in unresolved (pending, or crew-recorded 'used') Products/materials too — mirrors
       // JobDetail.tsx's buildPendingProductLineItems(), which this popup's
       // invoice creation was missing, silently leaving materials off the
       // invoice and stuck on "Pending" forever.
       const productLineItems = jobProducts
-        .filter((p) => p.status === "pending")
+        .filter((p) => (p.status === "pending" || p.status === "used") && !p.invoiceLineItemId)
         .map((p) => {
           const billedQty = p.invoiceQty ?? p.qty;
           return {
@@ -1960,27 +1967,27 @@ function TeamAssignDialog({
 
   async function reassign(visitId: string, crewId: string | null, jobId?: string) {
     try {
-      await updateVisit({ id: visitId, updates: { crew_id: crewId }, jobId });
+      // crewId === null means "unassigned": pin the visit to no crew with the
+      // per-visit override (crew_id NULL alone would just inherit the job's
+      // crew again). An explicit crew clears the override (useUpdateVisit).
+      await updateVisit({
+        id: visitId,
+        updates: crewId ? { crew_id: crewId } : { crew_id: null, crew_unassigned: true },
+        jobId,
+      });
     } catch {
       toast.error("Failed to reassign");
     }
   }
 
   /**
-   * Take a visit off its crew. A visit whose crew is INHERITED from the job
-   * (crew_id NULL) can't be unassigned per visit: NULL already means "use the
-   * job's crew", so writing NULL again changes nothing, and clearing the job's
-   * crew would strip every other visit of that job too (and future generated
-   * ones). Say so instead of silently doing nothing — the ✕ is hidden for
-   * those cards, this covers drag/tap into the pool.
+   * Take a visit off its crew — including a visit that INHERITS its crew from
+   * the job: reassign(null) sets the per-visit crew_unassigned override, so
+   * only this visit is affected (the job and its other visits keep the crew).
    */
   async function unassign(v: CRMJobVisit | undefined) {
-    if (!v) return;
-    if (v.crewId) {
-      await reassign(v.id, null, v.jobId);
-    } else if (effectiveCrewId(v)) {
-      toast.info("This visit uses the job's crew. Move it to another crew, or change the crew on the job to unassign it.");
-    }
+    if (!v || !effectiveCrewId(v)) return;
+    await reassign(v.id, null, v.jobId);
   }
 
   /** Pick an item up, or put it back down if it's the one already held. */
@@ -2220,7 +2227,7 @@ function TeamAssignDialog({
                       return (
                         <div
                           key={v.id}
-                          title={inherited ? "Crew comes from the job — move it to another crew, or change the job's crew to unassign" : undefined}
+                          title={inherited ? "Crew comes from the job — ✕ unassigns just this visit" : undefined}
                           draggable
                           onDragStart={() => { setHeld(null); setDragVisitId(v.id); }}
                           onDragEnd={() => setDragVisitId(null)}
@@ -2239,15 +2246,13 @@ function TeamAssignDialog({
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                           <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
                           <VisitStatusIcon status={v.status} />
-                          {!inherited && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
-                              className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
-                              title="Unassign"
-                            >
-                              ✕
-                            </button>
-                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
+                            className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
+                            title="Unassign"
+                          >
+                            ✕
+                          </button>
                         </div>
                       );
                     })}
@@ -2290,20 +2295,20 @@ function TeamAssignDialog({
 // Per-crew-member start/end times for a single visit — manually editable so the
 // office can enter or correct times, not just what the crew tablet punches.
 
-function isoToDateAndTime(iso: string | null, fallbackDate: string): { date: string; time: string } {
+function isoToDateAndTime(iso: string | null, fallbackDate: string, timeZone: string): { date: string; time: string } {
   if (!iso) return { date: fallbackDate, time: "" };
   const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-  };
+  if (Number.isNaN(d.getTime())) return { date: fallbackDate, time: "" };
+  // The ORG's wall clock — the viewer's browser zone would shift punches by
+  // the viewer's offset from the org (and the date across midnight).
+  return instantToZoneWallClock(d, timeZone);
 }
 
-function dateAndTimeToIso(date: string, time: string): string | null {
+/** `dayOffset` pushes the date forward (an overnight punch ends the next day). */
+function dateAndTimeToIso(date: string, time: string, timeZone: string, dayOffset = 0): string | null {
   if (!date || !time) return null;
-  const d = new Date(`${date}T${time}:00`);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  const d = zoneWallClockToInstant(dayOffset ? shiftYmd(date, dayOffset) : date, time, timeZone);
+  return d ? d.toISOString() : null;
 }
 
 // Native <input type="time"> always yields zero-padded 24h "HH:MM", so a
@@ -2364,19 +2369,22 @@ function EditJobTimeRow({
   onSave: (date: string, start: string, end: string) => void;
   onDelete: () => void;
 }) {
-  const startInit = isoToDateAndTime(clockedInAt, visitDate);
-  const endInit = isoToDateAndTime(clockedOutAt, visitDate);
+  const tz = useOrgTimeZone();
+  const startInit = isoToDateAndTime(clockedInAt, visitDate, tz);
+  const endInit = isoToDateAndTime(clockedOutAt, visitDate, tz);
   const [date, setDate] = useState(startInit.date || endInit.date || visitDate);
   const [start, setStart] = useState(startInit.time);
   const [end, setEnd] = useState(endInit.time);
 
   useEffect(() => {
-    const s = isoToDateAndTime(clockedInAt, visitDate);
-    const e = isoToDateAndTime(clockedOutAt, visitDate);
+    const s = isoToDateAndTime(clockedInAt, visitDate, tz);
+    const e = isoToDateAndTime(clockedOutAt, visitDate, tz);
     setDate(s.date || e.date || visitDate);
     setStart(s.time);
     setEnd(e.time);
-  }, [clockedInAt, clockedOutAt, visitDate]);
+  }, [clockedInAt, clockedOutAt, visitDate, tz]);
+  // An end on a later calendar day than the start is an overnight punch.
+  const overnight = !!clockedInAt && !!clockedOutAt && endInit.date > startInit.date;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 py-1.5">
@@ -2388,6 +2396,7 @@ function EditJobTimeRow({
       <span className="shrink-0 text-xs text-slate-400">to</span>
       <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
         onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
+      {overnight && <span className="shrink-0 text-[10px] text-slate-500" title="Ends the next day">+1 day</span>}
       <button onClick={onDelete} className="shrink-0 text-slate-300 hover:text-red-500" title="Remove">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -2413,6 +2422,7 @@ function EditJobTimesDialog({
 }) {
   const visitId = visit.id;
   const visitDate = visit.scheduledDate;
+  const tz = useOrgTimeZone();
   // Effective crew — a job-inherited visit (crew_id NULL) otherwise showed an
   // empty roster here and had nobody to seed times for.
   const crewId = effectiveCrewId(visit);
@@ -2452,8 +2462,8 @@ function EditJobTimesDialog({
     if (seededRef.current) return;
     if (memberTimes.length > 0 || allMembers.length === 0) return;
     seededRef.current = true;
-    const clockedInAt = visit.startTime ? dateAndTimeToIso(visitDate, visit.startTime.slice(0, 5)) : null;
-    const clockedOutAt = visit.endTime ? dateAndTimeToIso(visitDate, visit.endTime.slice(0, 5)) : null;
+    const clockedInAt = visit.startTime ? dateAndTimeToIso(visitDate, visit.startTime.slice(0, 5), tz) : null;
+    const clockedOutAt = visit.endTime ? dateAndTimeToIso(visitDate, visit.endTime.slice(0, 5), tz, visit.startTime && visit.endTime <= visit.startTime ? 1 : 0) : null;
     allMembers.forEach((m) => upsert.mutate({ visitId: anchorVisitId, crewMemberId: m.id, clockedInAt, clockedOutAt }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes.length, allMembers.length]);
@@ -2480,8 +2490,8 @@ function EditJobTimesDialog({
     if (ins.length === 0 && outs.length === 0) return;
     const earliestIn = ins.length > 0 ? ins.reduce((a, b) => (a < b ? a : b)) : null;
     const latestOut = outs.length > 0 ? outs.reduce((a, b) => (a > b ? a : b)) : null;
-    const newStart = earliestIn ? isoToDateAndTime(earliestIn, visitDate).time : null;
-    const newEnd = latestOut ? isoToDateAndTime(latestOut, visitDate).time : null;
+    const newStart = earliestIn ? isoToDateAndTime(earliestIn, visitDate, tz).time : null;
+    const newEnd = latestOut ? isoToDateAndTime(latestOut, visitDate, tz).time : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = {};
     // A rolled-up Start/End change means the real punch times moved —
@@ -2499,19 +2509,23 @@ function EditJobTimesDialog({
       updateVisit.mutate({ id: visitId, updates });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberTimes, visitId, visitDate]);
+  }, [memberTimes, visitId, visitDate, tz]);
 
   async function saveRow(memberId: string, date: string, start: string, end: string) {
-    if (isEndBeforeStart(start, end)) {
+    // End == Start is a zero-length punch. End BEFORE Start means the shift
+    // ran past midnight (snow/storm punches routinely do) — the end lands on
+    // the next calendar day; the route still rejects anything over 24h.
+    if (start && end && end === start) {
       toast.error("End time must be after Start time");
       return;
     }
+    const endDayOffset = start && end && end < start ? 1 : 0;
     try {
       await upsert.mutateAsync({
         visitId: anchorVisitId,
         crewMemberId: memberId,
-        clockedInAt: dateAndTimeToIso(date, start),
-        clockedOutAt: dateAndTimeToIso(date, end),
+        clockedInAt: dateAndTimeToIso(date, start, tz),
+        clockedOutAt: dateAndTimeToIso(date, end, tz, endDayOffset),
       });
     } catch {
       toast.error("Failed to save time");
@@ -2718,7 +2732,7 @@ function VisitRow({
   // Export so all three price a visit identically.
   const effectiveRate = visitEffectiveRateCents(visit);
   const visitCrewId = effectiveCrewId(visit);
-  const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
+  const effectiveCrewName = visit.crewUnassigned ? null : (visit.crewName ?? job?.crewName ?? null);
   const effectiveCrew = (visitCrewId && crewCodeById.get(visitCrewId)) || effectiveCrewName;
   // Swap this row's status icon for a driving icon when the crew is
   // currently driving AND this is the next stop they haven't started yet —
@@ -2787,8 +2801,9 @@ function VisitRow({
   // that this row's Start/End doesn't yet reflect. When they already agree
   // (the normal case after a correction), showing it again would just be the
   // redundant duplicate this replaced.
-  const startClockTime = isoToDateAndTime(visit.clockedInAt, visit.scheduledDate).time;
-  const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate).time;
+  const orgTz = useOrgTimeZone();
+  const startClockTime = isoToDateAndTime(visit.clockedInAt, visit.scheduledDate, orgTz).time;
+  const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate, orgTz).time;
   const startPunchDiffers = startClockTime !== "" && startClockTime !== (startVal || "").slice(0, 5);
   const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endVal   || "").slice(0, 5);
 
@@ -2820,7 +2835,7 @@ function VisitRow({
     // crew app and report date-filters agree with whatever the dispatcher
     // enters.
     const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
-    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
+    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value, orgTz) : null;
     updates[clockField] = clockIso;
     // A genuine change to Start/End means whatever actual_hours was measured
     // before (e.g. the stop clock-out flow's men-multiplied figure) no longer
@@ -3929,7 +3944,7 @@ export function DispatchBoard() {
           // just the underlying full name ("Maintenance 1").
           const effId = effectiveCrewIdOf(v);
           const code = effId ? crewCodeById.get(effId) ?? "" : "";
-          const name = v.crewName ?? v.job?.crewName ?? "";
+          const name = v.crewUnassigned ? "" : (v.crewName ?? v.job?.crewName ?? "");
           if (!name.toLowerCase().includes(q) && !code.toLowerCase().includes(q)) return false;
           break;
         }
@@ -3980,7 +3995,7 @@ export function DispatchBoard() {
         // column, the crew filter, the per-crew stop numbering) resolves it
         // through the same `?? job` fallback used here.
         const crewNameOf = (v: typeof filtered[number]) =>
-          v.crewName ?? v.job?.crewName ?? "";
+          v.crewUnassigned ? "" : (v.crewName ?? v.job?.crewName ?? "");
 
         return [...filtered].sort((a, b) => {
           const an = crewNameOf(a);
@@ -4804,12 +4819,17 @@ export function DispatchBoard() {
                   <DropdownMenuItem
                     className="text-xs"
                     onSelect={async () => {
-                      const ids = [...selectedIds];
+                      // Per-visit override: crew_unassigned pins each visit to no
+                      // crew, including ones that inherit the job's crew.
+                      const ids = displayVisits
+                        .filter((v) => selectedIds.has(v.id) && !!effectiveCrewId(v))
+                        .map((v) => v.id);
+                      if (ids.length === 0) return;
                       try {
                         const res = await fetch("/api/crm/visits/bulk-update", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ ids, updates: { crew_id: null } }),
+                          body: JSON.stringify({ ids, updates: { crew_id: null, crew_unassigned: true } }),
                         });
                         if (!res.ok) throw new Error("One or more updates failed");
                         await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });

@@ -4,6 +4,7 @@ import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { sumPunchLaborCents } from "@/lib/crew/visit-labor";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
@@ -42,7 +43,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_out_at, org_id, crew_id, status, paused_at, break_minutes, crm_jobs(crew_id)")
+    .select("clocked_out_at, org_id, crew_id, crew_unassigned, status, paused_at, break_minutes, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -73,8 +74,13 @@ export async function POST(
   // start_time/end_time (or clocked_in_at/out) x men_count via the
   // crm_recompute_job_actual_hours trigger, so it's correctly multiplied
   // by crew size instead of reflecting only the raw clock duration.
-  // Clock-out fields first, guarded on clocked_out_at so a racing retry
-  // can't overwrite them.
+  // One guarded update for the clock-out AND the completion flip — two
+  // separate writes (with the second's error ignored) left a visit
+  // clocked-out-but-not-completed whenever the second one failed, and the
+  // retry then 409'd on "Already clocked out". The clocked_out_at IS NULL
+  // guard keeps a racing retry from overwriting; a visit the office already
+  // completed keeps its own completed_at and does not re-run side effects.
+  const alreadyCompleted = existing.status === "completed";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: clockedOut, error } = await (supabase as any)
     .from("crm_job_visits")
@@ -84,31 +90,20 @@ export async function POST(
       completion_notes: notes ?? null,
       paused_at:        null,
       break_minutes:    finalBreakMinutes,
+      ...(alreadyCompleted ? {} : { status: "completed", completed_at: now }),
       updated_at:       now,
     })
     .eq("id", visitId)
     .is("clocked_out_at", null)
+    .not("status", "in", "(cancelled,skipped)")
     .select()
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!clockedOut) return NextResponse.json({ error: "Already clocked out" }, { status: 409 });
 
-  // Then the completion flip, conditional on the visit not already being
-  // completed (e.g. the office marked it complete from the dispatch board
-  // while the crew was still on site). Only the call that actually completes
-  // the visit runs the completion side effects below — otherwise the visit
-  // would be billed / timeline-logged / automation-triggered a second time.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: completedRow } = await (supabase as any)
-    .from("crm_job_visits")
-    .update({ status: "completed", completed_at: now })
-    .eq("id", visitId)
-    .neq("status", "completed")
-    .select()
-    .maybeSingle();
-  const transitioned = !!completedRow;
-  const data = completedRow ?? clockedOut;
+  const transitioned = !alreadyCompleted;
+  const data = clockedOut;
 
   // Push the next package-sequenced visit's date out if this one completed later
   // than its static schedule assumed. Non-fatal — a failure here shouldn't block
@@ -126,29 +121,7 @@ export async function POST(
   const jobId = data?.job_id as string | undefined;
   if (jobId) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: memberTimes } = await (supabase as any)
-        .from("crm_crew_member_times")
-        .select("crew_member_id, clocked_in_at, clocked_out_at, break_minutes, lunch_minutes")
-        .eq("visit_id", visitId)
-        .is("deleted_at", null)
-        .not("clocked_out_at", "is", null);
-
-      let visitLaborCents = 0;
-      for (const mt of memberTimes ?? []) {
-        const inMs = new Date(mt.clocked_in_at as string).getTime();
-        const outMs = new Date(mt.clocked_out_at as string).getTime();
-        const deductMins = (Number(mt.break_minutes ?? 0) + Number(mt.lunch_minutes ?? 0));
-        const hours = Math.max(0, (outMs - inMs) / 3_600_000 - deductMins / 60);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: member } = await (supabase as any)
-          .from("crm_crew_members")
-          .select("labor_burden_cents_per_hour")
-          .eq("id", mt.crew_member_id)
-          .single();
-        const burdenRate = Number(member?.labor_burden_cents_per_hour ?? 0);
-        visitLaborCents += Math.round(hours * burdenRate);
-      }
+      const visitLaborCents = await sumPunchLaborCents(supabase, visitId);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)

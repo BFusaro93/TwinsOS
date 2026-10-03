@@ -158,7 +158,14 @@ export function useCreatePurchaseOrder() {
               taxable: li.taxable,
             }))
           );
-        if (lineErr) throw lineErr;
+        if (lineErr) {
+          // Don't leave an empty PO header behind — soft-delete it.
+          await supabase
+            .from("purchase_orders")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", created.id);
+          throw lineErr;
+        }
       }
 
       const { data: full, error: fetchErr } = await supabase
@@ -722,6 +729,7 @@ export function useUpdatePurchaseOrderStatus() {
       if (context?.previous) {
         queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previous);
       }
+      toast.error(`Failed to update PO status: ${serializeError(_err)}`);
     },
     onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
@@ -965,6 +973,33 @@ export function useDeletePOLineItem() {
         .maybeSingle();
       const poNumber = (poRow?.po_number as string | null | undefined) ?? "";
 
+      // Delete (and unlink) FIRST; stock is reversed only after the delete is
+      // known to have succeeded, so a failed delete can't leave inventory
+      // already decremented against a line that still exists.
+      // Unlink receipt lines — the FK on goods_receipt_lines.po_line_item_id
+      // would block the delete if we skip this step.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: unlinkErr } = await (supabase as any)
+        .from("goods_receipt_lines")
+        .update({ po_line_item_id: null })
+        .eq("po_line_item_id", lineItemId);
+      if (unlinkErr) throw unlinkErr;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineErr } = await (supabase as any).from("po_line_items").delete().eq("id", lineItemId);
+      if (lineErr) {
+        // Delete failed — restore the receipt links; no stock has moved yet.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("goods_receipt_lines")
+          .update({ po_line_item_id: lineItemId })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .in("id", (receiptLines ?? []).map((r: any) => r.id));
+        throw lineErr;
+      }
+
+
+      try {
       if (totalReceived > 0) {
         // Resolve the catalog product the same way ReceiveGoodsDialog does:
         // by product_item_id first, then part number, then exact name.
@@ -1041,19 +1076,28 @@ export function useDeletePOLineItem() {
           reversedProductQty = -productDelta;
         }
       }
-
-      // Unlink receipt lines — the FK on goods_receipt_lines.po_line_item_id
-      // would block the delete if we skip this step.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: unlinkErr } = await (supabase as any)
-        .from("goods_receipt_lines")
-        .update({ po_line_item_id: null })
-        .eq("po_line_item_id", lineItemId);
-      if (unlinkErr) throw unlinkErr;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: lineErr } = await (supabase as any).from("po_line_items").delete().eq("id", lineItemId);
-      if (lineErr) throw lineErr;
+      } catch (reverseErr) {
+        // Stock reversal failed after the line was deleted — restore the line
+        // and its receipt links, and undo any partial reversal.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("po_line_items").insert(lineItem);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("goods_receipt_lines")
+          .update({ po_line_item_id: lineItemId })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .in("id", (receiptLines ?? []).map((r: any) => r.id));
+        if (reversedPartId && reversedPartQty > 0) {
+          await correctPartReceipt(supabase, {
+            orgId: lineItem.org_id,
+            partId: reversedPartId,
+            delta: reversedPartQty,
+            unitCost: Number(lineItem.unit_cost ?? 0),
+            poNumber,
+          }).catch(() => {});
+        }
+        throw reverseErr;
+      }
 
       const { error: poErr } = await supabase
         .from("purchase_orders")

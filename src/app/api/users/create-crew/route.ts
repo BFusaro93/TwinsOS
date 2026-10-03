@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
+
+const log = logger.child("users-create-crew");
 
 /**
  * POST /api/users/create-crew
@@ -25,6 +29,11 @@ export async function POST(request: Request) {
   if (profileErr || !callerProfile || callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // Service-role writes below target profiles.org_id (the staff member's HOME
+  // org) — refuse while impersonating another tenant.
+  const impersonating = await rejectIfImpersonating(supabase, user.id);
+  if (impersonating) return impersonating;
 
   // Service-role writes below bypass the canceled-org read-only RLS.
   const readOnly = await assertOrgWritable(supabase, callerProfile.org_id);
@@ -79,7 +88,8 @@ export async function POST(request: Request) {
     if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already been registered")) {
       return NextResponse.json({ error: `A crew account for "${teamName}" already exists (${loginEmail}).` }, { status: 409 });
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    log.error("create crew account failed", { error: msg });
+    return NextResponse.json({ error: "Failed to create crew account" }, { status: 500 });
   }
 
   // 5. Ensure profile row exists (the DB trigger may have already inserted it)

@@ -214,7 +214,7 @@ function renderBlock(
     case "image":
       return block.content
         ? wrap(
-            `<img src="${block.content}" alt="" style="max-width:100%;height:auto;display:block;margin:0 auto;" />`,
+            `<img src="${escapeHtml(content)}" alt="" style="max-width:100%;height:auto;display:block;margin:0 auto;" />`,
             "margin-bottom:16px;"
           )
         : wrap(

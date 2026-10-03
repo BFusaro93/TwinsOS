@@ -8,6 +8,9 @@ export interface Integration {
   orgId: string;
   provider: string;
   apiKey: string | null;
+  /** Display prefix of a hashed key (Zapier). The full key is never retrievable. */
+  apiKeyPrefix: string | null;
+  hasHashedKey: boolean;
   config: Record<string, unknown>;
   enabled: boolean;
   lastSyncAt: string | null;
@@ -22,6 +25,8 @@ function mapIntegration(row: Record<string, unknown>): Integration {
     orgId:            row.org_id as string,
     provider:         row.provider as string,
     apiKey:           (row.api_key as string | null) ?? null,
+    apiKeyPrefix:     (row.api_key_prefix as string | null) ?? null,
+    hasHashedKey:     !!row.api_key_prefix,
     config:           (row.config as Record<string, unknown>) ?? {},
     enabled:          (row.enabled as boolean) ?? true,
     lastSyncAt:       (row.last_sync_at as string | null) ?? null,
@@ -40,7 +45,7 @@ export function useIntegration(provider: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("integrations")
-        .select("*")
+        .select("id, org_id, provider, api_key, api_key_prefix, config, enabled, last_sync_at, last_sync_status, created_at, updated_at")
         .eq("provider", provider)
         .maybeSingle();
       if (error) throw error;

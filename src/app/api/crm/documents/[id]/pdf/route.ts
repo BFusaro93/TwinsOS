@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
 import { resolveMergeTags, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
+import { sanitizeImageBlocks } from "@/lib/documents/sanitize-image-blocks";
 import type { BlockType } from "@/types/crm-documents";
 
 interface PdfBlockInput {
@@ -46,7 +47,7 @@ function resolveBlocks(blocks: PdfBlockInput[], orgName: string | undefined) {
 }
 
 async function renderPdf(templateName: string, blocks: PdfBlockInput[], orgName: string | undefined) {
-  const resolved = resolveBlocks(blocks, orgName);
+  const resolved = await sanitizeImageBlocks(resolveBlocks(blocks, orgName));
   const buffer = await renderToBuffer(
     createElement(DocumentTemplatePdf, { blocks: resolved, title: templateName })
   );
@@ -94,8 +95,8 @@ export async function POST(
   const result = await loadOrgAndTemplate(supabase, templateId);
   if ("error" in result) return result.error;
 
-  const body = await req.json() as { blocks: PdfBlockInput[] };
-  if (!Array.isArray(body.blocks) || body.blocks.length === 0) {
+  const body = await req.json().catch(() => null) as { blocks: PdfBlockInput[] } | null;
+  if (!body || !Array.isArray(body.blocks) || body.blocks.length === 0) {
     return NextResponse.json({ error: "Nothing to render — add at least one block" }, { status: 400 });
   }
 

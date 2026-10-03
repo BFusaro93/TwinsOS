@@ -9,6 +9,7 @@ import {
   markEstimateDepositPending,
   clearEstimateDepositPending,
   recordEstimateDepositFailure,
+  syncEstimateDepositWithPayment,
 } from "@/lib/stripe/record-estimate-deposit";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
@@ -282,6 +283,17 @@ export async function POST(request: Request) {
         );
       }
       if (amounts.size > 0) {
+        // Stripe doesn't guarantee ordering: if payment_intent.succeeded already
+        // landed and recorded this intent, a late "processing" event must not
+        // re-mark the now-paid invoice as pending (nothing would clear it).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: alreadyRecorded } = await (db as any)
+          .from("crm_payments")
+          .select("id")
+          .eq("stripe_payment_intent_id", pendingIntent.id)
+          .limit(1)
+          .maybeSingle();
+        if (alreadyRecorded) break;
         await markInvoicesPendingCharge({ db, paymentIntent: pendingIntent, amountsByInvoiceId: amounts });
       }
       break;
@@ -394,6 +406,14 @@ export async function POST(request: Request) {
       } catch (err) {
         log.error("failed to reconcile charge.refunded", { error: err, paymentId: payment.id });
         return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+      }
+      // A refunded/charged-back proposal deposit must stop showing as collected
+      // on its estimate. Runs even when the delta is 0 (the staff refund route
+      // may have applied the reversal first); it recomputes from the payment row.
+      try {
+        await syncEstimateDepositWithPayment(db, payment.org_id, paymentIntentId);
+      } catch (err) {
+        log.error("failed to sync estimate deposit after refund", { error: err, paymentId: payment.id });
       }
       if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
 
@@ -534,9 +554,11 @@ async function applyCrmInvoiceMultiPayment(
  *   reconcile_stripe_payment_reversal() is Stripe's amount_refunded plus the
  *   disputed amount, so a retried delivery is a no-op and it converges with
  *   any refund already recorded.
- * - funds_reinstated / won: NOT automatically re-applied — re-crediting an
- *   invoice after a won dispute is left to staff (notified here), since the
- *   reversal may already have been followed by a re-charge or write-off.
+ * - funds_reinstated / closed-won: reinstate_stripe_payment_reversal()
+ *   converges the ledger back down to Stripe's refunded total, restoring the
+ *   money as unapplied credit and re-applying it to the payment's invoice only
+ *   if that invoice still owes (so a re-charge in the meantime is not
+ *   double-counted — the surplus stays as client credit).
  */
 async function handleDisputeEvent(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -601,6 +623,7 @@ async function handleDisputeEvent(
     const deltaCents = typeof applied === "number" ? applied : 0;
     if (deltaCents > 0) {
       try {
+        await syncEstimateDepositWithPayment(db, payment.org_id, paymentIntentId);
         await db.rpc("sync_client_balance", { p_client_id: payment.client_id });
         await db.from("client_activity").insert({
           org_id: payment.org_id,
@@ -613,6 +636,55 @@ async function handleDisputeEvent(
         });
       } catch (err) {
         log.error("reversed a disputed payment but a follow-up step failed", { error: err, paymentId: payment.id });
+      }
+    }
+  }
+
+  // Won dispute: Stripe returns the funds (funds_reinstated, and the closed
+  // event with status "won"). Converge the ledger back DOWN to Stripe's own
+  // refunded total — idempotent, so both events and any retry are safe — and
+  // re-apply the money to the payment's invoice if it still owes.
+  if (eventType === "charge.dispute.funds_reinstated" || (eventType === "charge.dispute.closed" && dispute.status === "won")) {
+    const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+    if (chargeId) {
+      let refundedAtStripe = 0;
+      try {
+        const { data: org } = await db
+          .from("organizations")
+          .select("stripe_connect_livemode")
+          .eq("id", payment.org_id)
+          .single();
+        const orgStripe = getStripeForOrg(org?.stripe_connect_livemode ?? null);
+        const charge = await orgStripe.charges.retrieve(chargeId, undefined, { stripeAccount: eventAccount });
+        refundedAtStripe = charge.amount_refunded ?? 0;
+      } catch (err) {
+        log.error("failed to load the disputed charge for reinstatement", { error: err, chargeId, disputeId: dispute.id });
+        return "error";
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: restored, error: reinstateErr } = await (db.rpc as any)("reinstate_stripe_payment_reversal", {
+        p_payment_id: payment.id,
+        p_target_reversed_cents: refundedAtStripe,
+      });
+      if (reinstateErr) {
+        log.error("failed to reinstate a won-dispute payment", { error: reinstateErr, paymentId: payment.id, disputeId: dispute.id });
+        return "error";
+      }
+      const restoredCents = typeof restored === "number" ? restored : 0;
+      if (restoredCents > 0) {
+        try {
+          await db.from("client_activity").insert({
+            org_id: payment.org_id,
+            client_id: payment.client_id,
+            activity_type: "payment",
+            subject: `Payment reinstated: $${(restoredCents / 100).toFixed(2)} (chargeback won)`,
+            ref_id: payment.id,
+            ref_table: "crm_payments",
+            amount_cents: restoredCents,
+          });
+        } catch (err) {
+          log.error("reinstated a payment but the activity entry failed", { error: err, paymentId: payment.id });
+        }
       }
     }
   }
@@ -630,7 +702,7 @@ async function handleDisputeEvent(
       : eventType === "charge.dispute.funds_withdrawn"
         ? { title: `Chargeback — ${amount} withdrawn`, message: `Stripe withdrew ${amount} for a disputed payment. The payment has been reversed and the invoice balance reopened.` }
         : eventType === "charge.dispute.closed" && dispute.status === "won"
-          ? { title: `Dispute won — ${amount}`, message: `A ${amount} payment dispute was closed in your favor. If the payment was reversed, re-record it against the invoice.` }
+          ? { title: `Dispute won — ${amount}`, message: `A ${amount} payment dispute was closed in your favor. If the payment had been reversed it was restored to the invoice (or to the client's unapplied credit if the invoice no longer owes).` }
           : null;
 
   if (notify) {

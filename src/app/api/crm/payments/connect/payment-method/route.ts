@@ -16,6 +16,16 @@ export async function DELETE(request: Request) {
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
+  // Saving/removing a payment method or toggling autopay changes who gets
+  // charged — gate behind the same permission as charging (admins always pass).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canManagePayments } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_add_modify_payments",
+  });
+  if (!canManagePayments) {
+    return NextResponse.json({ error: "You don't have permission to manage saved payment methods" }, { status: 403 });
+  }
+
   const body = await request.json();
   const parsed = RemoveSchema.safeParse(body);
   if (!parsed.success) {
@@ -73,6 +83,16 @@ export async function PATCH(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+
+  // Saving/removing a payment method or toggling autopay changes who gets
+  // charged — gate behind the same permission as charging (admins always pass).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canManagePayments } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_add_modify_payments",
+  });
+  if (!canManagePayments) {
+    return NextResponse.json({ error: "You don't have permission to manage saved payment methods" }, { status: 403 });
+  }
 
   const body = await request.json();
   const parsed = SetAutopaySchema.safeParse(body);

@@ -104,8 +104,11 @@ export async function POST(request: Request) {
       parent_work_order_id: body.parentWorkOrderId ?? null,
       assigned_to_id: body.assignedToId ?? null,
       assigned_to_name: body.assignedToId ? employeeMap.get(body.assignedToId) : null,
-      assigned_to_ids: body.assignedToIds ?? [],
-      assigned_to_names: (body.assignedToIds ?? []).map((id) => employeeMap.get(id)),
+      // Union of assignedToId + assignedToIds (primary first) so the array
+      // columns the app reads (assigned_to_ids/names) always include the
+      // primary assignee.
+      assigned_to_ids: assigneeIds,
+      assigned_to_names: assigneeIds.map((id) => employeeMap.get(id) ?? ""),
     })
     .select(WORK_ORDER_SELECT)
     .single();

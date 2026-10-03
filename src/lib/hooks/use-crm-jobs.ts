@@ -11,6 +11,7 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import { logger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
@@ -729,6 +730,7 @@ export function mapVisit(row: any): CRMJobVisit {
       ? row.clients.client_tags.map((t: any) => t.tag)
       : [],
     crewId: row.crew_id ?? null,
+    crewUnassigned: row.crew_unassigned ?? false,
     crewName: row.crm_crews?.name ?? null,
     scheduledDate: row.scheduled_date,
     startTime: row.start_time ?? null,
@@ -791,6 +793,8 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const buildQuery = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from('crm_job_visits')
         .select(`
@@ -807,7 +811,9 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         // otherwise have no stable order, so Postgres can return them in a
         // different sequence on every refetch, which reads as "the route
         // reorders itself" after any unrelated edit.
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        // id breaks created_at ties so .range() pages never skip/repeat rows.
+        .order('id', { ascending: true });
 
       if (toDate && toDate !== fromDate) {
         q = q.gte('scheduled_date', fromDate).lte('scheduled_date', toDate);
@@ -815,8 +821,12 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         q = q.eq('scheduled_date', fromDate);
       }
 
-      const { data, error } = await q;
-      if (error) throw error;
+      return q;
+      };
+      // PostgREST caps a response at 1000 rows — a busy multi-day board
+      // range was silently truncated. Page through everything.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await fetchAllRows<any>(buildQuery);
       const visits = (data.map(mapVisit)) as CRMJobVisit[];
       // Filter out snow jobs. For cancelled/completed parent jobs, only hide the
       // visit if the visit itself is still pending (scheduled/dispatched) — completed
@@ -890,10 +900,21 @@ export function useCreateVisit() {
         .single();
       if (error) throw error;
 
-      // Cascade crew assignment to parent job so it shows everywhere
+      // Deliberately NOT cascading this visit's crew onto crm_jobs.crew_id:
+      // that column is the default crew for every future generated visit, so a
+      // one-off visit assignment (or an "unassigned" NULL) would silently
+      // rewrite the whole job's crew — useUpdateVisit stopped doing this for
+      // the same reason. The one exception is a waiting-list job's first
+      // dispatch, which has no crew yet; it adopts the crew it was dispatched
+      // to. A crew is never cleared here.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const jobUpdate: Record<string, any> = {};
-      if (values.crewId !== undefined) jobUpdate.crew_id = values.crewId ?? null;
+      if (values.jobType === 'waiting_list' && values.crewId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: jobRow } = await (supabase as any)
+          .from('crm_jobs').select('crew_id').eq('id', values.jobId).maybeSingle();
+        if (jobRow && !jobRow.crew_id) jobUpdate.crew_id = values.crewId;
+      }
 
       // Dispatching a Waiting List job's first visit only ever created the visit
       // row — the parent job stayed job_type='waiting_list' with scheduled_date
@@ -1136,6 +1157,8 @@ export function useUpdateVisit() {
         sub_status: string | null;
         scheduled_date: string;
         crew_id: string | null;
+        /** Per-visit "no crew" override; wins over the job's crew. */
+        crew_unassigned: boolean;
         start_time: string | null;
         end_time: string | null;
         clocked_in_at: string | null;
@@ -1234,6 +1257,10 @@ export function useUpdateVisit() {
       const isCompleting = updates.status === 'completed';
       const { status: _statusOmittedForCompletion, ...updatesWithoutStatus } = updates;
       const dbUpdates = { ...(isCompleting ? updatesWithoutStatus : updates) };
+      // An explicit crew and "unassigned" are mutually exclusive (the DB
+      // trigger enforces the same; this keeps the payload honest).
+      if (dbUpdates.crew_id) dbUpdates.crew_unassigned = false;
+      else if (dbUpdates.crew_unassigned) dbUpdates.crew_id = null;
       // Hours come from clock deltas × men and qty ÷ production rate — round
       // before writing so float noise (6.000000000000001) never reaches the
       // row or the crm_jobs audit trail that echoes the actual_hours rollup.
@@ -1427,9 +1454,25 @@ export function useCreateClientJob() {
         .single();
       if (error) throw error;
 
+      const job = data as { id: string };
+
+      // The job, its services, products and first visits are separate,
+      // non-transactional inserts. If any later step fails the job would
+      // otherwise be left behind active with partial children, so compensate
+      // by soft-deleting the visits and the job, then surface the error.
+      const rollbackJob = async () => {
+        const deletedAt = new Date().toISOString();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('crm_job_visits').update({ deleted_at: deletedAt }).eq('job_id', job.id).is('deleted_at', null);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('crm_jobs').update({ deleted_at: deletedAt }).eq('id', job.id);
+      };
+
       // sort_order -> inserted crm_job_services.id, used below to link each
       // package visit to the specific service/visit it was generated from.
       let serviceIdBySortOrder: Record<number, string> = {};
+      let createdVisitIds: string[] = [];
+      try {
       if (values.services.length > 0) {
         const jobId = (data as { id: string }).id;
         const serviceRows = values.services.map((s, i) => ({
@@ -1462,8 +1505,6 @@ export function useCreateClientJob() {
           .reduce<Record<number, string>>((acc, row) => { acc[row.sort_order] = row.id; return acc; }, {});
       }
 
-      const job = data as { id: string };
-
       if (values.products.length > 0) {
         const productRows = values.products.map((p) => ({
           job_id: job.id,
@@ -1485,7 +1526,6 @@ export function useCreateClientJob() {
       // a different crew than another (e.g. Spring Clean-up to one crew, Mulch
       // to another) even though they were added together on the same job.
       const autoVisitTypes = ['one_time', 'snow', 'project', 'recurring'];
-      let createdVisitIds: string[] = [];
       if (values.scheduledDate && autoVisitTypes.includes(values.jobType)) {
         if (values.services.length > 1) {
           const visitRows = values.services.map((s, i) => ({
@@ -1498,14 +1538,15 @@ export function useCreateClientJob() {
             men_count: s.teamSize || jobManCount,
           }));
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: insertedVisits } = await (supabase as any)
+          const { data: insertedVisits, error: visitsErr } = await (supabase as any)
             .from('crm_job_visits')
             .insert(visitRows)
             .select('id');
+          if (visitsErr) throw visitsErr;
           createdVisitIds = ((insertedVisits ?? []) as { id: string }[]).map((v) => v.id);
         } else {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: insertedVisit } = await (supabase as any)
+          const { data: insertedVisit, error: visitErr } = await (supabase as any)
             .from('crm_job_visits')
             .insert({
               job_id: job.id,
@@ -1517,6 +1558,7 @@ export function useCreateClientJob() {
             })
             .select('id')
             .single();
+          if (visitErr) throw visitErr;
           if (insertedVisit) createdVisitIds = [(insertedVisit as { id: string }).id];
         }
       }
@@ -1539,8 +1581,13 @@ export function useCreateClientJob() {
           }));
         if (visitRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from('crm_job_visits').insert(visitRows);
+          const { error: pkgVisitErr } = await (supabase as any).from('crm_job_visits').insert(visitRows);
+          if (pkgVisitErr) throw pkgVisitErr;
         }
+      }
+      } catch (err) {
+        await rollbackJob().catch(() => {});
+        throw err;
       }
 
       // Recurring jobs: generate the season's visits right away (through
@@ -2245,7 +2292,10 @@ export function useCreateJobsFromEstimate() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update({ stage: "accepted" } as any)
         .eq("id", estimateId)
-        .neq("stage", "accepted");
+        // Only an open proposal is "forced" accepted by converting it. A lost
+        // estimate must be reopened deliberately (and a draft sent) rather
+        // than silently flipped here; accepted/invoiced are already past it.
+        .not("stage", "in", "(accepted,lost,draft,invoiced)");
 
       // Seed the linked project's contract price from the accepted estimate —
       // only while it is still unset, so a PM's figure is never clobbered.

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 // POST /api/crm/forms/attachments/signed-url — staff-only attachment download.
@@ -14,6 +15,10 @@ export async function POST(req: Request) {
   const { data: profile } = await supabase
     .from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+
+  if (!(await hasAnySettingsPermission(supabase, ["forms_view_submit", "forms_edit"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const path = body.path as string | undefined;
@@ -37,7 +42,7 @@ export async function POST(req: Request) {
     .createSignedUrl(path, 60 * 60); // 1 hour
 
   if (error || !signed) {
-    return NextResponse.json({ error: error?.message ?? "Failed to sign URL" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to sign URL" }, { status: 500 });
   }
 
   return NextResponse.json({ url: signed.signedUrl });

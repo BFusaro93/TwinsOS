@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createClient } from "@/lib/supabase/server";
 import { getValidConnection, findOrCreateCustomer, createCustomer, customerExists } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
@@ -45,6 +46,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Also fired automatically as part of invoice sync, so accept client/invoice
+  // keys as well as the explicit resync permission.
+  if (!(await hasAnySettingsPermission(supabase, ["quickbooks_resync", "client_allow_edit", "client_add", "acct_send_invoices", "acct_add_modify_invoices"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { clientId } = await params;
   const body = await req.json().catch(() => ({}));

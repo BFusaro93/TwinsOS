@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
+
+const log = logger.child("users-invite");
 
 function escapeHtml(value: string): string {
   return value
@@ -35,6 +39,11 @@ export async function POST(request: Request) {
   if (callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // Service-role writes below target profiles.org_id (the staff member's HOME
+  // org) — refuse while impersonating another tenant.
+  const impersonating = await rejectIfImpersonating(supabase, user.id);
+  if (impersonating) return impersonating;
 
   // Service-role writes below bypass the canceled-org read-only RLS.
   const readOnly = await assertOrgWritable(supabase, callerProfile.org_id);
@@ -91,12 +100,12 @@ export async function POST(request: Request) {
       });
       if (secondTry.error || !secondTry.data) {
         console.error("generateLink (recovery) error:", secondTry.error);
-        return NextResponse.json({ error: secondTry.error?.message || "Failed to generate invite link" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to generate invite link" }, { status: 500 });
       }
       linkData = secondTry.data;
     } else {
       console.error("generateLink error:", firstTry.error);
-      return NextResponse.json({ error: firstTry.error.message || "Failed to generate invite link" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to generate invite link" }, { status: 500 });
     }
   } else {
     linkData = firstTry.data;

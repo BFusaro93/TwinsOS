@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+// Only the settings keys the public renderer (app/forms/[slug]/page.tsx) reads.
+// The full settings blob also holds staff-only config (notification
+// recipients, fromEmail, tagsOnSubmit…) that must never reach anonymous users.
+const PUBLIC_SETTING_KEYS = [
+  "confirmationType", "confirmationUrl", "confirmationMessage", "successMessage", "submitLabel",
+] as const;
+
+function publicSettings(settings: unknown): Record<string, unknown> {
+  const src = (settings && typeof settings === "object" ? settings : {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of PUBLIC_SETTING_KEYS) if (src[k] !== undefined) out[k] = src[k];
+  return out;
+}
+
 // GET /api/public/forms/[slug] — fetch published form + fields (no auth)
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -37,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     name: form.name,
     slug: form.slug,
     description: form.description,
-    settings: form.settings ?? {},
+    settings: publicSettings(form.settings),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fields: (fields ?? []).map((f: any) => ({
       id: f.id,

@@ -114,9 +114,9 @@ export async function logSequenceExecution(
     eventType?: string | null;
     detail?: string | null;
   }
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await supabase.from("crm_sequence_execution_log").insert({
+    const { error } = await supabase.from("crm_sequence_execution_log").insert({
       org_id: params.orgId,
       enrollment_id: params.enrollmentId ?? null,
       sequence_id: params.sequenceId ?? null,
@@ -126,8 +126,14 @@ export async function logSequenceExecution(
       action: params.action,
       detail: params.detail ?? null,
     });
+    if (error) {
+      console.error("[sequence-execution-log] failed to log:", error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error("[sequence-execution-log] failed to log:", err);
+    return false;
   }
 }
 
@@ -469,7 +475,7 @@ export async function evaluateConditionSet(
           .then((r: { data: { service_name: string | null }[] | null }) => new Set((r.data ?? []).map((l) => l.service_name?.toLowerCase()).filter((v): v is string => !!v)))
       : Promise.resolve(new Set<string>()),
     needsEstimateProducts && estimateId
-      ? supabase.from("estimate_direct_costs").select("product_item_id").eq("estimate_id", estimateId)
+      ? supabase.from("estimate_direct_costs").select("product_item_id").eq("estimate_id", estimateId).is("deleted_at", null)
           .then((r: { data: { product_item_id: string | null }[] | null }) => new Set((r.data ?? []).map((l) => l.product_item_id?.toLowerCase()).filter((v): v is string => !!v)))
       : Promise.resolve(new Set<string>()),
     needsInvoiceLines && invoiceId
@@ -671,6 +677,39 @@ export async function triggerConditionsMet(
 }
 
 /**
+ * Loads one org's triggers of a given type, paginated (a single select
+ * silently truncates at 1000 rows) and scoped to the org in SQL rather than
+ * fetching every tenant's triggers and filtering in memory.
+ */
+async function fetchOrgTriggers(
+  supabase: AnyClient,
+  orgId: string,
+  triggerType: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const out: any[] = [];
+  for (let from = 0; ; ) {
+    const { data: page, error } = await supabase
+      .from("crm_sequence_triggers")
+      .select("id, sequence_id, config, crm_automation_sequences(is_active, deleted_at, allow_reentry, reentry_after_minutes, crm_automations(is_active, deleted_at, org_id))")
+      .eq("org_id", orgId)
+      .eq("trigger_type", triggerType)
+      .order("id")
+      .range(from, from + 999);
+    if (error) {
+      console.error("[sequence-triggers] lookup failed:", error.message);
+      break;
+    }
+    if (!page || page.length === 0) break;
+    out.push(...page);
+    if (page.length < 1000) break;
+    from += page.length;
+  }
+  return out;
+}
+
+/**
  * Fires the 'service_visit_completed' trigger type for every active sequence
  * configured for one of the just-completed visit's services (or configured
  * for "any service"), enrolling the client if eligible. Called from the
@@ -684,10 +723,7 @@ export async function fireServiceVisitCompletedTriggers(
 
   const enrolledIds: string[] = [];
 
-  const { data: triggers } = await supabase
-    .from("crm_sequence_triggers")
-    .select("id, sequence_id, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
-    .eq("trigger_type", "service_visit_completed");
+  const triggers = await fetchOrgTriggers(supabase, params.orgId, "service_visit_completed");
 
   for (const trigger of (triggers ?? []) as {
     id: string;
@@ -698,7 +734,7 @@ export async function fireServiceVisitCompletedTriggers(
   }[]) {
     const seq = trigger.crm_automation_sequences;
     const auto = seq?.crm_automations;
-    if (!seq?.is_active || !auto?.is_active) continue;
+    if (!seq?.is_active || !auto?.is_active || seq.deleted_at || auto.deleted_at) continue;
     if (auto.org_id !== params.orgId) continue;
 
     const configServiceId = trigger.config?.service_id as string | undefined;
@@ -759,10 +795,7 @@ export async function fireSimpleTrigger(
 ): Promise<string[]> {
   const enrolledIds: string[] = [];
 
-  const { data: triggers } = await supabase
-    .from("crm_sequence_triggers")
-    .select("id, sequence_id, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
-    .eq("trigger_type", params.triggerType);
+  const triggers = await fetchOrgTriggers(supabase, params.orgId, params.triggerType);
 
   for (const trigger of (triggers ?? []) as {
     id: string;
@@ -773,7 +806,7 @@ export async function fireSimpleTrigger(
   }[]) {
     const seq = trigger.crm_automation_sequences;
     const auto = seq?.crm_automations;
-    if (!seq?.is_active || !auto?.is_active) continue;
+    if (!seq?.is_active || !auto?.is_active || seq.deleted_at || auto.deleted_at) continue;
     if (auto.org_id !== params.orgId) continue;
 
     const filterValues = trigger.config?.filter_values;

@@ -109,6 +109,9 @@ async function evaluateWoOverdue(adminClient: AdminClient, orgId: string, daysOv
  *      trigger type, called by the app itself right after the event
  *      happens (a maintenance request created, a WO/PO status changed).
  */
+// The poll loop below works through a 240s time budget.
+export const maxDuration = 300;
+
 export async function GET(request: Request) {
   return handleRun(request);
 }
@@ -198,6 +201,27 @@ async function handleRun(request: Request) {
             .maybeSingle(),
         ]);
         verifiedAssetId = asset || vehicle ? assetId : null;
+      }
+
+      // The event was asserted by the caller; prove it from the record so a
+      // viewer/crew login can't fire "WO done"/"PO approved" automations (which
+      // create work orders, requisitions and emails) without the change having
+      // happened. Same idea as fire-trigger's VERIFIED_TRIGGERS.
+      if (eventTrigger === "wo_status_change" || eventTrigger === "po_status_change") {
+        const table = eventTrigger === "wo_status_change" ? "work_orders" : "purchase_orders";
+        const recordId = eventTrigger === "wo_status_change" ? workOrderId : purchaseOrderId;
+        if (!recordId || !toStatus) {
+          return NextResponse.json({ error: "Record id and toStatus are required" }, { status: 400 });
+        }
+        const { data: rec } = await (adminClient as AdminClient)
+          .from(table)
+          .select("status")
+          .eq("id", recordId)
+          .eq("org_id", callerOrgId)
+          .maybeSingle();
+        if (!rec || (rec as { status: string | null }).status !== toStatus) {
+          return NextResponse.json({ error: "Record is not in that status" }, { status: 409 });
+        }
       }
 
       // Fan out to any Zapier REST Hook subscriptions for the CMMS trigger
@@ -509,42 +533,61 @@ async function handleRun(request: Request) {
   const crmSkipped: { enrollmentId: string; reason: string }[] = [];
 
   try {
-    const nowIso = new Date().toISOString();
+    // Drain the due backlog in claim-sized batches until a time budget is
+    // spent, instead of one 50-row batch per 15-minute run (which capped
+    // throughput at ~200 steps/hour no matter how many were due). Each row is
+    // still claimed atomically in processDueEnrollment, so claim/lease
+    // semantics are unchanged. Rows already seen this run (e.g. skipped but
+    // still due) are not re-processed; the loop ends when a batch brings
+    // nothing new.
+    const POLL_BUDGET_MS = 240_000;
+    const BATCH_SIZE = 50;
+    const startedAt = Date.now();
+    const seenEnrollmentIds = new Set<string>();
 
-    let enrollQuery = (adminClient as AdminClient)
-      .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position, organizations!inner(plan)")
-      // A canceled org is read-only: its automations pause (and resume if it
-      // resubscribes). Filtered here so its due rows can't crowd the batch.
-      .neq("organizations.plan", "canceled")
-      .lte("next_fire_at", nowIso)
-      .is("completed_at", null)
-      .is("stopped_at", null)
-      .is("deleted_at", null)
-      .eq("awaiting_approval", false)
-      // Oldest-due first. With no ORDER BY Postgres returned an arbitrary
-      // (in practice stable) 50, so a backlog of rows that kept failing
-      // could starve everything behind them. Each row is still claimed
-      // atomically inside processDueEnrollment, so an overlapping run (or
-      // an immediate post-enrollment run) can't double-send it.
-      .order("next_fire_at", { ascending: true })
-      .limit(50);
+    while (Date.now() - startedAt < POLL_BUDGET_MS) {
+      const nowIso = new Date().toISOString();
 
-    if (callerOrgId) {
-      enrollQuery = enrollQuery.eq("org_id", callerOrgId);
-    }
+      let enrollQuery = (adminClient as AdminClient)
+        .from("crm_sequence_enrollments")
+        .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position, organizations!inner(plan)")
+        // A canceled org is read-only: its automations pause (and resume if it
+        // resubscribes). Filtered here so its due rows can't crowd the batch.
+        .neq("organizations.plan", "canceled")
+        .lte("next_fire_at", nowIso)
+        .is("completed_at", null)
+        .is("stopped_at", null)
+        .is("deleted_at", null)
+        .eq("awaiting_approval", false)
+        // Oldest-due first so a backlog of rows that kept failing can't
+        // starve everything behind them.
+        .order("next_fire_at", { ascending: true })
+        // Over-fetch by the already-seen count so skipped-but-still-due rows
+        // at the head of the queue can't hide fresh ones behind them.
+        .limit(BATCH_SIZE + seenEnrollmentIds.size);
 
-    const { data: enrollments, error: enrollErr } = await enrollQuery;
-    if (enrollErr) {
-      log.error("enrollment query error", { error: enrollErr.message });
-    }
+      if (callerOrgId) {
+        enrollQuery = enrollQuery.eq("org_id", callerOrgId);
+      }
 
-    for (const enrollment of enrollments ?? []) {
-      const outcome = await processDueEnrollment(adminClient, enrollment);
-      if ("fired" in outcome) {
-        crmFired.push(outcome.fired);
-      } else {
-        crmSkipped.push(outcome.skipped);
+      const { data: enrollments, error: enrollErr } = await enrollQuery;
+      if (enrollErr) {
+        log.error("enrollment query error", { error: enrollErr.message });
+        break;
+      }
+
+      const fresh = (enrollments ?? []).filter((e: { id: string }) => !seenEnrollmentIds.has(e.id));
+      if (fresh.length === 0) break;
+
+      for (const enrollment of fresh.slice(0, BATCH_SIZE)) {
+        if (Date.now() - startedAt >= POLL_BUDGET_MS) break;
+        seenEnrollmentIds.add(enrollment.id);
+        const outcome = await processDueEnrollment(adminClient, enrollment);
+        if ("fired" in outcome) {
+          crmFired.push(outcome.fired);
+        } else {
+          crmSkipped.push(outcome.skipped);
+        }
       }
     }
   } catch (crmErr) {

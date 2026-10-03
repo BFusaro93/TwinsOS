@@ -63,6 +63,9 @@ export default async function OAuthAuthorizePage({
   if (!profile) {
     return <ErrorScreen message="Couldn't load your account. Please try again." />;
   }
+  if (profile.role !== "admin") {
+    return <ErrorScreen message="Ask an admin to approve this connection. Only organization admins can connect outside apps to this account." />;
+  }
   const { data: org } = await supabase
     .from("organizations")
     .select("name, oauth_write_roles")

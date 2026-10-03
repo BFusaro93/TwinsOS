@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/api/auth";
+
+const log = logger.child("settings-oauth-connections");
 
 /**
  * GET /api/settings/oauth-connections -- lists this org's active OAuth
@@ -46,7 +49,8 @@ export async function GET() {
   const { data: refreshRows, error } = await query;
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("request failed", { error: error.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   // A connection's own refresh-token row only gets last_used_at touched when

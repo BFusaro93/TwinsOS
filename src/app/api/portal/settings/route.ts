@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
@@ -8,6 +9,21 @@ async function getOrgId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   return profile?.org_id ?? null;
 }
+
+const optText = (max: number) => z.string().max(max).nullish();
+const SettingsSchema = z.object({
+  company_name: optText(200),
+  // Rendered into <img src> on the portal — must be an http(s) URL.
+  logo_url: z.string().max(2000).regex(/^https?:\/\//i, "logo_url must be an http(s) URL").nullish().or(z.literal("")),
+  accent_color: z.string().regex(/^#[0-9a-fA-F]{3,8}$/, "accent_color must be a hex color").nullish().or(z.literal("")),
+  support_email: z.string().max(254).email().nullish().or(z.literal("")),
+  support_phone: optText(50),
+  allow_tickets: z.boolean().nullish(),
+  allow_estimates: z.boolean().nullish(),
+  allow_documents: z.boolean().nullish(),
+  welcome_message: optText(2000),
+  portal_ticket_categories: z.array(z.string().trim().min(1).max(100)).max(50).nullish(),
+});
 
 export async function GET() {
   const supabase = await createClient();
@@ -29,7 +45,11 @@ export async function PUT(req: Request) {
   const orgId = await getOrgId(supabase);
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
+  const parsedBody = SettingsSchema.safeParse(await req.json().catch(() => null));
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+  }
+  const body = parsedBody.data;
 
   const upsert = {
     org_id: orgId,

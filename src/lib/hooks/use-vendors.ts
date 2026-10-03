@@ -203,11 +203,39 @@ export function useDeleteVendor() {
       if (poErr) throw poErr;
       if (reqErr) throw reqErr;
 
+      // Other live records that reference this vendor by FK. Soft-deleting the
+      // vendor would blank its name on all of them, so block with a clear
+      // message (checked against the real FK columns).
+      const refChecks: Array<{ label: string; table: string; column: string }> = [
+        { label: "project subcontract cost", table: "project_subcontract_costs", column: "vendor_id" },
+        { label: "work order vendor charge", table: "wo_vendor_charges", column: "vendor_id" },
+        { label: "part with this default vendor", table: "parts", column: "vendor_id" },
+        { label: "product with this default vendor", table: "product_items", column: "vendor_id" },
+        { label: "damage case expense", table: "damage_case_expenses", column: "vendor_id" },
+        { label: "asset purchased from this vendor", table: "assets", column: "purchase_vendor_id" },
+        { label: "vehicle purchased from this vendor", table: "vehicles", column: "purchase_vendor_id" },
+      ];
+      const refResults = await Promise.all(
+        refChecks.map(async (c) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { count, error: refErr } = await (supabase as any)
+            .from(c.table)
+            .select("id", { count: "exact", head: true })
+            .eq(c.column, id)
+            .is("deleted_at", null);
+          if (refErr) throw refErr;
+          return { label: c.label, count: (count ?? 0) as number };
+        })
+      );
+
       const blockers: string[] = [];
+      for (const r of refResults) {
+        if (r.count > 0) blockers.push(`${r.count} ${r.label}${r.count === 1 ? "" : "s"}`);
+      }
       if (openPOCount) blockers.push(`${openPOCount} open purchase order${openPOCount === 1 ? "" : "s"}`);
       if (openReqCount) blockers.push(`${openReqCount} open requisition${openReqCount === 1 ? "" : "s"}`);
       if (blockers.length > 0) {
-        throw new Error(`Cannot delete vendor — it has ${blockers.join(" and ")}`);
+        throw new Error(`Cannot delete vendor — it is still referenced by ${blockers.join(", ")}`);
       }
 
       const { error } = await supabase
