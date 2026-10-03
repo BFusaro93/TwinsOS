@@ -15498,6 +15498,20 @@ export type Database = {
           was_newly_paid: boolean
         }[]
       }
+      crm_record_payment: {
+        Args: {
+          p_allocations: Json
+          p_amount_cents: number
+          p_client_id: string
+          p_is_credit: boolean
+          p_is_prepayment: boolean
+          p_memo: string
+          p_method: string
+          p_payment_date: string
+          p_reference: string
+        }
+        Returns: Json
+      }
       crm_revert_price_adjustment: {
         Args: { p_id: string }
         Returns: {
@@ -15522,6 +15536,19 @@ export type Database = {
       crm_unsubscribe_client: {
         Args: { p_campaign_id?: string; p_token: string }
         Returns: string
+      }
+      crm_update_payment: {
+        Args: {
+          p_allocations: Json
+          p_amount_cents: number
+          p_client_id: string
+          p_memo: string
+          p_method: string
+          p_payment_date: string
+          p_payment_id: string
+          p_reference: string
+        }
+        Returns: Json
       }
       decide_approval: {
         Args: { p_comment?: string; p_request_id: string; p_status: string }
@@ -15620,6 +15647,10 @@ export type Database = {
         Returns: string
       }
       next_po_number: { Args: { p_org_id_override?: string }; Returns: string }
+      next_receipt_number: {
+        Args: { p_org_id_override?: string }
+        Returns: string
+      }
       next_requisition_number: {
         Args: { p_org_id_override?: string }
         Returns: string
@@ -15735,6 +15766,10 @@ export type Database = {
         Returns: {
           new_refunded_amount_cents: number
         }[]
+      }
+      reinstate_stripe_payment_reversal: {
+        Args: { p_payment_id: string; p_target_reversed_cents: number }
+        Returns: number
       }
       reorder_snow_route_stops: {
         Args: { p_route_id: string; p_stops: Json }

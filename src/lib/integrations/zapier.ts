@@ -101,26 +101,13 @@ export async function authenticateZapierRequest(
   const key = match[1].trim();
   if (!key) return null;
 
-  let { data } = await db
+  const { data } = await db
     .from("integrations")
     .select("id, org_id")
     .eq("provider", "zapier")
     .eq("api_key_hash", hashZapierApiKey(key))
     .eq("enabled", true)
     .maybeSingle();
-
-  if (!data) {
-    // Transitional: rows not yet hashed/cleared still match on plaintext.
-    // Remove once 20261011000100_zapier_clear_plaintext_key.sql is applied.
-    const legacy = await db
-      .from("integrations")
-      .select("id, org_id")
-      .eq("provider", "zapier")
-      .eq("api_key", key)
-      .eq("enabled", true)
-      .maybeSingle();
-    data = legacy.data;
-  }
 
   if (!data) return null;
   return { orgId: data.org_id as string, integrationId: data.id as string };
