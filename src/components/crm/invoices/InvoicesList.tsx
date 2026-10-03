@@ -961,7 +961,7 @@ export function InvoicesList({ clientId }: Props) {
                 return (
                   <th
                     key={col.key}
-                    className={cn("px-4 py-3", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600" : "")}
+                    className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600" : "")}
                     onClick={sortable ? () => toggleSort(col.key) : undefined}
                   >
                     {col.label}
@@ -969,7 +969,7 @@ export function InvoicesList({ clientId }: Props) {
                   </th>
                 );
               })}
-              <th className="px-4 py-3" />
+              <th className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6" />
             </tr>
           </thead>
           <tbody>
@@ -977,7 +977,7 @@ export function InvoicesList({ clientId }: Props) {
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: colSpan }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -1010,13 +1010,13 @@ export function InvoicesList({ clientId }: Props) {
                     switch (col.key) {
                       case "number":
                         return (
-                          <td key={col.key} className="px-4 py-3 font-mono text-xs text-slate-400">
+                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 font-mono text-xs text-slate-400">
                             {inv.invoiceNumber != null ? `#${inv.invoiceNumber}` : "—"}
                           </td>
                         );
                       case "client":
                         return (
-                          <td key={col.key} className="px-4 py-3 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
                             <Link
                               href={`/crm/clients/${inv.clientId}`}
                               title={inv.clientName ?? undefined}
@@ -1037,7 +1037,7 @@ export function InvoicesList({ clientId }: Props) {
                         const overdue = isOverdue(inv);
                         const showOverdueLabel = overdue && inv.status !== "draft";
                         return (
-                          <td key={col.key} className="px-4 py-3">
+                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
                             <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", overdue ? STATUS_COLOR.overdue : STATUS_COLOR[inv.status])}>
                               {showOverdueLabel ? "overdue" : inv.status}
                             </span>
@@ -1058,10 +1058,10 @@ export function InvoicesList({ clientId }: Props) {
                         );
                       }
                       case "date":
-                        return <td key={col.key} className="px-4 py-3 text-xs text-slate-500">{formatDate(inv.invoiceDate)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">{formatDate(inv.invoiceDate)}</td>;
                       case "due":
                         return (
-                          <td key={col.key} className={cn("px-4 py-3 text-xs", isOverdue(inv) ? "text-red-600 font-medium" : "text-slate-500")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs", isOverdue(inv) ? "text-red-600 font-medium" : "text-slate-500")}>
                             {inv.dueDate
                               ? formatDate(inv.dueDate)
                               : inv.terms === "due_on_receipt" && inv.invoiceDate
@@ -1070,17 +1070,17 @@ export function InvoicesList({ clientId }: Props) {
                           </td>
                         );
                       case "total":
-                        return <td key={col.key} className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(inv.totalCents)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700">{formatCurrency(inv.totalCents)}</td>;
                       case "balance":
                         return (
-                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", inv.balanceCents > 0 ? "text-red-600" : "text-green-600")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", inv.balanceCents > 0 ? "text-red-600" : "text-green-600")}>
                             {formatCurrency(inv.balanceCents)}
                           </td>
                         );
                       case "accountBalance": {
                         const acct = accountBalanceByClient.get(inv.clientId) ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", acct > 0 ? "text-red-600" : acct < 0 ? "text-green-600" : "text-slate-500")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", acct > 0 ? "text-red-600" : acct < 0 ? "text-green-600" : "text-slate-500")}>
                             {acct < 0 ? "−" : ""}{formatCurrency(Math.abs(acct))}
                           </td>
                         );
@@ -1088,7 +1088,7 @@ export function InvoicesList({ clientId }: Props) {
                       case "prepay": {
                         const prepay = inv.clientPrepayCents ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", prepay > 0 ? "text-blue-600" : "text-slate-400")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", prepay > 0 ? "text-blue-600" : "text-slate-400")}>
                             {formatCurrency(prepay)}
                           </td>
                         );
@@ -1096,25 +1096,25 @@ export function InvoicesList({ clientId }: Props) {
                       case "credits": {
                         const credits = inv.clientCreditsCents ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", credits > 0 ? "text-green-600" : "text-slate-400")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", credits > 0 ? "text-green-600" : "text-slate-400")}>
                             {formatCurrency(credits)}
                           </td>
                         );
                       }
                       case "paymentType":
                         return (
-                          <td key={col.key} className="px-4 py-3 text-xs text-slate-500">
+                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">
                             {paymentTypeLabel(inv) || "—"}
                           </td>
                         );
                       case "delivery":
-                        return <td key={col.key} className="px-4 py-3 text-xs text-slate-500">{deliveryLabel(inv)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">{deliveryLabel(inv)}</td>;
                       case "frequency":
-                        return <td key={col.key} className="px-4 py-3 text-xs text-slate-500">{frequencyLabel(inv)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">{frequencyLabel(inv)}</td>;
                       default: return null;
                     }
                   })}
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenInvoiceId(inv.id)}>
                         <FileText className="mr-1 h-3 w-3" /> Open
