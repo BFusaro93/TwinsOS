@@ -128,6 +128,8 @@ export interface CRMInvoice {
   clientBalanceOutstandingCents?: number | null;
   /** Unapplied prepayments on the client's account (clients.balance_prepay_cents). */
   clientPrepayCents?: number | null;
+  /** Unapplied credits on the client's account (clients.balance_credits_cents). */
+  clientCreditsCents?: number | null;
   /** A Stripe charge is in flight against this invoice but hasn't settled — an
    * ACH debit takes days. Nothing is written to crm_payments until it settles
    * (that table only holds settled money), so without this the invoice looks

@@ -62,6 +62,9 @@ function voidBlockedReason(inv: CRMInvoice): string | null {
   return null;
 }
 
+/** Available from the Columns menu but not shown until asked for. */
+const HIDDEN_BY_DEFAULT = ["credits"];
+
 const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "number",      label: "Invoice #",  locked: true },
   { key: "status",      label: "Status" },
@@ -72,6 +75,7 @@ const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "balance",     label: "Balance" },
   { key: "accountBalance", label: "Account Balance" },
   { key: "prepay",      label: "Prepay" },
+  { key: "credits",     label: "Credits" },
   { key: "paymentType", label: "Payment Type" },
   { key: "delivery",    label: "Sent / Printed" },
   { key: "frequency",   label: "Frequency" },
@@ -325,7 +329,7 @@ export function InvoicesList({ clientId }: Props) {
   const [sortKey, setSortKey] = useState<string>("number");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [visibleKeys, setVisibleKeys] = useState<string[]>(
-    INVOICE_COLUMNS.map((c) => c.key)
+    INVOICE_COLUMNS.map((c) => c.key).filter((k) => !HIDDEN_BY_DEFAULT.includes(k))
   );
 
   const allInvoices = invoices ?? [];
@@ -403,6 +407,7 @@ export function InvoicesList({ clientId }: Props) {
         case "due":     av = a.dueDate ?? "9999-99-99"; bv = b.dueDate ?? "9999-99-99"; break;
         case "total":   av = a.totalCents; bv = b.totalCents; break;
         case "balance": av = a.balanceCents; bv = b.balanceCents; break;
+        case "credits": av = a.clientCreditsCents ?? 0; bv = b.clientCreditsCents ?? 0; break;
         case "prepay": av = a.clientPrepayCents ?? 0; bv = b.clientPrepayCents ?? 0; break;
         case "accountBalance": av = accountBalanceByClient.get(a.clientId) ?? 0; bv = accountBalanceByClient.get(b.clientId) ?? 0; break;
         case "status":  av = effectiveStatus(a); bv = effectiveStatus(b); break;
@@ -949,8 +954,8 @@ export function InvoicesList({ clientId }: Props) {
                 />
               </th>
               {visibleColumns.map((col) => {
-                const sortable = ["number","status","client","date","due","total","balance","accountBalance","prepay","paymentType","delivery","frequency"].includes(col.key);
-                const isRight = col.key === "total" || col.key === "balance" || col.key === "accountBalance" || col.key === "prepay";
+                const sortable = ["number","status","client","date","due","total","balance","accountBalance","prepay","credits","paymentType","delivery","frequency"].includes(col.key);
+                const isRight = col.key === "total" || col.key === "balance" || col.key === "accountBalance" || col.key === "prepay" || col.key === "credits";
                 return (
                   <th
                     key={col.key}
@@ -1083,6 +1088,14 @@ export function InvoicesList({ clientId }: Props) {
                         return (
                           <td key={col.key} className={cn("px-4 py-3 text-right font-medium", prepay > 0 ? "text-blue-600" : "text-slate-400")}>
                             {formatCurrency(prepay)}
+                          </td>
+                        );
+                      }
+                      case "credits": {
+                        const credits = inv.clientCreditsCents ?? 0;
+                        return (
+                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", credits > 0 ? "text-green-600" : "text-slate-400")}>
+                            {formatCurrency(credits)}
                           </td>
                         );
                       }
