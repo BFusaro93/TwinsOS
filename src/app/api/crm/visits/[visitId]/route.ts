@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-notify";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
 import {
   INVOICED_VISIT_LOCKED_CODE,
@@ -14,8 +15,10 @@ import {
 
 const PatchSchema = z.object({
   scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  status: z.string().optional(),
+  status: z.enum(VISIT_STATUS_VALUES).optional(),
   crew_id: z.string().uuid().nullable().optional(),
+  /** Per-visit "no crew" override (wins over the job's crew). Cleared by an explicit crew_id. */
+  crew_unassigned: z.boolean().optional(),
   priority: z.number().int().optional(),
   notes_to_crew: z.string().nullable().optional(),
   invoice_description: z.string().nullable().optional(),
@@ -91,7 +94,13 @@ export async function PATCH(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_visits")
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    .update({
+      ...patch,
+      // An explicit crew and "unassigned" are mutually exclusive.
+      ...(patch.crew_id ? { crew_unassigned: false } : {}),
+      ...(patch.crew_unassigned ? { crew_id: null } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", visitId)
     .select()
     .single();
@@ -103,6 +112,8 @@ export async function PATCH(
       { status: locked ? 409 : 500 }
     );
   }
+
+  if (prev) await reopenOneTimeJobsForVisits(supabase, [{ id: visitId, job_id: prev.job_id, status: prev.status }], parsed.data.status);
 
   // Lightweight client-timeline rows (no notifications) for a reschedule
   // and for the transition into "dispatched" — the dispatch board's bulk

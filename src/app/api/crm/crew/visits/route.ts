@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
 import {
-  compareCrewVisitRows,
+  crewVisitComparator,
   effectiveVisitCrewId,
+  fetchRememberedRouteOrder,
+  selectCarriedOverClockedInVisits,
   selectEffectiveCrewVisits,
   type VisitCrewRow,
 } from "@/lib/supabase/crew-id";
@@ -61,9 +63,8 @@ export async function GET(request: Request) {
   // Which day the crew's schedule opens on is the ORG's day. A crew phone set
   // to another timezone (or a UTC server) must not show a different route than
   // the office dispatched.
-  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
-    ? dateParam
-    : todayInZone(await getMyTimeZone(supabase));
+  const orgToday = todayInZone(await getMyTimeZone(supabase));
+  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : orgToday;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any)
@@ -102,10 +103,8 @@ export async function GET(request: Request) {
   // By EFFECTIVE crew — visit.crew_id, else the job's crew. Filtering on the
   // raw visit.crew_id hid every job-inherited visit (most of them) from the
   // crew's own day. See selectEffectiveCrewVisits().
-  const { data: unsorted, error } = await selectEffectiveCrewVisits(
-    supabase,
-    `
-      id, job_id, client_id, job_service_id, crew_id, scheduled_date,
+  const visitSelect = `
+      id, job_id, client_id, job_service_id, crew_id, crew_unassigned, scheduled_date,
       start_time, end_time, status, sub_status, priority,
       notes_to_crew, notes_to_client, completion_notes, job_comments,
       men_count, actual_hours, budgeted_hours, clocked_in_at, clocked_out_at,
@@ -117,14 +116,35 @@ export async function GET(request: Request) {
         notes_to_crew, notes_to_crew_updated_at,
         client_properties(address, city, state, zip),
         crm_job_services(id, service_name, budgeted_hours, team_size, sort_order))
-    `,
+    `;
+  const { data: unsorted, error } = await selectEffectiveCrewVisits(
+    supabase,
+    visitSelect,
     crew.id,
     (q) => q.eq("org_id", orgId).eq("scheduled_date", date).is("deleted_at", null)
   );
-  const data = [...unsorted].sort(compareCrewVisitRows);
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Stops still clocked into from an earlier day (clocked in before org
+  // midnight) must stay on today's list so the crew can clock out; otherwise
+  // they vanished at midnight. Only when viewing today.
+  let carriedOver: Record<string, unknown>[] = [];
+  if (date === orgToday) {
+    const carried = await selectCarriedOverClockedInVisits(
+      supabase, visitSelect, crew.id, date, (q) => q.eq("org_id", orgId)
+    );
+    if (!carried.error) carriedOver = carried.data;
+  }
+  const todayIds = new Set(unsorted.map((r) => r.id as string));
+
+  // Sticky route order (crm_crew_route_order) as the tiebreaker after
+  // priority — same rule as the dispatch board — so the crew's list matches
+  // the order the office routed.
+  const routeOrder = await fetchRememberedRouteOrder(supabase, crew.id, [date]);
+  const data = [
+    ...carriedOver.filter((r) => !todayIds.has(r.id as string)).sort(crewVisitComparator(routeOrder)),
+    ...[...unsorted].sort(crewVisitComparator(routeOrder)),
+  ];
   // A cancelled or on-hold job's leftover visits must not show on the crew's
   // day — except one the crew is clocked into right now, which they still
   // need to clock out of. Filtered here rather than with an !inner join so a

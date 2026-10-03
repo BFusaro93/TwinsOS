@@ -64,9 +64,20 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "access_denied", error_description: "Not signed in" }, { status: 401 });
   }
-  const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
   if (!profile) {
     return NextResponse.json({ error: "server_error" }, { status: 500 });
+  }
+  // A deactivated/pending user's still-valid session must not be able to mint
+  // org-scoped API tokens at consent time.
+  if (profile.status !== "active") {
+    return NextResponse.json({ error: "access_denied", error_description: "Account is not active" }, { status: 403 });
+  }
+  if (profile.role !== "admin") {
+    return NextResponse.json(
+      { error: "access_denied", error_description: "Ask an admin to approve this connection" },
+      { status: 403 }
+    );
   }
   const { data: org } = await db.from("organizations").select("oauth_write_roles").eq("id", profile.org_id).single();
 

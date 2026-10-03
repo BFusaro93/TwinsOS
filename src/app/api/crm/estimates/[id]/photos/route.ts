@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
+import { validateImageUpload } from "@/lib/utils/image-upload";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("estimate-photos");
 
 async function getSupabase() {
   const cookieStore = await cookies();
@@ -19,6 +24,10 @@ export async function POST(
   const supabase = await getSupabase();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!(await hasAnySettingsPermission(supabase, ["estimate_edit"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: estimateId } = await params;
 
@@ -38,17 +47,15 @@ export async function POST(
   const caption = formData.get("caption") as string | null;
 
   if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
-  if (!file.type.startsWith("image/")) {
-    return NextResponse.json({ error: "Only image files can be attached as photos" }, { status: 400 });
-  }
+  const imageCheck = validateImageUpload(file);
+  if (!imageCheck.ok) return NextResponse.json({ error: imageCheck.error }, { status: 400 });
 
   // file.name is client-controlled and can contain "/"/".." segments —
   // restrict the extracted extension to a safe charset before it lands in
   // a storage path, or a crafted name could traverse out of this org's
   // prefix in the shared "attachments" bucket (same class of bug fixed in
   // the crew-app photos route).
-  const rawExt = file.name.split(".").pop() ?? "jpg";
-  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "jpg";
+  const ext = imageCheck.ext;
   // org_id MUST be the first segment (attachments bucket INSERT policy checks
   // storage.foldername(name)[1]); the old estimate-photos/{org}/... layout was
   // rejected. Storage goes through the service client after the estimate was
@@ -60,9 +67,12 @@ export async function POST(
 
   const { error: uploadError } = await createServiceClient().storage
     .from("attachments")
-    .upload(storagePath, buffer, { contentType: file.type, upsert: false });
+    .upload(storagePath, buffer, { contentType: imageCheck.contentType, upsert: false });
 
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  if (uploadError) {
+    log.error("photo upload failed", { estimateId, error: uploadError.message });
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
@@ -73,14 +83,17 @@ export async function POST(
       storage_path: storagePath,
       file_name:    file.name,
       file_size:    file.size,
-      mime_type:    file.type,
+      mime_type:    imageCheck.contentType,
       caption:      caption || null,
       uploaded_by:  user.id,
     })
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    log.error("photo query failed", { estimateId, error: error.message });
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
   return NextResponse.json(data, { status: 201 });
 }
 
@@ -102,7 +115,10 @@ export async function GET(
     .is("deleted_at", null)
     .order("created_at");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    log.error("photo query failed", { estimateId, error: error.message });
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
 
   // Signed URLs are generated at read time — storage paths never leave the DB raw
   const storage = createServiceClient().storage;

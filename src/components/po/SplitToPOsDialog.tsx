@@ -178,9 +178,14 @@ export function SplitToPOsDialog({
         });
 
         createdMap.set(plan.key, result);
-        // Record the conversion right away (not only after the whole loop) so
-        // a later group failing can't leave committed POs unlinked.
-        const first = [...createdMap.values()][0];
+      }
+
+      // Mark the requisition 'ordered' only once EVERY group's PO exists. If a
+      // later group failed we land in the catch below with the requisition
+      // still approved, so the user can retry (createdByGroupRef skips groups
+      // already created) instead of being locked out with a half-split req.
+      const first = [...createdMap.values()][0];
+      if (first) {
         await syncRequisition({ id: requisition.id, status: "ordered", convertedPoId: first.id });
       }
 

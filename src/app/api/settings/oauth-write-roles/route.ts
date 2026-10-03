@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { CONFIGURABLE_WRITE_ROLES } from "@/lib/api/oauth";
+
+const log = logger.child("settings-oauth-write-roles");
 
 const updateSchema = z.object({
   roles: z.array(z.enum(CONFIGURABLE_WRITE_ROLES)),
@@ -30,7 +33,8 @@ export async function GET() {
     .eq("id", profile.org_id)
     .single();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("request failed", { error: error.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return NextResponse.json({ roles: org.oauth_write_roles ?? [] });
@@ -64,7 +68,8 @@ export async function PATCH(request: Request) {
     .update({ oauth_write_roles: parsed.data.roles })
     .eq("id", profile.org_id);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("request failed", { error: error.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

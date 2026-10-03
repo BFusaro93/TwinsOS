@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { notifyStaffOfDepositExcess } from "@/lib/estimate-deposit-excess-notify";
 import {
   accountOwnedByOrg,
   resolveMethod,
@@ -349,13 +350,31 @@ export async function recordEstimateDepositCharge({
   // asking for a deposit, and staff can see how it was taken. Non-fatal: the
   // money is already recorded above, and a failure here must not make the
   // webhook 500 and retry an insert that would then be a no-op anyway.
+  // On a replay (23505) the deposit may since have been refunded or charged
+  // back: re-stamping "collected" then would resurrect a deposit that was given
+  // back. Only clear the pending markers in that case.
+  let fullyReversed = false;
+  if (alreadyRecorded) {
+    const { data: existingForStamp } = await db
+      .from("crm_payments")
+      .select("amount_cents, refunded_amount_cents")
+      .eq("org_id", orgId)
+      .eq("stripe_payment_intent_id", paymentIntent.id)
+      .maybeSingle();
+    fullyReversed =
+      !!existingForStamp && (existingForStamp.refunded_amount_cents ?? 0) >= (existingForStamp.amount_cents ?? 0);
+  }
   const { error: stampErr } = await db
     .from("estimates")
     .update({
+      ...(fullyReversed
+        ? {}
+        : {
       deposit_collected_cents: depositCents,
       deposit_collected_at: new Date().toISOString(),
       deposit_method: paymentIntent.payment_method_types.includes("us_bank_account") ? "ach" : "credit_card",
       deposit_reference: paymentIntent.id,
+        }),
       // Settled — the pending marker has done its job (it only ever gets set
       // for ACH, which sits in `processing` for days).
       deposit_pending_intent_id: null,
@@ -381,6 +400,10 @@ export async function recordEstimateDepositCharge({
   }
 
   await db.rpc("sync_client_balance", { p_client_id: estimate.client_id });
+
+  // If the client accepted only part of the proposal, the deposit can exceed
+  // the accepted total. Left as account credit; tell staff to refund/apply it.
+  if (!fullyReversed) await notifyStaffOfDepositExcess(db, orgId, estimateId);
 
   // On the already-recorded path `inserted` is null (the insert failed with
   // 23505), so dereferencing it threw and the webhook 500'd on every retry,
@@ -422,4 +445,41 @@ export async function recordEstimateDepositCharge({
   }
 
   return "applied";
+}
+
+/**
+ * Keeps an estimate's "deposit collected" stamp honest after the deposit's
+ * payment is refunded / charged back. The deposit is a prepayment row whose
+ * stripe_payment_intent_id is the estimate's deposit_reference; once the
+ * payment is (partly) reversed, deposit_collected_cents drops to what is still
+ * held, and to 0 (with the collected timestamp cleared) on a full reversal so
+ * the proposal stops showing a deposit that was given back. Idempotent: it
+ * recomputes from the payment row. No-op when the intent isn't an estimate's
+ * deposit.
+ */
+export async function syncEstimateDepositWithPayment(
+  db: Db,
+  orgId: string,
+  paymentIntentId: string,
+): Promise<void> {
+  const { data: payment } = await db
+    .from("crm_payments")
+    .select("amount_cents, refunded_amount_cents")
+    .eq("org_id", orgId)
+    .eq("stripe_payment_intent_id", paymentIntentId)
+    .maybeSingle();
+  if (!payment) return;
+  const remaining = Math.max((payment.amount_cents ?? 0) - (payment.refunded_amount_cents ?? 0), 0);
+  const { error } = await db
+    .from("estimates")
+    .update({
+      deposit_collected_cents: remaining,
+      ...(remaining === 0 ? { deposit_collected_at: null } : {}),
+    })
+    .eq("org_id", orgId)
+    .eq("deposit_reference", paymentIntentId)
+    .gt("deposit_collected_cents", remaining);
+  if (error) {
+    log.error("failed to sync estimate deposit after a reversal", { error, paymentIntentId });
+  }
 }

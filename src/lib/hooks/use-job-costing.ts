@@ -250,7 +250,8 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         const { data: directCosts } = await (supabase as any)
           .from("estimate_direct_costs")
           .select("total_cents")
-          .eq("estimate_id", estimateId);
+          .eq("estimate_id", estimateId)
+          .is("deleted_at", null);
 
         const laborCostCents = estimatedLines.reduce((s, l) => s + l.costCents, 0);
         const directCostCents = (directCosts ?? []).reduce(

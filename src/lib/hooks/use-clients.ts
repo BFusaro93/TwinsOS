@@ -1,5 +1,6 @@
 "use client";
 
+import { phoneDedupeKey, toE164Us } from "@/lib/utils/phone";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
@@ -498,16 +499,20 @@ export function useUpdateClientPropertyZones() {
         },
         { gross: 0, turf: 0, mulch: 0, parking: 0 }
       );
+      // Only overwrite a rollup column when the saved zone list actually
+      // contains zones of that type. Properties whose turf_sqft / mulch_bed_sqft
+      // / parking_lot_sqft / gross_sqft were typed in by hand (no zones) were
+      // being wiped to null by `sum || null` the moment any zone was saved.
+      const hasType = (t: string) => zones.some((z) => z.type === t);
+      const rollup: Record<string, number | null> = {};
+      if (hasType("turf")) rollup.turf_sqft = sums.turf || null;
+      if (hasType("mulch_bed")) rollup.mulch_bed_sqft = sums.mulch || null;
+      if (hasType("parking_lot")) rollup.parking_lot_sqft = sums.parking || null;
+      if (zones.length > 0) rollup.gross_sqft = sums.gross || null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("client_properties")
-        .update({
-          zones,
-          turf_sqft: sums.turf || null,
-          mulch_bed_sqft: sums.mulch || null,
-          parking_lot_sqft: sums.parking || null,
-          gross_sqft: sums.gross || null,
-        })
+        .update({ zones, ...rollup })
         .eq("id", propertyId);
       if (error) throw error;
     },
@@ -605,7 +610,9 @@ async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
     (existing ?? []).filter((c) => c.primary_email).map((c) => [c.primary_email!.trim().toLowerCase(), c.id])
   );
   const byPhone = new Map(
-    (existing ?? []).filter((c) => c.primary_phone).map((c) => [c.primary_phone!.replace(/\D/g, ""), c.id])
+    (existing ?? [])
+      .filter((c) => phoneDedupeKey(c.primary_phone))
+      .map((c) => [phoneDedupeKey(c.primary_phone)!, c.id])
   );
   return { byEmail, byPhone };
 }
@@ -646,8 +653,10 @@ export function useBulkImportClients() {
           }
 
           const email = emailRaw?.toLowerCase() || null;
-          const phone = r.primaryPhone?.trim() || null;
-          const phoneDigits = phone?.replace(/\D/g, "") || null;
+          // Stored as E.164 for US-shaped numbers; compared on the last 10
+          // digits, ignoring junk with <7 digits (see phoneDedupeKey).
+          const phone = toE164Us(r.primaryPhone);
+          const phoneDigits = phoneDedupeKey(r.primaryPhone);
           const accountNumber = r.accountNumber?.trim() || null;
 
           // A row WITH an account number is matched by account number first
@@ -963,6 +972,25 @@ export function useUpdateClient() {
 export interface ClientDeletionBlockers {
   openRecurringJobs: { id: string; jobNumber: number | null; status: string }[];
   unpaidInvoices: { id: string; invoiceNumber: number | null; status: string; balanceCents: number }[];
+  /** Signed / active contracts that would keep billing and generating work. */
+  activeContracts: { id: string; title: string | null; status: string }[];
+  /** Estimates still in play (not lost / accepted / invoiced). */
+  openEstimates: { id: string; estimateNumber: number | null; stage: string }[];
+  /** Projects not yet complete or canceled. */
+  openProjects: { id: string; name: string | null; status: string }[];
+  /** Non-recurring jobs with future, unfinished visits on the board. */
+  scheduledJobs: { id: string; jobNumber: number | null }[];
+}
+
+export function hasClientDeletionBlockers(b: ClientDeletionBlockers): boolean {
+  return (
+    b.openRecurringJobs.length > 0 ||
+    b.unpaidInvoices.length > 0 ||
+    b.activeContracts.length > 0 ||
+    b.openEstimates.length > 0 ||
+    b.openProjects.length > 0 ||
+    b.scheduledJobs.length > 0
+  );
 }
 
 /**
@@ -979,6 +1007,18 @@ export class ClientDeletionBlockedError extends Error {
     if (blockers.unpaidInvoices.length) {
       parts.push(`${blockers.unpaidInvoices.length} unpaid invoice(s): ${blockers.unpaidInvoices.map((i) => `#${i.invoiceNumber ?? "?"}`).join(", ")}`);
     }
+    if (blockers.activeContracts.length) {
+      parts.push(`${blockers.activeContracts.length} active contract(s)`);
+    }
+    if (blockers.openEstimates.length) {
+      parts.push(`${blockers.openEstimates.length} open estimate(s): ${blockers.openEstimates.map((e) => `#${e.estimateNumber ?? "?"}`).join(", ")}`);
+    }
+    if (blockers.openProjects.length) {
+      parts.push(`${blockers.openProjects.length} open project(s)`);
+    }
+    if (blockers.scheduledJobs.length) {
+      parts.push(`${blockers.scheduledJobs.length} scheduled job(s) with upcoming visits: ${blockers.scheduledJobs.map((j) => `#${j.jobNumber ?? "?"}`).join(", ")}`);
+    }
     super(`This client still has ${parts.join(" and ")}. Confirm to delete anyway.`);
     this.name = "ClientDeletionBlockedError";
   }
@@ -986,7 +1026,11 @@ export class ClientDeletionBlockedError extends Error {
 
 export async function fetchClientDeletionBlockers(clientId: string): Promise<ClientDeletionBlockers> {
   const supabase = createClient();
-  const [jobsRes, invoicesRes] = await Promise.all([
+  // The new blocker tables aren't all in the generated types the same way, so
+  // those reads go through an untyped handle.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any;
+  const [jobsRes, invoicesRes, contractsRes, estimatesRes, projectsRes, oneTimeJobsRes] = await Promise.all([
     supabase
       .from("crm_jobs")
       .select("id, job_number, status")
@@ -1001,9 +1045,60 @@ export async function fetchClientDeletionBlockers(clientId: string): Promise<Cli
       .not("status", "in", "(paid,void)")
       .gt("balance_cents", 0)
       .is("deleted_at", null),
+    sb
+      .from("crm_contracts")
+      .select("id, title, status")
+      .eq("client_id", clientId)
+      .in("status", ["signed", "active"])
+      .is("deleted_at", null),
+    sb
+      .from("estimates")
+      .select("id, estimate_number, stage")
+      .eq("client_id", clientId)
+      .not("stage", "in", "(lost,accepted,invoiced)")
+      .is("deleted_at", null),
+    sb
+      .from("projects")
+      .select("id, name, status")
+      .eq("client_id", clientId)
+      .not("status", "in", "(complete,canceled)")
+      .is("deleted_at", null),
+    sb
+      .from("crm_jobs")
+      .select("id, job_number")
+      .eq("client_id", clientId)
+      .neq("job_type", "recurring")
+      .in("status", ["scheduled", "in_progress", "hold"])
+      .is("deleted_at", null),
   ]);
   if (jobsRes.error) throw jobsRes.error;
   if (invoicesRes.error) throw invoicesRes.error;
+  if (contractsRes.error) throw contractsRes.error;
+  if (estimatesRes.error) throw estimatesRes.error;
+  if (projectsRes.error) throw projectsRes.error;
+  if (oneTimeJobsRes.error) throw oneTimeJobsRes.error;
+
+  // Of the open non-recurring jobs, only those with an unfinished visit from
+  // today forward are blockers — a one-time job whose visits all happened (or
+  // were cancelled) leaves nothing on the board.
+  const oneTimeJobs = (oneTimeJobsRes.data ?? []) as { id: string; job_number: number | null }[];
+  let scheduledJobs: ClientDeletionBlockers["scheduledJobs"] = [];
+  if (oneTimeJobs.length) {
+    const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local
+    const { data: visits, error: visitsErr } = await sb
+      .from("crm_job_visits")
+      .select("job_id")
+      .in("job_id", oneTimeJobs.map((j) => j.id))
+      .gte("scheduled_date", today)
+      .not("status", "in", "(completed,cancelled,skipped)")
+      .is("deleted_at", null);
+    if (visitsErr) throw visitsErr;
+    const withVisits = new Set(((visits ?? []) as { job_id: string }[]).map((v) => v.job_id));
+    scheduledJobs = oneTimeJobs
+      .filter((j) => withVisits.has(j.id))
+      .map((j) => ({ id: j.id, jobNumber: j.job_number ?? null }));
+  }
+
   return {
     openRecurringJobs: (jobsRes.data ?? []).map((j) => ({
       id: j.id,
@@ -1016,6 +1111,14 @@ export async function fetchClientDeletionBlockers(clientId: string): Promise<Cli
       status: i.status as string,
       balanceCents: (i.balance_cents as number | null) ?? 0,
     })),
+    activeContracts: ((contractsRes.data ?? []) as { id: string; title: string | null; status: string }[]),
+    openEstimates: ((estimatesRes.data ?? []) as { id: string; estimate_number: number | null; stage: string }[]).map((e) => ({
+      id: e.id,
+      estimateNumber: e.estimate_number ?? null,
+      stage: e.stage,
+    })),
+    openProjects: ((projectsRes.data ?? []) as { id: string; name: string | null; status: string }[]),
+    scheduledJobs,
   };
 }
 
@@ -1034,7 +1137,7 @@ export function useDeleteClient() {
       const { id, confirmed = false } = typeof input === "string" ? { id: input } : input;
       if (!confirmed) {
         const blockers = await fetchClientDeletionBlockers(id);
-        if (blockers.openRecurringJobs.length || blockers.unpaidInvoices.length) {
+        if (hasClientDeletionBlockers(blockers)) {
           throw new ClientDeletionBlockedError(blockers);
         }
       }
@@ -1092,7 +1195,7 @@ export function useAddClientContact() {
       const supabase = createClient();
       const primaryPhone = contact.phones?.[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from("client_contacts").insert({
+      const { data: inserted, error } = await (supabase as any).from("client_contacts").insert({
         client_id:    clientId,
         first_name:   contact.firstName,
         last_name:    contact.lastName,
@@ -1105,8 +1208,19 @@ export function useAddClientContact() {
         is_primary:   contact.isPrimary,
         ok_to_email:  contact.okToEmail,
         notes:        contact.notes,
-      });
+      }).select("id").single();
       if (error) throw error;
+      // Only one primary contact per client: demote the others.
+      if (contact.isPrimary && inserted?.id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("client_contacts")
+          .update({ is_primary: false })
+          .eq("client_id", clientId)
+          .neq("id", inserted.id)
+          .eq("is_primary", true)
+          .is("deleted_at", null);
+      }
       const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
       await logClientActivity(
         supabase,
@@ -1150,6 +1264,17 @@ export function useUpdateClientContact() {
         updated_at:   new Date().toISOString(),
       }).eq("id", id);
       if (error) throw error;
+      if (contact.isPrimary) {
+        // Only one primary contact per client: demote the others.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("client_contacts")
+          .update({ is_primary: false })
+          .eq("client_id", clientId)
+          .neq("id", id)
+          .eq("is_primary", true)
+          .is("deleted_at", null);
+      }
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
@@ -1336,8 +1461,8 @@ export function useBulkImportLeads() {
         if (!displayName) { skipped++; continue; }
 
         const email = r.primaryEmail?.trim().toLowerCase() || null;
-        const phone = r.primaryPhone?.trim() || null;
-        const phoneDigits = phone?.replace(/\D/g, "") || null;
+        const phone = toE164Us(r.primaryPhone);
+        const phoneDigits = phoneDedupeKey(r.primaryPhone);
         const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
 
         if (matchedClientId) {

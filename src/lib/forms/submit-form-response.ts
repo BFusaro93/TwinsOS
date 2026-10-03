@@ -211,6 +211,12 @@ interface FormRow {
  * internal "Fill Out Form" test dialog (org resolved by session, no published
  * requirement — staff need to test a form before publishing it).
  */
+// Public submissions are untyped JSON — an array/object/number in a field
+// like "Email" must degrade to "not provided", not throw inside escapeIlike.
+function asString(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+
 export async function submitFormResponse(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -301,38 +307,38 @@ export async function submitFormResponse(
 
   const submittedEmail: string | null =
     mappedEmail ??
-    (formData["Email"] as string) ??
-    (formData["Email Address"] as string) ??
+    asString(formData["Email"]) ??
+    asString(formData["Email Address"]) ??
     null;
 
   const submittedFirstName: string | null =
     mappedFirstName ??
-    (formData["First Name"] as string) ??
+    asString(formData["First Name"]) ??
     null;
 
   const submittedLastName: string | null =
     mappedLastName ??
-    (formData["Last Name"] as string) ??
+    asString(formData["Last Name"]) ??
     null;
 
   const submittedName: string | null =
     (submittedFirstName && submittedLastName
       ? `${submittedFirstName} ${submittedLastName}`.trim()
       : submittedFirstName ?? mappedCompany) ??
-    (formData["Full Name"] as string) ??
-    (formData["Name"] as string) ??
+    asString(formData["Full Name"]) ??
+    asString(formData["Name"]) ??
     null;
 
   const submittedPhone: string | null =
     mappedPhone ??
-    (formData["Phone"] as string) ??
-    (formData["Phone Number"] as string) ??
+    asString(formData["Phone"]) ??
+    asString(formData["Phone Number"]) ??
     null;
 
   const submittedMessage: string | null =
-    (formData["Message"] as string) ??
-    (formData["Description"] as string) ??
-    (formData["How can we help?"] as string) ??
+    asString(formData["Message"]) ??
+    asString(formData["Description"]) ??
+    asString(formData["How can we help?"]) ??
     null;
 
   // ── Find matching client ──────────────────────────────────────────────────────
@@ -613,7 +619,7 @@ export async function submitFormResponse(
           ? `${submittedFirstName} ${submittedLastName}`.trim()
           : submittedFirstName ?? submittedName ?? "New Lead");
 
-      const { data: newClient } = await db
+      const { data: newClient, error: newClientErr } = await db
         .from("clients")
         .insert({
           org_id: form.org_id,
@@ -634,6 +640,11 @@ export async function submitFormResponse(
         .select("id")
         .single();
 
+      if (newClientErr) {
+        // Don't claim "Account Created" for a client that was never saved —
+        // fall back to the "On Hold" result so staff review the submission.
+        console.error("[submitFormResponse] failed to create client:", newClientErr.message);
+      }
       relatedClientId = newClient?.id ?? null;
 
       if (relatedClientId && (submittedFirstName || submittedEmail)) {
@@ -648,7 +659,7 @@ export async function submitFormResponse(
         });
       }
 
-      result = "Account Created";
+      if (relatedClientId) result = "Account Created";
     }
   } else {
     result = relatedClientId ? "On Hold — Matched" : "On Hold — New";
@@ -822,7 +833,13 @@ export async function submitFormResponse(
   }
 
   if (relatedClientId) {
-    await fireSimpleTrigger(db, { orgId: form.org_id, clientId: relatedClientId, triggerType: "form_submitted" });
+    // Best-effort: the response row is already saved, so a throw here must
+    // not 500 the request (the visitor would retry and duplicate the row).
+    try {
+      await fireSimpleTrigger(db, { orgId: form.org_id, clientId: relatedClientId, triggerType: "form_submitted" });
+    } catch (err) {
+      console.error("[submitFormResponse] form_submitted trigger failed:", err instanceof Error ? err.message : err);
+    }
   }
 
   // ── Fire configured email notifications ───────────────────────────────────────
@@ -856,14 +873,34 @@ export async function submitFormResponse(
       Object.entries(vars).map(([k, v]) => [k, escapeHtml(v)])
     );
 
+    // The "account" recipient is the (unverified) submitter's own address, so
+    // the body sent there must not interpolate free-text answers — otherwise
+    // the form is an open relay for attacker-chosen text to any address.
+    const accountVars: Record<string, string> = {
+      "[formname]": vars["[formname]"],
+      "[submittedname]": (submittedName ?? "").slice(0, 100),
+      "[submittedemail]": vars["[submittedemail]"],
+      "[submittedphone]": vars["[submittedphone]"],
+      "[submittedmessage]": "",
+      "[companyname]": orgName,
+      "[companyphone]": orgPhone,
+    };
+    const accountHtmlVars: Record<string, string> = Object.fromEntries(
+      Object.entries(accountVars).map(([k, v]) => [k, escapeHtml(v)])
+    );
+    const EMAIL_RE = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
+    const validAccountEmail = submittedEmail && submittedEmail.length <= 254 && EMAIL_RE.test(submittedEmail.trim())
+      ? submittedEmail.trim()
+      : null;
+
     const resend = new Resend(process.env.RESEND_API_KEY);
     for (const notif of emailNotifications) {
       const recipients = (notif.recipients ?? "")
         .split(",")
         .map((r) => r.trim())
         .filter(Boolean)
-        .map((r) => (r.toLowerCase() === "account" ? submittedEmail : r))
-        .filter((r): r is string => !!r);
+        .map((r) => ({ to: r.toLowerCase() === "account" ? validAccountEmail : r, isAccount: r.toLowerCase() === "account" }))
+        .filter((r): r is { to: string; isAccount: boolean } => !!r.to);
       if (!recipients.length) continue;
 
       const subject = resolveMergeTags(notif.subject || `New submission: ${form.name}`, vars);
@@ -871,10 +908,17 @@ export async function submitFormResponse(
         ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(formatFormFieldValue(v))}`).join("<br>")}</p>`
         : "";
       const html = resolveMergeTags(notif.body || "", htmlVars).replace(/\n/g, "<br>") + copyBlock;
+      const accountSubject = resolveMergeTags(notif.subject || `New submission: ${form.name}`, accountVars);
+      const accountHtml = resolveMergeTags(notif.body || "", accountHtmlVars).replace(/\n/g, "<br>") + copyBlock;
       const from = notif.fromEmail ? `${notif.fromName || orgName} <${notif.fromEmail}>` : EMAIL_FROM;
 
-      for (const to of recipients) {
-        await resend.emails.send({ from, to, subject, html }).catch(() => {
+      for (const { to, isAccount } of recipients) {
+        await resend.emails.send({
+          from,
+          to,
+          subject: isAccount ? accountSubject : subject,
+          html: isAccount ? accountHtml : html,
+        }).catch(() => {
           // Non-fatal — one bad recipient/from-domain shouldn't block the others
           // or fail the submission itself.
         });

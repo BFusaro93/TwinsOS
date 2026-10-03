@@ -26,8 +26,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     return NextResponse.json({ error: "Form not found" }, { status: 404 });
   }
 
-  const body = await req.json();
-  const { data: formData = {} } = body;
+  let body: { data?: unknown; turnstileToken?: string; referer?: string } | null;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const rawData = body.data ?? {};
+  if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) {
+    return NextResponse.json({ error: "data must be an object" }, { status: 400 });
+  }
+  const formData = rawData as Record<string, unknown>;
 
   const forwardedFor = req.headers.get("x-forwarded-for");
   const turnstileResult = await verifyTurnstileToken(body.turnstileToken, forwardedFor?.split(",")[0]?.trim());
@@ -45,7 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   // submitFormResponse from the form's own crm_form_rules and these answers.
   // Any client-sent `ruleTags` is ignored — it would let an anonymous caller
   // add/remove arbitrary client tags.
-  const result = await submitFormResponse(createServiceClient(), form, formData, body.referer);
+  const result = await submitFormResponse(createServiceClient(), form, formData, typeof body.referer === "string" ? body.referer : undefined);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
 
   return NextResponse.json({ ok: true, result: result.result });

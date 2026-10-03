@@ -43,7 +43,8 @@ export function ZapierIntegrationCard() {
     }
   }
 
-  const displayKey = newKey ?? zapier?.apiKey ?? null;
+  const hasKey = !!newKey || !!zapier?.hasHashedKey;
+  const displayKey = newKey ?? (zapier?.apiKeyPrefix ? `${zapier.apiKeyPrefix}${"•".repeat(24)}` : null);
 
   return (
     <div className="rounded-xl border bg-white shadow-sm">
@@ -60,7 +61,7 @@ export function ZapierIntegrationCard() {
             paid invoices, or create clients and tickets from a Zap.
           </p>
         </div>
-        {zapier?.enabled && zapier.apiKey && (
+        {zapier?.enabled && hasKey && (
           <span className="ml-auto rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
             Connected
           </span>
@@ -84,13 +85,13 @@ export function ZapierIntegrationCard() {
             <div className="relative flex-1">
               <Input
                 id="zapier-key"
-                type={showKey ? "text" : "password"}
+                type={newKey && showKey ? "text" : "password"}
                 value={displayKey ?? ""}
                 readOnly
                 placeholder="Generate a key to connect Zapier"
                 className="pr-10 font-mono text-sm"
               />
-              {displayKey && (
+              {newKey && (
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
@@ -101,20 +102,30 @@ export function ZapierIntegrationCard() {
               )}
             </div>
             <Button size="sm" disabled={generating} onClick={handleGenerate} className="shrink-0">
-              {generating ? "Generating…" : zapier?.apiKey ? "Regenerate" : "Generate Key"}
+              {generating ? "Generating…" : hasKey ? "Regenerate" : "Generate Key"}
             </Button>
           </div>
           {newKey && (
             <p className="text-xs text-amber-600">
-              Copy this key now — paste it into the Zapier app&apos;s API Key field. Regenerating
+              This key will not be shown again. Copy it now and paste it into the Zapier app&apos;s API Key field. Regenerating
               replaces it, so any Zaps using the old key will need to be reconnected.
             </p>
+          )}
+          {newKey && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => { void navigator.clipboard?.writeText(newKey); }}
+            >
+              Copy key
+            </Button>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
           {!newKey && (
             <p className="text-xs text-slate-400">
-              Paste this key into Zapier when connecting the Equipt/Landscapt app. Regenerating
-              invalidates the previous key.
+              Keys are stored hashed and can&apos;t be viewed again. Regenerate to get a new key; this
+              invalidates the previous one.
             </p>
           )}
         </div>

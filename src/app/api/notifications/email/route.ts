@@ -107,6 +107,16 @@ export async function POST(request: Request) {
   }
   const notifType = type as NotifType;
 
+  // Viewers are read-only — none of the UI actions that fire these events
+  // are available to them.
+  if (callerProfile.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (typeof entityId !== "string" || typeof entityType !== "string" ||
+      typeof extra !== "object" || extra === null) {
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  }
+
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -135,6 +145,69 @@ export async function POST(request: Request) {
   // org's user ids.
   if (entity.org_id !== callerProfile.org_id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // ── Derive event state from the DB — never trust the caller's claim ──────
+  const isWorkOrderEvent = notifType === "wo_assigned" || notifType === "wo_status_changed" ||
+    notifType === "wo_comment" || notifType === "wo_created";
+  if (isWorkOrderEvent && entityType !== "work_order") {
+    return NextResponse.json({ error: "entityType must be work_order" }, { status: 400 });
+  }
+  if (notifType === "new_maintenance_request" && entityType !== "maintenance_request") {
+    return NextResponse.json({ error: "entityType must be maintenance_request" }, { status: 400 });
+  }
+  if ((notifType === "approved" || notifType === "rejected") &&
+      !["requisition", "purchase_order", "crm_estimate"].includes(entityType)) {
+    return NextResponse.json({ error: "Invalid entityType for approval event" }, { status: 400 });
+  }
+
+  // Sanitized copy of caller-supplied text: only used where noted below.
+  const safeExtra: { commentBody?: string; comment?: string; newStatus?: string } = {};
+
+  if (notifType === "approved" || notifType === "rejected") {
+    // Requisition/PO track approval in `status`; estimates in `approval_status`.
+    const approvalState = (entityType === "crm_estimate" ? entity.approval_status : entity.status) as string | null;
+    if (approvalState !== notifType) {
+      return NextResponse.json({ success: true, sent: 0, reason: "entity is not in that state" });
+    }
+    if (notifType === "rejected") {
+      // The rejection reason comes from the approver's recorded decision.
+      const { data: lastRejected } = await adminClient
+        .from("approval_requests")
+        .select("comment")
+        .eq("entity_id", entityId)
+        .eq("org_id", callerProfile.org_id)
+        .eq("status", "rejected")
+        .order("decided_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastRejected?.comment) safeExtra.comment = String(lastRejected.comment).slice(0, 1000);
+    }
+  } else if (notifType === "wo_status_changed") {
+    // The status in the message must be the WO's real current status.
+    if (extra.newStatus && extra.newStatus !== entity.status) {
+      return NextResponse.json({ success: true, sent: 0, reason: "status does not match" });
+    }
+    safeExtra.newStatus = String(entity.status ?? "");
+  } else if (notifType === "wo_comment") {
+    // Load the comment text from the DB: the caller's own most recent comment
+    // on this work order, posted within the last 10 minutes.
+    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: lastComment } = await adminClient
+      .from("comments")
+      .select("body")
+      .eq("record_type", "work_order")
+      .eq("record_id", entityId)
+      .eq("org_id", callerProfile.org_id)
+      .eq("author_id", user.id)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!lastComment) {
+      return NextResponse.json({ success: true, sent: 0, reason: "no recent comment" });
+    }
+    safeExtra.commentBody = String(lastComment.body ?? "").slice(0, 2000);
   }
 
   // ── Determine direct recipients (users personally affected) ──────────────
@@ -174,7 +247,7 @@ export async function POST(request: Request) {
       const entityLabel = entityType === "requisition" ? "Materials request"
         : entityType === "crm_estimate" ? "Estimate"
         : "Purchase order";
-      const reason = extra.comment;
+      const reason = safeExtra.comment;
       void sendPushToUser({
         userId: submitterId,
         title: `${entityLabel} ${isApproved ? "Approved" : "Rejected"}`,
@@ -246,13 +319,13 @@ export async function POST(request: Request) {
         let inAppMessage: string;
 
         if (notifType === "wo_comment") {
-          const commentBody = extra.commentBody ?? "";
+          const commentBody = safeExtra.commentBody ?? "";
           inAppType    = "wo_comment";
           inAppTitle   = "New Comment";
           inAppMessage = `${callerProfile.name ?? "Someone"} commented on ${woNum}${woTitle ? ` — ${woTitle}` : ""}${commentBody ? `: "${commentBody.slice(0, 80)}${commentBody.length > 80 ? "…" : ""}"` : ""}`;
         } else {
           // wo_status_changed
-          const rawStatus = (extra.newStatus ?? (entity.status as string) ?? "").replace(/_/g, " ");
+          const rawStatus = (safeExtra.newStatus ?? (entity.status as string) ?? "").replace(/_/g, " ");
           inAppType    = "wo_status_changed";
           inAppTitle   = "Status Changed";
           inAppMessage = `${callerProfile.name ?? "Someone"} changed ${woNum}${woTitle ? ` — ${woTitle}` : ""} to ${rawStatus}`;
@@ -364,7 +437,7 @@ export async function POST(request: Request) {
       const rawNum = (entity.work_order_number ?? "Work Order") as string;
       const num   = escapeHtml(rawNum);
       const title = escapeHtml((entity.title ?? "") as string);
-      const commentBody = escapeHtml(extra.commentBody ?? "");
+      const commentBody = escapeHtml(safeExtra.commentBody ?? "");
       const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
         subject: `New comment on ${rawNum}`,
@@ -388,7 +461,7 @@ export async function POST(request: Request) {
         : `${SITE_URL}/po/orders?id=${entity.id as string}`;
       const color = isApproved ? "#60ab45" : "#dc2626";
       const verb  = isApproved ? "approved" : "rejected";
-      const reason = escapeHtml(extra.comment ?? "");
+      const reason = escapeHtml(safeExtra.comment ?? "");
       return {
         subject: `${entityLabel} ${verb}: ${rawNum}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">

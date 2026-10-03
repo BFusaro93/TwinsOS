@@ -2,6 +2,8 @@
 // both let a customer leave a "please change this" note on an estimate, which
 // creates a record staff can see and notifies admins/managers in-app.
 
+export const MAX_CHANGE_REQUEST_MESSAGE_CHARS = 4000;
+
 export async function submitEstimateChangeRequest(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -17,7 +19,11 @@ export async function submitEstimateChangeRequest(
 ) {
   const { orgId, estimateId, clientId, estimateNumber, message, requesterName, requesterEmail } = params;
 
-  await supabase.from("estimate_change_requests").insert({
+  // The change-request row is the record staff act on: if it isn't saved the
+  // caller must fail (previously the error was dropped and the client was told
+  // their request went through). The activity/notification writes below are
+  // best-effort side effects.
+  const { error: insertErr } = await supabase.from("estimate_change_requests").insert({
     org_id: orgId,
     estimate_id: estimateId,
     client_id: clientId,
@@ -25,6 +31,7 @@ export async function submitEstimateChangeRequest(
     requester_name: requesterName,
     requester_email: requesterEmail ?? null,
   });
+  if (insertErr) throw new Error(`Failed to save change request: ${insertErr.message}`);
 
   if (clientId) {
     await supabase.from("client_activity").insert({

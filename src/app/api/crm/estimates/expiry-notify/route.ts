@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { escapeHtml } from "@/lib/utils/escape-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
@@ -132,14 +133,18 @@ function expiryPhrase(daysLeft: number): string {
   return `expires in ${daysLeft} days`;
 }
 
-function buildExpiryEmail({
-  orgName, brandColor, repName, clientName, estimateNum, validUntil,
-  daysLeft, total, estimateId,
-}: {
+function buildExpiryEmail(raw: {
   orgName: string; brandColor: string; repName: string; clientName: string;
   estimateNum: string; validUntil: string; daysLeft: number; total: string;
   estimateId: string;
 }) {
+  // orgName / repName / clientName are free-text (client names come from the
+  // anonymous intake forms too) — escape before interpolating into HTML.
+  const orgName = escapeHtml(raw.orgName);
+  const repName = escapeHtml(raw.repName);
+  const clientName = escapeHtml(raw.clientName);
+  const { brandColor: rawBrand, estimateNum, validUntil, daysLeft, total, estimateId } = raw;
+  const brandColor = /^#[0-9a-fA-F]{3,8}$/.test(rawBrand) ? rawBrand : "#60ab45";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.twinsos.com";
   const estimateUrl = `${appUrl}/crm/estimates/${estimateId}`;
   const urgency = daysLeft <= 0 ? "⚠️ Expires today!" : daysLeft === 1 ? "⚠️ Expires tomorrow" : `Expires in ${daysLeft} days`;

@@ -303,7 +303,7 @@ function ContractDetailsTab({
                 min={1} max={31}
                 className="h-7 w-16 text-sm"
                 value={state.billingDayOfMonth}
-                onChange={(e) => onChange({ billingDayOfMonth: parseInt(e.target.value) || 1 })}
+                onChange={(e) => onChange({ billingDayOfMonth: Math.min(31, Math.max(1, parseInt(e.target.value) || 1)) })}
               />
             </div>
             <div className="flex items-center justify-between gap-2">

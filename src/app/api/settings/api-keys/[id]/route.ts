@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+
+const log = logger.child("settings-api-keys");
 
 /**
  * PATCH /api/settings/api-keys/[id] — removes an already-revoked key from
@@ -43,7 +46,8 @@ export async function PATCH(_request: Request, { params }: { params: Promise<{ i
     .eq("org_id", profile.org_id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("request failed", { error: error.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });
@@ -73,7 +77,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     .eq("org_id", profile.org_id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("request failed", { error: error.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

@@ -156,7 +156,15 @@ export function useCreateRequisition() {
               notes: li.notes ?? null,
             }))
           );
-        if (lineErr) throw lineErr;
+        if (lineErr) {
+          // Don't leave an empty requisition header behind — soft-delete it.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from("requisitions")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", req.id);
+          throw lineErr;
+        }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

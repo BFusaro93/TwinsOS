@@ -196,6 +196,31 @@ function zoneOffsetMs(d: Date, timeZone: string): number {
 }
 
 /**
+ * An instant as a wall-clock date + "HH:MM" in `timeZone` (the org's clock, not
+ * the viewer's browser's).
+ */
+export function instantToZoneWallClock(d: Date, timeZone: string): { date: string; time: string } {
+  const p = zoneWallParts(d, timeZone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { date: ymd(p.year, p.month - 1, p.day), time: `${pad(p.hour)}:${pad(p.minute)}` };
+}
+
+/**
+ * The instant at which `timeZone`'s wall clock reads `date` "YYYY-MM-DD" +
+ * `time` "HH:MM". The offset is re-derived at the guess so a DST-transition day
+ * lands correctly. Returns null for unparsable input.
+ */
+export function zoneWallClockToInstant(date: string, time: string, timeZone: string): Date | null {
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const tm = /^(\d{2}):(\d{2})/.exec(time);
+  if (!dm || !tm) return null;
+  const wall = Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), Number(tm[1]), Number(tm[2]));
+  const first = new Date(wall - zoneOffsetMs(new Date(wall), timeZone));
+  const second = new Date(wall - zoneOffsetMs(first, timeZone));
+  return Number.isNaN(second.getTime()) ? null : second;
+}
+
+/**
  * The ISO instant of midnight (start of today) in `timeZone`.
  *
  * The offset is re-derived at the midnight guess itself, not just at `now`,

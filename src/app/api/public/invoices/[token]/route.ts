@@ -75,7 +75,7 @@ export async function GET(
     .map((li) => ({
       name: li.name as string | null,
       description: (li.description as string) ?? "",
-      qty: Number(li.qty) || 1,
+      qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
       rateCents: (li.rate_cents as number) ?? 0,
       totalCents: (li.total_cents as number) ?? 0,
     }));

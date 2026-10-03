@@ -532,7 +532,8 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const { data: directCosts, error: dcError } = await supabase
     .from("estimate_direct_costs")
     .select("total_cents, cost_type")
-    .eq("estimate_id", estimateId);
+    .eq("estimate_id", estimateId)
+    .is("deleted_at", null);
   if (dcError) throw dcError;
 
   // Sub-items (estimate_line_item_subitems) are real priced Product/Subservice

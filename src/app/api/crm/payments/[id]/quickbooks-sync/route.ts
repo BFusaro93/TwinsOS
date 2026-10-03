@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { pushPaymentToQuickBooks } from "@/lib/integrations/quickbooks";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 /**
  * POST /api/crm/payments/[id]/quickbooks-sync — pushes this payment's
@@ -17,6 +18,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Also auto-fired after a payment is recorded, so accept the payment keys too.
+  if (!(await hasAnySettingsPermission(supabase, ["quickbooks_resync", "acct_add_modify_payments"]))) {
+    return NextResponse.json({ error: "You don't have permission to sync payments to QuickBooks" }, { status: 403 });
+  }
 
   const { id } = await params;
   const result = await pushPaymentToQuickBooks(supabase, profile.org_id, id);

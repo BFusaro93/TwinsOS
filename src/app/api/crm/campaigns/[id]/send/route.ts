@@ -24,6 +24,14 @@ export async function POST(
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Bulk-emailing every recipient is gated in the UI by campaign_send; the
+  // server must enforce it too or any CRM user can POST here directly.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canSend } = await (supabase.rpc as any)("has_settings_permission", { p_key: "campaign_send" });
+  if (!canSend) {
+    return NextResponse.json({ error: "You don't have permission to send campaigns" }, { status: 403 });
+  }
+
   const { id: campaignId } = await params;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

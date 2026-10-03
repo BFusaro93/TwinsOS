@@ -65,11 +65,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const question = body.question?.trim();
+  const question = typeof body.question === "string" ? body.question.trim() : "";
   if (!question) {
     return NextResponse.json({ error: "question is required" }, { status: 400 });
   }
-  const history = Array.isArray(body.history) ? body.history.slice(-10) : [];
+  if (question.length > 2000) {
+    return NextResponse.json({ error: "question must be 2000 characters or fewer" }, { status: 400 });
+  }
+  // History is client-supplied: keep only well-formed turns and cap their size
+  // so a crafted payload can't run up token cost or inject odd roles.
+  const history: ChatTurn[] = (Array.isArray(body.history) ? body.history : [])
+    .filter((t): t is ChatTurn =>
+      !!t && typeof t === "object" &&
+      (t.role === "user" || t.role === "assistant") &&
+      typeof t.content === "string" && t.content.trim().length > 0)
+    .slice(-10)
+    .map((t) => ({ role: t.role, content: t.content.slice(0, 4000) }));
 
   // Cap Ask AI at 100 requests/org/day so no single tenant can run up the
   // shared ANTHROPIC_API_KEY bill. Atomic RPC avoids a check-then-write race.

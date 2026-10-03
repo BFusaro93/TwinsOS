@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
+import { MAX_CHANGE_REQUEST_MESSAGE_CHARS, submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
 
 const serviceClient = () =>
   createClient(
@@ -17,6 +17,10 @@ export async function POST(
 
   if (!body.requesterName?.trim() || !body.message?.trim()) {
     return NextResponse.json({ error: "Name and message are required" }, { status: 400 });
+  }
+
+  if (body.message.length > MAX_CHANGE_REQUEST_MESSAGE_CHARS || body.requesterName.length > 200) {
+    return NextResponse.json({ error: "Message is too long" }, { status: 400 });
   }
 
   const supabase = serviceClient();
@@ -54,14 +58,18 @@ export async function POST(
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
 
-  await submitEstimateChangeRequest(supabase, {
-    orgId: est.org_id,
-    estimateId: est.id,
-    clientId: est.client_id,
-    estimateNumber: est.estimate_number,
-    message: body.message.trim(),
-    requesterName: body.requesterName.trim(),
-  });
+  try {
+    await submitEstimateChangeRequest(supabase, {
+      orgId: est.org_id,
+      estimateId: est.id,
+      clientId: est.client_id,
+      estimateNumber: est.estimate_number,
+      message: body.message.trim(),
+      requesterName: body.requesterName.trim(),
+    });
+  } catch {
+    return NextResponse.json({ error: "Failed to send your request. Please try again." }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

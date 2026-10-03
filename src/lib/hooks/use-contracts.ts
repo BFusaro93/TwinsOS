@@ -484,6 +484,11 @@ export function useGenerateContractInvoices() {
         const lineItems = (contract.invoice_line_items ?? []) as string[];
         const description = lineItems.length > 0 ? lineItems.join("\n") : contract.title;
 
+        // Contract invoices are untaxed: contracts bill services, which are
+        // typically tax-exempt, and contracts carry no per-service taxable flag.
+        // (Taxable products are billed through job/visit invoices.)
+        const totalCents = monthAmount;
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: invoice, error: invErr } = await (supabase as any)
           .from("crm_invoices")
@@ -495,8 +500,8 @@ export function useGenerateContractInvoices() {
             invoice_date: plan.invoiceDate,
             status: "draft",
             subtotal_cents: monthAmount,
-            total_cents: monthAmount,
-            balance_cents: monthAmount,
+            total_cents: totalCents,
+            balance_cents: totalCents,
           })
           .select("id")
           .single();
@@ -511,9 +516,8 @@ export function useGenerateContractInvoices() {
           continue;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: numErr } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: invoice.id });
-
+        // Line item first, THEN the invoice number: a line-item-less invoice
+        // is orphaned and cleaned up below, and must not burn a number.
         // Line item description AND name (the "Service" column) should reflect
         // the contract's actual configured service(s), not the contract's own
         // title — description matches the invoice header description above.
@@ -525,8 +529,25 @@ export function useGenerateContractInvoices() {
           qty: 1,
           rate_cents: monthAmount,
           total_cents: monthAmount,
+          is_taxable: false,
           sort_order: 1,
         });
+
+        if (liErr) {
+          // Mirror the cron: soft-delete the line-item-less invoice. Left
+          // live, the idempotency check would see it next time and skip this
+          // period forever; last_billed_date must NOT advance either.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from("crm_invoices")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", invoice.id);
+          results.push({ contractId, status: "skipped", reason: `line item insert failed: ${liErr.message}` });
+          continue;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: numErr } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: invoice.id });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
@@ -534,11 +555,11 @@ export function useGenerateContractInvoices() {
           .update({ last_billed_date: plan.invoiceDate })
           .eq("id", contractId);
 
-        const problems = [
-          numErr ? `invoice number not assigned (${numErr.message})` : null,
-          liErr ? `line item not created (${liErr.message})` : null,
-        ].filter(Boolean);
-        results.push({ contractId, status: "created", reason: problems.length > 0 ? problems.join("; ") : undefined });
+        results.push({
+          contractId,
+          status: "created",
+          reason: numErr ? `invoice number not assigned (${numErr.message})` : undefined,
+        });
       }
 
       return results;

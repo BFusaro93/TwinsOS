@@ -394,7 +394,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // JobProductStatus union hasn't been widened for it yet (that file is
       // owned by another change this sprint), so a literal === comparison
       // would be a "no overlap" type error rather than a behaviour change.
-      .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status))
+      .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status) && !p.invoiceLineItemId)
       .map((p) => {
         // Bill the invoiceQty override when set (e.g. 5 bags used, only 4
         // invoiced) — the used qty still drives the inventory decrement via

@@ -151,7 +151,10 @@ function mapEstimate(row: any): Estimate {
     clientSince: row.clients?.client_since ?? null,
     salesRepName: (row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || undefined : undefined),
     lineItems: (row.estimate_line_items ?? []).map(mapLineItem),
-    directCosts: (row.estimate_direct_costs ?? []).map(mapDirectCost),
+    directCosts: (row.estimate_direct_costs ?? [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((dc: any) => !dc.deleted_at)
+      .map(mapDirectCost),
   };
 }
 
@@ -415,9 +418,41 @@ export function useUpdateEstimateStage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: existing } = await (supabase as any)
         .from("estimates")
-        .select("client_id, description, sales_rep_id, tiers_enabled")
+        .select("client_id, description, sales_rep_id, tiers_enabled, stage")
         .eq("id", id)
         .single();
+
+      // Stage-transition guard. Stages are org-configurable so this is NOT a
+      // full state machine — it only blocks the moves that orphan real work:
+      // an estimate with live jobs or non-void invoices can't be marked lost
+      // or pulled back out of 'accepted' (it would then read as "never won"
+      // while crews are scheduled / the client is billed against it).
+      // 'invoiced' (forward) and 'accepted' (no-op) are always allowed.
+      const fromStage = (existing as { stage?: string } | null)?.stage;
+      const leavingAccepted = fromStage === "accepted" && stage !== "accepted" && stage !== "invoiced";
+      if (stage === "lost" || leavingAccepted) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count: liveJobs, error: jobErr } = await (supabase as any)
+          .from("crm_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("estimate_id", id)
+          .is("deleted_at", null)
+          .not("status", "in", "(cancelled)");
+        if (jobErr) throw jobErr;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count: liveInvoices, error: invErr } = await (supabase as any)
+          .from("crm_invoices")
+          .select("id", { count: "exact", head: true })
+          .eq("estimate_id", id)
+          .is("deleted_at", null)
+          .neq("status", "void");
+        if (invErr) throw invErr;
+        if ((liveJobs ?? 0) > 0 || (liveInvoices ?? 0) > 0) {
+          throw new Error(
+            `Can't move this estimate to "${stage}" — it has ${liveJobs ?? 0} active job(s) and ${liveInvoices ?? 0} invoice(s). Cancel the jobs and void the invoices first.`,
+          );
+        }
+      }
 
       // Accepting a tiered estimate from the office must pick ONE tier, the
       // same as the public proposal / portal accept: the chosen tier's (and
@@ -636,8 +671,9 @@ export function useDeleteDirectCost() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("estimate_direct_costs")
-        .delete()
-        .eq("id", id);
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id)
+        .is("deleted_at", null);
       if (error) throw error;
       await recalcEstimateTotals(estimateId);
       return { estimateId };

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapProductItem } from "@/lib/supabase/mappers";
 import { setProducts } from "@/lib/hooks/cost-store";
@@ -275,12 +276,15 @@ export function useUpdateProduct() {
       if (input.alternateVendors !== undefined) syncFields.alternate_vendors = input.alternateVendors;
       if (input.isInventory !== undefined) syncFields.is_inventory = input.isInventory;
       if (Object.keys(syncFields).length > 0) {
-        await supabase
+        const { error: partSyncErr } = await supabase
           .from("parts")
           // `as never`: postgrest rejects excess properties on a dynamically-built patch.
           .update(syncFields as never)
           .eq("product_item_id", id)
           .is("deleted_at", null);
+        if (partSyncErr) {
+          toast.warning(`Product saved, but the linked part could not be synced: ${partSyncErr.message}`);
+        }
       }
 
       return mapProductItem(data);
@@ -323,11 +327,14 @@ export function useAdjustProductQuantityManual() {
       });
       if (error) throw error;
 
-      await supabase
+      const { error: partMirrorErr } = await supabase
         .from("parts")
         .update({ quantity_on_hand: input.quantityOnHand })
         .eq("product_item_id", input.id)
         .is("deleted_at", null);
+      if (partMirrorErr) {
+        toast.warning(`Product stock updated, but the linked part's quantity could not be synced: ${partMirrorErr.message}`);
+      }
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });

@@ -256,8 +256,53 @@ export function useDeleteAsset() {
     mutationFn: async (id: string) => {
       const supabase = createClient();
       const deletedAt = new Date().toISOString();
+
+      // Block deletion while the asset still has open work orders — they would
+      // otherwise be orphaned against a hidden asset.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { count: openWoCount, error: woErr } = await (supabase as any)
+        .from("work_orders")
+        .select("id", { count: "exact", head: true })
+        .eq("asset_id", id)
+        .in("status", ["open", "on_hold", "in_progress"])
+        .is("deleted_at", null);
+      if (woErr) throw woErr;
+      if ((openWoCount ?? 0) > 0) {
+        throw new Error(
+          `This asset has ${openWoCount} open work order${openWoCount === 1 ? "" : "s"}. Complete or cancel them before deleting the asset.`
+        );
+      }
+
       const { error } = await supabase.from("assets").update({ deleted_at: deletedAt }).eq("id", id);
       if (error) throw error;
+
+      // Deactivate the asset's meters and any meter-threshold automations that
+      // point at them, so readings/automations don't keep running for an asset
+      // that no longer exists in the UI.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: assetMeters } = await (supabase as any)
+        .from("meters")
+        .update({ deleted_at: deletedAt })
+        .eq("asset_id", id)
+        .is("deleted_at", null)
+        .select("id");
+      const meterIds = new Set<string>(((assetMeters ?? []) as { id: string }[]).map((m) => m.id));
+      if (meterIds.size > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: autos } = await (supabase as any)
+          .from("automations")
+          .select("id, trigger_config")
+          .eq("trigger_type", "meter_threshold")
+          .eq("enabled", true)
+          .is("deleted_at", null);
+        const toDisable = ((autos ?? []) as { id: string; trigger_config: Record<string, unknown> | null }[])
+          .filter((a) => meterIds.has(String(a.trigger_config?.meter_id ?? "")))
+          .map((a) => a.id);
+        if (toDisable.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("automations").update({ enabled: false }).in("id", toDisable);
+        }
+      }
 
       // asset_parts rows cache the asset↔part link; without cleaning them up
       // here they go stale (and, since (asset_id, part_id) is UNIQUE, can
@@ -267,6 +312,8 @@ export function useDeleteAsset() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
+      queryClient.invalidateQueries({ queryKey: ["meters"] });
+      queryClient.invalidateQueries({ queryKey: ["automations"] });
     },
   });
 }

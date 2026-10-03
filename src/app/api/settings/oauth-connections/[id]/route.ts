@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/api/auth";
+
+const log = logger.child("settings-oauth-connections");
 
 /**
  * DELETE /api/settings/oauth-connections/[id] -- disconnects an OAuth
@@ -54,7 +57,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     .is("revoked_at", null);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("request failed", { error: error.message });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

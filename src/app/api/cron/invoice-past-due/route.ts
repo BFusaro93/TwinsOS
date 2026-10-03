@@ -12,6 +12,10 @@ import { todayInZone } from "@/lib/time/zone";
  * handled entirely by fireSimpleTrigger/isEligibleForEnrollment — running
  * this daily is expected and safe, same as the estimate date-gap crons.
  */
+// Many orgs × many rows, each firing a trigger lookup + enrollment: give the
+// run the full Pro-plan budget instead of the default.
+export const maxDuration = 300;
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -51,19 +55,39 @@ export async function GET(request: Request) {
     from += page.length;
   }
 
+  // Group by org: the org's calendar day is resolved once per org, and an org
+  // with no active invoice_past_due trigger is skipped outright instead of paying a
+  // trigger lookup per overdue row.
+  const byOrg = new Map<string, Row[]>();
+  for (const row of overdue) {
+    const list = byOrg.get(row.org_id);
+    if (list) list.push(row);
+    else byOrg.set(row.org_id, [row]);
+  }
+
   let fired = 0;
-  for (const invoice of overdue) {
-    // Re-check on the owning org's calendar: an invoice due today is not past
-    // due, and the UTC-bounded query above may have included one.
-    const orgToday = todayInZone(await getOrgTimeZone(supabase, invoice.org_id));
-    if (!(invoice.due_date < orgToday)) continue;
-    await fireSimpleTrigger(supabase, {
-      orgId: invoice.org_id,
-      clientId: invoice.client_id,
-      invoiceId: invoice.id,
-      triggerType: "invoice_past_due",
-    });
-    fired++;
+  for (const [orgId, rows] of byOrg) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: triggerCount } = await (supabase as any)
+      .from("crm_sequence_triggers")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("trigger_type", "invoice_past_due");
+    if (!triggerCount) continue;
+
+    const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
+    for (const invoice of rows) {
+      // Re-check on the owning org's calendar: a row due today is not past
+      // due, and the UTC-bounded query above may have included one.
+      if (!(invoice.due_date < orgToday)) continue;
+      await fireSimpleTrigger(supabase, {
+        orgId,
+        clientId: invoice.client_id,
+        invoiceId: invoice.id,
+        triggerType: "invoice_past_due",
+      });
+      fired++;
+    }
   }
 
   return NextResponse.json({ checked: fired });

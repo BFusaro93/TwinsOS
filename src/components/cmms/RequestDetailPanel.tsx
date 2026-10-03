@@ -24,7 +24,8 @@ import { StatusFlowIndicator } from "@/components/shared/StatusFlowIndicator";
 import { NewRequestDialog } from "./NewRequestDialog";
 import { REQUEST_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useUpdateRequestStatus, useDeleteRequest, useConvertRequestToWO } from "@/lib/hooks/use-requests";
+import { toast } from "sonner";
+import { useUpdateRequestStatus, useDeleteRequest, useConvertRequestToWO, useClaimRequestForConversion } from "@/lib/hooks/use-requests";
 import { useCreateWorkOrder, useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useAutomations } from "@/lib/hooks/use-automations";
@@ -207,6 +208,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const canEditRequest = canEditMaintenanceRequest(request);
   const { mutate: createWorkOrder, isPending: converting } = useCreateWorkOrder();
   const { mutate: convertToWO } = useConvertRequestToWO();
+  const { mutateAsync: claimRequest, isPending: claiming } = useClaimRequestForConversion();
   const { setSelectedRequestId } = useCMMSStore();
   const { toISODate } = useOrgDates();
   const { data: automations = [] } = useAutomations();
@@ -216,7 +218,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
     syncStatus({ id: request.id, status: s });
   }
 
-  function handleConvertToWO() {
+  async function handleConvertToWO() {
     // Requests raised by a METER automation are meter-triggered PMs (an oil
     // change at N hours): preventive, and due 7 days after the meter tripped —
     // the same rule PM compliance scores them by (v_pm_outcomes, which only
@@ -225,6 +227,15 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
     const fromAutomation = !!request.automationId && automations.some(
       (a) => a.id === request.automationId && a.trigger.type === "meter_threshold"
     );
+    // Claim the request first (compare-and-set) so a double-click or a second
+    // tab can't create two work orders from one request.
+    let previousStatus: MaintenanceRequestStatus;
+    try {
+      ({ previousStatus } = await claimRequest({ id: request.id }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not convert request");
+      return;
+    }
     createWorkOrder(
       {
         title: request.title,
@@ -252,13 +263,24 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         automationId: request.automationId,
       },
       {
+        onError: (err) => {
+          toast.error(`Failed to create work order: ${err instanceof Error ? err.message : "unknown error"}`);
+          // WO creation failed — release the claim so the request can be retried.
+          syncStatus({ id: request.id, status: previousStatus });
+        },
         onSuccess: (wo) => {
           setStatus("converted");
-          convertToWO({
-            id: request.id,
-            linkedWorkOrderId: wo.id,
-            linkedWorkOrderNumber: wo.workOrderNumber,
-          });
+          convertToWO(
+            {
+              id: request.id,
+              linkedWorkOrderId: wo.id,
+              linkedWorkOrderNumber: wo.workOrderNumber,
+            },
+            {
+              onError: (err) =>
+                toast.error(`Work order ${wo.workOrderNumber} was created but linking the request failed: ${err instanceof Error ? err.message : "unknown error"}`),
+            }
+          );
         },
       }
     );
@@ -297,7 +319,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
           {
             value: "details",
             label: "Details",
-            content: <DetailsTab request={request} status={status} onStatusChange={handleStatusChange} onConvertToWO={handleConvertToWO} converting={converting} onOpenWoSheet={() => setWoSheetOpen(true)} />,
+            content: <DetailsTab request={request} status={status} onStatusChange={handleStatusChange} onConvertToWO={handleConvertToWO} converting={converting || claiming} onOpenWoSheet={() => setWoSheetOpen(true)} />,
           },
           {
             value: "history",

@@ -14,7 +14,11 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 // with its own confirmation — this list is a defense-in-depth backstop for
 // if that setting is ever off, not the primary compliance mechanism.
 const OPT_OUT_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
-const OPT_IN_KEYWORDS = new Set(["START", "YES", "UNSTOP"]);
+// "YES" is deliberately NOT an opt-in keyword: clients reply YES to unrelated
+// texts (e.g. "Reply YES to confirm your visit"), which would silently re-grant
+// SMS consent to someone who texted STOP. START/UNSTOP are Twilio's own
+// opt-in keywords.
+const OPT_IN_KEYWORDS = new Set(["START", "UNSTOP"]);
 // None of these need a ticket — they're single-word system commands, not
 // something a staff member needs to respond to.
 const SKIP_TICKET_KEYWORDS = new Set([...OPT_OUT_KEYWORDS, ...OPT_IN_KEYWORDS, "HELP", "INFO"]);

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { assertOrgWritable } from "@/lib/org-writable";
+
+const log = logger.child("users-reactivate");
 
 export async function POST(
   request: Request,
@@ -46,7 +49,8 @@ export async function POST(
     ban_duration: "none",
   });
   if (unbanError) {
-    return NextResponse.json({ error: unbanError.message }, { status: 500 });
+    log.error("unban failed", { error: unbanError.message });
+    return NextResponse.json({ error: "Failed to reactivate user" }, { status: 500 });
   }
 
   const { error: updateError } = await adminClient
@@ -54,7 +58,8 @@ export async function POST(
     .update({ status: "active" })
     .eq("id", userId);
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+    log.error("profile update failed", { error: updateError.message });
+    return NextResponse.json({ error: "Failed to reactivate user" }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

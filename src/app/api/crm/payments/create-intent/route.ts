@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
@@ -60,6 +61,16 @@ export async function POST(request: Request) {
   }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
+  }
+  // Apply the client's existing deposit/credit first so they aren't charged
+  // for money they've already paid.
+  try {
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+  } catch {
+    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
+  }
+  if (invoice.balance_cents <= 0) {
+    return NextResponse.json({ error: "Invoice was fully paid from the client's existing credit — nothing to charge — refresh to see it paid.", paidFromCredit: true }, { status: 409 });
   }
 
   // stripe_connect_livemode isn't in the generated Supabase types yet (added

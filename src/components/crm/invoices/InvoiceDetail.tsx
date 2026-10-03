@@ -855,7 +855,7 @@ export function InvoiceDetail({
       ]);
       toast.success("Invoice saved");
       onSaved?.();
-    } catch { toast.error("Save failed"); }
+    } catch (e) { toast.error(e instanceof Error && /already used/.test(e.message) ? e.message : "Save failed"); }
     finally { setSaving(false); }
   }
 
@@ -999,6 +999,8 @@ export function InvoiceDetail({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-red-600 focus:text-red-600"
+                disabled={voidBlocked !== null}
+                title={voidBlocked !== null ? "Invoices with payments applied can't be deleted — refund or unapply the payments first" : undefined}
                 onSelect={() => setConfirmDeleteOpen(true)}
               >
                 <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete Invoice
@@ -1042,12 +1044,6 @@ export function InvoiceDetail({
             {invoice.invoiceNumber != null
               ? `This will delete Invoice #${invoice.invoiceNumber}.`
               : "This will delete this draft invoice."}
-            {invoice.amountPaidCents > 0 && (
-              <span className="mt-2 block font-medium text-red-600">
-                This invoice has {formatCurrency(invoice.amountPaidCents)} in recorded payments. Deleting it will
-                not reverse those payments — consider voiding it instead.
-              </span>
-            )}
           </p>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setConfirmDeleteOpen(false)}>Cancel</Button>

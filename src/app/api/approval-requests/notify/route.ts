@@ -13,7 +13,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { formatCurrency } from "@/lib/utils";
-import { EMAIL_FROM, EMAIL_FROM_EQUIPT } from "@/lib/email/send";
+import { EMAIL_FROM, EMAIL_FROM_EQUIPT, escapeHtml } from "@/lib/email/send";
 
 // `linkPath` has an `{id}` slot the deep link is built from — list pages that
 // only support auto-opening a record via `?id=` (po/requisitions, po/orders)
@@ -84,7 +84,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const entityNumber = entity?.[meta.numberField] ?? meta.fallbackLabel;
+  // Only an entity that is actually awaiting approval can trigger approver
+  // emails — otherwise any member could re-spam approvers for settled records.
+  // Estimates track approval separately from their sales status.
+  const approvalState = (entityType === "crm_estimate" ? entity.approval_status : entity.status) as string | null;
+  if (approvalState !== "pending_approval" && approvalState !== "pending") {
+    return NextResponse.json({ success: true, sent: 0, reason: "not pending approval" });
+  }
+
+  const entityNumber = String(entity?.[meta.numberField] ?? meta.fallbackLabel);
 
   // Compute grand total for display (stored in cents)
   const grandTotalDisplay = entity?.[meta.totalField]
@@ -96,6 +104,8 @@ export async function POST(request: Request) {
     .from("approval_requests")
     .select("id, approver_id, approver_name, order")
     .eq("entity_id", entityId)
+    .eq("org_id", callerProfile.org_id)
+    .eq("archived", false)
     .eq("status", "pending")
     .order("order", { ascending: true });
 
@@ -139,7 +149,7 @@ export async function POST(request: Request) {
     .select("name")
     .eq("id", requesterId)
     .single();
-  const submitterName = submitterProfile?.name ?? "A team member";
+  const submitterName: string = submitterProfile?.name ?? "A team member";
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   const deepLink = `${siteUrl}/${meta.linkPath.replace("{id}", entityId)}`;
@@ -164,10 +174,10 @@ export async function POST(request: Request) {
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Approval request</h2>
           <p style="margin:0 0 4px;color:#475569">
-            Hi ${req.approver_name ?? "there"},
+            Hi ${escapeHtml(req.approver_name ?? "there")},
           </p>
           <p style="margin:0 0 24px;color:#475569">
-            ${submitterName} submitted <strong>${entityLabel} ${entityNumber}</strong>${grandTotalDisplay ? ` for <strong>${grandTotalDisplay}</strong>` : ""} and it needs your approval.
+            ${escapeHtml(submitterName)} submitted <strong>${entityLabel} ${escapeHtml(entityNumber)}</strong>${grandTotalDisplay ? ` for <strong>${grandTotalDisplay}</strong>` : ""} and it needs your approval.
           </p>
           <a
             href="${deepLink}"

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+
+const log = logger.child("users-deactivate");
 
 // Effectively permanent — GoTrue's ban_duration has no "forever" option, so a
 // very long duration is the standard way to represent one (mirrors Supabase's
@@ -55,7 +58,8 @@ export async function POST(
     .update({ status: "inactive" })
     .eq("id", userId);
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+    log.error("profile update failed", { error: updateError.message });
+    return NextResponse.json({ error: "Failed to deactivate user" }, { status: 500 });
   }
 
   // The ban is what actually revokes access (blocks sign-in and invalidates
@@ -69,7 +73,8 @@ export async function POST(
       .from("profiles")
       .update({ status: targetProfile.status ?? "active" })
       .eq("id", userId);
-    return NextResponse.json({ error: banError.message }, { status: 500 });
+    log.error("ban failed", { error: banError.message });
+    return NextResponse.json({ error: "Failed to deactivate user" }, { status: 500 });
   }
 
   // The GoTrue ban doesn't reach MCP/OAuth tokens — those are our own rows
@@ -80,7 +85,8 @@ export async function POST(
     .eq("user_id", userId)
     .is("revoked_at", null);
   if (revokeError) {
-    return NextResponse.json({ error: revokeError.message }, { status: 500 });
+    log.error("session revoke failed", { error: revokeError.message });
+    return NextResponse.json({ error: "Failed to deactivate user" }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

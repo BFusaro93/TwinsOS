@@ -115,10 +115,15 @@ export async function syncPartQtyToProduct(
     .eq("id", partId)
     .single();
   if (part?.product_item_id) {
-    await supabase
+    const { error } = await supabase
       .from("product_items")
       .update({ quantity_on_hand: part.quantity_on_hand })
       .eq("id", part.product_item_id);
+    if (error) {
+      // The part's stock change already committed; surface the mirror failure
+      // rather than silently leaving the Products page out of sync.
+      toast.warning(`Part quantity updated, but the linked product's stock could not be synced: ${error.message}`);
+    }
   }
 }
 

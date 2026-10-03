@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
@@ -19,7 +20,11 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json() as { description?: string; resetStatus?: boolean };
+  if (!(await hasAnySettingsPermission(supabase, ["estimate_add"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({})) as { description?: string; resetStatus?: boolean };
   const { resetStatus = true } = body;
 
   // Fetch source estimate
@@ -159,11 +164,12 @@ export async function POST(
     .from("estimate_direct_costs")
     .select("*")
     .eq("estimate_id", id)
+    .is("deleted_at", null)
     .order("sort_order", { ascending: true });
 
   if (directCosts?.length) {
     const newDCs = directCosts.map((dc: Record<string, unknown>) => {
-      const { id: _did, created_at: _dca, updated_at: _dua, org_id: _dorg, ...dcRest } = dc;
+      const { id: _did, created_at: _dca, updated_at: _dua, org_id: _dorg, deleted_at: _ddel, ...dcRest } = dc;
       return { ...dcRest, org_id: newEst.org_id, estimate_id: newEst.id };
     });
     const { error: dcErr } = await supabase.from("estimate_direct_costs").insert(newDCs);

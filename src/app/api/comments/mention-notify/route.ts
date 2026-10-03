@@ -10,6 +10,12 @@ import { notifyMentions } from "@/lib/comment-mention-notify";
  * succeeded — same pattern as /api/crm/tickets/[id]/notify. Body:
  * { recordType, recordId, mentionedUserIds, commentBody }
  */
+const RECORD_TYPES = new Set([
+  "requisition", "po", "receiving", "project", "work_order",
+  "job_photo", "damage_case", "ticket", "crm_estimate",
+]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(request: Request) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -37,10 +43,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "recordType, recordId, and mentionedUserIds are required" }, { status: 400 });
   }
 
+  if (
+    typeof body.recordType !== "string" || !RECORD_TYPES.has(body.recordType) ||
+    typeof body.recordId !== "string" || !UUID_RE.test(body.recordId) ||
+    !body.mentionedUserIds.every((id) => typeof id === "string" && UUID_RE.test(id))
+  ) {
+    return NextResponse.json({ error: "Invalid recordType, recordId, or mentionedUserIds" }, { status: 400 });
+  }
+
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+
+  // The caller must have actually commented on this record (in their own org)
+  // — proves the record exists/belongs to them and that a mention just happened,
+  // so this can't be used to push arbitrary links/text at colleagues.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: ownComment } = await (adminClient as any)
+    .from("comments")
+    .select("id, body")
+    .eq("org_id", callerProfile.org_id)
+    .eq("record_type", body.recordType)
+    .eq("record_id", body.recordId)
+    .eq("author_id", user.id)
+    .gte("created_at", new Date(Date.now() - 10 * 60 * 1000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!ownComment) return NextResponse.json({ error: "Record not found" }, { status: 404 });
 
   // adminClient is service-role and bypasses RLS — without scoping mentioned
   // ids to the caller's own org here, a crafted request could get a comment
@@ -50,7 +81,7 @@ export async function POST(request: Request) {
     .from("profiles")
     .select("id")
     .eq("org_id", callerProfile.org_id)
-    .in("id", body.mentionedUserIds);
+    .in("id", body.mentionedUserIds.slice(0, 50));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const validIds = (validRecipients ?? []).map((p: any) => p.id as string);
   if (!validIds.length) return NextResponse.json({ success: true });
@@ -62,7 +93,7 @@ export async function POST(request: Request) {
     mentionedUserIds: validIds,
     commenterId: user.id,
     commenterName: (callerProfile.name as string | null) ?? "Someone",
-    commentBody: body.commentBody ?? "",
+    commentBody: String(ownComment.body ?? ""),
   });
 
   return NextResponse.json({ success: true });

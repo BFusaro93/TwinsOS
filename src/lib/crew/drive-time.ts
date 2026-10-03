@@ -15,6 +15,13 @@ type AnySupabase = any;
  */
 export const STALE_DRIVE_SEGMENT_CAP_MINUTES = 60;
 
+/**
+ * A segment that crosses midnight is only treated as forgotten when the gap
+ * from its start exceeds this. A legit overnight drive (left 11:50pm, arrived
+ * 12:10am) is credited in full.
+ */
+export const STALE_DRIVE_SEGMENT_GAP_MINUTES = 4 * 60;
+
 interface OpenSegment {
   id: string;
   started_at: string;
@@ -50,8 +57,11 @@ export async function closeOpenDriveSegment(
   const segment = open as OpenSegment;
 
   const today = isoInZone(now, await getOrgTimeZone(supabase, orgId));
-  const stale = segment.work_date < today;
   const startedMs = new Date(segment.started_at).getTime();
+  const crossedDay = segment.work_date < today;
+  // Cap only when the gap is implausibly long for a single drive.
+  const stale =
+    crossedDay && now.getTime() - startedMs > STALE_DRIVE_SEGMENT_GAP_MINUTES * 60_000;
   const endMs = Math.max(
     startedMs,
     stale

@@ -197,8 +197,30 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
   const dayMatches = Math.min(configuredDay, daysInMonth(now.y, now.m)) === now.d;
 
   switch (frequency) {
-    case "monthly":
-      return dayMatches;
+    case "monthly": {
+      if (dayMatches) return true;
+      // Catch-up: if the cron missed the billing day (outage, failed run,
+      // contract flipped to active late), the exact-day match never fires
+      // again and the month was silently never billed. Treat any day AFTER
+      // the clamped billing day as due as long as this period is verifiably
+      // unbilled. Safety rails, all required:
+      //  - last_billed_date must not already sit in the billed month (the
+      //    cron stamps it on every successful run; a manually deleted
+      //    invoice therefore is NOT regenerated after the billing day, which
+      //    preserves the pre-existing "no surprise re-bills" behaviour);
+      //  - the contract must have existed on the billing day (anchor <= the
+      //    run date), so a contract signed on the 20th is not retroactively
+      //    billed for a billing day on the 1st that predates it;
+      //  - callers still run their live-invoice-in-period idempotency query.
+      const dueDay = Math.min(configuredDay, daysInMonth(now.y, now.m));
+      if (now.d <= dueDay) return false;
+      const advance = contract.bill_month_in_advance ? 1 : 0;
+      const billedIdx = monthIndex(now.y, now.m) + advance;
+      const last = parseYmd(contract.last_billed_date);
+      if (last && monthIndex(last.y, last.m) >= billedIdx) return false;
+      const anchor = billingAnchor(contract, today);
+      return dayDiff(anchor, { y: now.y, m: now.m, d: dueDay }) >= 0;
+    }
 
     case "quarterly":
     case "annual": {

@@ -23,8 +23,14 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error, count } = await (supabase as any)
     .from("crm_job_visits")
-    .update({ crew_id: crewId })
+    .update({ crew_id: crewId }, { count: "exact" })
     .eq("job_id", jobId)
+    // Visits individually pinned to "no crew" stay unassigned — the job's
+    // crew change must not reach them.
+    .eq("crew_unassigned", false)
+    // Never reassign a stop that is mid-clock — it would split the stop.
+    .neq("status", "in_progress")
+    .is("clocked_in_at", null)
     .neq("status", "completed")
     .neq("status", "cancelled")
     .neq("status", "skipped")

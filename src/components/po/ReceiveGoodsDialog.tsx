@@ -157,10 +157,10 @@ export function ReceiveGoodsDialog({
       prev.map((l) => {
         if (l.lineItemId !== lineItemId) return l;
         const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
-        const remaining = Math.max(0, l.quantityOrdered - alreadyReceived);
+        const remaining = Math.max(0, Math.round((l.quantityOrdered - alreadyReceived) * 1000) / 1000);
         // Maintenance parts are discrete units (can't receive 3.5 oil filters);
         // materials (mulch, chemicals, etc.) are legitimately fractional.
-        const normalized = l.isMaintPart ? Math.round(qty) : Math.round(qty * 100) / 100;
+        const normalized = l.isMaintPart ? Math.round(qty) : Math.round(qty * 1000) / 1000;
         return { ...l, quantityReceived: Math.max(0, Math.min(normalized, remaining)) };
       })
     );
@@ -188,7 +188,8 @@ export function ReceiveGoodsDialog({
   // received before it.
   const allFullyReceived = lines.every((l) => {
     const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
-    return alreadyReceived + l.quantityReceived >= l.quantityOrdered;
+    // 0.0005 tolerance: quantities are numeric(10,3), float sums drift.
+    return alreadyReceived + l.quantityReceived >= l.quantityOrdered - 0.0005;
   });
   // Prorated discount/shipping/tax plus the final-receipt true-up live in the
   // shared helper so editing a receipt applies the identical math.
@@ -221,7 +222,15 @@ export function ReceiveGoodsDialog({
     if (!isValid || applyingInventory || saving) return;
 
     const receivedAt = new Date().toISOString();
-    const receiptNumber = `GR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+    // Atomic per-org counter (same mechanism as WO/PO/REQ numbers) — the old
+    // Date.now() suffix collided on same-millisecond / wrapped-ms submits.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: generatedNumber, error: numErr } = await (createClient().rpc as any)("next_receipt_number");
+    if (numErr || !generatedNumber) {
+      toast.error(numErr?.message ?? "Failed to generate receipt number");
+      return;
+    }
+    const receiptNumber = generatedNumber as string;
     const receivedUser = users.find((u) => u.id === receivedById);
     const receivedByName = receivedUser?.name ?? "";
 
@@ -463,7 +472,7 @@ export function ReceiveGoodsDialog({
                             <Input
                               type="number"
                               min={0}
-                              step={line.isMaintPart ? 1 : 0.01}
+                              step={line.isMaintPart ? 1 : 0.001}
                               max={Math.max(0, line.quantityOrdered - (alreadyReceivedMap.get(line.lineItemId) ?? 0))}
                               className="h-8 w-20 text-right text-xs"
                               value={line.quantityReceived}

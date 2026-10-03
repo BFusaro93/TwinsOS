@@ -1,5 +1,6 @@
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { monthStartInZone } from "@/lib/time/zone";
+import { toE164Us } from "@/lib/utils/phone";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -75,7 +76,8 @@ export async function sendClientSms(
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   const form = new URLSearchParams({
-    To: params.toPhone,
+    // Twilio only accepts E.164; clients' phones are stored as typed.
+    To: toE164Us(params.toPhone) ?? params.toPhone,
     MessagingServiceSid: messagingServiceSid,
     Body: params.body,
     StatusCallback: `${siteUrl}/api/webhooks/twilio/status`,

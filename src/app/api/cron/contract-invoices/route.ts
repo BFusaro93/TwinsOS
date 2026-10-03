@@ -8,6 +8,7 @@ import {
   planContractBilling,
   termSkipReason,
 } from "@/lib/contract-billing";
+import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
@@ -93,7 +94,7 @@ export async function GET(request: Request) {
 
   const { data: contracts, error: fetchErr } = await sb
     .from("crm_contracts")
-    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at)")
+    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms)")
     .is("clients.deleted_at", null)
     .eq("is_active", true)
     .eq("auto_generate", true)
@@ -194,7 +195,24 @@ export async function GET(request: Request) {
       ? lineItems.join("\n")
       : contract.title;
 
+    // ── tax ───────────────────────────────────────────────────────────────
+    // Contract invoices are untaxed: contracts bill services (typically
+    // tax-exempt) and carry no per-service taxable flag. Taxable products are
+    // billed through job/visit invoices.
+    const totalCents = monthAmount;
+
     // ── create invoice ────────────────────────────────────────────────────
+    // Terms: client default, else org default. due_date is computed so the
+    // invoice-past-due cron (which skips null due_date) can fire.
+    const { data: orgTermsRow } = await sb
+      .from("organizations")
+      .select("default_billing_terms")
+      .eq("id", contract.org_id)
+      .maybeSingle();
+    const invoiceTerms = resolveInvoiceTerms(
+      contract.clients?.default_terms,
+      orgTermsRow?.default_billing_terms,
+    );
     const { data: invoice, error: invErr } = await sb
       .from("crm_invoices")
       .insert({
@@ -204,11 +222,12 @@ export async function GET(request: Request) {
         sales_rep_id: contract.sales_rep_id ?? null,
         description,
         invoice_date: plan.invoiceDate,
-        due_date: null,
+        terms: invoiceTerms,
+        due_date: computeDueDate(plan.invoiceDate, invoiceTerms),
         status: "draft",
         subtotal_cents: monthAmount,
-        total_cents: monthAmount,
-        balance_cents: monthAmount,
+        total_cents: totalCents,
+        balance_cents: totalCents,
       })
       .select("id")
       .single();
@@ -248,6 +267,7 @@ export async function GET(request: Request) {
       qty: 1,
       rate_cents: monthAmount,
       total_cents: monthAmount,
+      is_taxable: false,
       sort_order: 1,
     });
 
@@ -282,7 +302,7 @@ export async function GET(request: Request) {
       client_id: contract.client_id,
       activity_type: "invoice",
       subject: invoiceNumber != null ? `Invoice #${invoiceNumber}` : "Invoice",
-      amount_cents: monthAmount,
+      amount_cents: totalCents,
       ref_id: invoice.id,
       ref_table: "crm_invoices",
     });

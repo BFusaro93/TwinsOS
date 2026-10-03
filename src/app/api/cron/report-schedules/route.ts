@@ -30,6 +30,9 @@ import { hourInZone, startOfTodayInZoneIso } from "@/lib/time/zone";
  * Security: Vercel passes Authorization: Bearer {CRON_SECRET}. Reject
  * anything else.
  */
+// Renders PDFs and sends email for every due schedule in one run.
+export const maxDuration = 300;
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   const isCron =
@@ -65,7 +68,7 @@ export async function GET(request: Request) {
   // at or after its org's dayStart already ran today (success or error — an
   // errored run is not retried until tomorrow, same as before) and is skipped.
   const dayStartByOrg = new Map<string, string>();
-  const due: { id: string; org_id: string; report_key: string; recipients: string[] }[] = [];
+  const due: { id: string; org_id: string; report_key: string; recipients: string[]; last_run_at: string | null }[] = [];
   for (const schedule of schedules ?? []) {
     const tz = await getOrgTimeZone(supabase, schedule.org_id);
     if (!dayStartByOrg.has(schedule.org_id)) {
@@ -114,13 +117,18 @@ export async function GET(request: Request) {
       continue;
     }
 
+    const tz = await getOrgTimeZone(supabase, schedule.org_id);
+    // Dates in the subject/body are on the ORG's calendar — the server runs
+    // UTC, where an evening run reads as tomorrow.
+    const orgDate = now.toLocaleDateString("en-US", { timeZone: tz });
+    const orgDateTime = now.toLocaleString("en-US", { timeZone: tz });
     try {
       const pdfBuffer = await renderScheduledReportPdf(supabase, def, schedule.org_id);
       const { error: sendErr } = await resend.emails.send({
         from: EMAIL_FROM,
         to: schedule.recipients,
-        subject: `${def.name} — ${new Date().toLocaleDateString("en-US")}`,
-        html: `<p>Attached: <strong>${def.name}</strong>, generated ${new Date().toLocaleString("en-US")}.</p>`,
+        subject: `${def.name} — ${orgDate}`,
+        html: `<p>Attached: <strong>${def.name}</strong>, generated ${orgDateTime}.</p>`,
         attachments: [
           {
             filename: `${def.name.replace(/[^a-z0-9-_ ]/gi, "").trim()}.pdf`,
@@ -129,23 +137,28 @@ export async function GET(request: Request) {
         ],
       });
       if (sendErr) throw new Error(sendErr.message);
-
-      sent++;
-      await supabase
-        .from("report_schedules")
-        .update({ last_run_at: new Date().toISOString(), last_run_status: "success", last_run_error: null })
-        .eq("id", schedule.id);
     } catch (err) {
       failed++;
+      // Nothing was delivered: give the claim back (restore the prior
+      // last_run_at) so the next hourly tick retries today, instead of the
+      // claim stamp silently swallowing the day's report. The error is still
+      // recorded for the schedules UI.
       await supabase
         .from("report_schedules")
         .update({
-          last_run_at: new Date().toISOString(),
+          last_run_at: schedule.last_run_at,
           last_run_status: "error",
           last_run_error: err instanceof Error ? err.message : "Unknown error",
         })
         .eq("id", schedule.id);
+      continue;
     }
+
+    sent++;
+    await supabase
+      .from("report_schedules")
+      .update({ last_run_at: new Date().toISOString(), last_run_status: "success", last_run_error: null })
+      .eq("id", schedule.id);
   }
 
   return NextResponse.json({ sent, failed, total: schedules?.length ?? 0 });

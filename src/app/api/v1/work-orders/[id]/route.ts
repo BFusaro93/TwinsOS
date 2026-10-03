@@ -90,9 +90,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // null unassigns — the denormalised name has to go with the id.
         assigned_to_name: body.assignedToId ? (employeeMap.get(body.assignedToId) ?? null) : null,
       }),
-      ...(body.assignedToIds !== undefined && {
-        assigned_to_ids: body.assignedToIds,
-        assigned_to_names: body.assignedToIds.map((id) => employeeMap.get(id)),
+      // Keep assigned_to_ids/names in sync with the primary assignee: any
+      // assignee change rewrites the arrays as the union of assignedToId and
+      // assignedToIds (primary first). A null assignedToId alone clears them.
+      ...((body.assignedToId !== undefined || body.assignedToIds !== undefined) && {
+        assigned_to_ids: assigneeIds,
+        assigned_to_names: assigneeIds.map((aid) => employeeMap.get(aid) ?? ""),
       }),
     })
     .eq("org_id", auth.orgId)

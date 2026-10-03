@@ -397,7 +397,13 @@ function SnowCrewAssignDialog({
 
   async function reassign(visitId: string, crewId: string | null, jobId?: string) {
     try {
-      await updateVisit({ id: visitId, updates: { crew_id: crewId }, jobId });
+      // Unassign pins the visit to no crew (crew_unassigned) so other surfaces
+      // don't fall back to the job's crew; an explicit crew clears the flag.
+      await updateVisit({
+        id: visitId,
+        updates: crewId ? { crew_id: crewId } : { crew_id: null, crew_unassigned: true },
+        jobId,
+      });
     } catch {
       toast.error("Failed to reassign");
     }

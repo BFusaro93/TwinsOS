@@ -3,6 +3,8 @@ import type { Database } from "@/types/supabase";
 import type { AnalysisConfig, AnalysisFilter, ReportResultRow } from "@/types/crm-reports";
 import type { KpiComputedActuals } from "@/types/crm-kpi-scorecard";
 import { runAnalysis } from "@/lib/reports/engine";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { daysBetweenYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 import { BILLABLE_CONTRACT_STATUSES, monthlyRecurringCents } from "@/lib/reports/contract-schedule";
 import { loadVisitCosting, weightedTargetRate, type CostedVisit } from "@/lib/visit-costing";
 import { logger } from "@/lib/logger";
@@ -37,13 +39,24 @@ interface YearWindow {
   daysElapsed: number;
   /** Last instant considered "in" the year for snapshot-style logic. */
   periodEnd: Date;
+  /** The instant the org's calendar year begins (midnight Jan 1 in the org zone). */
+  jan1: Date;
+  /** The org's operating timezone. */
+  timeZone: string;
 }
 
-function buildWindow(year: number, now = new Date()): YearWindow {
+/**
+ * Year window on the ORG's calendar. The server runs UTC, so `new Date(year,
+ * 0, 1)` / "now" would flip the year (and the days-elapsed count) at 7-8pm
+ * Eastern on Dec 31 and misplace the Jan 1 boundary by the UTC offset.
+ */
+function buildWindow(year: number, timeZone: string, now = new Date()): YearWindow {
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
-  const jan1 = new Date(year, 0, 1);
-  const dec31 = new Date(year, 11, 31, 23, 59, 59, 999);
+  const jan1 = zoneWallClockToInstant(from, "00:00", timeZone) ?? new Date(Date.UTC(year, 0, 1));
+  const dec31 = new Date(
+    (zoneWallClockToInstant(`${year + 1}-01-01`, "00:00", timeZone) ?? new Date(Date.UTC(year + 1, 0, 1))).getTime() - 1
+  );
   const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
   let daysElapsed: number;
   let periodEnd: Date;
@@ -54,7 +67,8 @@ function buildWindow(year: number, now = new Date()): YearWindow {
     daysElapsed = isLeap ? 366 : 365;
     periodEnd = dec31;
   } else {
-    daysElapsed = Math.floor((now.getTime() - jan1.getTime()) / 86_400_000) + 1;
+    // Calendar days on the org's clock, counting today.
+    daysElapsed = daysBetweenYmd(from, todayInZone(timeZone)) + 1;
     periodEnd = now;
   }
   return {
@@ -65,6 +79,8 @@ function buildWindow(year: number, now = new Date()): YearWindow {
     toTs: `${to} 23:59:59.999`,
     daysElapsed,
     periodEnd,
+    jan1,
+    timeZone,
   };
 }
 
@@ -389,7 +405,7 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
     ),
   ]);
 
-  const jan1 = new Date(w.year, 0, 1).getTime();
+  const jan1 = w.jan1.getTime();
   const end = w.periodEnd.getTime();
   const inYear = (v: string | null) => {
     if (!v) return false;
@@ -562,7 +578,7 @@ async function computeEmployees(supabase: Client, w: YearWindow): Promise<Values
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as EmployeeRow[];
 
-  const jan1 = new Date(w.year, 0, 1).getTime();
+  const jan1 = w.jan1.getTime();
   const end = w.periodEnd.getTime();
   const ts = (v: string | null) => (v ? new Date(v).getTime() : null);
   const inYear = (v: string | null) => {
@@ -642,7 +658,7 @@ async function computeTickets(supabase: Client, w: YearWindow): Promise<Values> 
   };
 }
 
-async function computeDamageCases(supabase: Client): Promise<Values> {
+async function computeDamageCases(supabase: Client, timeZone: string): Promise<Values> {
   const { data, error } = await supabase
     .from("damage_cases")
     .select("date_of_incident")
@@ -652,7 +668,7 @@ async function computeDamageCases(supabase: Client): Promise<Values> {
   if (error) throw new Error(error.message);
   const last = data?.[0]?.date_of_incident;
   if (!last) return { days_since_last_damage_case: null };
-  const days = Math.floor((Date.now() - new Date(`${last}T00:00:00`).getTime()) / 86_400_000);
+  const days = daysBetweenYmd(last as string, todayInZone(timeZone));
   return { days_since_last_damage_case: Math.max(0, days) };
 }
 
@@ -665,9 +681,11 @@ async function computeDamageCases(supabase: Client): Promise<Values> {
  */
 export async function computeLandscaptKpiActuals(
   supabase: Client,
-  year: number
+  year: number,
+  timeZone?: string
 ): Promise<KpiComputedActuals> {
-  const w = buildWindow(year);
+  // Callers needn't pass a zone: it resolves from the session's own org.
+  const w = buildWindow(year, timeZone ?? (await getMyTimeZone(supabase)));
 
   const areas: Array<[string, () => Promise<Values>]> = [
     ["invoices", () => computeInvoices(supabase, w)],
@@ -680,7 +698,7 @@ export async function computeLandscaptKpiActuals(
     ["timesheets", () => computeTimesheets(supabase, w)],
     ["employees", () => computeEmployees(supabase, w)],
     ["tickets", () => computeTickets(supabase, w)],
-    ["damage_cases", () => computeDamageCases(supabase)],
+    ["damage_cases", () => computeDamageCases(supabase, w.timeZone)],
   ];
 
   const settled = await Promise.allSettled(areas.map(([, fn]) => fn()));

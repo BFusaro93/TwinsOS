@@ -213,11 +213,15 @@ export function useUpdatePart() {
         if (input.vendorName !== undefined) productSync.vendor_name = input.vendorName;
         if (input.alternateVendors !== undefined) productSync.alternate_vendors = input.alternateVendors;
         if (Object.keys(productSync).length > 0) {
-          await supabase
+          const { error: productSyncErr } = await supabase
             .from("product_items")
             // `as never`: postgrest rejects excess properties on a dynamically-built patch.
             .update(productSync as never)
             .eq("id", row.product_item_id);
+          if (productSyncErr) {
+            const { toast } = await import("sonner");
+            toast.warning(`Part saved, but the linked product could not be synced: ${productSyncErr.message}`);
+          }
         }
       }
 
@@ -252,10 +256,14 @@ export function useAdjustPartQuantityManual() {
       await adjustPartQuantity(supabase, input.id, input.quantityOnHand, input.reason);
 
       if (part.product_item_id) {
-        await supabase
+        const { error: mirrorErr } = await supabase
           .from("product_items")
           .update({ quantity_on_hand: input.quantityOnHand })
           .eq("id", part.product_item_id);
+        if (mirrorErr) {
+          const { toast } = await import("sonner");
+          toast.warning(`Part quantity updated, but the linked product's stock could not be synced: ${mirrorErr.message}`);
+        }
       }
     },
     onSuccess: (_, { id }) => {

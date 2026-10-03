@@ -29,7 +29,7 @@ export function generateApiKey(): { key: string; keyPrefix: string; keyHash: str
 
 export type ApiAuthResult =
   | { ok: true; orgId: string; keyId: string; scopes: string[] }
-  | { ok: false; status: 401 | 403 | 429; error: string };
+  | { ok: false; status: 401 | 403 | 429 | 503; error: string };
 
 type ApiKeyRow = {
   id: string;
@@ -58,7 +58,7 @@ const OAUTH_TOKEN_RATE_LIMIT_PER_MIN = 60;
 async function lookupApiKey(
   request: Request,
   db: AdminClient
-): Promise<{ ok: true; keyRow: ApiKeyRow } | { ok: false; status: 401; error: string }> {
+): Promise<{ ok: true; keyRow: ApiKeyRow } | { ok: false; status: 401 | 503; error: string }> {
   const authHeader = request.headers.get("Authorization") ?? "";
   const match = authHeader.match(/^Bearer (.+)$/);
   if (!match) {
@@ -70,11 +70,17 @@ async function lookupApiKey(
   }
   const keyHash = hashApiKey(key);
 
-  const { data: keyRow } = await db
+  const { data: keyRow, error: keyErr } = await db
     .from("api_keys")
     .select("id, org_id, scopes, rate_limit_per_min, revoked_at")
     .eq("key_hash", keyHash)
     .maybeSingle();
+  if (keyErr) {
+    // Fail closed: a lookup error must not be read as "key not found", and
+    // must not fall through to the OAuth lookup.
+    log.error("api key lookup failed", { err: keyErr });
+    return { ok: false, status: 503, error: "Authentication temporarily unavailable" };
+  }
 
   if (keyRow) {
     if (keyRow.revoked_at) {
@@ -85,12 +91,16 @@ async function lookupApiKey(
 
   // hashApiKey is a plain sha256, same as oauth.ts's hashToken -- the same
   // hash works to look up either table, so no need to re-hash.
-  const { data: tokenRow } = await db
+  const { data: tokenRow, error: tokenErr } = await db
     .from("oauth_tokens")
     .select("id, org_id, scopes, revoked_at, expires_at, token_type")
     .eq("token_hash", keyHash)
     .eq("token_type", "access")
     .maybeSingle();
+  if (tokenErr) {
+    log.error("oauth token lookup failed", { err: tokenErr });
+    return { ok: false, status: 503, error: "Authentication temporarily unavailable" };
+  }
 
   if (!tokenRow || tokenRow.revoked_at || new Date(tokenRow.expires_at).getTime() < Date.now()) {
     return { ok: false, status: 401, error: "Invalid or revoked API key" };
@@ -151,7 +161,9 @@ export async function resolveApiKey(request: Request, db: AdminClient = adminCli
     });
 
     if (rateLimitError) {
+      // Fail closed — an erroring limiter must not mean "unlimited".
       log.error("rate limit check failed", { err: rateLimitError, keyId: keyRow.id });
+      return { ok: false, status: 503, error: "Rate limit check unavailable, please retry" };
     } else if (typeof requestCount === "number" && requestCount > keyRow.rate_limit_per_min) {
       return { ok: false, status: 429, error: "Rate limit exceeded" };
     }

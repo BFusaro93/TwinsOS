@@ -125,8 +125,14 @@ function formulaColumnsFor(
  *  is scaled ×100 here because the "percent" field type is already-scaled
  *  0–100 everywhere else (formatCellValue appends "%" without scaling). */
 function evaluateFormula(formula: AnalysisFormula, row: ReportResultRow): number | null {
-  const left = Number(row[formula.left]);
-  const right = Number(row[formula.right]);
+  // Number(null) is 0 — a missing operand must stay missing (blank), not
+  // silently become 0 / "0%".
+  const rawLeft = row[formula.left];
+  const rawRight = row[formula.right];
+  if (rawLeft === null || rawLeft === undefined || rawLeft === "") return null;
+  if (rawRight === null || rawRight === undefined || rawRight === "") return null;
+  const left = Number(rawLeft);
+  const right = Number(rawRight);
   if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
   switch (formula.operator) {
     case "+":
@@ -296,7 +302,12 @@ export async function runAnalysis(
     typeof payload?.total_count === "number" && Number.isFinite(payload.total_count)
       ? payload.total_count
       : undefined;
-  const truncated = totalCount !== undefined && totalCount > rows.length;
+  // With an older RPC that doesn't report total_count, a result that fills the
+  // row cap is assumed partial — totals and formula sorts then only cover the
+  // returned rows, and the UI says so ("partial — first N rows").
+  const requestedLimit = Math.min(config.limit ?? RPC_ROW_CAP, RPC_ROW_CAP);
+  const truncated =
+    totalCount !== undefined ? totalCount > rows.length : rows.length >= requestedLimit;
 
   // Calculated columns — computed here (never sent into the crm_run_report
   // RPC's dynamic SQL) from two of the query's own already-whitelisted

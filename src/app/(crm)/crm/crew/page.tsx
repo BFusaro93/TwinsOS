@@ -114,7 +114,7 @@ export default function CrewSchedulePage() {
   // midnight UTC-wise) used to open on a different day's route.
   const { today: orgToday } = useOrgDates();
   const today = orgToday();
-  const { data: stops = [], isLoading } = useMyCrewStops(today);
+  const { data: stops = [], isLoading } = useMyCrewStops(today, true);
   const { data: crewInfo } = useMyCrewInfo();
   const { data: drive } = useCrewDriveToday(today);
   const startDrive = useStartDrive();

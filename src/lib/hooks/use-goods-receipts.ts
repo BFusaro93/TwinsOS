@@ -244,6 +244,12 @@ export function useUpdateGoodsReceipt() {
         }
       }
 
+      // Undo steps for inventory moves already applied, run if a later step
+      // (another line, a line/header write) fails so stock never drifts from
+      // what the saved receipt claims.
+      const compensations: Array<() => Promise<void>> = [];
+      try {
+
       // ── Adjust inventory by the delta ────────────────────────────────────
       // A receipt line's quantity_received is the only place parts/product
       // quantity_on_hand is derived from — correcting it here (up or down)
@@ -267,17 +273,22 @@ export function useUpdateGoodsReceipt() {
           .select("id, part_number, product_item_id")
           .is("deleted_at", null);
 
-        for (const chg of qtyChanges) {
+        // Resolve EVERY line's catalog product before moving any stock, so a
+        // missing match on a later line can't leave earlier lines' inventory
+        // already adjusted with the receipt unsaved.
+        const resolved = qtyChanges.map((chg) => {
           const poLineItem = poLineItems?.find((pli) => pli.id === chg.poLineItemId);
           const matchedProduct =
             (poLineItem?.product_item_id ? products?.find((p) => p.id === poLineItem.product_item_id) : null) ??
             (chg.partNumber ? products?.find((p) => p.part_number === chg.partNumber) : null) ??
             (chg.name ? products?.find((p) => p.name === chg.name) : null);
-
           if (!matchedProduct) {
             throw new Error(`Could not find a catalog product for "${chg.name}" — inventory was not adjusted, receipt not saved.`);
           }
+          return { chg, matchedProduct };
+        });
 
+        for (const { chg, matchedProduct } of resolved) {
           if (chg.isMaintPart) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const linkedPart = parts?.find((pt: any) => pt.product_item_id === matchedProduct.id) ??
@@ -296,6 +307,15 @@ export function useUpdateGoodsReceipt() {
               });
               const note = shortfallMessage(chg.name, res);
               if (note) toast.warning(note);
+              compensations.push(async () => {
+                await correctPartReceipt(supabase, {
+                  orgId: currentReceipt.org_id as string,
+                  partId: linkedPart.id,
+                  delta: -chg.delta,
+                  unitCost: chg.unitCost,
+                  poNumber: (currentReceipt.po_number as string | null) ?? "",
+                });
+              });
             }
           }
 
@@ -315,6 +335,15 @@ export function useUpdateGoodsReceipt() {
               p_reason: "goods receipt correction",
             });
             if (prodErr) throw prodErr;
+            compensations.push(async () => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (supabase.rpc as any)("adjust_product_item_quantity", {
+                p_org_id: currentReceipt.org_id,
+                p_product_id: matchedProduct.id,
+                p_delta: -productDelta,
+                p_reason: "goods receipt correction rollback",
+              });
+            });
           }
         }
       }
@@ -332,6 +361,19 @@ export function useUpdateGoodsReceipt() {
           })
           .eq("id", line.id);
         if (lineError) throw lineError;
+        const prior = oldByLineId.get(line.id);
+        if (prior) {
+          compensations.push(async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
+              .from("goods_receipt_lines")
+              .update({
+                quantity_received: prior.quantity_received,
+                quantity_remaining: line.quantityOrdered - prior.quantity_received,
+              })
+              .eq("id", line.id);
+          });
+        }
       }
 
       if (currentReceipt) {
@@ -429,7 +471,17 @@ export function useUpdateGoodsReceipt() {
         }
 
         // `as never`: postgrest rejects excess properties on a dynamically-built patch.
-        await supabase.from("goods_receipts").update(headerPatch as never).eq("id", input.id);
+        const { error: headerUpdateErr } = await supabase
+          .from("goods_receipts")
+          .update(headerPatch as never)
+          .eq("id", input.id);
+        if (headerUpdateErr) throw headerUpdateErr;
+      }
+      } catch (err) {
+        for (const undo of compensations.reverse()) {
+          try { await undo(); } catch { /* best effort — original error is what the user needs */ }
+        }
+        throw err;
       }
 
       // Write audit entries for quantity changes via SECURITY DEFINER RPC

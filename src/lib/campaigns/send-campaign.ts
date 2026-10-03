@@ -27,10 +27,19 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Transient = worth retrying: rate limits, provider 5xx, network blips and
+ * timeouts. Validation-style rejections (400/422, bad address) are permanent.
+ */
 function isRateLimitError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
-  return /429|rate.?limit/i.test(message);
+  return /429|rate.?limit|\b5\d\d\b|timeout|timed out|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|network|socket hang up|temporar|unavailable/i.test(message);
 }
+
+// How often the claim's updated_at is refreshed during a long send, so a
+// healthy long-running send is never mistaken for a dead one (see
+// STUCK_SENDING_THRESHOLD_MS) and re-claimed by a concurrent run.
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 
 /**
  * Thin wrapper around sendClientEmail that retries a couple of times, with
@@ -54,9 +63,14 @@ async function sendClientEmailWithRetry(
   throw lastErr;
 }
 
-async function sendInBatches<T>(items: T[], fn: (item: T) => Promise<void>) {
+async function sendInBatches<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  onBatchDone?: () => Promise<void>
+) {
   for (let i = 0; i < items.length; i += SEND_CONCURRENCY) {
     await Promise.all(items.slice(i, i + SEND_CONCURRENCY).map(fn));
+    if (onBatchDone) await onBatchDone();
     if (i + SEND_CONCURRENCY < items.length) {
       await sleep(BATCH_DELAY_MS);
     }
@@ -127,6 +141,11 @@ export async function sendCampaignEmails(
     .eq("org_id", orgId)
     .is("deleted_at", null)
     .eq("do_not_market", false)
+    // Per-client "OK to Email" preference (clients.ok_to_email, not null
+    // default true): a bulk marketing blast must honor it, in addition to the
+    // do_not_market unsubscribe flag. Service/transactional emails (invoices,
+    // estimates) are sent by their own routes and don't apply this filter.
+    .eq("ok_to_email", true)
     // A hard bounce is tracked separately from the marketing opt-out now (see
     // 20260919010000_client_email_bounce_suppression.sql). The Resend webhook
     // used to fold bounces into do_not_market, so this filter caught them for
@@ -255,7 +274,21 @@ export async function sendCampaignEmails(
     referring_client: { display_name: string } | null;
   }
 
-  await sendInBatches((recipients as Recipient[]).filter((r) => !alreadySent.has(r.id)), async (recipient) => {
+  const failedRecipients: Recipient[] = [];
+  let lastHeartbeat = Date.now();
+  const heartbeat = async () => {
+    if (Date.now() - lastHeartbeat < HEARTBEAT_INTERVAL_MS) return;
+    lastHeartbeat = Date.now();
+    // Conditional on still being "sending" so a heartbeat can never resurrect
+    // a campaign something else already finished.
+    await db
+      .from("crm_campaigns")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", campaign.id)
+      .eq("status", "sending");
+  };
+
+  const sendOne = async (recipient: Recipient, isRetryPass: boolean) => {
     const client = {
       displayName: recipient.display_name,
       firstName: recipient.first_name,
@@ -304,8 +337,9 @@ export async function sendCampaignEmails(
     const unsubscribeUrl = `${appUrl}/api/crm/unsubscribe/${recipient.unsubscribe_token}?campaign=${campaign.id}`;
     const html = resolvedBody + buildCanSpamFooter(orgName, orgAddress, unsubscribeUrl);
 
+    let sent: { resendId: string | null };
     try {
-      const sent = await sendClientEmailWithRetry({
+      sent = await sendClientEmailWithRetry({
         to: recipient.primary_email,
         subject: resolvedSubject,
         html,
@@ -313,25 +347,51 @@ export async function sendCampaignEmails(
         replyTo,
         unsubscribeUrl,
       });
-      delivered += 1;
-      await db.from("client_activity").insert({
-        org_id: orgId,
-        client_id: recipient.id,
-        activity_type: "email",
-        subject: resolvedSubject,
-        body: `Campaign "${campaign.name}" sent to ${recipient.primary_email}`,
-        sent_to: recipient.primary_email,
-        ref_id: campaign.id,
-        ref_table: "crm_campaigns",
-        resend_message_id: sent.resendId,
-        occurred_at: new Date().toISOString(),
-        created_by: createdBy,
-      });
     } catch (err) {
-      failed += 1;
       console.error(`[campaign-send] failed for ${recipient.primary_email}:`, err);
+      if (isRetryPass) failed += 1;
+      else failedRecipients.push(recipient);
+      return;
     }
-  });
+    // The email is out: count it and remember it in-memory FIRST. The
+    // client_activity row is what a resumed send dedupes on, but a failed log
+    // insert must not turn a delivered email into a "failure" (or, worse, get
+    // it re-sent) — retry the insert once, then log loudly and move on.
+    delivered += 1;
+    alreadySent.add(recipient.id);
+    const activityRow = {
+      org_id: orgId,
+      client_id: recipient.id,
+      activity_type: "email",
+      subject: resolvedSubject,
+      body: `Campaign "${campaign.name}" sent to ${recipient.primary_email}`,
+      sent_to: recipient.primary_email,
+      ref_id: campaign.id,
+      ref_table: "crm_campaigns",
+      resend_message_id: sent.resendId,
+      occurred_at: new Date().toISOString(),
+      created_by: createdBy,
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { error: actErr } = await db.from("client_activity").insert(activityRow);
+      if (!actErr) break;
+      if (attempt === 1) {
+        console.error(
+          `[campaign-send] sent to ${recipient.primary_email} but client_activity insert failed (resume may re-send):`,
+          actErr.message ?? actErr
+        );
+      }
+    }
+  };
+
+  const todo = (recipients as Recipient[]).filter((r) => !alreadySent.has(r.id));
+  await sendInBatches(todo, (r) => sendOne(r, false), heartbeat);
+  // One more bounded pass over first-pass failures (transient provider/network
+  // trouble often clears); whatever fails again is counted as failed.
+  if (failedRecipients.length > 0) {
+    await sleep(RATE_LIMIT_RETRY_DELAY_MS * 3);
+    await sendInBatches(failedRecipients, (r) => sendOne(r, true), heartbeat);
+  }
 
   await db.from("crm_campaigns").update({
     status: "completed",

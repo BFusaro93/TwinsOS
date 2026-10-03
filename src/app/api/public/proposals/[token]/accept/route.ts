@@ -7,6 +7,7 @@ import { orgEmailFrom } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
+import { notifyStaffOfDepositExcess } from "@/lib/estimate-deposit-excess-notify";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
@@ -74,7 +75,8 @@ export async function POST(
   }
 
   const supabase = serviceClient();
-  const ipAddress = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? null;
+  // x-forwarded-for is a comma list (client, proxies...); the signature record wants the client hop only.
+  const ipAddress = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || null;
 
   // Validate token
   const { data: shareToken, error: tokenErr } = await supabase
@@ -269,7 +271,23 @@ export async function POST(
     return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
   }
   const eligibleLines = (openLines ?? []) as { id: string; tier: string | null; row_type: string | null }[];
-  const acceptedIds = body.acceptedLineItemIds?.length ? new Set(body.acceptedLineItemIds) : null;
+  // An explicit array — even an empty one — is a selection. Treating [] as
+  // "no selection" used to accept every line, and unknown ids matched nothing
+  // so the estimate was accepted at $0. Mirror the portal accept route.
+  if (body.acceptedLineItemIds !== undefined && !Array.isArray(body.acceptedLineItemIds)) {
+    await rollbackAcceptance([]);
+    return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
+  }
+  const acceptedIds = body.acceptedLineItemIds ? new Set(body.acceptedLineItemIds) : null;
+  if (acceptedIds) {
+    const knownIds = new Set(eligibleLines.map((li) => li.id));
+    for (const id of acceptedIds) {
+      if (!knownIds.has(id)) {
+        await rollbackAcceptance([]);
+        return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
+      }
+    }
+  }
   const isWonLine = (li: { id: string; tier: string | null; row_type: string | null }) => {
     if (body.selectedTier) {
       // Tier-based: items with tier=null OR tier=selectedTier → won; other tiers → lost
@@ -285,6 +303,13 @@ export async function POST(
   };
   const wonIds = eligibleLines.filter(isWonLine).map((li) => li.id);
   const lostIds = eligibleLines.filter((li) => !isWonLine(li)).map((li) => li.id);
+  // At least one priced line must be accepted; otherwise this would record an
+  // acceptance of nothing.
+  const hasPricedEligible = eligibleLines.some((li) => li.row_type !== "section");
+  if (hasPricedEligible && !eligibleLines.some((li) => li.row_type !== "section" && isWonLine(li))) {
+    await rollbackAcceptance([]);
+    return NextResponse.json({ error: "Please select at least one item to accept" }, { status: 400 });
+  }
 
   for (const [ids, status] of [[wonIds, "won"], [lostIds, "lost"]] as const) {
     if (ids.length === 0) continue;
@@ -393,6 +418,12 @@ export async function POST(
       clientName: ((est.clients as any)?.display_name as string | undefined) ?? body.acceptedByName.trim(),
       decision: "accepted",
     });
+  }
+
+  if (est) {
+    // A deposit already paid online against the full proposal can exceed the
+    // accepted subset; flag it for staff (kept as unapplied credit).
+    await notifyStaffOfDepositExcess(supabase, est.org_id, shareToken.estimate_id);
   }
 
   if (est?.client_id) {

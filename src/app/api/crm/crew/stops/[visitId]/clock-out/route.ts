@@ -6,6 +6,7 @@ import { allocateStopHours } from "@/lib/utils/visit-hours";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { sumPunchLaborCents } from "@/lib/crew/visit-labor";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
@@ -58,7 +59,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, org_id, job_id, client_id, scheduled_date, crew_id, job_service_id, status,
+  id, org_id, job_id, client_id, scheduled_date, crew_id, crew_unassigned, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
   crm_jobs(crew_id, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
@@ -269,29 +270,25 @@ export async function POST(
   // the hours split, so per-service job costing isn't skewed the same way
   // hours would have been.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: memberTimes } = await (supabase as any)
-      .from("crm_crew_member_times")
-      .select("crew_member_id, clocked_in_at, clocked_out_at, break_minutes, lunch_minutes")
-      .eq("visit_id", anchor.id)
-      .is("deleted_at", null)
-      .not("clocked_out_at", "is", null);
+    const punchTotalCents = await sumPunchLaborCents(supabase, anchor.id);
 
-    let totalLaborCents = 0;
-    for (const mt of memberTimes ?? []) {
-      const inMs = new Date(mt.clocked_in_at as string).getTime();
-      const outMs = new Date(mt.clocked_out_at as string).getTime();
-      const deductMins = (Number(mt.break_minutes ?? 0) + Number(mt.lunch_minutes ?? 0));
-      const hours = Math.max(0, (outMs - inMs) / 3_600_000 - deductMins / 60);
+    // Siblings that were closed EARLIER already carry a share of the anchor's
+    // punches. Allocating the full total again across the rows closing now
+    // double-counted that labor, so only the not-yet-allocated remainder is
+    // split here.
+    const openIdSet = new Set(openRows.map((r) => r.id));
+    const earlierIds = stopRows.filter((r) => !openIdSet.has(r.id)).map((r) => r.id);
+    let alreadyAllocatedCents = 0;
+    if (earlierIds.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: member } = await (supabase as any)
-        .from("crm_crew_members")
-        .select("labor_burden_cents_per_hour")
-        .eq("id", mt.crew_member_id)
-        .single();
-      const burdenRate = Number(member?.labor_burden_cents_per_hour ?? 0);
-      totalLaborCents += Math.round(hours * burdenRate);
+      const { data: earlier } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("actual_labor_cost_cents")
+        .in("id", earlierIds);
+      alreadyAllocatedCents = ((earlier ?? []) as { actual_labor_cost_cents: number | null }[])
+        .reduce((sum, v) => sum + (v.actual_labor_cost_cents ?? 0), 0);
     }
+    const totalLaborCents = Math.max(0, punchTotalCents - alreadyAllocatedCents);
 
     // Shares are still computed over every open row (the labor total covers
     // the whole stop); only the rows this request closed get written.

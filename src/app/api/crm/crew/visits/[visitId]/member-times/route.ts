@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { recomputeStopLabor } from "@/lib/crew/visit-labor";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 
 /**
@@ -34,7 +35,7 @@ const Body = z.object({
 
 const DeleteBody = z.object({ crewMemberId: z.string().uuid() });
 
-const VISIT_SELECT = "id, org_id, crew_id, scheduled_date, crm_jobs(crew_id)";
+const VISIT_SELECT = "id, org_id, crew_id, crew_unassigned, scheduled_date, crm_jobs(crew_id)";
 
 interface VisitRow {
   id: string;
@@ -203,6 +204,8 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Keep an already-closed stop's stored labor cost in step with the edit.
+  await recomputeStopLabor(supabase, visit.id);
   return NextResponse.json(data);
 }
 
@@ -231,6 +234,7 @@ export async function DELETE(
     .is("deleted_at", null);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await recomputeStopLabor(supabase, auth.visit.id);
   return NextResponse.json({ ok: true });
 }
 

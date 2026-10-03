@@ -294,12 +294,47 @@ export interface GenerateResult {
 }
 
 /** Loads everything the planner needs for `jobs`, plans, and inserts. */
+/** Drops jobs whose client is deleted/cancelled or whose contract is
+ * cancelled/expired. Cancelling or deleting those parents doesn't touch the
+ * job rows, so without this the daily cron would keep regenerating visits
+ * (dispatching crews to cancelled work that then never invoices, since a
+ * contract-linked job is billed on the contract cycle). Filtering here rather
+ * than putting jobs on hold means reactivating the client resumes service. */
+async function excludeInactiveParents(supabase: AnyClient, jobs: GeneratorJob[]): Promise<GeneratorJob[]> {
+  const inactiveClients = new Set<string>();
+  for (const ids of chunk([...new Set(jobs.map((j) => j.client_id))], 100)) {
+    const { data } = await supabase.from("clients").select("id, status, deleted_at").in("id", ids);
+    for (const c of (data ?? []) as { id: string; status: string | null; deleted_at: string | null }[]) {
+      if (c.deleted_at || c.status === "cancelled") inactiveClients.add(c.id);
+    }
+  }
+  const contractByJob = new Map<string, string>();
+  for (const ids of chunk(jobs.map((j) => j.id), 100)) {
+    const { data } = await supabase.from("crm_jobs").select("id, contract_id").in("id", ids).not("contract_id", "is", null);
+    for (const r of (data ?? []) as { id: string; contract_id: string }[]) contractByJob.set(r.id, r.contract_id);
+  }
+  const deadContracts = new Set<string>();
+  for (const ids of chunk([...new Set(contractByJob.values())], 100)) {
+    const { data } = await supabase.from("crm_contracts").select("id, status, deleted_at").in("id", ids);
+    for (const c of (data ?? []) as { id: string; status: string | null; deleted_at: string | null }[]) {
+      if (c.deleted_at || c.status === "cancelled" || c.status === "expired") deadContracts.add(c.id);
+    }
+  }
+  return jobs.filter((j) => {
+    if (inactiveClients.has(j.client_id)) return false;
+    const contractId = contractByJob.get(j.id);
+    return !(contractId && deadContracts.has(contractId));
+  });
+}
+
 export async function generateVisitsForJobs(
   supabase: AnyClient,
-  jobs: GeneratorJob[],
+  allJobs: GeneratorJob[],
   opts: GenerateOptions
 ): Promise<GenerateResult> {
   const result: GenerateResult = { planned: 0, inserted: 0, insertedByJob: new Map(), errors: [] };
+  if (allJobs.length === 0) return result;
+  const jobs = await excludeInactiveParents(supabase, allJobs);
   if (jobs.length === 0) return result;
 
   const todayByJob = new Map<string, string>();

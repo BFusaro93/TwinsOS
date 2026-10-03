@@ -48,7 +48,13 @@ export function useCreateApprovalFlow() {
         .insert({ name, entity_type: entityType })
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        // 23505 = the unique index on live (org_id, entity_type) flows.
+        if (error.code === "23505") {
+          throw new Error("An approval flow already exists for this record type. Edit the existing flow instead.");
+        }
+        throw error;
+      }
       return data;
     },
     onSuccess: () => {

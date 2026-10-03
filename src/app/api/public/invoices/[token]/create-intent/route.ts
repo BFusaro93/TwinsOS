@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { logger } from "@/lib/logger";
+import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { createClient } from "@supabase/supabase-js";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
@@ -12,6 +16,11 @@ import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/dupli
 // the PaymentIntent was created. This route itself never touches the
 // ledger; it only ever creates a PaymentIntent scoped to the one invoice
 // the token resolves to.
+const log = logger.child("public invoice create-intent");
+
+// Stripe rejects charges under 50 cents.
+const STRIPE_MIN_CHARGE_CENTS = 50;
+
 const serviceClient = () =>
   createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +28,7 @@ const serviceClient = () =>
   );
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   if (!isStripeConfigured() && !isStripeTestConfigured()) {
@@ -27,6 +36,14 @@ export async function POST(
   }
 
   const { token } = await params;
+
+  // Unauthenticated endpoint that creates Stripe objects: throttle per IP+token
+  // (fails open if the limiter itself errors).
+  const allowed = await checkAuthRateLimit(`pay-intent:${getClientIp(req)}:${token.slice(0, 16)}`, 20, 600);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many attempts. Please wait a few minutes and try again." }, { status: 429 });
+  }
+
   const supabase = serviceClient();
 
   const { data: shareToken, error: tokenErr } = await supabase
@@ -63,6 +80,16 @@ export async function POST(
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
   }
+  // Settle with any credit/deposit already on the account first (service role:
+  // the token holder has no session) so the card only pays what is still owed.
+  try {
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+  } catch {
+    return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
+  }
+  if (invoice.balance_cents <= 0) {
+    return NextResponse.json({ error: "Your account credit has paid this invoice in full — no card payment needed. Refresh the page to see it." }, { status: 409 });
+  }
 
   const { data: org } = await supabase
     .from("organizations")
@@ -89,8 +116,16 @@ export async function POST(
     false
   );
 
+  if (totalChargeCents < STRIPE_MIN_CHARGE_CENTS) {
+    return NextResponse.json(
+      { error: "The remaining balance is below the $0.50 minimum for card payments. Please contact us to settle it." },
+      { status: 400 }
+    );
+  }
+
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
+  try {
   // Always attach the client's Stripe customer so the intent is visible to
   // the duplicate-charge lookup, then refuse if a payment for this invoice is
   // already in flight (e.g. an ACH debit from the portal still settling).
@@ -143,4 +178,7 @@ export async function POST(
     feeCents,
     totalChargeCents,
   });
+  } catch (err) {
+    return stripeErrorResponse(err, log, { invoiceId: invoice.id, connectedAccountId: org.stripe_connect_account_id });
+  }
 }

@@ -26,13 +26,14 @@ export async function getOrgTimeZone(
   if (hit && Date.now() - hit.at < TTL_MS) return hit.tz;
 
   try {
-    const { data } = await db
+    const { data, error } = await db
       .from("organizations")
       .select("timezone")
       .eq("id", orgId)
       .single();
     const tz = coerceTimeZone(data?.timezone as string | null | undefined);
-    cache.set(orgId, { tz, at: Date.now() });
+    // A failed lookup (error / no row) must not pin the default for the TTL.
+    if (!error && data) cache.set(orgId, { tz, at: Date.now() });
     return tz;
   } catch {
     return DEFAULT_TIME_ZONE;
