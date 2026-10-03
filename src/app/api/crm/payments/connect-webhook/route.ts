@@ -590,6 +590,31 @@ async function handleDisputeEvent(
     .eq("id", payment.id);
   if (markErr) log.error("failed to mark payment as disputed", { error: markErr, paymentId: payment.id, disputeId: dispute.id });
 
+  // Flag/unflag the invoice(s) so the autopay queues and charge routes won't
+  // offer them for charging while a chargeback is open (a won dispute returns
+  // the funds, so re-charging in the meantime would collect twice). Status-based
+  // so out-of-order deliveries converge on the dispute's real state. Must run
+  // BEFORE the reversal below, which deletes the payment's allocation rows.
+  try {
+    const OPEN_DISPUTE_STATUSES = ["needs_response", "under_review", "warning_needs_response", "warning_under_review"];
+    if (OPEN_DISPUTE_STATUSES.includes(dispute.status)) {
+      const { data: allocs } = await db
+        .from("crm_payment_allocations")
+        .select("invoice_id")
+        .eq("payment_id", payment.id);
+      const invoiceIds = [
+        ...new Set([payment.invoice_id, ...((allocs ?? []).map((a: { invoice_id: string }) => a.invoice_id))].filter(Boolean)),
+      ] as string[];
+      if (invoiceIds.length > 0) {
+        await db.from("crm_invoices").update({ open_dispute_payment_id: payment.id }).in("id", invoiceIds).is("deleted_at", null);
+      }
+    } else {
+      await db.from("crm_invoices").update({ open_dispute_payment_id: null }).eq("open_dispute_payment_id", payment.id);
+    }
+  } catch (err) {
+    log.error("failed to update the invoice dispute flag", { error: err, paymentId: payment.id, disputeId: dispute.id });
+  }
+
   const amount = `$${(dispute.amount / 100).toFixed(2)}`;
 
   if (eventType === "charge.dispute.funds_withdrawn") {

@@ -63,7 +63,7 @@ export async function POST(
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
-    .select("id, org_id, client_id, balance_cents, status")
+    .select("id, org_id, client_id, balance_cents, status, open_dispute_payment_id")
     .eq("id", shareToken.invoice_id)
     .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
@@ -79,6 +79,9 @@ export async function POST(
   }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
+  }
+  if (invoice.open_dispute_payment_id) {
+    return NextResponse.json({ error: "This invoice can't be paid online right now. Please contact us." }, { status: 409 });
   }
   // Settle with any credit/deposit already on the account first (service role:
   // the token holder has no session) so the card only pays what is still owed.

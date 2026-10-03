@@ -129,6 +129,8 @@ export interface CRMInvoice {
   pendingPaymentCents?: number | null;
   pendingPaymentMethod?: "card" | "us_bank_account" | null;
   pendingPaymentAt?: string | null;
+  /** Set while a chargeback is open on a payment applied to this invoice; keeps it out of the charge queues. */
+  openDisputePaymentId?: string | null;
   salesRepName?: string | null;
   clientInvoiceDelivery?: 'email' | 'print' | 'both';
   lineItems?: InvoiceLineItem[];

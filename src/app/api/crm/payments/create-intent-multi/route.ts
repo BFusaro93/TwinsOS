@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   const invoiceIds = allocations.map((a) => a.invoiceId);
   const { data: invoices } = await supabase
     .from("crm_invoices")
-    .select("id, balance_cents, status")
+    .select("id, balance_cents, status, open_dispute_payment_id")
     .in("id", invoiceIds)
     .eq("client_id", clientId)
     .eq("org_id", profile.org_id)
@@ -74,6 +74,12 @@ export async function POST(request: Request) {
   }
   if (invoices.some((i) => i.status === "draft" || i.status === "void")) {
     return NextResponse.json({ error: "Draft and voided invoices can't be paid — remove them from this payment" }, { status: 400 });
+  }
+  if (invoices.some((i) => i.open_dispute_payment_id)) {
+    return NextResponse.json(
+      { error: "One or more selected invoices have a payment dispute open — remove them from this charge until the chargeback is resolved" },
+      { status: 409 }
+    );
   }
   const balanceByInvoice = new Map(invoices.map((i) => [i.id, i.balance_cents]));
   for (const a of allocations) {

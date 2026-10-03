@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
-    .select("id, org_id, client_id, invoice_number, balance_cents, status")
+    .select("id, org_id, client_id, invoice_number, balance_cents, status, open_dispute_payment_id")
     .eq("id", invoiceId)
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
@@ -60,6 +60,9 @@ export async function POST(request: Request) {
   }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
+  }
+  if (invoice.open_dispute_payment_id) {
+    return NextResponse.json({ error: "This invoice can't be paid online right now. Please contact us." }, { status: 409 });
   }
   // Settle with any credit/deposit already on the account first so the card
   // only pays what is still owed. Service role: portal customers have no
