@@ -1,5 +1,7 @@
 "use client";
 
+import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
+import { inDateRange } from "@/lib/utils/column-filters";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -212,7 +214,7 @@ export function EstimatesList({ clientId }: Props) {
           case "description": return (e.description ?? "").toLowerCase().includes(fv);
           case "client":      return (e.clientName ?? "").toLowerCase().includes(fv);
           case "stage":       return e.stage.toLowerCase().includes(fv);
-          case "date":        return (e.estimateDate ?? "").includes(fv);
+          case "date":        return inDateRange(e.estimateDate, filterValue);
           case "sales_rep":   return (e.salesRepName ?? "").toLowerCase().includes(fv);
           default:            return true;
         }
@@ -390,13 +392,17 @@ export function EstimatesList({ clientId }: Props) {
           ))}
           {activeFilterKey && (
             <>
-              <Input
-                autoFocus
-                value={filterValue}
-                onChange={(e) => setFilterValue(e.target.value)}
-                placeholder={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}…`}
-                className="ml-2 h-6 w-48 text-xs"
-              />
+              {activeFilterKey === "date" ? (
+                <DateRangeFilter value={filterValue} onChange={setFilterValue} label="Estimate date" />
+              ) : (
+                <Input
+                  autoFocus
+                  value={filterValue}
+                  onChange={(e) => setFilterValue(e.target.value)}
+                  placeholder={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}…`}
+                  className="ml-2 h-6 w-48 text-xs"
+                />
+              )}
               <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>

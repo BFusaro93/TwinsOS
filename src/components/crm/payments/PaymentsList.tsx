@@ -1,5 +1,7 @@
 "use client";
 
+import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
+import { inDateRange } from "@/lib/utils/column-filters";
 import { useState, useMemo, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -951,7 +953,9 @@ function FilterBar({
           {f.label}
         </button>
       ))}
-      {activeFilter && (
+      {activeFilter === "date" ? (
+        <DateRangeFilter value={filterValue} onChange={onFilterValue} label="Payment date" />
+      ) : activeFilter && (
         <Input
           className="ml-2 h-6 w-48 text-xs"
           placeholder={`Filter by ${fields.find((f) => f.key === activeFilter)?.label}…`}
@@ -1018,7 +1022,7 @@ export function PaymentsList({ clientId }: Props) {
       list = list.filter((p) => {
         switch (activeFilter) {
           case "reference": return (p.reference ?? "").toLowerCase().includes(v);
-          case "date": return p.paymentDate.includes(v);
+          case "date": return inDateRange(p.paymentDate, filterValue);
           case "client": return (p.clientName ?? "").toLowerCase().includes(v);
           case "address": return (p.clientAddress ?? "").toLowerCase().includes(v);
           case "method": return p.method.toLowerCase().includes(v);

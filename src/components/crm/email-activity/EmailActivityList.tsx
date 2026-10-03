@@ -1,5 +1,9 @@
 "use client";
 
+import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
+import { inDateRange } from "@/lib/utils/column-filters";
+import { isoInZone } from "@/lib/time/zone";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useMemo, useState } from "react";
 import { Mail, X, ChevronDown, RotateCcw, Send } from "lucide-react";
 import { useQuery } from "@/lib/hooks/use-query";
@@ -134,6 +138,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 export function EmailActivityList() {
   const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: emails = [] as EmailActivity[], isLoading, refetch } = useEmailActivity();
+  const orgTimeZone = useOrgTimeZone();
   const [search, setSearch] = useState("");
   const [activeColumnFilter, setActiveColumnFilter] = useState<ColumnFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
@@ -165,7 +170,8 @@ export function EmailActivityList() {
       const fv = filterValue.toLowerCase();
       list = list.filter((e: EmailActivity) => {
         switch (activeColumnFilter) {
-          case "date":     return e.occurredAt.includes(fv);
+          // Compare the day in the company's timezone, not the UTC day of the timestamp.
+          case "date":     return inDateRange(isoInZone(new Date(e.occurredAt), orgTimeZone), filterValue);
           case "subject":  return (e.subject ?? "").toLowerCase().includes(fv);
           case "client":   return e.clientName.toLowerCase().includes(fv);
           case "sent_to":  return (e.sentTo ?? "").toLowerCase().includes(fv);
@@ -186,7 +192,7 @@ export function EmailActivityList() {
     }
 
     return list;
-  }, [emails, quickFilter, activeColumnFilter, filterValue, search]);
+  }, [emails, quickFilter, activeColumnFilter, filterValue, search, orgTimeZone]);
 
   const allSelected = filtered.length > 0 && filtered.every((e: EmailActivity) => selectedIds.has(e.id));
   const someSelected = selectedIds.size > 0;
@@ -309,13 +315,17 @@ export function EmailActivityList() {
           ))}
           {activeColumnFilter && (
             <>
-              <Input
-                autoFocus
-                value={filterValue}
-                onChange={(e) => setFilterValue(e.target.value)}
-                placeholder={`Filter by ${COLUMN_FILTERS.find((f) => f.key === activeColumnFilter)?.label}…`}
-                className="ml-2 h-6 w-48 text-xs"
-              />
+              {activeColumnFilter === "date" ? (
+                <DateRangeFilter value={filterValue} onChange={setFilterValue} label="Date sent" />
+              ) : (
+                <Input
+                  autoFocus
+                  value={filterValue}
+                  onChange={(e) => setFilterValue(e.target.value)}
+                  placeholder={`Filter by ${COLUMN_FILTERS.find((f) => f.key === activeColumnFilter)?.label}…`}
+                  className="ml-2 h-6 w-48 text-xs"
+                />
+              )}
               <button
                 onClick={() => { setActiveColumnFilter(null); setFilterValue(""); }}
                 className="text-slate-400 hover:text-slate-600"
