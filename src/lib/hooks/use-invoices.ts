@@ -236,7 +236,7 @@ export function useInvoices(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
         .is("deleted_at", null)
         // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
         // Without a tiebreaker Postgres returns tied rows in physical heap
