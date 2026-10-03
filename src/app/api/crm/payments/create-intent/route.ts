@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
-    .select("id, org_id, client_id, invoice_number, balance_cents, status")
+    .select("id, org_id, client_id, invoice_number, balance_cents, status, open_dispute_payment_id")
     .eq("id", invoiceId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
@@ -61,6 +61,12 @@ export async function POST(request: Request) {
   }
   if (invoice.balance_cents <= 0) {
     return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
+  }
+  if (invoice.open_dispute_payment_id) {
+    return NextResponse.json(
+      { error: "This invoice has a payment dispute open. Resolve the chargeback before charging it again." },
+      { status: 409 }
+    );
   }
   // Apply the client's existing deposit/credit first so they aren't charged
   // for money they've already paid.

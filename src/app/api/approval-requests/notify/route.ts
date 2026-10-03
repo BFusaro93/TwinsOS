@@ -102,7 +102,7 @@ export async function POST(request: Request) {
   // 3. Fetch pending approval requests for this entity
   const { data: requests, error: reqErr } = await adminClient
     .from("approval_requests")
-    .select("id, approver_id, approver_name, order")
+    .select("id, approver_id, approver_name, order, last_notified_at")
     .eq("entity_id", entityId)
     .eq("org_id", callerProfile.org_id)
     .eq("archived", false)
@@ -120,7 +120,18 @@ export async function POST(request: Request) {
   // emailing them immediately is both premature and confusing: they'd get an
   // actionable-looking email for something the app then refuses to let them do.
   const activeOrder = requests[0].order;
-  const activeRequests = requests.filter((r) => r.order === activeOrder);
+  // One re-send per approver per 10 minutes: the first submit has no
+  // last_notified_at; any later call within the window is a no-op so the route
+  // can't be used to re-spam an approver.
+  const NOTIFY_COOLDOWN_MS = 10 * 60 * 1000;
+  const activeRequests = requests.filter(
+    (r) =>
+      r.order === activeOrder &&
+      (!r.last_notified_at || Date.now() - new Date(r.last_notified_at).getTime() > NOTIFY_COOLDOWN_MS)
+  );
+  if (activeRequests.length === 0) {
+    return NextResponse.json({ success: true, sent: 0, reason: "recently notified" });
+  }
 
   // 4. Fetch approver emails from profiles
   const approverIds = [...new Set(activeRequests.map((r) => r.approver_id))];
@@ -192,6 +203,10 @@ export async function POST(request: Request) {
       `,
     });
     sent++;
+    await adminClient
+      .from("approval_requests")
+      .update({ last_notified_at: new Date().toISOString() })
+      .eq("id", req.id);
   }
 
   return NextResponse.json({ success: true, sent });

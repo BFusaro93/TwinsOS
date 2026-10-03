@@ -203,6 +203,7 @@ export function mapInvoice(row: any): CRMInvoice {
     pendingPaymentCents: row.pending_payment_cents ?? null,
     pendingPaymentMethod: row.pending_payment_method ?? null,
     pendingPaymentAt: row.pending_payment_at ?? null,
+    openDisputePaymentId: row.open_dispute_payment_id ?? null,
     salesRepName: row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null : null,
     clientInvoiceDelivery: row.clients?.invoice_delivery ?? "email",
     lineItems: (row.crm_invoice_line_items ?? []).map(mapLineItem),

@@ -163,6 +163,8 @@ function isChargeableBy(i: CRMInvoice, method: "card" | "us_bank_account") {
     i.status !== "draft" &&
     i.status !== "void" &&
     i.balanceCents > 0 &&
+    // A chargeback is open: if it's won the funds come back, so re-charging now would collect twice.
+    !i.openDisputePaymentId &&
     i.clientSavedPaymentMethodType === method &&
     i.clientAutopayEnabled !== false
   );

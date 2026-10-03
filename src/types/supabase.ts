@@ -257,6 +257,7 @@ export type Database = {
           org_id: string
           status: string
           updated_at: string
+          last_notified_at: string | null
         }
         Insert: {
           approver_id?: string | null
@@ -275,6 +276,7 @@ export type Database = {
           org_id?: string
           status?: string
           updated_at?: string
+          last_notified_at?: string | null
         }
         Update: {
           approver_id?: string | null
@@ -293,6 +295,7 @@ export type Database = {
           org_id?: string
           status?: string
           updated_at?: string
+          last_notified_at?: string | null
         }
         Relationships: [
           {
@@ -4743,6 +4746,7 @@ export type Database = {
           terms: string | null
           total_cents: number
           updated_at: string
+          open_dispute_payment_id: string | null
         }
         Insert: {
           amount_paid_cents?: number
@@ -4787,6 +4791,7 @@ export type Database = {
           terms?: string | null
           total_cents?: number
           updated_at?: string
+          open_dispute_payment_id?: string | null
         }
         Update: {
           amount_paid_cents?: number
@@ -4831,6 +4836,7 @@ export type Database = {
           terms?: string | null
           total_cents?: number
           updated_at?: string
+          open_dispute_payment_id?: string | null
         }
         Relationships: [
           {
