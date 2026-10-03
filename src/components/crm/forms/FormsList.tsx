@@ -208,7 +208,7 @@ export function FormsList() {
       const fv = colFilterValue.toLowerCase();
       list = list.filter((f) => {
         if (activeColFilter === "name")   return f.name.toLowerCase().includes(fv);
-        if (activeColFilter === "status") return f.status.toLowerCase().includes(fv);
+        if (activeColFilter === "status") return f.status === colFilterValue;
         return true;
       });
     }
@@ -284,13 +284,27 @@ export function FormsList() {
           ))}
           {activeColFilter && (
             <>
-              <Input
-                autoFocus
-                value={colFilterValue}
-                onChange={(e) => setColFilterValue(e.target.value)}
-                placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
-                className="ml-2 h-6 w-48 text-xs"
-              />
+              {activeColFilter === "status" ? (
+                <select
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  aria-label="Filter by Status"
+                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
+                >
+                  <option value="">Select…</option>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                </select>
+              ) : (
+                <Input
+                  autoFocus
+                  value={colFilterValue}
+                  onChange={(e) => setColFilterValue(e.target.value)}
+                  placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
+                  className="ml-2 h-6 w-48 text-xs"
+                />
+              )}
               <button onClick={() => { setActiveColFilter(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
