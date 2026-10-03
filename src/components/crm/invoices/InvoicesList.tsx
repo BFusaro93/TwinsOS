@@ -71,6 +71,7 @@ const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "total",       label: "Total" },
   { key: "balance",     label: "Balance" },
   { key: "accountBalance", label: "Account Balance" },
+  { key: "prepay",      label: "Prepay" },
   { key: "paymentType", label: "Payment Type" },
   { key: "delivery",    label: "Sent / Printed" },
   { key: "frequency",   label: "Frequency" },
@@ -402,6 +403,7 @@ export function InvoicesList({ clientId }: Props) {
         case "due":     av = a.dueDate ?? "9999-99-99"; bv = b.dueDate ?? "9999-99-99"; break;
         case "total":   av = a.totalCents; bv = b.totalCents; break;
         case "balance": av = a.balanceCents; bv = b.balanceCents; break;
+        case "prepay": av = a.clientPrepayCents ?? 0; bv = b.clientPrepayCents ?? 0; break;
         case "accountBalance": av = accountBalanceByClient.get(a.clientId) ?? 0; bv = accountBalanceByClient.get(b.clientId) ?? 0; break;
         case "status":  av = effectiveStatus(a); bv = effectiveStatus(b); break;
         case "paymentType": av = paymentTypeLabel(a).toLowerCase(); bv = paymentTypeLabel(b).toLowerCase(); break;
@@ -947,8 +949,8 @@ export function InvoicesList({ clientId }: Props) {
                 />
               </th>
               {visibleColumns.map((col) => {
-                const sortable = ["number","status","client","date","due","total","balance","accountBalance","paymentType","delivery","frequency"].includes(col.key);
-                const isRight = col.key === "total" || col.key === "balance" || col.key === "accountBalance";
+                const sortable = ["number","status","client","date","due","total","balance","accountBalance","prepay","paymentType","delivery","frequency"].includes(col.key);
+                const isRight = col.key === "total" || col.key === "balance" || col.key === "accountBalance" || col.key === "prepay";
                 return (
                   <th
                     key={col.key}
@@ -1073,6 +1075,14 @@ export function InvoicesList({ clientId }: Props) {
                         return (
                           <td key={col.key} className={cn("px-4 py-3 text-right font-medium", acct > 0 ? "text-red-600" : acct < 0 ? "text-green-600" : "text-slate-500")}>
                             {acct < 0 ? "−" : ""}{formatCurrency(Math.abs(acct))}
+                          </td>
+                        );
+                      }
+                      case "prepay": {
+                        const prepay = inv.clientPrepayCents ?? 0;
+                        return (
+                          <td key={col.key} className={cn("px-4 py-3 text-right font-medium", prepay > 0 ? "text-blue-600" : "text-slate-400")}>
+                            {formatCurrency(prepay)}
                           </td>
                         );
                       }
