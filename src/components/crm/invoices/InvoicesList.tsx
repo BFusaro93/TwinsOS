@@ -1065,10 +1065,10 @@ export function InvoicesList({ clientId }: Props) {
                         );
                       }
                       case "date":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">{formatDate(inv.invoiceDate)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-slate-500">{formatDate(inv.invoiceDate)}</td>;
                       case "due":
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs", isOverdue(inv) ? "text-red-600 font-medium" : "text-slate-500")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs", isOverdue(inv) ? "text-red-600 font-medium" : "text-slate-500")}>
                             {inv.dueDate
                               ? formatDate(inv.dueDate)
                               : inv.terms === "due_on_receipt" && inv.invoiceDate
