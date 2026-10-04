@@ -544,10 +544,11 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     label: "Accident Free Workdays",
     unit: "days",
     category: "people",
-    auto: false,
+    auto: true,
+    snapshot: true,
     legacy: true,
     defaultTarget: 100,
-    source: "Not tracked — workplace incidents are not logged in Landscapt (property Damage Cases are, see “Days Since Last Damage Case”).",
+    source: "Injury Cases: Monday–Friday workdays since the most recent injury incident date, as of today.",
   },
   {
     key: "absenteeism_rate",
