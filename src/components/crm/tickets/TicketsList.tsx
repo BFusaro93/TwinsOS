@@ -654,7 +654,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   }
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full flex-col gap-4 overflow-y-auto lg:overflow-visible">
       {/* Page header */}
       <PageHeader
         title={title}
@@ -701,7 +701,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       />
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid shrink-0 grid-cols-5 gap-1.5 sm:gap-3">
         {(typeFilter === "call"
           ? [
               { label: "Total Calls",  value: stats.typeTotal,  color: "text-slate-900" },
@@ -718,9 +718,9 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               { label: "Closed",  value: stats.closed,  color: "text-green-600" },
             ]
         ).map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
-            <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
+          <div key={s.label} className="rounded-lg border bg-white px-1 py-2 shadow-sm text-center sm:p-4">
+            <p className="truncate text-[9px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[10px] sm:tracking-widest">{s.label}</p>
+            <p className={`mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -899,7 +899,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="shrink-0 overflow-x-auto bg-white lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">

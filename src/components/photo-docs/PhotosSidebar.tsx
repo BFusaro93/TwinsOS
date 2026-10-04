@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
-import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList } from "lucide-react";
+import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList, ShieldAlert, HeartPulse } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface PhotoNavItem {
@@ -26,6 +26,8 @@ export const FIELD_NAV: PhotoNavItem[] = [
   { label: "Morning Checklist",  href: "/photos/field/crew-checklist",  icon: ClipboardList, internalOnly: true },
   { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays,  internalOnly: true },
   { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench },
+  { label: "Damage Report",      href: "/photos/field/damage-report",   icon: ShieldAlert },
+  { label: "Injury Report",      href: "/photos/field/injury-report",   icon: HeartPulse },
 ];
 
 // Roles with access to the PO/Projects side (Projects nav item)

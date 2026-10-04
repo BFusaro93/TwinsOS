@@ -8,6 +8,7 @@ export type CommentRecordType =
   | "work_order"
   | "job_photo"
   | "damage_case"
+  | "injury_case"
   | "ticket"
   | "crm_estimate";
 

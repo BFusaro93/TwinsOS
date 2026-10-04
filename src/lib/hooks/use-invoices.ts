@@ -282,7 +282,7 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(*), crm_payments(*, clients(display_name))")
+        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(*), crm_payments!crm_payments_invoice_id_fkey(*, clients(display_name))")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -1586,8 +1586,8 @@ export function usePayments(clientId?: string, opts?: { projectId?: string | nul
       // unapplied payments (invoice_id null) from the unfiltered list, which
       // is exactly where they need to show up.
       const invoiceJoin = projectId
-        ? "crm_invoices!inner(invoice_number, project_id)"
-        : "crm_invoices(invoice_number, project_id)";
+        ? "crm_invoices!crm_payments_invoice_id_fkey!inner(invoice_number, project_id)"
+        : "crm_invoices!crm_payments_invoice_id_fkey(invoice_number, project_id)";
       // Builders are mutable, so each page gets its own.
       const buildQuery = () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1636,7 +1636,7 @@ export function usePayment(id: string | undefined) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_payments")
-        .select("*, clients(display_name, billing_address), crm_invoices(invoice_number)")
+        .select("*, clients(display_name, billing_address), crm_invoices!crm_payments_invoice_id_fkey(invoice_number)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();

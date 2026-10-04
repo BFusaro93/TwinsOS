@@ -43,7 +43,7 @@ export async function buildAccountStatementData(
   // to drop them (payments with no invoice, e.g. unapplied credits, stay).
   const { rows: rawPaymentRows, error: paymentErr } = await selectAllRows<Record<string, unknown>>(() => supabase
     .from("crm_payments")
-    .select("id, payment_date, amount_cents, refunded_amount_cents, method, reference, is_credit, invoice_id, crm_invoices(invoice_number, status, deleted_at)")
+    .select("id, payment_date, amount_cents, refunded_amount_cents, method, reference, is_credit, invoice_id, crm_invoices!crm_payments_invoice_id_fkey(invoice_number, status, deleted_at)")
     .eq("client_id", clientId)
     .is("deleted_at", null)
     .lte("payment_date", toDate));

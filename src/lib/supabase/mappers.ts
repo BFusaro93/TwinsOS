@@ -874,3 +874,28 @@ export function mapDamageCaseExpense(row: Record<string, any>): import("@/types"
     purchaseOrderId: row.purchase_order_id ?? null,
   };
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapInjuryCase(row: Record<string, any>): import("@/types").InjuryCase {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    caseNumber: row.case_number,
+    status: row.status,
+    severity: row.severity,
+    employeeName: row.employee_name,
+    dateOfIncident: row.date_of_incident,
+    location: row.location ?? null,
+    injuryType: row.injury_type ?? null,
+    bodyPart: row.body_part ?? null,
+    description: row.description,
+    treatment: row.treatment ?? null,
+    daysAway: row.days_away ?? 0,
+    recordable: row.recordable ?? false,
+    resolutionNotes: row.resolution_notes ?? null,
+  };
+}

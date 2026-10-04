@@ -203,3 +203,31 @@ export const BILLING_TERMS_OPTIONS = [
   { value: "net_60", label: "Net 60" },
   { value: "net_90", label: "Net 90" },
 ];
+
+// ─── Injury Cases ─────────────────────────────────────────────────────────────
+
+export const INJURY_CASE_STATUS_LABELS: Record<string, string> = {
+  open: "Open",
+  in_progress: "In Progress",
+  resolved: "Resolved",
+  closed: "Closed",
+};
+
+export const INJURY_SEVERITY_LABELS: Record<string, string> = {
+  first_aid: "First Aid",
+  medical_treatment: "Medical Treatment",
+  lost_time: "Lost Time",
+};
+
+export const INJURY_TYPE_OPTIONS = [
+  "Strain / Sprain",
+  "Cut / Laceration",
+  "Bruise / Contusion",
+  "Fracture",
+  "Burn",
+  "Eye injury",
+  "Heat illness",
+  "Insect / Animal bite",
+  "Chemical exposure",
+  "Other",
+];
