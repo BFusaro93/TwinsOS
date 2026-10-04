@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Calculator, PenLine, DollarSign, ShieldAlert, Snowflake } from "lucide-react";
+import { ArrowLeft, Calculator, PenLine, DollarSign, ShieldAlert, HeartPulse, Snowflake } from "lucide-react";
 import { BrandMark } from "./BrandMark";
 import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
@@ -23,6 +23,7 @@ export const TOOLS_NAV: ToolsNavItem[] = [
   { label: "Estimate Builder",  href: "/tools/estimate-builder", icon: PenLine,      description: "Generate estimate text & language",  hideFromCrew: true },
   { label: "Job Costing",       href: "/tools/job-costing",      icon: DollarSign,   description: "Track per-job material costs",        hideFromCrew: true },
   { label: "Damage Cases",      href: "/tools/damage-cases",     icon: ShieldAlert,  description: "Track property damage & warranty",    hideFromCrew: true },
+  { label: "Injury Cases",      href: "/tools/injury-cases",     icon: HeartPulse,   description: "Track employee injuries & safety",    hideFromCrew: true },
   { label: "Calculators",       href: "/tools/calculators",      icon: Calculator,   description: "Material quantity calculators" },
   { label: "Snow Pricing Calculator", href: "/tools/snow-calculator", icon: Snowflake, description: "Season & per-storm snow pricing", internalOnly: true },
 ];

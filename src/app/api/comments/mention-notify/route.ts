@@ -12,7 +12,7 @@ import { notifyMentions } from "@/lib/comment-mention-notify";
  */
 const RECORD_TYPES = new Set([
   "requisition", "po", "receiving", "project", "work_order",
-  "job_photo", "damage_case", "ticket", "crm_estimate",
+  "job_photo", "damage_case", "ticket", "crm_estimate", "injury_case",
 ]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -11,3 +11,4 @@ export * from "./attachment";
 export * from "./audit";
 export * from "./approval";
 export * from "./damage-case";
+export * from "./injury-case";

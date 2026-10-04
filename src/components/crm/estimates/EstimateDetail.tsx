@@ -1064,13 +1064,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       )}
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
-      <div className="flex gap-0 border-b bg-white px-6">
+      <div className="flex gap-0 overflow-x-auto border-b bg-white px-4 md:px-6">
         {(["details", "payment", "display", "notes", "photos", "attachments", "comments", "audit", "versions"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
             className={cn(
-              "px-4 py-2 text-sm capitalize transition-colors border-b-2",
+              "shrink-0 whitespace-nowrap px-4 py-2 text-sm capitalize transition-colors border-b-2",
               activeTab === t
                 ? "border-brand-500 text-brand-600 font-medium"
                 : "border-transparent text-slate-500 hover:text-slate-800"

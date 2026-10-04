@@ -13,6 +13,7 @@ export type AttachmentRecordType =
   | "estimate"
   | "ticket"
   | "damage_case"
+  | "injury_case"
   | "contract"
   | "job";
 

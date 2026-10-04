@@ -922,8 +922,8 @@ export function InvoiceDetail({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Top action bar */}
-      <div className="flex items-center justify-between border-b bg-white px-8 py-3 shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b bg-white px-4 py-3 shadow-sm md:px-8">
+        <div className="flex flex-wrap items-center gap-3">
           <div>
             <h1 className="text-base font-semibold text-slate-900">
               {invoice.invoiceNumber != null ? `Invoice #${invoice.invoiceNumber}` : "Draft Invoice"}
@@ -944,7 +944,7 @@ export function InvoiceDetail({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onDiscard && invoice.invoiceNumber == null && (
             <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-red-600"
               onClick={handleDiscard}>
@@ -1066,13 +1066,13 @@ export function InvoiceDetail({
       </Dialog>
 
       {/* Tabs */}
-      <div className="flex border-b bg-white px-8">
+      <div className="flex overflow-x-auto border-b bg-white px-4 md:px-8">
         {(["invoice", "photos", "audit"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={cn(
-              "border-b-2 px-4 py-2.5 text-xs font-medium capitalize transition-colors",
+              "shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-medium capitalize transition-colors",
               activeTab === tab
                 ? "border-brand-500 text-brand-700"
                 : "border-transparent text-slate-500 hover:text-slate-800"
@@ -1084,7 +1084,7 @@ export function InvoiceDetail({
       </div>
 
       {activeTab === "photos" ? (
-        <div className="flex-1 overflow-auto bg-white px-8 py-5">
+        <div className="flex-1 overflow-auto bg-white px-4 py-5 md:px-8">
           <InvoicePhotosPanel invoiceId={invoice.id} canEdit={can("acct_add_modify_invoices") || can("acct_send_invoices")} />
         </div>
       ) : activeTab === "audit" ? (
@@ -1094,7 +1094,7 @@ export function InvoiceDetail({
       ) : (
         <div className="flex-1 overflow-auto bg-slate-50">
           {/* Green title bar */}
-          <div className="bg-brand-500 px-8 py-3 flex items-center gap-3">
+          <div className="bg-brand-500 px-4 py-3 md:px-8 flex items-center gap-3">
             <span className="text-white text-sm font-semibold">
               Invoice #
               <InlineEdit
@@ -1131,7 +1131,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Header — two-column boxed layout */}
-          <div className="px-8 py-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="px-4 py-5 md:px-8 grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Left: Bill To + Service Address */}
             <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bill To</p>
