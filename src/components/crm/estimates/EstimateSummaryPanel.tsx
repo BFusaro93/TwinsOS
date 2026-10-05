@@ -129,8 +129,12 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     // The HTML min="0" on these inputs is only a hint, not an enforced
     // constraint — a user can still type a negative value directly, so floor
     // it here before it ever reaches recalcEstimateTotals.
-    const taxRateBps      = Math.max(0, Math.round((parseFloat(taxRateStr) || 0) * 100));
-    const overheadRateBps = Math.max(0, Math.round((parseFloat(overheadRateStr) || 0) * 100));
+    // Rates are percentages: 0–100%. Anything outside is a typo that would
+    // multiply straight through the totals.
+    const taxRateBps      = Math.min(10000, Math.max(0, Math.round((parseFloat(taxRateStr) || 0) * 100)));
+    const overheadRateBps = Math.min(10000, Math.max(0, Math.round((parseFloat(overheadRateStr) || 0) * 100)));
+    setTaxRateStr((taxRateBps / 100).toFixed(2));
+    setOverheadRateStr((overheadRateBps / 100).toFixed(2));
     const discountCents   = Math.max(0, Math.round((parseFloat(discountOverrideStr ?? discountStr) || 0) * 100));
     await onRecalculate({
       taxRateBps,

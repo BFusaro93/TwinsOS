@@ -1342,7 +1342,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                                   ? Math.round((headerEdits.probability_bps as number) / 100)
                                   : Math.round(estimate.probabilityBps / 100)
                               }
-                              onChange={(e) => patchHeader("probability_bps", Math.round(Number(e.target.value) * 100))}
+                              onChange={(e) => patchHeader("probability_bps", Math.min(10000, Math.max(0, Math.round(Number(e.target.value) * 100))))}
                               onBlur={() => saveHeader()}
                               className="h-8 w-20"
                             />
