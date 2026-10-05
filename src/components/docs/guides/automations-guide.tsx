@@ -305,6 +305,20 @@ export function AutomationsGuide() {
 
       <Section id="faq" title="FAQ">
         <p>
+          <strong>What happens when a client clicks Unsubscribe in a marketing email?</strong> The
+          link opens a confirmation page showing your company name; nothing changes until they press
+          the <strong>Unsubscribe</strong> button on it (this stops mail scanners that pre-open links
+          from unsubscribing people by accident). Once confirmed, the client is marked Do Not Market,
+          a note is added to their Activity timeline, and the campaign&apos;s unsubscribed count
+          goes up. Marketing emails also carry the one-click unsubscribe header that Gmail and Apple
+          Mail show as their own Unsubscribe button.
+        </p>
+        <p>
+          <strong>I approved an automation email and it was refused. Why?</strong> The client&apos;s
+          status is re-checked at the moment you approve. If they unsubscribed or their email address
+          bounced while the step was waiting, the approval is blocked — reject the step instead.
+        </p>
+        <p>
           <strong>Can an automation email send itself before anyone reviews it?</strong> Only if
           &quot;Require approval before sending&quot; is off for that email event. Turn it on to hold the
           email for manual approval before it sends — useful when you&apos;re not fully confident in a

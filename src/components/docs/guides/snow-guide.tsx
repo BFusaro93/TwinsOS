@@ -143,6 +143,10 @@ export function SnowGuide() {
           crew. The card you picked up is outlined and every crew you can drop it on is highlighted.
         </Callout>
         <p>
+          The snow dispatch board fits phone widths too: the toolbar scrolls sideways and the
+          controls get bigger tap targets below desktop width, so you can dispatch from a truck.
+        </p>
+        <p>
           <strong>Snowfall depth is not pulled from a weather feed — it&apos;s recorded manually,
           per visit, when the crew&apos;s work is closed out.</strong> Select one or more completed
           visits and click <strong>Close Out…</strong> to enter the actual depth (in), temperature,
@@ -196,6 +200,15 @@ export function SnowGuide() {
           push), or an hourly rate times actual hours logged. Only completed, non-contract snow
           visits that don&apos;t already have an invoice line item appear in the queue, so
           generating invoices twice never double-bills.
+        </p>
+        <p>
+          <strong>Possibly already billed.</strong> An invoice made by hand for a snow push has no
+          link back to the visit, so the visit would stay in the queue. When a queued visit&apos;s
+          job already has a non-void invoice line for the same service date, the row shows an
+          amber <strong>Possibly billed on invoice #N</strong> tag (or &ldquo;a draft invoice&rdquo;
+          if that invoice has no number yet). If you generate with any of those visits selected,
+          you&apos;re asked to confirm &mdash; <strong>Bill anyway</strong> bills it again, or
+          cancel and check that invoice first.
         </p>
         <Table>
           <thead>

@@ -9,12 +9,12 @@ import {
 } from "@/components/docs/DocsBrand";
 
 const NAV_TABS: [string, string, string][] = [
-  ["Home", "/portal", "Balance-due summary, an in-progress-visit banner, upcoming visits (next 3), and open estimates (up to 3). Always shown."],
+  ["Home", "/portal", "A greeting with the balance due (or an all-caught-up message), the next visit, credits on account, upcoming visits, open estimates, recent invoices, and completed-visit history, plus quick actions (Pay balance, My schedule, Request service, Estimates). Always shown."],
   ["Billing", "/portal/billing", "Every invoice, split into Outstanding and History, with Pay and PDF-download actions. Always shown."],
   ["Services", "/portal/services", "Upcoming and completed job visits, with a live in-progress banner. Always shown."],
   ["Estimates", "/portal/estimates", "Open and past estimates, with Accept / Decline / Request Changes on open ones. Hidden if the org turns off “Show Estimates.”"],
-  ["Tickets", "/portal/tickets", "The client’s support tickets, plus a New Ticket form. Hidden if the org turns off “Allow Tickets.”"],
-  ["Documents", "/portal/documents", "A shared document library (same files for every client of that org), grouped by category. Hidden if the org turns off “Document Library.”"],
+  ["Tickets", "/portal/tickets", "Tickets the client submitted from the portal, plus any ticket staff chose to share with them, and a New Ticket form. Hidden if the org turns off “Allow Tickets.”"],
+  ["Documents", "/portal/documents", "A shared document library (same files for every client of that org), grouped by category, with separate View (opens in a tab, for files a browser can display) and Download buttons. Hidden if the org turns off “Document Library.”"],
   ["Account", "/portal/account", "Contact info, billing address, saved payment method, and additional contacts. Always shown."],
 ];
 
@@ -49,6 +49,7 @@ export function ClientPortalGuide() {
           <TOCLink href="#signing-in">Signing in, and multi-company clients</TOCLink>
           <TOCLink href="#nav">What a client sees</TOCLink>
           <TOCLink href="#billing">Billing and online payment</TOCLink>
+          <TOCLink href="#drafts-and-tickets">What stays hidden, and sharing tickets</TOCLink>
           <TOCLink href="#estimates">Reviewing and accepting estimates</TOCLink>
           <TOCLink href="#branding">Branding and portal settings</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
@@ -204,10 +205,39 @@ export function ClientPortalGuide() {
         </p>
       </Section>
 
+      <Section id="drafts-and-tickets" title="What stays hidden, and sharing tickets">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Drafts are never shown.</strong> Draft invoices and unsent estimates don&apos;t
+            appear in the portal, and a draft can&apos;t be paid from it. A fully paid or $0 invoice
+            doesn&apos;t count as outstanding or flag the account as past due.
+          </li>
+          <li>
+            <strong>Real PDFs.</strong> The invoice and estimate PDF buttons in the portal download
+            the same PDF staff and the emailed attachment use.
+          </li>
+          <li>
+            <strong>Sharing a ticket.</strong> Tickets submitted by the client from the portal show
+            there automatically. For a ticket you created, turn on the{" "}
+            <strong>Show in client portal</strong> switch on the ticket (or when creating it) &mdash;
+            it needs a client linked to the ticket. The client sees only the subject, category,
+            status, and description &mdash; never comments, files, or the assignee. Turn the
+            switch off to hide it again.
+          </li>
+          <li>
+            <strong>Visit names.</strong> Visits in the schedule are named by their service rather
+            than a generic job title.
+          </li>
+        </ul>
+      </Section>
+
       <Section id="estimates" title="Reviewing and accepting estimates">
         <p>
           Only estimates the org has sent to that client (stage <code>sent</code>) show up, split into{" "}
-          <strong>Pending Review</strong> and <strong>History</strong>. Three actions are available on an open,
+          <strong>Pending Review</strong> and <strong>History</strong>. The portal shows the{" "}
+          <strong>last sent version</strong> of the estimate &mdash; if staff have edited it since,
+          Accept is refused until it&apos;s sent again. Acceptance is also refused once the
+          estimate&apos;s Valid until date has passed (the client can still request changes). Three actions are available on an open,
           non-expired estimate:
         </p>
         <ul className="list-disc space-y-2 pl-5">

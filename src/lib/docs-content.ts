@@ -686,6 +686,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Go to CRM > Estimates and click '+ New Estimate'. Pick a client (leads are labeled '(lead)' in the picker; inactive or cancelled clients don't appear), set the estimate date and a valid-until date (defaults to 30 days out), and assign a sales rep.",
           },
           {
+            step: "What the client's proposal link shows",
+            detail:
+              "The proposal link (and the client portal) shows the last version you sent — emailing the estimate, or Get link / Copy link / Open, publishes the current estimate as a numbered version. If you keep editing, a banner reads 'Edited since Version N was sent': the client still sees Version N and can't accept until you send again. The page honors the Valid until date through the end of that day; after it, the page reads Expired, acceptance (link or portal) is refused, and the client can still decline or request changes. The page also has a Download PDF button, and Visits, Quantities and Units are separate display toggles. Tax rate, overhead rate and win probability are limited to 0-100%.",
+          },
+          {
             step: "Stage vs. approval status",
             detail:
               "Stage tracks the sales process: Draft → Quote → Sent → Accepted → Lost → Invoiced. Approval Status (Not Required / Pending / Approved / Rejected) is a separate internal sign-off gate that can hold an estimate back from being sent regardless of its stage.",
@@ -940,6 +945,21 @@ export const DOC_SECTIONS: DocSection[] = [
               "Invoices move Draft → Sent → Viewed → Partial → Paid, with Overdue and Void as side states. Payments can be recorded against an invoice with a specific method — Cash, Check, ACH/E-Check, AutoPay, Credit Card by network, AR Write-off, or Other.",
           },
           {
+            step: "Photos on an invoice",
+            detail:
+              "Open the invoice's Photos tab (or 'Photos to include' in the email dialog) to attach up to 12 photos from the invoice's visits and jobs, Job Photos linked to the client or project, or direct uploads. They print on extra PDF pages and show as a gallery on the client's online invoice page. HEIC iPhone photos are converted automatically; only JPEG and PNG print in the PDF, and Print Selected leaves photos out.",
+          },
+          {
+            step: "Invoices list columns and filters",
+            detail:
+              "The Columns menu adds Account Balance, Prepay, Credits, Payment type, Sent / Printed (where a draft is queued, or Sent/Printed once issued) and Frequency (the contract's cadence, or One-time). Filters: Date takes a from/to range, Balance takes At least / At most / Exactly, and Status and Payment type are pick-from-list (Status matches what the column shows, so a past-due Sent invoice is under Overdue). The Payments page has the same Date range filter.",
+          },
+          {
+            step: "Limits, voids and disputes",
+            detail:
+              "Payment amounts must be greater than $0. Discounts can't be negative or exceed the subtotal, and tax rate is limited to 0-100%. An invoice with payments applied can't be voided — hover the greyed-out Void button to see why (refund or unapply first); Charge shows why it's disabled too (for example a bank debit still settling). While a card chargeback is open, the invoice is flagged and drops out of the To Charge queues and can't be charged again until the dispute closes.",
+          },
+          {
             step: "Paying across sub-accounts",
             detail:
               "Recording a payment against a commercial parent with sub-accounts shows open invoices from the parent AND every sub-account, grouped by account — covers a property manager sending one check for several HOAs' invoices at once. A sub-account's own invoice list tags that payment 'via [Parent Name]'.",
@@ -947,7 +967,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Contracts",
             detail:
-              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time), auto-renew, billing day of month, and whether the contract bills a month in advance. Month-by-month amount overrides are supported for seasonal pricing.",
+              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time — honored by the invoicing cron, set through the API since the dialog doesn't expose it), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized. The end date can't be before the start date. Month-by-month amount overrides are supported for seasonal pricing.",
           },
           {
             step: "Sub-properties on one contract",
@@ -1102,6 +1122,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Assign a ticket to a specific user. Notification preferences let that person (and anyone watching) get alerted on assignment and new comments, both by email and in-app.",
           },
           {
+            step: "Show in client portal",
+            detail:
+              "A ticket linked to a client has a 'Show in client portal' switch (also on the New Ticket form), off by default. When on, the client sees the subject, category, status and notes in their portal, never comments, files or the assignee.",
+          },
+          {
             step: "Full guide",
             detail:
               "A deeper walkthrough — the full lifecycle from form submission to close, the real status/priority/type values, and a clear line between Tickets and CMMS Maintenance Requests.",
@@ -1202,6 +1227,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Not read-only: a client can pay invoices via Stripe (card or ACH), and can accept (with e-signature), decline, or request changes on estimates. Up to seven tabs are available — Home, Billing, Services, Estimates, Tickets, Documents, Account — and an org can hide three of them.",
           },
           {
+            step: "What stays hidden, and sharing tickets",
+            detail:
+              "Draft invoices and unsent estimates never appear in the portal and can't be paid from it. Invoice and estimate PDFs are the real PDFs. Tickets the client submits show up automatically; for one you created, turn on 'Show in client portal' on the ticket (it needs a linked client) — the client sees only the subject, category, status and description, never comments, files or the assignee. Documents have separate View and Download buttons. The portal shows the last sent version of an estimate and refuses acceptance after its Valid until date.",
+          },
+          {
             step: "Configuring what's visible",
             detail:
               "Landscapt Settings > Client Portal controls which optional tabs are shown.",
@@ -1277,6 +1307,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Dashboards > Company Report is a live sales/operations/A-R snapshot, always \"as of now\" (YTD from Jan 1, trailing 3 months for the monthly tables). Progress bars on the KPI row read Targets from that org's KPI Scorecard. The flags section is rule-based (fixed dollar/percent thresholds), not AI-generated commentary.",
           },
           {
+            step: "Social Media dashboard",
+            detail:
+              "Dashboards > Social Media tracks your accounts week by week. Someone logs each week's numbers per platform (posts, views, profile views, likes, comments, shares, saves, followers, leads) from each platform's own analytics; the dashboard shows trends, a platform comparison, and this month against editable minimum/stretch goals. Add, hide or reorder platforms from Add / hide platforms (hiding keeps past numbers). Admins and managers can log and edit; give another role the Social Media: Enter & Edit Data permission to let them too. Each dashboard also has its own View permission in the role editor.",
+          },
+          {
             step: "Full guide",
             detail:
               "A deeper walkthrough — a worked example running the Production Rate Accuracy report end to end, and the distinction between curated and custom dashboards.",
@@ -1329,6 +1364,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Multiple eligible approvers on one step",
             detail:
               "If a step is assigned to a role (e.g., any Manager), every user with that role — including the requester, if they hold the role — is listed as an eligible approver for that step. Whoever decides first resolves the step; the other eligible approvers' entries are marked 'Superseded' and no longer actionable.",
+          },
+          {
+            step: "Reordering steps and admin-only steps",
+            detail:
+              "Drag a step by its grip handle to reorder; on a phone or narrow screen use the up/down arrows on each step instead. Managers can approve on behalf of another approver, but never on a step whose required role is admin — only an admin can decide those.",
           },
           {
             step: "Full guide",
@@ -1616,6 +1656,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "There's no rule against it — if you hold the role assigned to that approval step, you're listed as an eligible approver even on your own submission. What usually happens is another eligible approver decided first: when a step allows any user with a role (e.g., any Manager) to approve, the first decision resolves the step and the other eligible approvers' entries are marked 'Superseded'.",
       },
       {
+        q: "Why can't I edit the line items on an ordered requisition or PO?",
+        a: "Once a requisition or PO reaches Ordered (or a later status), only admins can change its line items (managers can't either). Ask an admin to make the change. Editing lines on a Pending Approval or Approved record, by contrast, sends it back through the approval chain for the new total.",
+      },
+      {
+        q: "What do the Parts Spend and Repair Cost reports include?",
+        a: "Reports > Parts Spend totals maintenance-part lines on POs by PO date and excludes canceled and rejected POs; pick Last 6 months, Last 12 months, or All time, and click any stat card to see the lines or POs behind it. Reports > Repair Cost totals the parts, labor and vendor/sub lines on work orders' Costs tabs over the same ranges, with cards that also drill down. The Equipt Dashboard shows Parts Spend MTD with repairs MTD beneath it.",
+      },
+      {
         q: "Why does a line item require a product from the catalog?",
         a: "Free-text item descriptions are not allowed. Every line must reference the Products catalog to ensure consistent naming, GL coding, and reporting. If the item doesn't exist yet, add it to the catalog first in Purchasing > Products.",
       },
@@ -1750,6 +1798,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Snow Invoicing groups a client's uninvoiced storm visits and computes the total from the job's invoice type — a flat rate per storm event, a rate per inch of snowfall, or an hourly rate — rather than itemizing a fixed monthly job the way a regular contract invoice does.",
       },
       {
+        q: "A snow visit shows 'Possibly billed on invoice #N' — what does that mean?",
+        a: "The visit's job already has a non-void invoice line for the same service date that isn't linked to the visit (for example an invoice made by hand), so generating from Snow Invoicing would bill it a second time. Check that invoice first; if you generate anyway you'll be asked to confirm with 'Bill anyway'.",
+      },
+      {
+        q: "Why can't I charge an invoice or void it?",
+        a: "Hover the greyed-out button. Void is blocked while payments are applied (refund or unapply them first). Charge is blocked while a card charge or bank debit is still processing (bank debits take a few business days), and charging is refused while a chargeback on that invoice is open, until the dispute closes.",
+      },
+      {
+        q: "Why does a client's proposal link still show the old price after I edited the estimate?",
+        a: "The link shows the last version you sent. Edit as much as you like, then use Send or Copy link to publish the new version; until then the client sees the previous one and can't accept it. The estimate header shows an 'Edited since Version N was sent' banner when the two differ.",
+      },
+      {
         q: "Can an automation email send itself before anyone reviews it?",
         a: "Only if 'require approval' is off for that email event. Turn it on to hold the email for manual approval before it sends — useful when you're not fully confident in a new automation yet.",
       },
@@ -1765,6 +1825,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I add or remove users from my organization?",
         a: "Go to Settings > Users. Admins can invite new users by email and assign a role (Admin, Manager, Staff, Purchaser, Requestor, or Viewer). Users receive an email invitation and set their own password on first login.",
+      },
+      {
+        q: "What happens if we cancel our subscription?",
+        a: "The account becomes read-only for 90 days: you can still view your data, but saves are blocked, automations pause, and a banner shows the end date with a Resubscribe link (Settings > Subscription). After 90 days the app locks and shows a Resubscribe screen; your data is kept. Resubscribing restores full access and resumes automations.",
       },
       {
         q: "Can I customize which fields are required?",

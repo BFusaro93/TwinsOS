@@ -51,6 +51,7 @@ export function EstimatingGuide() {
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
           <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
           <TOCLink href="#deposits">Taking a deposit on acceptance</TOCLink>
+          <TOCLink href="#estimate-limits">Rate and probability limits</TOCLink>
           <TOCLink href="#converting">Converting an estimate to a job</TOCLink>
         </div>
       </div>
@@ -68,6 +69,8 @@ export function EstimatingGuide() {
           <li>
             Set the <strong>estimate date</strong> and a <strong>valid-until date</strong> &mdash;
             it defaults to 30 days out, but can be pushed further for a bid that needs more runway.
+            The proposal page is honored through the end of that day (in your company&rsquo;s
+            time zone); see &ldquo;Valid until&rdquo; under the proposal link below.
           </li>
           <li>
             Assign a <strong>sales rep</strong>.
@@ -383,6 +386,33 @@ export function EstimatingGuide() {
           same page. A link is good for <strong>30 days</strong>; after it expires (or the client
           accepts through it) the next request creates a new one.
         </p>
+        <p>
+          <strong>The link shows the last version you sent, not your live edits.</strong> Emailing
+          the estimate, or using Get link / Copy link / Open, publishes the estimate as it stands
+          right then as a numbered version, and that is what the client sees and can accept. You
+          can keep editing a sent estimate without the client seeing a half-finished revision. Once
+          you&rsquo;ve edited past it, an amber banner reads &ldquo;Edited since Version N was
+          sent&rdquo; and the client still sees Version N &mdash; and can&rsquo;t accept, with a
+          message that an updated version is coming &mdash; until you send it again (Send, or Copy
+          link). The client portal&rsquo;s Estimates page shows the same last-sent version.
+          The version history lists each send, marks links that were shared by link rather than
+          email (&ldquo;Shared via link&rdquo;), and tags the version that was accepted with who
+          accepted it and whether it was through the proposal link or the portal.
+        </p>
+        <p>
+          <strong>Valid until.</strong> The proposal page shows the Valid until date. Through the
+          end of that day it can be accepted; after it, the page reads &ldquo;Expired,&rdquo; the
+          Accept controls are replaced by a notice, and acceptance (by link or portal) is refused.
+          The client can still decline or use <strong>Request changes</strong> to ask for an
+          updated proposal. Extend the Valid until date and re-send to reopen it.
+        </p>
+        <p>
+          <strong>What the client sees.</strong> The page shows the client&rsquo;s billing address
+          and the service address, has a <strong>Download PDF</strong> button, and a{" "}
+          <strong>Request changes</strong> box. In the estimate&rsquo;s display settings,{" "}
+          <strong>Visits</strong>, <strong>Quantities</strong>, and <strong>Units</strong> are now
+          three separate toggles for what shows on each line, on the page and the PDF.
+        </p>
         <Callout>
           The <strong>Send</strong> dialog&rsquo;s Preview tab renders the real proposal URL behind the
           &ldquo;View Your Proposal&rdquo; button when the estimate already has a live link, so you
@@ -503,6 +533,15 @@ export function EstimatingGuide() {
           <em>somewhere else</em> &mdash; nothing was charged here. The proposal page says so beneath
           those options whenever online payment is available.
         </Callout>
+      </Section>
+
+      <Section id="estimate-limits" title="Rate and probability limits">
+        <p>
+          The estimate&rsquo;s <strong>tax rate</strong>, <strong>overhead rate</strong>, and{" "}
+          <strong>win probability</strong> are percentages limited to 0&ndash;100%. A value outside
+          that range is clamped when you leave the field, so a typo like 825 can&rsquo;t multiply
+          through the totals.
+        </p>
       </Section>
 
       <Section id="converting" title="Converting an estimate to a job">

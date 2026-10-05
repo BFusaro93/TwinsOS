@@ -61,8 +61,13 @@ export function CrewAppGuide() {
           them — no clients list, no invoices, no estimates, and no sidebar full of office screens.
         </p>
         <p>
-          It runs in the phone&apos;s browser, so there&apos;s nothing to install. Tell crews to add it to
-          their home screen once and it behaves like an app from then on.
+          It runs in the phone&apos;s browser, so there&apos;s nothing to download from an app store.
+          It&apos;s also an installable web app: have crews use the browser&apos;s{" "}
+          <strong>Add to Home Screen</strong> (iPhone Safari) or <strong>Install app</strong>{" "}
+          (Android Chrome) option once, and it opens full-screen from a home-screen icon like a
+          normal app. It still needs a signal to load and save — installing doesn&apos;t add offline
+          use. Inputs are sized so iPhones don&apos;t zoom in when a field is tapped, and controls
+          are larger for gloved or one-handed use.
         </p>
         <Callout>
           <strong>The login belongs to the crew, not to a person.</strong> Create a user with the{" "}

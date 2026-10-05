@@ -52,6 +52,7 @@ export function PurchaseOrdersGuide() {
           <TOCLink href="#approval">How approval actually works</TOCLink>
           <TOCLink href="#receiving">Receiving</TOCLink>
           <TOCLink href="#mark-complete">The &ldquo;Mark Complete Anyway&rdquo; override</TOCLink>
+          <TOCLink href="#spend-reports">Spend and repair cost reports</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
         </div>
       </div>
@@ -124,7 +125,13 @@ export function PurchaseOrdersGuide() {
           Requisition or PO through its header Edit button only changes Title/Vendor/Notes (or PO
           Date/Payment Type/Invoice #) and Tax/Shipping/Discount — the line-items table isn&apos;t
           even shown there. To add, edit, or remove a line item, use the <strong>Line Items</strong>{" "}
-          section on the record&apos;s own detail page instead — it&apos;s editable at any status.
+          section on the record&apos;s own detail page instead.
+        </Callout>
+        <Callout>
+          <strong>Once a Requisition or PO is Ordered, only admins can edit its lines.</strong>{" "}
+          For everyone else the Line Items table turns read-only after ordering (and, for POs,
+          through Partially Fulfilled, Completed, and Canceled). Managers are no longer exempt —
+          if a manager needs a line changed on an ordered record, an admin has to make the edit.
         </Callout>
         <Callout>
           <strong>Editing line items on a pending or approved record silently resubmits it for
@@ -159,6 +166,12 @@ export function PurchaseOrdersGuide() {
           survive a page reload.
         </Callout>
         <p>
+          If a split fails partway (say the first vendor&apos;s PO was created but the second
+          wasn&apos;t), you can close the dialog and reopen it, then retry — it recognizes the POs
+          already created for that requisition and only creates the missing ones instead of
+          duplicating the first.
+        </p>
+        <p>
           Nothing locks a requisition after conversion — you can click Convert (or Split) again and
           create additional POs from the same requisition. Its own line items are never modified by
           converting.
@@ -175,6 +188,12 @@ export function PurchaseOrdersGuide() {
           you exempt a specific line — a delivery fee, for example — from sales tax. Requisition
           lines don&apos;t have this toggle; if a requisition is converted, every resulting PO line
           defaults to taxable regardless.
+        </p>
+        <p>
+          The New Purchase Order form also shows a read-only <strong>Part #</strong> column beside
+          each line&apos;s item, filled in from the catalog entry (a dash if it has none), so you
+          can check the part number without leaving the form. The New PO and Receive Goods dialogs
+          are wider than they used to be so every column fits.
         </p>
       </Section>
 
@@ -221,6 +240,12 @@ export function PurchaseOrdersGuide() {
             An admin submitting their own requisition/PO automatically clears any
             manager-level step in the chain (the step still shows in history, just marked skipped)
             — admins outrank managers in this flow.
+          </li>
+          <li>
+            Managers can stand in for another approver on a step, but only on non-admin steps. A
+            step whose Required Role is <em>admin</em> can only be decided by an admin (or the
+            admin it was assigned to) — a manager doesn&apos;t see the override option there, and
+            the server rejects it if attempted.
           </li>
           <li>
             Only the approver whose turn it currently is can act — trying to approve or reject out
@@ -279,6 +304,36 @@ export function PurchaseOrdersGuide() {
           formally received. Use this deliberately (e.g. an order that was partially canceled by
           the vendor), not as a shortcut to skip receiving.
         </Callout>
+      </Section>
+
+      <Section id="spend-reports" title="Spend and repair cost reports">
+        <p>
+          <strong>Reports</strong> in the Equipt sidebar opens a tabbed page. Two tabs cover
+          money spent:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Parts Spend</strong> — spend on catalog items categorized as maintenance parts,
+            with a date range picker (Last 6 months, Last 12 months, or All time; default is 12
+            months). <strong>Canceled and rejected POs are excluded</strong>, and each PO is
+            placed in a month by its PO Date. The cards show Total Parts Spend, Avg Parts PO
+            Value, Total POs, and Open POs, followed by a monthly trend and the top 5 vendors. The
+            four cards are clickable — each opens the list of line items or POs behind that number
+            (for Avg Parts PO Value, the parts-only amounts it&apos;s averaged from).
+          </li>
+          <li>
+            <strong>Repair Cost</strong> — what maintenance actually cost, taken from the lines on
+            each work order&apos;s Costs tab: Parts, Labor, and Vendors / Subs, with the same date
+            range picker, a Preventive vs. Reactive split, a monthly breakdown, and the top 5 assets by repair spend. Total Repair
+            Spend, Parts, Labor, and Vendors / Subs are clickable and open the individual cost
+            lines behind them.
+          </li>
+        </ul>
+        <p>
+          The Equipt Dashboard&apos;s <strong>Parts Spend MTD</strong> card also shows a smaller{" "}
+          <em>repairs MTD</em> figure beneath it — the same repair-cost definition as the Repair
+          Cost report, for the current month.
+        </p>
       </Section>
 
       <Section id="gotchas" title="Gotchas">

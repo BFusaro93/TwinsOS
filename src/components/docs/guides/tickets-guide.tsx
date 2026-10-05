@@ -62,6 +62,7 @@ export function TicketsGuide() {
           <TOCLink href="#creating">Creating a ticket</TOCLink>
           <TOCLink href="#assignment">Assignment</TOCLink>
           <TOCLink href="#lifecycle">Worked example: a form-to-close lifecycle</TOCLink>
+          <TOCLink href="#list-filters">Searching and filtering the list</TOCLink>
           <TOCLink href="#detail-sheet">The ticket detail sheet</TOCLink>
           <TOCLink href="#client-link">Client link &amp; activity timeline</TOCLink>
           <TOCLink href="#field-upsells">Field upsells from crews</TOCLink>
@@ -257,6 +258,15 @@ export function TicketsGuide() {
         </ol>
       </Section>
 
+      <Section id="list-filters" title="Searching and filtering the list">
+        <p>
+          The search box above the Tickets list has an &times; button, and Escape clears it. The
+          column filter narrows by one field at a time; <strong>Category</strong>,{" "}
+          <strong>Assignment</strong> (including Unassigned) and <strong>Priority</strong> are
+          picked from a list and match exactly, instead of being typed.
+        </p>
+      </Section>
+
       <Section id="detail-sheet" title="The ticket detail sheet">
         <p>
           Clicking any ticket row opens <code>TicketDetailSheet</code>, with five tabs:
@@ -268,6 +278,13 @@ export function TicketsGuide() {
           <li><strong>Contributors</strong> — additional staff CC&apos;d on the ticket as participants, distinct from the single assignee. Managed by <code>use-ticket-contributors.ts</code>.</li>
           <li><strong>Audit Trail</strong> — the shared <code>AuditTrailTab</code> change history.</li>
         </ul>
+        <p>
+          Near the top of the Details tab, a <strong>Show in client portal</strong> switch controls
+          whether the ticket appears in the client&apos;s portal. It&apos;s off by default (the same
+          switch is on the New Ticket form), and it&apos;s disabled until a client is linked. When
+          on, the client sees the subject, category, status and notes — never comments, files or who
+          it&apos;s assigned to. Turn it off at any time to hide it again.
+        </p>
         <p>
           The header also has a <strong>PDF</strong> button that opens a print-formatted view in a new
           window — all ticket fields are HTML-escaped before being written into that window, since
