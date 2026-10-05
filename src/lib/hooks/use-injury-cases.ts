@@ -148,8 +148,11 @@ export function useCreateInjuryCase() {
       if (!data) throw lastError ?? new Error("Failed to create injury case");
       return mapInjuryCase(data);
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["injury-cases"] });
+      // Alert the supervisor. Best-effort: the report is already saved, so a
+      // failed alert must never surface as a failed submission.
+      void fetch(`/api/injury-cases/${created.id}/notify`, { method: "POST" }).catch(() => {});
     },
   });
 }

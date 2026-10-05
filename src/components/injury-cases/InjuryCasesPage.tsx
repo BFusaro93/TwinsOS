@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -49,6 +50,12 @@ export function InjuryCasesPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
+
+  // Deep link from a supervisor alert: /tools/injury-cases?open=<id>
+  const openParam = useSearchParams().get("open");
+  useEffect(() => {
+    if (openParam) setSelectedId(openParam);
+  }, [openParam]);
 
   const stats = useMemo(() => {
     const now = new Date();

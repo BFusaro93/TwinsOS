@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import {
   INJURY_CLAIM_ROUTE_LABELS,
   INJURY_INCIDENT_TYPE_LABELS,
@@ -95,6 +96,9 @@ export function InjuryCaseForm({ initial, office = false, submitLabel, pendingLa
   const [correctiveAction, setCorrectiveAction] = useState(initial?.correctiveAction ?? "");
 
   const nearMiss = incidentType === "near_miss";
+  // Suggestions only — typing any name still works. An exact employee name is
+  // what lets the supervisor alert find their login.
+  const { data: employees = [] } = useSelectableEmployees();
 
   return (
     <form
@@ -171,8 +175,11 @@ export function InjuryCaseForm({ initial, office = false, submitLabel, pendingLa
             <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Supervisor <span className="text-xs text-muted-foreground">(optional)</span></Label>
-            <Input value={supervisorName} onChange={(e) => setSupervisorName(e.target.value)} />
+            <Label>Supervisor <span className="text-xs text-muted-foreground">(they&apos;ll be alerted)</span></Label>
+            <Input value={supervisorName} onChange={(e) => setSupervisorName(e.target.value)} list="injury-supervisor-options" autoComplete="off" />
+            <datalist id="injury-supervisor-options">
+              {employees.map((e) => <option key={e.id} value={`${e.firstName} ${e.lastName}`.trim()} />)}
+            </datalist>
           </div>
           <div className="space-y-1.5">
             <Label>Have you told your supervisor?</Label>

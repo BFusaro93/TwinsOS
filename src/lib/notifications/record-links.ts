@@ -16,6 +16,7 @@ const RECORD_PATHS: Record<string, (id: string) => string> = {
   receiving:    () => "/po/receiving",
   project:      () => "/po/projects",
   damage_case:  () => "/tools/damage-cases",
+  injury_case:  (id) => `/tools/injury-cases?open=${id}`,
   job_photo:    () => "/photos/projects",
 };
 
