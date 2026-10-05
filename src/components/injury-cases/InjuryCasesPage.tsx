@@ -11,8 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useInjuryCases } from "@/lib/hooks/use-injury-cases";
 import { InjuryCaseDetailPanel } from "./InjuryCaseDetailPanel";
 import { NewInjuryCaseDialog } from "./NewInjuryCaseDialog";
-import { formatDate } from "@/lib/utils";
-import { INJURY_CASE_STATUS_LABELS, INJURY_SEVERITY_LABELS } from "@/lib/constants";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { INJURY_CASE_STATUS_LABELS, INJURY_CLAIM_ROUTE_LABELS, INJURY_SEVERITY_LABELS } from "@/lib/constants";
 import { INJURY_STATUS_COLORS, INJURY_SEVERITY_COLORS } from "./injury-colors";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
@@ -128,6 +128,8 @@ export function InjuryCasesPage() {
               <TableHead>Severity</TableHead>
               <TableHead>Incident Date</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Handling</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
               <TableHead className="text-right">Days Away</TableHead>
             </TableRow>
           </TableHeader>
@@ -135,12 +137,12 @@ export function InjuryCasesPage() {
             {isLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
+                  {Array.from({ length: 9 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                   {search || statusFilter !== "all" ? "No cases match your filters." : "No injury cases yet. 🎉"}
                 </TableCell>
               </TableRow>
@@ -159,6 +161,8 @@ export function InjuryCasesPage() {
                   <TableCell>
                     <Badge className={`${INJURY_STATUS_COLORS[c.status]} text-xs`}>{INJURY_CASE_STATUS_LABELS[c.status]}</Badge>
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{c.claimRoute ? INJURY_CLAIM_ROUTE_LABELS[c.claimRoute] : "—"}</TableCell>
+                  <TableCell className="text-right text-sm">{c.totalCost > 0 ? formatCurrency(c.totalCost) : "—"}</TableCell>
                   <TableCell className="text-right text-sm">{c.daysAway}</TableCell>
                 </TableRow>
               ))

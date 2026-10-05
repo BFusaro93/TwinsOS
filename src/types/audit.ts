@@ -25,6 +25,7 @@ export type AuditRecordType =
   | "request"
   | "pm_schedule"
   | "damage_case"
+  | "injury_case"
   | "job_photo"
   | "ticket"
   | "client"

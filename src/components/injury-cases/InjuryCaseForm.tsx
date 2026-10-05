@@ -7,9 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { INJURY_SEVERITY_LABELS, INJURY_TYPE_OPTIONS } from "@/lib/constants";
+import { INJURY_CLAIM_ROUTE_LABELS, INJURY_SEVERITY_LABELS, INJURY_TYPE_OPTIONS } from "@/lib/constants";
 import type { InjuryCaseInput } from "@/lib/hooks/use-injury-cases";
-import type { InjurySeverity } from "@/types";
+import type { InjuryClaimRoute, InjurySeverity } from "@/types";
 
 interface Props {
   initial?: Partial<InjuryCaseInput>;
@@ -35,6 +35,7 @@ export function InjuryCaseForm({ initial, submitLabel, pendingLabel, pending, er
   const [treatment, setTreatment] = useState(initial?.treatment ?? "");
   const [daysAway, setDaysAway] = useState(String(initial?.daysAway ?? 0));
   const [recordable, setRecordable] = useState(initial?.recordable ?? false);
+  const [claimRoute, setClaimRoute] = useState<string>(initial?.claimRoute ?? "undecided");
 
   return (
     <form
@@ -52,6 +53,7 @@ export function InjuryCaseForm({ initial, submitLabel, pendingLabel, pending, er
           treatment: treatment.trim() || null,
           daysAway: Math.max(0, parseInt(daysAway, 10) || 0),
           recordable,
+          claimRoute: claimRoute === "undecided" ? null : (claimRoute as InjuryClaimRoute),
         });
       }}
     >
@@ -112,6 +114,17 @@ export function InjuryCaseForm({ initial, submitLabel, pendingLabel, pending, er
       <div className="space-y-1.5">
         <Label>Treatment Given <span className="text-xs text-muted-foreground">(optional)</span></Label>
         <Textarea value={treatment} onChange={(e) => setTreatment(e.target.value)} rows={2} placeholder="First aid, clinic visit, ER…" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Cost handled through</Label>
+        <Select value={claimRoute} onValueChange={setClaimRoute}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="undecided">Not decided yet</SelectItem>
+            {Object.entries(INJURY_CLAIM_ROUTE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">Choose self-pay if the company covers the costs instead of filing a workers&apos; comp claim — track them on the Expenses tab.</p>
       </div>
       <label className="flex items-center gap-2 text-sm">
         <Checkbox checked={recordable} onCheckedChange={(c) => setRecordable(c === true)} />

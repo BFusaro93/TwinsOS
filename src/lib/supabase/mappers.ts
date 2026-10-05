@@ -896,6 +896,27 @@ export function mapInjuryCase(row: Record<string, any>): import("@/types").Injur
     treatment: row.treatment ?? null,
     daysAway: row.days_away ?? 0,
     recordable: row.recordable ?? false,
+    claimRoute: row.claim_route ?? null,
     resolutionNotes: row.resolution_notes ?? null,
+    totalCost: row.total_cost ?? 0,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapInjuryCaseExpense(row: Record<string, any>): import("@/types").InjuryCaseExpense {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    injuryCaseId: row.injury_case_id,
+    expenseDate: row.expense_date,
+    expenseType: row.expense_type,
+    vendorId: row.vendor_id ?? null,
+    vendorName: row.vendor_name ?? null,
+    description: row.description,
+    amount: row.amount,
   };
 }

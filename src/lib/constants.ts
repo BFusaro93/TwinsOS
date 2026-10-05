@@ -219,6 +219,17 @@ export const INJURY_SEVERITY_LABELS: Record<string, string> = {
   lost_time: "Lost Time",
 };
 
+export const INJURY_CLAIM_ROUTE_LABELS: Record<string, string> = {
+  workers_comp: "Workers' comp",
+  self_pay: "Self-pay (company)",
+};
+
+export const INJURY_EXPENSE_TYPE_LABELS: Record<string, string> = {
+  medical: "Medical",
+  lost_wages: "Lost wages",
+  other: "Other",
+};
+
 export const INJURY_TYPE_OPTIONS = [
   "Strain / Sprain",
   "Cut / Laceration",

@@ -12,6 +12,7 @@ import { useIsStaff } from "@/lib/hooks/use-impersonation";
 const TABS = [
   { href: "/internal", label: "Impersonate" },
   { href: "/internal/chat", label: "Chat" },
+  { href: "/internal/feedback", label: "Feedback" },
 ];
 
 /**

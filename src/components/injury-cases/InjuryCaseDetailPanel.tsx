@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,11 +16,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditButton } from "@/components/shared/EditButton";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
-import { useInjuryCase, useUpdateInjuryCase, useDeleteInjuryCase } from "@/lib/hooks/use-injury-cases";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { useInjuryCase, useUpdateInjuryCase, useDeleteInjuryCase, useDeleteInjuryCaseExpense } from "@/lib/hooks/use-injury-cases";
+import { AddInjuryExpenseDialog } from "./AddInjuryExpenseDialog";
 import { NewInjuryCaseDialog } from "./NewInjuryCaseDialog";
 import { INJURY_STATUS_COLORS, INJURY_SEVERITY_COLORS } from "./injury-colors";
-import { INJURY_CASE_STATUS_LABELS, INJURY_SEVERITY_LABELS } from "@/lib/constants";
-import { formatDate } from "@/lib/utils";
+import { INJURY_CASE_STATUS_LABELS, INJURY_CLAIM_ROUTE_LABELS, INJURY_EXPENSE_TYPE_LABELS, INJURY_SEVERITY_LABELS } from "@/lib/constants";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import type { InjuryCaseStatus } from "@/types";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -35,6 +39,8 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
   const { data, isLoading } = useInjuryCase(caseId);
   const updateCase = useUpdateInjuryCase();
   const deleteCase = useDeleteInjuryCase();
+  const deleteExpense = useDeleteInjuryCaseExpense();
+  const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [notesDialog, setNotesDialog] = useState<{ nextStatus: InjuryCaseStatus | null } | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
@@ -51,6 +57,7 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
   if (!data) return null;
 
   const isClosed = data.status === "resolved" || data.status === "closed";
+  const expenses = data.expenses;
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -122,6 +129,7 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
         <Row label="What happened">{data.description}</Row>
         <Row label="Treatment">{data.treatment}</Row>
         <Row label="Days Away From Work">{String(data.daysAway)}</Row>
+        <Row label="Cost handled through">{data.claimRoute ? INJURY_CLAIM_ROUTE_LABELS[data.claimRoute] : null}</Row>
         {data.recordable && <Badge className="bg-red-100 text-red-800">OSHA recordable</Badge>}
         {(data.resolutionNotes || isClosed) && (
           <div className="flex items-start gap-2 text-sm">
@@ -146,27 +154,103 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
         )}
       </div>
 
-      <Tabs defaultValue="files" className="flex min-h-0 flex-1 flex-col">
+      <Tabs defaultValue={data.claimRoute === "self_pay" ? "expenses" : "files"} className="flex min-h-0 flex-1 flex-col">
         <div className="shrink-0 overflow-x-auto border-b px-4 md:px-6">
           <TabsList className="h-10 bg-transparent p-0">
-            {(["files", "comments"] as const).map((v) => (
+            {(["expenses", "files", "comments", "audit"] as const).map((v) => (
               <TabsTrigger
                 key={v}
                 value={v}
                 className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium capitalize text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
               >
-                {v}
+                {v === "audit" ? "audit trail" : v}
               </TabsTrigger>
             ))}
           </TabsList>
         </div>
+        <TabsContent value="expenses" className="mt-0 flex-1 space-y-4 overflow-y-auto p-6">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Expenses</h3>
+              <p className="text-xs text-muted-foreground">
+                {data.claimRoute === "workers_comp"
+                  ? "This case is going through workers' comp. Log only costs the company pays directly."
+                  : "Costs the company pays directly — e.g. self-pay instead of a workers' comp claim."}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAddExpenseOpen(true)}
+              disabled={isClosed}
+              title={isClosed ? "Reopen this case before adding expenses" : undefined}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add Expense
+            </Button>
+          </div>
+          {expenses.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No expenses yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="w-8" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenses.map((exp) => (
+                    <TableRow key={exp.id}>
+                      <TableCell className="text-sm">{formatDate(exp.expenseDate)}</TableCell>
+                      <TableCell className="text-sm">{INJURY_EXPENSE_TYPE_LABELS[exp.expenseType]}</TableCell>
+                      <TableCell className="text-sm">{exp.vendorName ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{exp.description}</TableCell>
+                      <TableCell className="text-right text-sm">{formatCurrency(exp.amount)}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          disabled={isClosed}
+                          title={isClosed ? "Reopen this case before deleting expenses" : "Delete expense"}
+                          onClick={() => deleteExpense.mutate(
+                            { id: exp.id, injuryCaseId: data.id },
+                            { onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete expense") },
+                          )}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Separator className="my-3" />
+              <div className="flex justify-end text-sm font-semibold">
+                <span className="mr-4 text-muted-foreground">Total Cost</span>
+                <span>{formatCurrency(data.totalCost)}</span>
+              </div>
+            </div>
+          )}
+        </TabsContent>
         <TabsContent value="files" className="mt-0 flex-1 overflow-y-auto p-6">
           <AttachmentsSection recordType="injury_case" recordId={data.id} />
         </TabsContent>
         <TabsContent value="comments" className="mt-0 flex-1 overflow-y-auto p-6">
           <CommentsSection recordType="injury_case" recordId={data.id} />
         </TabsContent>
+        <TabsContent value="audit" className="mt-0 flex-1 overflow-y-auto">
+          <AuditTrailTab recordType="injury_case" recordId={data.id} />
+        </TabsContent>
       </Tabs>
+
+      <AddInjuryExpenseDialog injuryCaseId={data.id} open={addExpenseOpen} onOpenChange={setAddExpenseOpen} />
 
       <Dialog open={!!notesDialog} onOpenChange={(o) => { if (!o) setNotesDialog(null); }}>
         <DialogContent className="max-w-md">
