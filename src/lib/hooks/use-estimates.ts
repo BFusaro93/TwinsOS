@@ -752,6 +752,9 @@ export function useSaveEstimateFinancials() {
       appliedDiscountId?: string | null;
       perTypeOverhead?: OverheadSettings;
     }) => {
+      // Backstop for any caller: a rate outside 0–100% is never valid.
+      taxRateBps = Math.min(10000, Math.max(0, taxRateBps));
+      overheadRateBps = Math.min(10000, Math.max(0, overheadRateBps));
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
