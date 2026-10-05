@@ -13,6 +13,7 @@ import { DispatchBoardGuide } from "@/components/docs/guides/dispatch-board-guid
 import { EstimatingGuide } from "@/components/docs/guides/estimating-guide";
 import { FormsGuide } from "@/components/docs/guides/forms-guide";
 import { ImportExportGuide } from "@/components/docs/guides/import-export-guide";
+import { InjuryCasesGuide } from "@/components/docs/guides/injury-cases-guide";
 import { InventoryCostingGuide } from "@/components/docs/guides/inventory-costing-guide";
 import { InvoicingGuide } from "@/components/docs/guides/invoicing-guide";
 import { JobPhotosGuide } from "@/components/docs/guides/job-photos-guide";
@@ -60,6 +61,7 @@ export const GUIDE_COMPONENTS: Record<string, ComponentType> = {
   "estimating-guide": EstimatingGuide,
   "forms-guide": FormsGuide,
   "import-export-guide": ImportExportGuide,
+  "injury-cases-guide": InjuryCasesGuide,
   "inventory-costing-guide": InventoryCostingGuide,
   "invoicing-guide": InvoicingGuide,
   "job-photos-guide": JobPhotosGuide,

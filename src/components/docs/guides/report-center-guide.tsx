@@ -419,7 +419,8 @@ export function ReportCenterGuide() {
             <strong>Manual</strong> — click the Actual cell and type the value. These are things
             Landscapt has no source for: NOI and net margin, overhead ratio, AP days, labor
             efficiency against payroll hours, fleet safety score, eNPS, training hours, training
-            completion, accident-free workdays, absenteeism, plus any custom metric you add.
+            completion, absenteeism, plus any custom metric you add. (Accident Free Workdays is no longer
+            manual — it&apos;s calculated from Injury Cases; see the Injury &amp; Near-Miss Cases guide.)
           </li>
         </ul>
         <p>

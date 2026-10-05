@@ -207,13 +207,13 @@ export function NotificationPreferencesGuide() {
           </li>
           <li>
             <strong>&quot;Who in the org can even be notified?&quot;</strong> — a separate, admin-only
-            setting for exactly two broadcast-style CRM events: <em>estimate decisions</em> (client accepts
+            setting for three broadcast-style CRM events: <em>estimate decisions</em> (client accepts
             or declines &mdash; which also covers a <em>failed proposal deposit</em>, since the people who
             wanted to hear a proposal was accepted are the ones who need to hear its deposit bounced)
-            and <em>new tickets</em>. An admin uses the Recipients picker in Settings →
+            <em>new tickets</em>, and <em>injury &amp; near-miss reports</em>. An admin uses the Recipients picker in Settings →
             Notifications to restrict the eligible pool for each, stored as an array of user IDs under{" "}
             <code>organizations.customizations</code> (<code>estimateDecisionRecipientIds</code> /{" "}
-            <code>newTicketRecipientIds</code>). Leaving it unset means &quot;no restriction&quot; — anyone
+            <code>newTicketRecipientIds</code> / <code>injuryReportRecipientIds</code>). Leaving it unset means &quot;no restriction&quot; — anyone
             in the org is eligible.
           </li>
         </ul>
@@ -228,8 +228,11 @@ export function NotificationPreferencesGuide() {
         <Callout>
           Two exceptions always ride along regardless of the picker: the estimate&apos;s sales rep is
           always included for estimate-decision and failed-deposit notifications, and the ticket&apos;s assignee (if any) is
-          always included for new-ticket notifications — on top of whoever is picked in the Recipients
-          list.
+          always included for new-ticket notifications, and the supervisor named on an injury or near-miss
+          report (matched to an employee with a login) is always included for injury-report alerts — on
+          top of whoever is picked in the Recipients list. The injury-report alert has its own personal
+          toggles (<code>inAppInjuryReport</code> / <code>emailInjuryReport</code>) and a reporter is never
+          alerted about their own report.
         </Callout>
       </Section>
 

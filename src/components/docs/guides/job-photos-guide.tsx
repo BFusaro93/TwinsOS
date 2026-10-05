@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const ROLE_PERMISSIONS: [string, string, string, string, string][] = [
   ["Admin",              "Yes", "Yes", "Yes", "Yes"],
@@ -46,6 +47,7 @@ export function JobPhotosGuide() {
           <TOCLink href="#uploading">Uploading photos, videos, and files</TOCLink>
           <TOCLink href="#organizing">Tagging, before/after, and comparisons</TOCLink>
           <TOCLink href="#annotating">Annotating a photo</TOCLink>
+          <TOCLink href="#field-forms">Field forms</TOCLink>
           <TOCLink href="#worked-example">Worked example: documenting a mulch job</TOCLink>
           <TOCLink href="#limitations">Known limitations</TOCLink>
         </div>
@@ -272,6 +274,27 @@ export function JobPhotosGuide() {
           this is handled explicitly in the load path so an annotation made on a desktop still lines
           up correctly when reviewed on a crew tablet.
         </Callout>
+      </Section>
+
+      <Section id="field-forms" title="Field forms">
+        <p>
+          The Job Photos sidebar has a second group, <strong>Field</strong>, of short forms meant to
+          be filled out on a phone in the field. Each submission is attributed to the signed-in user:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li><strong>Repair Request</strong> — creates a maintenance request / work order submission.</li>
+          <li>
+            <strong>Damage Report</strong> — opens a{" "}
+            <GuideLink href="/settings/support/damage-cases-guide" className="text-[#60ab45] underline">Damage Case</GuideLink>{" "}
+            (property damage or a warranty issue).
+          </li>
+          <li>
+            <strong>Injury / Near Miss</strong> — opens an{" "}
+            <GuideLink href="/settings/support/injury-cases-guide" className="text-[#60ab45] underline">Injury Case</GuideLink>
+            {" "}and alerts the supervisor. Report near misses too.
+          </li>
+          <li><strong>Morning Checklist</strong> and <strong>Time Off Request</strong> — Twins Lawn Service&apos;s own forms, shown only to that organization.</li>
+        </ul>
       </Section>
 
       <Section id="worked-example" title="Worked example: documenting a mulch job">
