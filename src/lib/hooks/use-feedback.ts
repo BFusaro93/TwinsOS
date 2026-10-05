@@ -36,15 +36,27 @@ export function useSubmitFeedback() {
         screenshotPath = path;
       }
 
-      const { error } = await supabase.from("feedback").insert({
-        created_by: user.id,
-        category: input.category,
-        message: input.message,
-        page_url: input.pageUrl,
-        user_agent: navigator.userAgent,
-        screenshot_path: screenshotPath,
-      });
+      const { data: inserted, error } = await supabase
+        .from("feedback")
+        .insert({
+          created_by: user.id,
+          category: input.category,
+          message: input.message,
+          page_url: input.pageUrl,
+          user_agent: navigator.userAgent,
+          screenshot_path: screenshotPath,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+
+      // Email Landscapt staff. Best-effort: the feedback is already saved, so
+      // a failed email must never show up as a failed submission.
+      void fetch("/api/support/notify-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: inserted.id }),
+      }).catch(() => {});
     },
   });
 }

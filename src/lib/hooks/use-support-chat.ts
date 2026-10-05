@@ -114,14 +114,28 @@ export function useSendSupportMessage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
 
-      const { error } = await supabase.from("support_messages").insert({
-        org_id: input.orgId,
-        sender_type: input.senderType,
-        sender_id: user.id,
-        sender_name: input.senderName,
-        body: input.body,
-      });
+      const { data: inserted, error } = await supabase
+        .from("support_messages")
+        .insert({
+          org_id: input.orgId,
+          sender_type: input.senderType,
+          sender_id: user.id,
+          sender_name: input.senderName,
+          body: input.body,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+
+      // A customer message emails Landscapt staff (new conversation, a reply
+      // to staff, or after a quiet gap). Best-effort — the message is saved.
+      if (input.senderType === "org") {
+        void fetch("/api/support/notify-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: inserted.id }),
+        }).catch(() => {});
+      }
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["support-messages", "mine"] });
