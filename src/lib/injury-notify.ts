@@ -8,10 +8,13 @@ import { sendPushToUser } from "@/lib/notifications/send-push";
 // supervisor's half of the paper process (investigation within 48 hours) starts
 // without anyone having to remember to forward the report.
 //
-// Who gets it: the supervisor the reporter named, when that name matches an
-// employee with a login. If it doesn't resolve (blank, a typo, or a supervisor
-// with no login) the org's admins/managers are alerted instead so a report is
-// never silently dropped. The reporter is never notified of their own report.
+// Who gets it: the supervisor the reporter named (when that name matches an
+// employee with a login) PLUS the org's configurable injury-report list
+// (Settings > Notifications; defaults to all admins/managers) — the same
+// "named person always included in addition to the picked list" shape as new
+// tickets and estimate decisions. So a report still reaches someone when the
+// supervisor name is blank, misspelled or has no login. The reporter is never
+// notified of their own report.
 // Per-recipient prefs `inAppInjuryReport` / `emailInjuryReport` opt out (absent
 // = on). The email carries only who/what/when — the details stay behind login.
 
@@ -39,22 +42,21 @@ export async function notifyInjuryReported(
   const { orgId, reporterId, injuryCase: c } = params;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let recipients: any[] = [];
+  const byId = new Map<string, any>();
+  for (const p of await resolveBroadcastRecipients(supabase, orgId, "injuryReportRecipientIds")) {
+    byId.set(p.id, p);
+  }
   const supervisorUserId = await resolveAssigneeId(supabase, orgId, null, c.supervisor_name);
-  if (supervisorUserId) {
+  if (supervisorUserId && !byId.has(supervisorUserId)) {
     const { data } = await supabase
       .from("profiles")
       .select("id, email, name, notification_prefs")
       .eq("id", supervisorUserId)
       .eq("org_id", orgId)
       .neq("status", "inactive");
-    recipients = data ?? [];
+    for (const p of data ?? []) byId.set(p.id, p);
   }
-  if (!recipients.length) {
-    recipients = await resolveBroadcastRecipients(supabase, orgId, "injuryReportRecipients");
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  recipients = recipients.filter((p: any) => p.id !== reporterId);
+  const recipients = [...byId.values()].filter((p) => p.id !== reporterId);
   if (!recipients.length) return { recipients: 0 };
 
   const label = TYPE_LABEL[c.incident_type] ?? "Incident";

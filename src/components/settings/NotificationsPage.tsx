@@ -201,6 +201,11 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
             title="New Ticket Recipients"
             description="Choose who is even eligible to be notified when a new ticket comes in. The ticket's assignee (if any) is always included in addition to whoever's picked here."
           />
+          <RecipientsPicker
+            customizationsKey="injuryReportRecipientIds"
+            title="Injury & Near-Miss Report Recipients"
+            description="Choose who is notified whenever an injury, illness or near miss is reported. The supervisor named on the report is always included in addition to whoever's picked here."
+          />
         </>
       )}
 
@@ -223,7 +228,7 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
                 <Switch checked={prefs.emailMention} onCheckedChange={() => toggle("emailMention")} />
               </SettingRow>
-              <SettingRow label="Injury / Near Miss Reported" description="When an employee reports an injury, illness or near miss and you're their supervisor (or an admin/manager)">
+              <SettingRow label="Injury / Near Miss Reported" description="When an employee reports an injury, illness or near miss and you're their supervisor or on the report recipient list">
                 <Switch checked={prefs.emailInjuryReport} onCheckedChange={() => toggle("emailInjuryReport")} />
               </SettingRow>
               {hasEquipt && (
