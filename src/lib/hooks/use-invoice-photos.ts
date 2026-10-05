@@ -2,9 +2,11 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
+import { downscaleImage } from "@/lib/utils/downscale-image";
 import type { InvoicePhotosResponse } from "@/types/invoice-photos";
 
 async function readError(res: Response, fallback: string): Promise<string> {
+  if (res.status === 413) return "That photo is too large to upload — try a smaller one";
   try {
     const body = (await res.json()) as { error?: string };
     return body.error ?? fallback;
@@ -52,10 +54,13 @@ export function useUploadInvoicePhotos(invoiceId: string) {
   const invalidate = useInvalidate(invoiceId);
   return useMutation({
     mutationFn: async (files: File[]) => {
-      const form = new FormData();
-      for (const f of files) form.append("file", f);
-      const res = await fetch(`/api/crm/invoices/${invoiceId}/photos`, { method: "POST", body: form });
-      if (!res.ok) throw new Error(await readError(res, "Failed to upload photos"));
+      // One request per photo, each downscaled, so no body nears the host's ~4.5MB cap.
+      for (const f of files) {
+        const form = new FormData();
+        form.append("file", await downscaleImage(f));
+        const res = await fetch(`/api/crm/invoices/${invoiceId}/photos`, { method: "POST", body: form });
+        if (!res.ok) throw new Error(await readError(res, "Failed to upload photos"));
+      }
     },
     onSettled: invalidate,
   });
