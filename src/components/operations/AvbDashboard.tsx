@@ -665,7 +665,7 @@ function Daily({ cur, employees, crewDefs, viewDay, setViewDay }: DailyProps) {
               return (<tr key={cr.code} className="hover:bg-slate-50">
                 <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400">{cr.name}</span></td>
                 <Td right>{bud>0?bud.toFixed(1):"—"}</Td><Td right>{act>0?act.toFixed(1):"—"}</Td>
-                <Td right>{bud>0?<span className={avar>=0?"text-green-600":"text-red-600"}>{avar>=0?"+":""}{avar.toFixed(1)}</span>:"—"}</Td>
+                <Td right>{bud>0||act>0?<span className={avar>=0?"text-green-600":"text-red-600"}>{avar>=0?"+":""}{avar.toFixed(2)}</span>:"—"}</Td>
                 <Td right>{g>0?g.toFixed(1):"—"}</Td>
                 <Td right cls="pr-4">{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
               </tr>);
