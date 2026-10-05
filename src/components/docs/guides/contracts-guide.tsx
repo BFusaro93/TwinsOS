@@ -19,12 +19,12 @@ const STATUS_FLOW: [string, string][] = [
 ];
 
 const BILLING_FREQUENCIES: [string, string][] = [
-  ["Weekly", "Short-term or trial arrangements — rare for landscape maintenance, more common for a temporary snow-season add-on."],
-  ["Biweekly", "Every-other-week billing cadence, occasionally used for lighter recurring service loads."],
-  ["Monthly", "The default and by far the most common — matches how most maintenance and package programs are sold and how the automatic invoicing cron actually runs (see the callout below)."],
-  ["Quarterly", "Larger commercial accounts that prefer fewer, bigger invoices instead of a monthly drip."],
-  ["Annual", "Prepaid or single-invoice-per-year agreements, e.g. a lump-sum snow contract."],
-  ["One-time", "A contract that isn't really recurring — used to formalize terms for a single large job without pretending it repeats."],
+  ["Weekly", "Bills every 7 days, counted from the contract’s start date. Billing Day of Month doesn’t apply."],
+  ["Biweekly", "Bills every 14 days, counted from the contract’s start date. Billing Day of Month doesn’t apply."],
+  ["Monthly", "The default and by far the most common — matches how most maintenance and package programs are sold; bills on the Billing Day of Month."],
+  ["Quarterly", "Bills every third month, counted from the contract’s start month, on the Billing Day of Month."],
+  ["Annual", "Bills once a year, in the contract’s start month, on the Billing Day of Month — e.g. a lump-sum snow contract."],
+  ["One-time", "Bills exactly once, on the first run on or after the start date; once any invoice exists on the contract it never bills again."],
 ];
 
 export function ContractsGuide() {
@@ -79,6 +79,10 @@ export function ContractsGuide() {
             automatic invoicing cron) and Active.
           </li>
         </ul>
+        <p>
+          A contract&apos;s end date can&apos;t be earlier than its start date &mdash; a save with
+          reversed dates is rejected.
+        </p>
       </Section>
 
       <Section id="status-lifecycle" title="Status lifecycle &amp; signing">
@@ -167,10 +171,11 @@ export function ContractsGuide() {
 
       <Section id="billing-frequency" title="Billing frequency options">
         <p>
-          Every contract has a Billing Frequency value in the data model — it&apos;s stored, shown
-          in Contract reports, and returned by the API — but there is currently no field in the
-          Contract dialog to set it; new contracts default to Monthly and it isn&apos;t exposed for
-          editing after that.
+          Every contract has a Billing Frequency, and both billing paths (the daily cron and
+          Create Invoices) honor it. It&apos;s shown in Contract reports and as the{" "}
+          <strong>Frequency</strong> column on the Invoices list. There is currently no field in
+          the Contract dialog to set it; new contracts default to Monthly, and a different
+          frequency is set through the API or MCP connector.
         </p>
         <Table>
           <thead>
@@ -189,13 +194,13 @@ export function ContractsGuide() {
           </tbody>
         </Table>
         <Callout>
-          <strong>The actual invoicing cadence is monthly, regardless of this field.</strong> Both
-          the automatic cron and the manual &quot;Create Invoices&quot; action check the contract
-          once per calendar month against a Billing Day of Month — there&apos;s no separate
-          weekly/quarterly/annual invoicing path today. If your contract truly bills less often than
-          monthly, the practical way to represent that is via the monthly-amounts grid: put the full
-          period amount in the one month it should invoice and leave the other months at $0 (see the
-          worked example below for the seasonal version of this).
+          <strong>The amount is per invoice, not per month.</strong> The contract&apos;s monthly
+          amount (and each month in the monthly-amounts grid) is what gets charged every time the
+          contract bills, at any frequency &mdash; it isn&apos;t annualized or divided. A quarterly
+          contract worth $3,000 a quarter should store $3,000, and an annual $12,000 contract
+          stores $12,000. Quarterly and annual contracts can&apos;t double-bill: a manual Create
+          Invoices click mid-period bills that period and the cron then skips it. Bill 1 Month in
+          Advance only applies to monthly, quarterly, and annual contracts.
         </Callout>
       </Section>
 

@@ -46,9 +46,12 @@ export function InvoicingGuide() {
           <TOCLink href="#where-invoices-come-from">Where invoices come from</TOCLink>
           <TOCLink href="#tax-on-auto-invoices">Sales tax on invoices generated from jobs</TOCLink>
           <TOCLink href="#editing-and-sending">Editing and sending an invoice</TOCLink>
+          <TOCLink href="#invoice-photos">Photos on an invoice</TOCLink>
+          <TOCLink href="#invoice-list">The Invoices list: columns and filters</TOCLink>
           <TOCLink href="#status-lifecycle">Invoice status lifecycle</TOCLink>
           <TOCLink href="#recording-payments">Recording payments</TOCLink>
           <TOCLink href="#partial-payment-example">Worked example: a partial payment</TOCLink>
+          <TOCLink href="#money-limits">Discounts, tax rate, and quantity limits</TOCLink>
           <TOCLink href="#po-number">The “PO Number” field vs. the PO module</TOCLink>
           <TOCLink href="#online-payments">Online payments (Stripe)</TOCLink>
           <TOCLink href="#snow-invoicing">Snow invoicing</TOCLink>
@@ -186,6 +189,90 @@ export function InvoicingGuide() {
         </ul>
       </Section>
 
+      <Section id="invoice-photos" title="Photos on an invoice">
+        <p>
+          You can attach photos to an invoice — a before/after of the work, a damaged item, proof
+          of service. Attached photos print on extra pages at the end of the invoice PDF and show
+          as a gallery on the client&apos;s online invoice page.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Where to add them.</strong> Open the invoice&apos;s <strong>Photos</strong>{" "}
+            tab, or expand <strong>Photos to include (PDF and online invoice)</strong> in the
+            email dialog so you can pick them at send time. Both are the same list.
+          </li>
+          <li>
+            <strong>Three sources.</strong> <strong>Add from job / visit photos</strong> shows
+            photos from this invoice&apos;s visits and jobs, plus Job Photos jobs linked to the
+            client or project. A Job Photos job created with only a customer name won&apos;t be
+            linked, so use the picker&apos;s search box (or <strong>Use client name</strong>).{" "}
+            <strong>Upload</strong> adds new images straight from your computer or phone.
+          </li>
+          <li>
+            <strong>Captions and removal.</strong> Each photo has an optional caption, and the
+            trash icon removes it from the invoice (the original job or visit photo is untouched).
+          </li>
+          <li>
+            <strong>Limits.</strong> Up to <strong>12 photos</strong> per invoice, images only
+            (videos and PDFs stored with job photos aren&apos;t offered). iPhone HEIC photos are
+            converted to JPEG automatically, and large phone photos are shrunk before upload.
+            Only JPEG and PNG print in the PDF, and very large photos may be left off the PDF to
+            keep it small enough to email &mdash; they still show on the online invoice page.{" "}
+            <strong>Print Selected</strong> (bulk print) leaves photos out.
+          </li>
+          <li>
+            <strong>Who can edit.</strong> Attaching, captioning, and removing needs the
+            permission to send invoices or to add/modify invoices.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="invoice-list" title="The Invoices list: columns and filters">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Columns menu.</strong> Besides the usual Invoice #, Status, Client, dates,
+            Total, and Balance, you can show <strong>Account Balance</strong> (the client&apos;s
+            true balance, net of credits and prepayments &mdash; green when the client is in
+            credit), <strong>Prepay</strong>, <strong>Credits</strong> (hidden until you turn it
+            on), <strong>Payment type</strong>, <strong>Sent / Printed</strong>, and{" "}
+            <strong>Frequency</strong>.
+          </li>
+          <li>
+            <strong>Sent / Printed</strong> shows where each invoice stands on getting to the
+            client: a draft shows the queue it&apos;s waiting in (To Email, To Print, or To Email
+            &amp; Print, from the client&apos;s invoice-delivery preference); anything issued shows
+            Sent or Printed.
+          </li>
+          <li>
+            <strong>Frequency</strong> is the contract billing cadence (Weekly, Bi-weekly,
+            Monthly, Quarterly, Annual); an invoice not tied to a contract reads One-time.
+          </li>
+          <li>
+            <strong>Payment type</strong> shows Credit Card or ACH when the client has an autopay
+            card or bank account saved (that&apos;s what puts the invoice in the To Charge queues),
+            otherwise the invoice&apos;s own preferred method, then the client&apos;s default.
+          </li>
+          <li>
+            <strong>Filters.</strong> Click a filter label above the table. <strong>Date</strong>{" "}
+            takes a from/to range (either end can be left open), <strong>Balance</strong> takes
+            At least / At most / Exactly with a dollar amount, and{" "}
+            <strong>Status</strong> and <strong>Payment type</strong> are pick-from-list. The
+            Status filter matches what the Status column shows, so a past-due Sent invoice is
+            found under Overdue.
+          </li>
+          <li>
+            <strong>Sorting and layout.</strong> The list opens sorted by invoice number, and
+            Status, Account Balance, Prepay, Credits, Payment type, Sent / Printed, and Frequency
+            can be sorted too. The table fills the page width, and row actions appear over the
+            right edge of a row on hover instead of taking their own column.
+          </li>
+        </ul>
+        <p>
+          The Payments page uses the same range filter: filter by <strong>Date</strong> with a
+          from/to range.
+        </p>
+      </Section>
+
       <Section id="status-lifecycle" title="Invoice status lifecycle">
         <p>
           Five statuses form a straight line; two more are side states that sit outside it — they
@@ -286,6 +373,10 @@ export function InvoicingGuide() {
           collected figure — see &quot;What counts as collected&quot; above.
         </p>
         <p>
+          <strong>Zero and negative payments are rejected.</strong> A payment amount must be
+          greater than $0.00 (&quot;Payment amount must be greater than $0.00&quot;).
+        </p>
+        <p>
           <strong>Typing amounts.</strong> Currency fields — payment allocations, contract amounts,
           employee rates — keep exactly what you type while you&apos;re in the field and format it
           (e.g. <code>55</code> → <code>$55.00</code>) when you leave it. Nothing is reformatted
@@ -337,6 +428,43 @@ export function InvoicingGuide() {
           <strong>Apply to this invoice</strong> button. It uses the oldest money first and never
           applies more than the invoice still owes, leaving any remainder for next time.
         </p>
+      </Section>
+
+      <Section id="money-limits" title="Discounts, tax rate, and quantity limits">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Discount</strong> can&apos;t be negative and can&apos;t exceed the invoice
+            subtotal. Anything higher is clamped to the subtotal when you leave the field, and if
+            you remove lines after entering a discount the preview total never goes below zero.
+            Tax is calculated after the discount is taken off the taxable lines.
+          </li>
+          <li>
+            <strong>Tax rate</strong> is limited to 0%&ndash;100%.
+          </li>
+          <li>
+            <strong>Line quantities</strong> can&apos;t go below zero. On jobs, a blank, zero, or
+            negative quantity falls back to 1.
+          </li>
+          <li>
+            <strong>Voiding.</strong> An invoice with payments applied can&apos;t be voided. The
+            Void button is greyed out and hovering it says to refund or unapply the payments
+            first. Sent and printed invoices can still be voided.
+          </li>
+          <li>
+            <strong>Disputed invoices.</strong> When a client&apos;s bank opens a chargeback on a
+            card payment, the invoice is flagged while the dispute is open: it drops out of the
+            To Charge queues, and Charge Saved, Charge All, and the pay links refuse it (&quot;This
+            invoice has a payment dispute open. Resolve the chargeback before charging it
+            again.&quot;). If the dispute is won the money comes back, so charging again in the
+            meantime would collect twice. The flag clears when the dispute closes.
+          </li>
+          <li>
+            <strong>Charge and Void buttons</strong> on the Invoices list, when disabled, show why
+            on hover &mdash; for example a card charge or bank debit that&apos;s still processing
+            (bank debits take a few business days to settle), or payments that must be
+            refunded before voiding.
+          </li>
+        </ul>
       </Section>
 
       <Section id="po-number" title="The “PO Number” field vs. the PO module">

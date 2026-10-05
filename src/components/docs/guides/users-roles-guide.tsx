@@ -172,7 +172,12 @@ export function UsersRolesGuide() {
           To give someone CRM access, two things have to both be true:
         </p>
         <ol className="list-decimal space-y-2 pl-5">
-          <li>They have a <code>crm_employees</code> record linked to their login.</li>
+          <li>
+            They have a <code>crm_employees</code> record linked to their login. On the employee
+            record, pick the login from the <strong>Select a user to link…</strong> dropdown — it
+            lists active users who aren&apos;t already linked to another employee, and once linked
+            it shows their name and email.
+          </li>
           <li>That employee record points at an active (non-deleted) <code>crm_roles</code> row — the specific CRM role that defines what they can see and do inside Landscapt.</li>
         </ol>
         <p>
@@ -214,6 +219,17 @@ export function UsersRolesGuide() {
             Estimates by Service. A dashboard panel the user can&apos;t query shows &quot;You
             don&apos;t have permission to view this panel&quot; rather than failing the whole
             dashboard.
+          </li>
+          <li>
+            <strong>Dashboard Access</strong> (Home &gt; Dashboard Access in the role editor) has
+            one View key per built-in dashboard — Equipt Dashboard, My Day, Reports Dashboard, KPI
+            Scorecard, Driver Safety Scores, Company Report, Social Media, Custom Dashboards, Job
+            Costing, Estimate Builder, and Calculators. A role without a key doesn&apos;t see that
+            dashboard in the Dashboards sidebar or overview, and opening its URL directly is
+            blocked. Admins always see everything. A login with no Landscapt role sees none of these
+            dashboards, with one exception: Equipt-only staff (a shop mechanic, say) still get the
+            Equipt Dashboard and Driver Safety Scores based on their organization role. Existing roles were given every Dashboard Access key on, so nothing disappeared
+            when the keys were introduced.
           </li>
         </ul>
       </Section>

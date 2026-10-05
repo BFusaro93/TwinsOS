@@ -54,6 +54,7 @@ export function DispatchBoardGuide() {
           <TOCLink href="#products">Products (materials) on a visit</TOCLink>
           <TOCLink href="#filters-search">Filters, search, and routing</TOCLink>
           <TOCLink href="#bulk-actions">Bulk actions on selected visits</TOCLink>
+          <TOCLink href="#contact-client">Emailing or texting one client from a visit</TOCLink>
           <TOCLink href="#route-order">Stop order and Optimize Route</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
         </div>
@@ -64,6 +65,12 @@ export function DispatchBoardGuide() {
           <strong>CRM → Scheduling → Dispatch Board.</strong> The board shows one day at a time — use
           the week strip at the top to jump between days. It&apos;s built for a dispatcher planning today&apos;s
           work and for reviewing what actually happened once crews are done.
+        </p>
+        <p>
+          The board also works on a phone or tablet: below desktop width the toolbar scrolls
+          sideways, the Client column stays pinned while you scroll the visit table, the side panel
+          drops below the list, and buttons and checkboxes get larger tap targets. The Snow
+          dispatch board is laid out the same way.
         </p>
         <Callout>
           &quot;Today&quot; is the org&apos;s day, not the browser&apos;s. The default date is derived
@@ -234,7 +241,9 @@ export function DispatchBoardGuide() {
             <strong>Scheduled Start/End time, as a fallback</strong> — if there&apos;s no clock data and
             no override, actual hours = (scheduled end time − scheduled start time − recorded break)
             × the number of crew members assigned to the visit. This is the formula used for the vast
-            majority of everyday visits, since most crews don&apos;t punch in/out per stop.
+            majority of everyday visits, since most crews don&apos;t punch in/out per stop. A
+            scheduled End earlier than the Start is treated as running past midnight (End + 24
+            hours), so an overnight visit doesn&apos;t come out as zero or negative hours.
           </li>
         </ol>
         <Callout>
@@ -379,7 +388,9 @@ export function DispatchBoardGuide() {
           </li>
           <li>
             <strong>Search</strong> — a free-text box for finding a visit by client, address, or
-            similar.
+            similar. Click the &times; in the box (or press Escape) to clear it. The per-column
+            filter&apos;s Crew option is a pick-list of your active crews plus Unassigned, so
+            you choose a crew instead of typing its name or code.
           </li>
           <li>
             <strong>Date range</strong> — an optional end date lets the board span more than a single
@@ -427,6 +438,28 @@ export function DispatchBoardGuide() {
           (Email Activity&apos;s Send permission) — it isn&apos;t a separate, less-gated path to
           reach clients in bulk.
         </Callout>
+      </Section>
+
+      <Section id="contact-client" title="Emailing or texting one client from a visit">
+        <p>
+          Open a visit and use the <strong>More visit actions</strong> (&hellip;) menu in the sheet
+          header to reach that visit&apos;s client directly — the &quot;we&apos;re running late&quot;
+          or &quot;the crew is on the way&quot; case. <strong>Send Email</strong> and{" "}
+          <strong>Send Text</strong> open the same dialogs as the job screen&apos;s More menu and
+          log to the client&apos;s Activity timeline. Each option only appears if you have the
+          matching permission (Email Activity Send, or SMS Send) and is greyed out with
+          &quot;(no address)&quot; or &quot;(no number)&quot; when the client record is missing
+          one. Texting also requires the client to be marked <strong>Opted in to text
+          messages</strong>; without that, the dialog explains why and won&apos;t send.
+        </p>
+        <p>
+          The same Send Email / Send Text actions are on a job&apos;s own screen, in its More menu
+          alongside View Audit Trail, View Client and View Estimate. Replies to those emails go to
+          the <strong>Reply-To Email</strong> set in Settings &gt; Organization (emails still send
+          from your company name on Landscapt&apos;s sending domain; with no Reply-To set, replies
+          have nowhere to go). A one-to-one email you send yourself uses your own address as the
+          reply-to instead.
+        </p>
       </Section>
 
       <Section id="route-order" title="Stop order and Optimize Route">

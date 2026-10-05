@@ -68,7 +68,8 @@ export function ApprovalFlowsGuide() {
         <p>
           Each flow is an ordered list of steps. Click <strong>Add Approval Step</strong> to append
           one, or the pencil icon on an existing step to edit it. Steps can be reordered by dragging
-          them (the grip handle on the left) — order matters, since steps are processed strictly in
+          them (the grip handle on the left); on a phone or narrow screen, where the grip is
+          hidden, use the up and down arrow buttons on each step instead — order matters, since steps are processed strictly in
           sequence. Every field on a step:
         </p>
         <Table>
@@ -156,6 +157,14 @@ export function ApprovalFlowsGuide() {
           dollar threshold doesn&apos;t block progress; the chain simply moves on to the next step
           as if it had approved.
         </p>
+        <Callout>
+          <strong>Managers can&apos;t override an admin step.</strong> A manager can approve on
+          behalf of another approver on a non-admin step, in chain order, but a step whose
+          Required Role is <em>admin</em> can only be decided by an admin. The override option
+          simply isn&apos;t offered to a manager on that step, and the server rejects the attempt
+          if made another way. Approval submissions and decisions are processed server-side, so
+          the chain can&apos;t be skipped by editing a record&apos;s status directly.
+        </Callout>
       </Section>
 
       <Section id="notifications" title="Notifications">

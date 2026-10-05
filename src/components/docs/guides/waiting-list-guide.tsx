@@ -79,8 +79,9 @@ export function WaitingListGuide() {
           is the primary filter — it&apos;s a server-side query, not a client-side narrow, so it
           also controls which jobs get fetched in the first place. Below that, <strong>Select a
           Filter</strong> lets you narrow the fetched set by one field at a time: Client, Service,
-          City, Zip, or Crew. A separate free-text Search box matches client name or service name
-          independent of that filter.
+          City, Zip, or Crew. Crew is picked from a list of your active crews (or Unassigned)
+          rather than typed. A separate free-text Search box matches client name or service name
+          independent of that filter; it has an &times; button, and pressing Escape clears it.
         </p>
         <Table>
           <thead>

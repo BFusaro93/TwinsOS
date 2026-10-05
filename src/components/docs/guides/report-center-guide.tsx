@@ -41,6 +41,7 @@ const CURATED_DASHBOARDS: [string, string, string][] = [
   ["Labor Efficiency", "/dashboards/avb", "Internal org only"],
   ["Driver Safety Scores", "/dashboards/safety", "Internal org only"],
   ["Company Report", "/dashboards/crm", "Requires the Landscapt module, hidden from crew role"],
+  ["Social Media", "/dashboards/social-media", "Hidden from crew role; needs the View Social Media permission"],
 ];
 
 export function ReportCenterGuide() {
@@ -67,6 +68,7 @@ export function ReportCenterGuide() {
           <TOCLink href="#curated-dashboards">The curated, top-level dashboards</TOCLink>
           <TOCLink href="#kpi-scorecard">The KPI Scorecard</TOCLink>
           <TOCLink href="#company-report">The Company Report</TOCLink>
+          <TOCLink href="#social-media">The Social Media dashboard</TOCLink>
           <TOCLink href="#audit-trail">Audit trail: per-record tabs and the org-wide log</TOCLink>
           <TOCLink href="#export">Exporting, printing, and scheduled delivery</TOCLink>
           <TOCLink href="#permissions">Permissions and gating</TOCLink>
@@ -522,6 +524,52 @@ export function ReportCenterGuide() {
         </p>
       </Section>
 
+      <Section id="social-media" title="The Social Media dashboard">
+        <p>
+          <strong>Dashboards &gt; Social Media</strong> (<code>/dashboards/social-media</code>) tracks
+          your social accounts week by week. Nothing is pulled in automatically — someone logs each
+          week&apos;s numbers by hand, copied from each platform&apos;s own Insights/Analytics page.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Log a Week</strong> — pick a Monday–Sunday week, then fill in one column per
+            platform: posts, views/reach, profile views, likes, comments, shares, saves, total
+            followers, net new followers, leads and notes. Leave anything you don&apos;t know blank
+            rather than typing 0; platforms left completely blank aren&apos;t saved. If you type
+            Total followers, Net new followers works itself out from the previous week&apos;s total.
+          </li>
+          <li>
+            <strong>Overview</strong> — KPI cards (posts, views, profile views and profile view
+            rate, engagements and engagement rate, net new followers, leads) with the change versus
+            the previous period, a follower snapshot, and weekly charts. Use the platform chips and
+            the date-range menu (last 4 or 12 weeks, this month, last month, year to date, all time)
+            to narrow it.
+          </li>
+          <li>
+            <strong>Platforms &amp; Monthly, Weekly Log</strong> — a side-by-side platform
+            comparison, a monthly summary and the full weekly history, where a logged week can be
+            edited or deleted.
+          </li>
+          <li>
+            <strong>This Month vs. Goals</strong> — content published, engagement rate, leads and
+            follower growth against a minimum and a stretch goal. A goal shows &quot;On track&quot;
+            once it reaches the minimum. <strong>Edit goals</strong> changes the targets for your
+            whole organization (Reset to defaults restores the starting ones).
+          </li>
+          <li>
+            <strong>Add / hide platforms</strong> — the dashboard starts with Facebook, Instagram,
+            TikTok, YouTube and LinkedIn. Add your own (for example Google Business or Nextdoor),
+            reorder them, or hide ones you don&apos;t use; hiding keeps the past numbers.
+          </li>
+        </ul>
+        <p>
+          Anyone allowed to see the dashboard can read it. Admins and managers can always log weeks
+          and edit goals and platforms; give another role the <strong>Social Media: Enter &amp; Edit
+          Data</strong> permission (CRM Settings &gt; Roles) to let, say, a marketing coordinator do
+          it without broader access.
+        </p>
+      </Section>
+
       <Section id="audit-trail" title="Audit trail: per-record tabs and the org-wide log">
         <p>
           There are two ways to see who changed what. Most detail panels and dialogs —
@@ -552,7 +600,10 @@ export function ReportCenterGuide() {
           Reyes — &apos;ok to order&apos;&quot;, a change order reads &quot;Change order CO #99
           Extra pavers approved — $4500.00&quot; — and roll up onto the requisition, PO,
           estimate, or project being approved. Attribution uses the signed-in editor, not the
-          record&apos;s original creator, except on the very first insert.
+          record&apos;s original creator, except on the very first insert. Line-item entries on Purchase Orders and Requisitions show the
+          before and after in the entry itself (for example &quot;quantity 4 → 6&quot; or
+          &quot;unit cost $12.50 → $14.00&quot;), changes to a PM schedule&apos;s default assignee are
+          recorded, and list-type values are shown as plain text rather than raw JSON.
         </p>
         <p>
           <strong>What&apos;s deliberately hidden.</strong> Credential tables (API keys,
@@ -637,6 +688,14 @@ export function ReportCenterGuide() {
             independently checks <code>currentUser.role === &quot;crew&quot;</code> to hide the
             same cards, and <code>CrewBlockedGuard</code> in the reports layout blocks the office
             dashboards by URL as well.
+          </li>
+          <li>
+            <strong>Per-dashboard View permissions</strong> — each built-in dashboard also has a{" "}
+            <em>View …</em> permission in the CRM role editor (View Equipt Dashboard, View My Day,
+            View KPI Scorecard, View Company Report, View Social Media, View Custom Dashboards,
+            View Job Costing, View Estimate Builder, View Calculators and so on). A dashboard a
+            role can&apos;t view is hidden from the sidebar and Dashboards home and blocked if
+            someone opens its URL. Admins always see everything.
           </li>
           <li>
             <strong>Custom Dashboards module gate</strong> — both{" "}
