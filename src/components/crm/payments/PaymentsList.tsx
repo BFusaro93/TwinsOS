@@ -923,55 +923,6 @@ export function AddPaymentDialog({
 
 type FilterField = "reference" | "date" | "client" | "address" | "method";
 
-function FilterBar({
-  activeFilter,
-  onFilter,
-  filterValue,
-  onFilterValue,
-}: {
-  activeFilter: FilterField;
-  onFilter: (f: FilterField) => void;
-  filterValue: string;
-  onFilterValue: (v: string) => void;
-}) {
-  const fields: { key: FilterField; label: string }[] = [
-    { key: "reference", label: "Reference #" },
-    { key: "date", label: "Date" },
-    { key: "client", label: "Client" },
-    { key: "address", label: "Address" },
-    { key: "method", label: "Payment Method" },
-  ];
-
-  return (
-    <div className="flex items-center gap-1 text-xs text-slate-600">
-      {fields.map((f) => (
-        <button
-          key={f.key}
-          onClick={() => { onFilter(f.key); onFilterValue(""); }}
-          className={`px-2 py-0.5 rounded transition-colors whitespace-nowrap ${
-            activeFilter === f.key
-              ? "bg-brand-100 text-brand-700 font-medium"
-              : "hover:bg-slate-100"
-          }`}
-        >
-          {f.label}
-        </button>
-      ))}
-      {activeFilter === "date" ? (
-        <DateRangeFilter value={filterValue} onChange={onFilterValue} label="Payment date" />
-      ) : activeFilter && (
-        <Input
-          className="ml-2 h-6 w-48 text-xs"
-          placeholder={`Filter by ${fields.find((f) => f.key === activeFilter)?.label}…`}
-          value={filterValue}
-          onChange={(e) => onFilterValue(e.target.value)}
-          autoFocus
-        />
-      )}
-    </div>
-  );
-}
-
 // ── main list ─────────────────────────────────────────────────────────────────
 
 type Tab = "last30" | "deleted";
@@ -1131,13 +1082,17 @@ export function PaymentsList({ clientId }: Props) {
           })}
           {activeFilter && (
             <>
-              <Input
-                className="ml-2 h-6 w-48 text-xs"
-                placeholder={`Filter by ${({ reference: "Reference #", date: "Date", client: "Client", address: "Address", method: "Payment Method" }[activeFilter])}…`}
-                value={filterValue}
-                onChange={(e) => setFilterValue(e.target.value)}
-                autoFocus
-              />
+              {activeFilter === "date" ? (
+                <DateRangeFilter value={filterValue} onChange={setFilterValue} label="Payment date" />
+              ) : (
+                <Input
+                  className="ml-2 h-6 w-48 text-xs"
+                  placeholder={`Filter by ${({ reference: "Reference #", date: "Date", client: "Client", address: "Address", method: "Payment Method" }[activeFilter])}…`}
+                  value={filterValue}
+                  onChange={(e) => setFilterValue(e.target.value)}
+                  autoFocus
+                />
+              )}
               <button onClick={() => { setActiveFilter(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
