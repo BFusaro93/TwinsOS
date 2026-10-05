@@ -1132,31 +1132,35 @@ export function InvoicesList({ clientId }: Props) {
                           server refuses it anyway, so don't present it as an
                           available action. */}
                       {inv.clientSavedPaymentMethodType && inv.balanceCents > 0 && inv.status !== "void" && can("acct_add_modify_payments") && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-brand-600 hover:text-brand-700"
-                          onClick={(e) => { e.stopPropagation(); void handleCharge(inv); }}
-                          disabled={chargingId === inv.id || chargingAll || hasPaymentInFlight(inv)}
-                          title={hasPaymentInFlight(inv) ? pendingChargeTooltip(inv) : undefined}
-                        >
-                          {chargingId === inv.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                          Charge
-                        </Button>
+                        <span title={hasPaymentInFlight(inv) ? pendingChargeTooltip(inv) : undefined} className="inline-flex">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-brand-600 hover:text-brand-700"
+                            onClick={(e) => { e.stopPropagation(); void handleCharge(inv); }}
+                            disabled={chargingId === inv.id || chargingAll || hasPaymentInFlight(inv)}
+                          >
+                            {chargingId === inv.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                            Charge
+                          </Button>
+                        </span>
                       )}
                       {inv.status !== "void" && (() => {
                         const blocked = voidBlockedReason(inv);
                         return (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-slate-400 hover:text-red-500 disabled:opacity-40 disabled:hover:text-slate-400"
-                            disabled={blocked !== null}
-                            title={blocked ?? "Void this invoice"}
-                            onClick={(e) => { e.stopPropagation(); requestVoid(inv); }}
-                          >
-                            Void
-                          </Button>
+                          // Buttons are pointer-events:none when disabled, so the tooltip
+                          // that explains WHY lives on a wrapper that still gets hover.
+                          <span title={blocked ?? "Void this invoice"} className="inline-flex">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-slate-400 hover:text-red-500 disabled:opacity-40 disabled:hover:text-slate-400"
+                              disabled={blocked !== null}
+                              onClick={(e) => { e.stopPropagation(); requestVoid(inv); }}
+                            >
+                              Void
+                            </Button>
+                          </span>
                         );
                       })()}
                     </div>
