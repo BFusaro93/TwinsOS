@@ -691,6 +691,8 @@ async function computeInjuryCases(supabase: Client, timeZone: string): Promise<V
     .from("injury_cases")
     .select("date_of_incident")
     .is("deleted_at", null)
+    // A near miss isn't an accident — it doesn't reset the streak.
+    .neq("incident_type", "near_miss")
     .order("date_of_incident", { ascending: false })
     .limit(1);
   if (error) throw new Error(error.message);
