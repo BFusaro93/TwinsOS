@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Ticket,
   AlertTriangle,
+  HeartPulse,
   Camera,
   Globe,
   BarChart3,
@@ -208,6 +209,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "Damage Cases",
     description: "Tracking property damage and warranty claims tied to a job — what a case captures, how cost rolls up, and a real current limitation in how it connects to a client record.",
     icon: AlertTriangle,
+  },
+  {
+    slug: "injury-cases-guide",
+    kicker: "Landscapt (CRM)",
+    title: "Injury & Near-Miss Cases",
+    description: "Reporting injuries, illnesses and near misses from the field, following them up in the office, tracking self-paid costs, supervisor alerts, and the Accident Free Workdays KPI.",
+    icon: HeartPulse,
   },
   {
     slug: "job-photos-guide",

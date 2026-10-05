@@ -27,6 +27,7 @@ import {
   Plug,
   KeyRound,
   AlertTriangle,
+  HeartPulse,
   Ticket,
   Globe,
   Camera,
@@ -1145,6 +1146,46 @@ export const DOC_SECTIONS: DocSection[] = [
         ],
       },
       {
+        id: "injury-cases",
+        title: "Injury & Near-Miss Cases",
+        summary: "Report injuries, illnesses and near misses from the field and follow them up in the office.",
+        icon: HeartPulse,
+        steps: [
+          {
+            step: "Report from the field",
+            detail:
+              "Job Photos > Field > Injury / Near Miss is a phone-friendly form based on your paper Employee's Report of Injury. Choose Injury, Illness or Near miss, then fill in who, when, what happened, the injury, and what could have prevented it. Submitting opens a new case. The same menu has a Damage Report form that opens a Damage Case.",
+          },
+          {
+            step: "Follow up in the office",
+            detail:
+              "Tools > Injury Cases shows Days Since Last Injury, open and closed cases, and year-to-date totals above a searchable list. Open a case to set severity, days away, how the cost is handled (workers' comp or self-pay), cause and corrective action, and to attach your completed investigation PDF on the Files tab.",
+          },
+          {
+            step: "Self-pay expenses",
+            detail:
+              "If the company pays instead of filing a workers' comp claim, log the costs on the case's Expenses tab (medical, lost wages or other). The total shows in the list and on the Reporting tab.",
+          },
+          {
+            step: "Supervisor alerts",
+            detail:
+              "Filing a report alerts the named supervisor (if they match an employee with a login) and everyone on the Injury & Near-Miss Report Recipients list in Settings > Notifications (default: all admins and managers). The reporter is never alerted about their own report, and anyone can opt out.",
+          },
+          {
+            step: "Near misses count differently",
+            detail:
+              "A near miss is tracked but never resets Days Since Last Injury or the Accident Free Workdays KPI. That KPI is calculated automatically from Injury Cases: Monday-Friday workdays since the last injury or illness.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "Every field, status, who can see injury records, and how this works alongside your paper investigation form.",
+            href: "/settings/support/injury-cases-guide",
+            linkLabel: "Open the Injury & Near-Miss Cases guide",
+          },
+        ],
+      },
+      {
         id: "client-portal",
         title: "The Client Portal",
         summary: "A separate, invite-only login where clients pay invoices and act on estimates.",
@@ -1665,6 +1706,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Should we report near misses, or only injuries?",
+        a: "Report both. A near miss is an event that could have hurt someone but didn't, and the Injury / Near Miss form in Job Photos > Field has its own type for it. Near misses are tracked and reported separately and never reset Days Since Last Injury or the Accident Free Workdays KPI, so reporting them can't make your numbers look worse.",
+      },
+      {
+        q: "Does the in-app injury report replace our paper accident investigation form?",
+        a: "No. The in-app report is the quick intake and the place the case is tracked. Keep using your paper investigation form for the detail that doesn't belong in the app (date of birth, address, unsafe acts and conditions checklists, signatures) and attach the finished PDF to the case's Files tab.",
+      },
+      {
+        q: "Why didn't my supervisor get an alert when I filed an injury report?",
+        a: "The alert finds the supervisor by matching the name typed on the report to an employee who has a login — pick the name from the suggestions rather than typing it. People on the Injury & Near-Miss Report Recipients list (Settings > Notifications, default all admins and managers) are alerted regardless, and anyone can turn the alert off for themselves. You are never alerted about a report you filed yourself.",
+      },
+      {
+        q: "Why is Accident Free Workdays showing a dash?",
+        a: "It's calculated from Injury Cases, and shows a dash until at least one injury or illness case exists. Near misses and deleted cases don't count.",
+      },
+      {
         q: "What's the difference between an estimate's stage and its approval status?",
         a: "Stage (Draft/Quote/Sent/Accepted/Lost/Invoiced) tracks where the estimate sits in the sales process. Approval Status (Not Required/Pending/Approved/Rejected) is a separate internal sign-off gate — an estimate can be stuck 'Pending' approval even though its stage already says 'Sent', which blocks it from actually going out.",
       },
@@ -1701,6 +1758,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "How do I report a bug or suggest an idea?",
+        a: "Use Send Feedback (the feedback button in the app, also on the Support page). Pick Bug, Idea or Other, describe what happened or what you'd like, and attach a screenshot if you can — the page you were on is included automatically. Submissions go straight to the Landscapt team.",
+      },
       {
         q: "How do I add or remove users from my organization?",
         a: "Go to Settings > Users. Admins can invite new users by email and assign a role (Admin, Manager, Staff, Purchaser, Requestor, or Viewer). Users receive an email invitation and set their own password on first login.",

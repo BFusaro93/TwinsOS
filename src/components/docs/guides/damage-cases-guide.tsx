@@ -42,6 +42,7 @@ export function DamageCasesGuide() {
           <TOCLink href="#overview">What a damage case is</TOCLink>
           <TOCLink href="#where">Where cases live</TOCLink>
           <TOCLink href="#creating">Opening a case</TOCLink>
+          <TOCLink href="#field-report">Reporting from the field</TOCLink>
           <TOCLink href="#status">Status</TOCLink>
           <TOCLink href="#expenses">Expenses &amp; cost tracking</TOCLink>
           <TOCLink href="#po-link">Linking a Purchase Order</TOCLink>
@@ -118,6 +119,20 @@ export function DamageCasesGuide() {
           line.&quot;</em> A photo of the cracked head can be attached afterward from the case&apos;s
           Files tab (see below). The case is now visible in the list with status{" "}
           <strong>Open</strong> and $0.00 total cost until an expense is logged.
+        </p>
+      </Section>
+
+      <Section id="field-report" title="Reporting from the field">
+        <p>
+          Crew and anyone with Job Photos access can also open a case without going near the Tools
+          menu: <strong>Job Photos → Field → Damage Report</strong> is a phone-friendly form with the
+          same fields (report type, date, customer / property, address, what happened). Submitting
+          it opens a new case with the same case number and automation behavior as the form above.
+          Employee injuries are tracked separately — see{" "}
+          <GuideLink href="/settings/support/injury-cases-guide" className="text-[#60ab45] underline">
+            Injury &amp; Near-Miss Cases
+          </GuideLink>
+          .
         </p>
       </Section>
 
