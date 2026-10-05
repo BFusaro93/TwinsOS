@@ -20,13 +20,14 @@ export function NewInjuryCaseDialog({ open, onOpenChange, onCreated, editCase }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Injury Case" : "Open Injury Case"}</DialogTitle>
         </DialogHeader>
         {/* key remounts the form so it re-seeds from editCase each time. */}
         <InjuryCaseForm
           key={editCase?.id ?? "new"}
+          office
           initial={editCase}
           submitLabel={isEdit ? "Save Changes" : "Open Case"}
           pendingLabel={isEdit ? "Saving…" : "Opening…"}

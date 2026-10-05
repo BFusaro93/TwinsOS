@@ -2,20 +2,38 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapInjuryCase, mapInjuryCaseExpense } from "@/lib/supabase/mappers";
-import type { InjuryCase, InjuryCaseExpense, InjuryCaseStatus, InjuryClaimRoute, InjuryExpenseType, InjurySeverity } from "@/types";
+import type { InjuryCase, InjuryCaseExpense, InjuryCaseStatus, InjuryClaimRoute, InjuryExpenseType, InjuryIncidentType, InjurySeverity } from "@/types";
 
 export interface InjuryCaseInput {
+  incidentType: InjuryIncidentType;
   employeeName: string;
   dateOfIncident: string;
-  severity: InjurySeverity;
+  timeOfIncident?: string | null;
+  jobTitle?: string | null;
+  supervisorName?: string | null;
+  toldSupervisor?: boolean | null;
+  witnesses?: string | null;
+  activity?: string | null;
   location?: string | null;
+  description: string;
+  equipmentInvolved?: string | null;
+  ppeUsed?: string | null;
   injuryType?: string | null;
   bodyPart?: string | null;
-  description: string;
+  /** Ignored (stored null) for near misses. */
+  severity?: InjurySeverity | null;
+  sawDoctor?: boolean | null;
+  doctorName?: string | null;
+  doctorPhone?: string | null;
+  doctorVisitDate?: string | null;
+  previouslyInjured?: boolean | null;
+  preventionSuggestion?: string | null;
   treatment?: string | null;
   daysAway?: number;
   recordable?: boolean;
   claimRoute?: InjuryClaimRoute | null;
+  cause?: string | null;
+  correctiveAction?: string | null;
 }
 
 const CLOSED: InjuryCaseStatus[] = ["resolved", "closed"];
@@ -91,13 +109,30 @@ export function useCreateInjuryCase() {
           .from("injury_cases")
           .insert({
             case_number: caseNumber,
+            incident_type: input.incidentType,
             employee_name: input.employeeName,
             date_of_incident: input.dateOfIncident,
-            severity: input.severity,
+            time_of_incident: input.timeOfIncident || null,
+            job_title: input.jobTitle || null,
+            supervisor_name: input.supervisorName || null,
+            told_supervisor: input.toldSupervisor ?? null,
+            witnesses: input.witnesses || null,
+            activity: input.activity || null,
+            severity: input.incidentType === "near_miss" ? null : (input.severity ?? "first_aid"),
             location: input.location || null,
             injury_type: input.injuryType || null,
             body_part: input.bodyPart || null,
             description: input.description,
+            equipment_involved: input.equipmentInvolved || null,
+            ppe_used: input.ppeUsed || null,
+            saw_doctor: input.sawDoctor ?? null,
+            doctor_name: input.doctorName || null,
+            doctor_phone: input.doctorPhone || null,
+            doctor_visit_date: input.doctorVisitDate || null,
+            previously_injured: input.previouslyInjured ?? null,
+            prevention_suggestion: input.preventionSuggestion || null,
+            cause: input.cause || null,
+            corrective_action: input.correctiveAction || null,
             treatment: input.treatment || null,
             days_away: input.daysAway ?? 0,
             recordable: input.recordable ?? false,
@@ -123,8 +158,12 @@ export function useCreateInjuryCase() {
 // once a case is resolved/closed it's a finished record, so those are locked
 // until it's reopened (mirrors damage cases).
 const SUBSTANTIVE_FIELDS = [
-  "employeeName", "dateOfIncident", "severity", "location", "injuryType",
-  "bodyPart", "description", "treatment", "daysAway", "recordable", "claimRoute",
+  "incidentType", "employeeName", "dateOfIncident", "timeOfIncident", "jobTitle",
+  "supervisorName", "toldSupervisor", "witnesses", "activity", "severity", "location",
+  "injuryType", "bodyPart", "description", "equipmentInvolved", "ppeUsed", "sawDoctor",
+  "doctorName", "doctorPhone", "doctorVisitDate", "previouslyInjured",
+  "preventionSuggestion", "treatment", "daysAway", "recordable", "claimRoute",
+  "cause", "correctiveAction",
 ] as const;
 
 export function useUpdateInjuryCase() {
@@ -149,9 +188,28 @@ export function useUpdateInjuryCase() {
         .from("injury_cases")
         .update({
           ...(input.status !== undefined && { status: input.status }),
+          ...(input.incidentType !== undefined && { incident_type: input.incidentType }),
+          ...(input.timeOfIncident !== undefined && { time_of_incident: input.timeOfIncident }),
+          ...(input.jobTitle !== undefined && { job_title: input.jobTitle }),
+          ...(input.supervisorName !== undefined && { supervisor_name: input.supervisorName }),
+          ...(input.toldSupervisor !== undefined && { told_supervisor: input.toldSupervisor }),
+          ...(input.witnesses !== undefined && { witnesses: input.witnesses }),
+          ...(input.activity !== undefined && { activity: input.activity }),
+          ...(input.equipmentInvolved !== undefined && { equipment_involved: input.equipmentInvolved }),
+          ...(input.ppeUsed !== undefined && { ppe_used: input.ppeUsed }),
+          ...(input.sawDoctor !== undefined && { saw_doctor: input.sawDoctor }),
+          ...(input.doctorName !== undefined && { doctor_name: input.doctorName }),
+          ...(input.doctorPhone !== undefined && { doctor_phone: input.doctorPhone }),
+          ...(input.doctorVisitDate !== undefined && { doctor_visit_date: input.doctorVisitDate }),
+          ...(input.previouslyInjured !== undefined && { previously_injured: input.previouslyInjured }),
+          ...(input.preventionSuggestion !== undefined && { prevention_suggestion: input.preventionSuggestion }),
+          ...(input.cause !== undefined && { cause: input.cause }),
+          ...(input.correctiveAction !== undefined && { corrective_action: input.correctiveAction }),
           ...(input.employeeName !== undefined && { employee_name: input.employeeName }),
           ...(input.dateOfIncident !== undefined && { date_of_incident: input.dateOfIncident }),
-          ...(input.severity !== undefined && { severity: input.severity }),
+          ...((input.severity !== undefined || input.incidentType === "near_miss") && {
+            severity: input.incidentType === "near_miss" ? null : input.severity,
+          }),
           ...(input.location !== undefined && { location: input.location }),
           ...(input.injuryType !== undefined && { injury_type: input.injuryType }),
           ...(input.bodyPart !== undefined && { body_part: input.bodyPart }),

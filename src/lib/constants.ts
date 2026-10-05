@@ -217,6 +217,19 @@ export const INJURY_SEVERITY_LABELS: Record<string, string> = {
   first_aid: "First Aid",
   medical_treatment: "Medical Treatment",
   lost_time: "Lost Time",
+  fatality: "Fatality",
+};
+
+export const INJURY_INCIDENT_TYPE_COLORS: Record<string, string> = {
+  injury: "bg-red-100 text-red-800",
+  illness: "bg-purple-100 text-purple-800",
+  near_miss: "bg-sky-100 text-sky-800",
+};
+
+export const INJURY_INCIDENT_TYPE_LABELS: Record<string, string> = {
+  injury: "Injury",
+  illness: "Illness",
+  near_miss: "Near miss",
 };
 
 export const INJURY_CLAIM_ROUTE_LABELS: Record<string, string> = {
@@ -231,14 +244,20 @@ export const INJURY_EXPENSE_TYPE_LABELS: Record<string, string> = {
 };
 
 export const INJURY_TYPE_OPTIONS = [
-  "Strain / Sprain",
-  "Cut / Laceration",
-  "Bruise / Contusion",
-  "Fracture",
-  "Burn",
-  "Eye injury",
+  "Abrasion / scrape",
+  "Amputation",
+  "Broken bone",
+  "Bruise",
+  "Burn (heat)",
+  "Burn (chemical)",
+  "Concussion (to the head)",
+  "Crushing injury",
+  "Cut / laceration / puncture",
+  "Hernia",
+  "Sprain / strain",
   "Heat illness",
-  "Insect / Animal bite",
-  "Chemical exposure",
+  "Insect / animal bite",
+  "Eye injury",
+  "Damage to a body system",
   "Other",
 ];

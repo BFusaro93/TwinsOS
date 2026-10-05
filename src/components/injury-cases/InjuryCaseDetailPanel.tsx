@@ -21,9 +21,13 @@ import { useInjuryCase, useUpdateInjuryCase, useDeleteInjuryCase, useDeleteInjur
 import { AddInjuryExpenseDialog } from "./AddInjuryExpenseDialog";
 import { NewInjuryCaseDialog } from "./NewInjuryCaseDialog";
 import { INJURY_STATUS_COLORS, INJURY_SEVERITY_COLORS } from "./injury-colors";
-import { INJURY_CASE_STATUS_LABELS, INJURY_CLAIM_ROUTE_LABELS, INJURY_EXPENSE_TYPE_LABELS, INJURY_SEVERITY_LABELS } from "@/lib/constants";
+import { INJURY_CASE_STATUS_LABELS, INJURY_CLAIM_ROUTE_LABELS, INJURY_EXPENSE_TYPE_LABELS, INJURY_INCIDENT_TYPE_COLORS, INJURY_INCIDENT_TYPE_LABELS, INJURY_SEVERITY_LABELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { InjuryCaseStatus } from "@/types";
+
+function yesNo(v: boolean | null): string | null {
+  return v === null ? null : v ? "Yes" : "No";
+}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   if (children === null || children === undefined || children === "") return null;
@@ -68,7 +72,8 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
           <h2 className="text-base font-semibold text-slate-900">{data.employeeName}</h2>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className={INJURY_SEVERITY_COLORS[data.severity]}>{INJURY_SEVERITY_LABELS[data.severity]}</Badge>
+          <Badge className={INJURY_INCIDENT_TYPE_COLORS[data.incidentType]}>{INJURY_INCIDENT_TYPE_LABELS[data.incidentType]}</Badge>
+          {data.severity && <Badge className={INJURY_SEVERITY_COLORS[data.severity]}>{INJURY_SEVERITY_LABELS[data.severity]}</Badge>}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className="inline-flex items-center gap-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
@@ -123,13 +128,32 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
       </div>
 
       <div className="space-y-2 border-b px-6 py-3">
-        <Row label="Incident Date">{formatDate(data.dateOfIncident)}</Row>
+        <Row label="Incident Date">
+          {formatDate(data.dateOfIncident)}{data.timeOfIncident ? ` at ${data.timeOfIncident}` : ""}
+        </Row>
+        <Row label="Job title">{data.jobTitle}</Row>
+        <Row label="Supervisor">{data.supervisorName}</Row>
+        <Row label="Told supervisor">{yesNo(data.toldSupervisor)}</Row>
         <Row label="Location">{data.location}</Row>
-        <Row label="Injury">{[data.injuryType, data.bodyPart].filter(Boolean).join(" · ")}</Row>
+        <Row label="Doing at the time">{data.activity}</Row>
         <Row label="What happened">{data.description}</Row>
+        <Row label="Equipment / tools">{data.equipmentInvolved}</Row>
+        <Row label="PPE worn">{data.ppeUsed}</Row>
+        <Row label="Witnesses">{data.witnesses}</Row>
+        <Row label={data.incidentType === "near_miss" ? "Body parts at risk" : "Injury"}>
+          {[data.injuryType, data.bodyPart].filter(Boolean).join(" · ")}
+        </Row>
+        <Row label="Saw a doctor">{yesNo(data.sawDoctor)}</Row>
+        <Row label="Doctor / clinic">
+          {[data.doctorName, data.doctorPhone, data.doctorVisitDate ? formatDate(data.doctorVisitDate) : null].filter(Boolean).join(" · ")}
+        </Row>
+        <Row label="Previously injured (same body part)">{yesNo(data.previouslyInjured)}</Row>
         <Row label="Treatment">{data.treatment}</Row>
-        <Row label="Days Away From Work">{String(data.daysAway)}</Row>
+        {data.incidentType !== "near_miss" && <Row label="Days Away From Work">{String(data.daysAway)}</Row>}
         <Row label="Cost handled through">{data.claimRoute ? INJURY_CLAIM_ROUTE_LABELS[data.claimRoute] : null}</Row>
+        <Row label="Suggested prevention">{data.preventionSuggestion}</Row>
+        <Row label="Cause">{data.cause}</Row>
+        <Row label="Corrective action">{data.correctiveAction}</Row>
         {data.recordable && <Badge className="bg-red-100 text-red-800">OSHA recordable</Badge>}
         {(data.resolutionNotes || isClosed) && (
           <div className="flex items-start gap-2 text-sm">
