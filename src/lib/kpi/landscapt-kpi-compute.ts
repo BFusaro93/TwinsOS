@@ -672,6 +672,33 @@ async function computeDamageCases(supabase: Client, timeZone: string): Promise<V
   return { days_since_last_damage_case: Math.max(0, days) };
 }
 
+/** Mon–Fri days strictly after `fromYmd` up to and including `toYmd`. */
+function weekdaysAfter(fromYmd: string, toYmd: string): number {
+  const total = Math.max(0, daysBetweenYmd(fromYmd, toYmd));
+  const start = Date.parse(`${fromYmd.slice(0, 10)}T00:00:00Z`);
+  let count = 0;
+  for (let i = 1; i <= total; i++) {
+    const dow = new Date(start + i * 86400000).getUTCDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
+async function computeInjuryCases(supabase: Client, timeZone: string): Promise<Values> {
+  // injury_cases isn't in the generated Database types yet.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from("injury_cases")
+    .select("date_of_incident")
+    .is("deleted_at", null)
+    .order("date_of_incident", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const last = (data as { date_of_incident: string }[] | null)?.[0]?.date_of_incident;
+  if (!last) return { accident_free_workdays: null };
+  return { accident_free_workdays: weekdaysAfter(last as string, todayInZone(timeZone)) };
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 /**
@@ -699,6 +726,7 @@ export async function computeLandscaptKpiActuals(
     ["employees", () => computeEmployees(supabase, w)],
     ["tickets", () => computeTickets(supabase, w)],
     ["damage_cases", () => computeDamageCases(supabase, w.timeZone)],
+    ["injury_cases", () => computeInjuryCases(supabase, w.timeZone)],
   ];
 
   const settled = await Promise.allSettled(areas.map(([, fn]) => fn()));
