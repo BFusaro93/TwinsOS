@@ -55,6 +55,8 @@ export interface NotificationPrefs {
   inAppPmScheduleDue: boolean;
   inAppNewMaintenanceRequest: boolean;
   inAppMention: boolean;
+  emailInjuryReport: boolean;
+  inAppInjuryReport: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -107,6 +109,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inAppPmScheduleDue: false,
   inAppNewMaintenanceRequest: false,
   inAppMention: true,
+  emailInjuryReport: true,
+  inAppInjuryReport: true,
 };
 
 function mergePrefs(stored: Record<string, unknown>): NotificationPrefs {

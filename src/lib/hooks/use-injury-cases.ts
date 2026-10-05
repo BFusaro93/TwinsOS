@@ -1,23 +1,46 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
-import { mapInjuryCase } from "@/lib/supabase/mappers";
-import type { InjuryCase, InjuryCaseStatus, InjurySeverity } from "@/types";
+import { mapInjuryCase, mapInjuryCaseExpense } from "@/lib/supabase/mappers";
+import type { InjuryCase, InjuryCaseExpense, InjuryCaseStatus, InjuryClaimRoute, InjuryExpenseType, InjuryIncidentType, InjurySeverity } from "@/types";
 
 export interface InjuryCaseInput {
+  incidentType: InjuryIncidentType;
   employeeName: string;
   dateOfIncident: string;
-  severity: InjurySeverity;
+  timeOfIncident?: string | null;
+  jobTitle?: string | null;
+  supervisorName?: string | null;
+  toldSupervisor?: boolean | null;
+  witnesses?: string | null;
+  activity?: string | null;
   location?: string | null;
+  description: string;
+  equipmentInvolved?: string | null;
+  ppeUsed?: string | null;
   injuryType?: string | null;
   bodyPart?: string | null;
-  description: string;
+  /** Ignored (stored null) for near misses. */
+  severity?: InjurySeverity | null;
+  sawDoctor?: boolean | null;
+  doctorName?: string | null;
+  doctorPhone?: string | null;
+  doctorVisitDate?: string | null;
+  previouslyInjured?: boolean | null;
+  preventionSuggestion?: string | null;
   treatment?: string | null;
   daysAway?: number;
   recordable?: boolean;
+  claimRoute?: InjuryClaimRoute | null;
+  cause?: string | null;
+  correctiveAction?: string | null;
 }
 
 const CLOSED: InjuryCaseStatus[] = ["resolved", "closed"];
+
+function sumExpenses(rows: { amount: number; deleted_at: string | null }[] | null | undefined): number {
+  return (rows ?? []).filter((e) => !e.deleted_at).reduce((sum, e) => sum + e.amount, 0);
+}
 
 export function useInjuryCases() {
   return useQuery({
@@ -27,12 +50,12 @@ export function useInjuryCases() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("injury_cases")
-        .select("*")
+        .select("*, injury_case_expenses(amount, deleted_at)")
         .is("deleted_at", null)
         .order("date_of_incident", { ascending: false });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data as any[]).map(mapInjuryCase);
+      return (data as any[]).map((row) => ({ ...mapInjuryCase(row), totalCost: sumExpenses(row.injury_case_expenses) }));
     },
   });
 }
@@ -45,12 +68,20 @@ export function useInjuryCase(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("injury_cases")
-        .select("*")
+        .select("*, injury_case_expenses(*)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
       if (error) throw error;
-      return mapInjuryCase(data);
+      return {
+        ...mapInjuryCase(data),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expenses: ((data.injury_case_expenses ?? []) as any[])
+          .filter((e) => !e.deleted_at)
+          .sort((a, b) => (a.expense_date < b.expense_date ? 1 : -1))
+          .map(mapInjuryCaseExpense) as InjuryCaseExpense[],
+        totalCost: sumExpenses(data.injury_case_expenses),
+      };
     },
     enabled: !!id,
   });
@@ -78,16 +109,34 @@ export function useCreateInjuryCase() {
           .from("injury_cases")
           .insert({
             case_number: caseNumber,
+            incident_type: input.incidentType,
             employee_name: input.employeeName,
             date_of_incident: input.dateOfIncident,
-            severity: input.severity,
+            time_of_incident: input.timeOfIncident || null,
+            job_title: input.jobTitle || null,
+            supervisor_name: input.supervisorName || null,
+            told_supervisor: input.toldSupervisor ?? null,
+            witnesses: input.witnesses || null,
+            activity: input.activity || null,
+            severity: input.incidentType === "near_miss" ? null : (input.severity ?? "first_aid"),
             location: input.location || null,
             injury_type: input.injuryType || null,
             body_part: input.bodyPart || null,
             description: input.description,
+            equipment_involved: input.equipmentInvolved || null,
+            ppe_used: input.ppeUsed || null,
+            saw_doctor: input.sawDoctor ?? null,
+            doctor_name: input.doctorName || null,
+            doctor_phone: input.doctorPhone || null,
+            doctor_visit_date: input.doctorVisitDate || null,
+            previously_injured: input.previouslyInjured ?? null,
+            prevention_suggestion: input.preventionSuggestion || null,
+            cause: input.cause || null,
+            corrective_action: input.correctiveAction || null,
             treatment: input.treatment || null,
             days_away: input.daysAway ?? 0,
             recordable: input.recordable ?? false,
+            claim_route: input.claimRoute ?? null,
             created_by: user?.id ?? null,
           })
           .select()
@@ -99,8 +148,11 @@ export function useCreateInjuryCase() {
       if (!data) throw lastError ?? new Error("Failed to create injury case");
       return mapInjuryCase(data);
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["injury-cases"] });
+      // Alert the supervisor. Best-effort: the report is already saved, so a
+      // failed alert must never surface as a failed submission.
+      void fetch(`/api/injury-cases/${created.id}/notify`, { method: "POST" }).catch(() => {});
     },
   });
 }
@@ -109,8 +161,12 @@ export function useCreateInjuryCase() {
 // once a case is resolved/closed it's a finished record, so those are locked
 // until it's reopened (mirrors damage cases).
 const SUBSTANTIVE_FIELDS = [
-  "employeeName", "dateOfIncident", "severity", "location", "injuryType",
-  "bodyPart", "description", "treatment", "daysAway", "recordable",
+  "incidentType", "employeeName", "dateOfIncident", "timeOfIncident", "jobTitle",
+  "supervisorName", "toldSupervisor", "witnesses", "activity", "severity", "location",
+  "injuryType", "bodyPart", "description", "equipmentInvolved", "ppeUsed", "sawDoctor",
+  "doctorName", "doctorPhone", "doctorVisitDate", "previouslyInjured",
+  "preventionSuggestion", "treatment", "daysAway", "recordable", "claimRoute",
+  "cause", "correctiveAction",
 ] as const;
 
 export function useUpdateInjuryCase() {
@@ -135,9 +191,28 @@ export function useUpdateInjuryCase() {
         .from("injury_cases")
         .update({
           ...(input.status !== undefined && { status: input.status }),
+          ...(input.incidentType !== undefined && { incident_type: input.incidentType }),
+          ...(input.timeOfIncident !== undefined && { time_of_incident: input.timeOfIncident }),
+          ...(input.jobTitle !== undefined && { job_title: input.jobTitle }),
+          ...(input.supervisorName !== undefined && { supervisor_name: input.supervisorName }),
+          ...(input.toldSupervisor !== undefined && { told_supervisor: input.toldSupervisor }),
+          ...(input.witnesses !== undefined && { witnesses: input.witnesses }),
+          ...(input.activity !== undefined && { activity: input.activity }),
+          ...(input.equipmentInvolved !== undefined && { equipment_involved: input.equipmentInvolved }),
+          ...(input.ppeUsed !== undefined && { ppe_used: input.ppeUsed }),
+          ...(input.sawDoctor !== undefined && { saw_doctor: input.sawDoctor }),
+          ...(input.doctorName !== undefined && { doctor_name: input.doctorName }),
+          ...(input.doctorPhone !== undefined && { doctor_phone: input.doctorPhone }),
+          ...(input.doctorVisitDate !== undefined && { doctor_visit_date: input.doctorVisitDate }),
+          ...(input.previouslyInjured !== undefined && { previously_injured: input.previouslyInjured }),
+          ...(input.preventionSuggestion !== undefined && { prevention_suggestion: input.preventionSuggestion }),
+          ...(input.cause !== undefined && { cause: input.cause }),
+          ...(input.correctiveAction !== undefined && { corrective_action: input.correctiveAction }),
           ...(input.employeeName !== undefined && { employee_name: input.employeeName }),
           ...(input.dateOfIncident !== undefined && { date_of_incident: input.dateOfIncident }),
-          ...(input.severity !== undefined && { severity: input.severity }),
+          ...((input.severity !== undefined || input.incidentType === "near_miss") && {
+            severity: input.incidentType === "near_miss" ? null : input.severity,
+          }),
           ...(input.location !== undefined && { location: input.location }),
           ...(input.injuryType !== undefined && { injury_type: input.injuryType }),
           ...(input.bodyPart !== undefined && { body_part: input.bodyPart }),
@@ -145,6 +220,7 @@ export function useUpdateInjuryCase() {
           ...(input.treatment !== undefined && { treatment: input.treatment }),
           ...(input.daysAway !== undefined && { days_away: input.daysAway }),
           ...(input.recordable !== undefined && { recordable: input.recordable }),
+          ...(input.claimRoute !== undefined && { claim_route: input.claimRoute }),
           ...(input.resolutionNotes !== undefined && { resolution_notes: input.resolutionNotes }),
         })
         .eq("id", id)
@@ -156,6 +232,7 @@ export function useUpdateInjuryCase() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["injury-cases"] });
       queryClient.invalidateQueries({ queryKey: ["injury-cases", id] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
   });
 }
@@ -180,6 +257,84 @@ export function useDeleteInjuryCase() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["injury-cases"] });
+    },
+  });
+}
+
+async function assertInjuryCaseOpen(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  injuryCaseId: string,
+  action: string,
+): Promise<void> {
+  const { data, error } = await supabase.from("injury_cases").select("status").eq("id", injuryCaseId).single();
+  if (error) throw error;
+  if (CLOSED.includes(data?.status)) {
+    throw new Error(`This case is resolved/closed. Reopen it before ${action}.`);
+  }
+}
+
+export interface InjuryExpenseInput {
+  injuryCaseId: string;
+  expenseDate: string;
+  expenseType: InjuryExpenseType;
+  vendorId: string | null;
+  vendorName: string | null;
+  description: string;
+  amount: number; // cents
+}
+
+export function useCreateInjuryCaseExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: InjuryExpenseInput) => {
+      const supabase = createClient();
+      await assertInjuryCaseOpen(supabase, input.injuryCaseId, "adding expenses");
+      const { data: { user } } = await supabase.auth.getUser();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("injury_case_expenses")
+        .insert({
+          injury_case_id: input.injuryCaseId,
+          expense_date: input.expenseDate,
+          expense_type: input.expenseType,
+          vendor_id: input.vendorId || null,
+          vendor_name: input.vendorName || null,
+          description: input.description,
+          amount: input.amount,
+          created_by: user?.id ?? null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return mapInjuryCaseExpense(data);
+    },
+    onSuccess: (_, { injuryCaseId }) => {
+      queryClient.invalidateQueries({ queryKey: ["injury-cases"] });
+      queryClient.invalidateQueries({ queryKey: ["injury-cases", injuryCaseId] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+    },
+  });
+}
+
+export function useDeleteInjuryCaseExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, injuryCaseId }: { id: string; injuryCaseId: string }) => {
+      const supabase = createClient();
+      await assertInjuryCaseOpen(supabase, injuryCaseId, "deleting expenses");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("injury_case_expenses")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      return injuryCaseId;
+    },
+    onSuccess: (injuryCaseId) => {
+      queryClient.invalidateQueries({ queryKey: ["injury-cases"] });
+      queryClient.invalidateQueries({ queryKey: ["injury-cases", injuryCaseId] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
   });
 }

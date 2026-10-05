@@ -16,6 +16,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
   AtSign,
+  HeartPulse,
   CircleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <CalendarClock className={cn(cls, "text-sky-500")} />;
     case "comment_mention":
       return <AtSign className={cn(cls, "text-brand-500")} />;
+    case "injury_reported":
+      return <HeartPulse className={cn(cls, "text-red-500")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -208,7 +211,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -370,12 +373,14 @@ export function NotificationsBell() {
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       automation_alert:           { href: () => "/crm/communication/automations", title: "Automation Alert" },
       wo_status_changed:          { href: (id) => id ? `/cmms/work-orders?id=${id}` : "/cmms/work-orders", title: "Status Changed" },
+      injury_reported:            { href: (id) => id ? `/tools/injury-cases?open=${id}` : "/tools/injury-cases", title: "Injury Report" },
       sales_meeting_reminder:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Reminder" },
     };
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;
       if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
       if (n.type === "comment_mention" && notifPrefs?.inAppMention === false) return false;
+      if (n.type === "injury_reported" && notifPrefs?.inAppInjuryReport === false) return false;
       return true;
     }).forEach((n) => {
       const id = `db-notif-${n.id}`;

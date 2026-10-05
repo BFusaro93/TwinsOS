@@ -15,8 +15,8 @@ export function InjuryReportForm() {
 
   return (
     <div className="mx-auto w-full max-w-xl p-4 md:p-6">
-      <h1 className="text-xl font-semibold">Injury Report</h1>
-      <p className="mb-4 text-sm text-muted-foreground">Report an employee injury. This opens a new injury case for the office to follow up on.</p>
+      <h1 className="text-xl font-semibold">Injury / Near-Miss Report</h1>
+      <p className="mb-4 text-sm text-muted-foreground">Report a work-related injury, illness or near miss — no matter how minor. This opens a case for the office to follow up on; complete it within 48 hours of the incident.</p>
       {submitted ? (
         <div className="space-y-4 rounded-lg border bg-white p-6 text-center">
           <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />

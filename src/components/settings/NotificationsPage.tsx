@@ -223,6 +223,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
                 <Switch checked={prefs.emailMention} onCheckedChange={() => toggle("emailMention")} />
               </SettingRow>
+              <SettingRow label="Injury / Near Miss Reported" description="When an employee reports an injury, illness or near miss and you're their supervisor (or an admin/manager)">
+                <Switch checked={prefs.emailInjuryReport} onCheckedChange={() => toggle("emailInjuryReport")} />
+              </SettingRow>
               {hasEquipt && (
                 <>
                   <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
@@ -286,6 +289,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
             <>
               <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
                 <Switch checked={prefs.emailMention} onCheckedChange={() => toggle("emailMention")} />
+              </SettingRow>
+              <SettingRow label="Injury / Near Miss Reported" description="When an employee reports an injury, illness or near miss and you're their supervisor (or an admin/manager)">
+                <Switch checked={prefs.emailInjuryReport} onCheckedChange={() => toggle("emailInjuryReport")} />
               </SettingRow>
               <SettingRow label="Estimate Approved" description="When your estimate is approved">
                 <Switch checked={prefs.emailEstimateApproved} onCheckedChange={() => toggle("emailEstimateApproved")} />
@@ -353,6 +359,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
                 <Switch checked={prefs.inAppMention} onCheckedChange={() => toggle("inAppMention")} />
               </SettingRow>
+              <SettingRow label="Injury / Near Miss Reported" description="When an employee reports an injury, illness or near miss and you're their supervisor (or an admin/manager)">
+                <Switch checked={prefs.inAppInjuryReport} onCheckedChange={() => toggle("inAppInjuryReport")} />
+              </SettingRow>
               {hasEquipt && (
                 <>
                   <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
@@ -400,6 +409,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
             <>
               <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
                 <Switch checked={prefs.inAppMention} onCheckedChange={() => toggle("inAppMention")} />
+              </SettingRow>
+              <SettingRow label="Injury / Near Miss Reported" description="When an employee reports an injury, illness or near miss and you're their supervisor (or an admin/manager)">
+                <Switch checked={prefs.inAppInjuryReport} onCheckedChange={() => toggle("inAppInjuryReport")} />
               </SettingRow>
               <SettingRow label="Estimate Approval Required" description="When an estimate requires your approval">
                 <Switch checked={prefs.inAppEstimateApprovalRequired} onCheckedChange={() => toggle("inAppEstimateApprovalRequired")} />

@@ -27,7 +27,7 @@ export const FIELD_NAV: PhotoNavItem[] = [
   { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays,  internalOnly: true },
   { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench },
   { label: "Damage Report",      href: "/photos/field/damage-report",   icon: ShieldAlert },
-  { label: "Injury Report",      href: "/photos/field/injury-report",   icon: HeartPulse },
+  { label: "Injury / Near Miss", href: "/photos/field/injury-report",   icon: HeartPulse },
 ];
 
 // Roles with access to the PO/Projects side (Projects nav item)

@@ -548,7 +548,7 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     snapshot: true,
     legacy: true,
     defaultTarget: 100,
-    source: "Injury Cases: Monday–Friday workdays since the most recent injury incident date, as of today.",
+    source: "Injury Cases: Monday–Friday workdays since the most recent injury or illness incident date (near misses don't count), as of today.",
   },
   {
     key: "absenteeism_rate",

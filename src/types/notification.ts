@@ -34,6 +34,7 @@ export interface AppNotification {
     | "contract_expiring"
     | "automation_alert"
     | "comment_mention"
+    | "injury_reported"
     | "sales_meeting_reminder";
   title: string;
   body: string;
