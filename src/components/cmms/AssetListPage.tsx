@@ -35,7 +35,7 @@ import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useCMMSStore } from "@/stores";
 import { useRouter } from "next/navigation";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
-import { cn, matchesFilter, getInitials, getAvatarColor } from "@/lib/utils";
+import { cn, codesMatch, matchesFilter, getInitials, getAvatarColor } from "@/lib/utils";
 import type { Asset } from "@/types";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
@@ -148,9 +148,9 @@ export function AssetListPage() {
     // Search assets first
     const assetMatch = all.find(
       (a) =>
-        a.barcode?.toLowerCase() === q ||
-        a.assetTag.toLowerCase() === q ||
-        (a.licensePlate ?? "").toLowerCase() === q
+        codesMatch(q, a.barcode) ||
+        codesMatch(q, a.assetTag) ||
+        codesMatch(q, a.licensePlate)
     );
     if (assetMatch) {
       setSelectedAssetId(assetMatch.id);
@@ -160,9 +160,9 @@ export function AssetListPage() {
     // Fall back to vehicles — navigate there and pre-select
     const vehicleMatch = (vehicles ?? []).find(
       (v) =>
-        v.barcode?.toLowerCase() === q ||
-        v.assetTag.toLowerCase() === q ||
-        (v.licensePlate ?? "").toLowerCase() === q
+        codesMatch(q, v.barcode) ||
+        codesMatch(q, v.assetTag) ||
+        codesMatch(q, v.licensePlate)
     );
     if (vehicleMatch) {
       setSelectedVehicleId(vehicleMatch.id);

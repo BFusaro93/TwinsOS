@@ -273,3 +273,17 @@ export function formatTimeOfDay(value: string | null | undefined): string {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
+
+/**
+ * True when a scanned/typed code matches a stored code. Case-insensitive, and
+ * all-digit codes ignore leading zeros so "237" finds a tag printed "00237".
+ */
+export function codesMatch(entered: string, stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  const a = entered.trim().toLowerCase();
+  const b = stored.trim().toLowerCase();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (/^\d+$/.test(a) && /^\d+$/.test(b)) return a.replace(/^0+/, "") === b.replace(/^0+/, "");
+  return false;
+}
