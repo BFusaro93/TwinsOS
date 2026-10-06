@@ -17,6 +17,7 @@ import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
+import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 
 const log = logger.child("use-crm-jobs");
 
@@ -663,6 +664,8 @@ type JobServiceFallback = {
   rate_cents: number | null;
   /** numeric in Postgres, so it can arrive as a string. */
   budgeted_hours: number | string | null;
+  /** budgeted_hours is per-person; man-hours = budgeted_hours x team_size. */
+  team_size?: number | null;
   qty: number | null;
 };
 
@@ -670,6 +673,13 @@ type JobServiceFallback = {
 // sum of the parent job's services (the common case for auto-generated visits).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
+  // visit.crew_id is usually NULL — the crew lives on the job. Resolve the
+  // EFFECTIVE crew name (an explicit crew_unassigned override wins) so the
+  // visit list doesn't read "Unassigned" for every normally-crewed visit.
+  if (!visit.crewUnassigned && !visit.crewId && !visit.crewName) {
+    const jobCrew = Array.isArray(row.crm_jobs) ? row.crm_jobs[0] : row.crm_jobs;
+    visit.crewName = jobCrew?.crm_crews?.name ?? null;
+  }
   const services: JobServiceFallback[] = row.crm_jobs?.crm_job_services ?? [];
   // Package jobs link each visit to a single service (e.g. "Fert 2 of 5") via
   // job_service_id — use that one service's own rate/hours/name instead of
@@ -688,10 +698,22 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
     if (visit.rateCents == null && row.crm_jobs?.rate_cents != null) visit.rateCents = row.crm_jobs.rate_cents;
   }
   if (visit.budgetedHours == null) {
+    // Same units as everything else (computeBudgetedHours): budgeted_hours is
+    // per-person, so a service's visit budget is budgeted_hours x team_size —
+    // NOT x qty, which under-counted crews and over-counted quantities.
+    const asHours = (s: JobServiceFallback) => ({
+      id: s.id,
+      budgetedHours: Number(s.budgeted_hours) || 0,
+      teamSize: s.team_size ?? 1,
+    });
     if (linkedService) {
-      visit.budgetedHours = Number(linkedService.budgeted_hours ?? 0) * (linkedService.qty ?? 1);
+      visit.budgetedHours = computeBudgetedHours({
+        budgetedHours: null,
+        jobServiceId: linkedService.id,
+        job: { budgetedHours: null, services: [asHours(linkedService)] },
+      });
     } else {
-      const total = services.reduce((sum, s) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
+      const total = services.reduce((sum, s) => sum + (Number(s.budgeted_hours) || 0) * (s.team_size ?? 1), 0);
       if (total > 0) visit.budgetedHours = total;
     }
     if (visit.budgetedHours == null && row.crm_jobs?.budgeted_hours != null) visit.budgetedHours = Number(row.crm_jobs.budgeted_hours);
@@ -2407,7 +2429,7 @@ export function useJobVisits(jobId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(id, rate_cents, budgeted_hours, qty, service_name, service_id))')
+        .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('job_id', jobId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: true });
@@ -2427,7 +2449,7 @@ export function useClientAllVisits(clientId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(id, rate_cents, budgeted_hours, qty, service_name, service_id))')
+        .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('client_id', clientId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: false });

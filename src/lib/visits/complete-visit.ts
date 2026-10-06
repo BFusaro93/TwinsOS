@@ -44,6 +44,7 @@ export async function completeVisit(
     .from("crm_job_visits")
     .select("job_id, client_id, invoice_description, scheduled_date, status, completed_at, job_service_id, org_id")
     .eq("id", visitId)
+    .is("deleted_at", null)
     .single();
 
   if (visitErr || !visit) {
@@ -98,6 +99,7 @@ export async function completeVisit(
     .from("crm_job_visits")
     .update({ status: "completed", completed_at: new Date().toISOString() })
     .eq("id", visitId)
+    .is("deleted_at", null)
     .neq("status", "completed")
     .select("id");
 

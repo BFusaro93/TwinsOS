@@ -19,7 +19,7 @@ import type {
   TicketBreakdown,
 } from "@/types/company-report";
 import { runAnalysis } from "@/lib/reports/engine";
-import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
+import { daysBetweenYmd, isoInZone, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 
 // ============================================================
@@ -409,6 +409,7 @@ async function sumCashPayments(supabase: Client, from: string, to: string): Prom
       .gte("payment_date", from)
       .lte("payment_date", to)
       .order("payment_date", { ascending: true })
+      .order("id")
       .range(f, t)
   );
   return rows.reduce((s, r) => s + (r.amount_cents ?? 0) - (r.refunded_amount_cents ?? 0), 0);
@@ -466,6 +467,7 @@ async function computeTickets(supabase: Client, now: Date): Promise<TicketBreakd
       // null) would wrongly count as still open.
       .neq("status", "closed")
       .order("created_at", { ascending: true })
+      .order("id")
       .range(from, to)
   );
 
@@ -515,6 +517,7 @@ async function computePaymentPool(
       .gte("payment_date", from)
       .lte("payment_date", to)
       .order("unused_amount_cents", { ascending: false })
+      .order("id")
       .range(f, t)
   );
 
@@ -569,7 +572,7 @@ function badgeFor(d61_90Cents: number, d90PlusCents: number, totalCents: number)
   return "ok";
 }
 
-async function computeCollections(supabase: Client): Promise<CollectionsSection> {
+async function computeCollections(supabase: Client, timeZone: string): Promise<CollectionsSection> {
   const rows = await fetchAll<InvoiceAgingRow>((from, to) =>
     supabase
       .from("crm_invoices")
@@ -577,10 +580,14 @@ async function computeCollections(supabase: Client): Promise<CollectionsSection>
       .gt("balance_cents", 0)
       .is("deleted_at", null)
       .in("status", ISSUED_INVOICE_STATUSES)
+      .order("id")
       .range(from, to)
   );
 
-  const nowMs = Date.now();
+  // Days past due on the org's calendar: new Date("YYYY-MM-DD") is UTC
+  // midnight, so against Date.now() every invoice read up to a day older
+  // (and flipped buckets in the evening).
+  const orgToday = todayInZone(timeZone);
   const byClient = new Map<string, AgingBucketTotals & { name: string }>();
   const buckets: AgingBucketTotals = {
     currentCents: 0,
@@ -594,7 +601,7 @@ async function computeCollections(supabase: Client): Promise<CollectionsSection>
   for (const r of rows) {
     const balance = r.balance_cents ?? 0;
     const anchor = r.due_date ?? r.invoice_date;
-    const daysPastDue = anchor ? Math.floor((nowMs - new Date(anchor).getTime()) / 86_400_000) : 0;
+    const daysPastDue = anchor ? daysBetweenYmd(anchor.slice(0, 10), orgToday) : 0;
     const name = r.clients?.display_name ?? "(unknown)";
     const existing =
       byClient.get(name) ??
@@ -649,7 +656,7 @@ export async function computeCompanyReport(supabase: Client, timeZone: string, n
   const areas: Array<[string, () => Promise<unknown>]> = [
     ["sales", () => computeSales(supabase, months, ytdFrom, nowStr)],
     ["operations", () => computeOperations(supabase, months, now, ytdFrom, nowStr)],
-    ["collections", () => computeCollections(supabase)],
+    ["collections", () => computeCollections(supabase, timeZone)],
   ];
 
   const [salesResult, operationsResult, collectionsResult] = await Promise.allSettled(

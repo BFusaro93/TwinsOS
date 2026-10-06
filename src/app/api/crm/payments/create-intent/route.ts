@@ -35,6 +35,17 @@ export async function POST(request: Request) {
     .single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
+  // This creates a charge against the client's card/bank — same permission as
+  // autopay/charge (admins always pass inside has_settings_permission). It also
+  // covers the waiveFee / overrideFeeCents knobs below.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canCharge } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_add_modify_payments",
+  });
+  if (!canCharge) {
+    return NextResponse.json({ error: "You don't have permission to take payments" }, { status: 403 });
+  }
+
   const body = await request.json();
   const parsed = CreateIntentSchema.safeParse(body);
   if (!parsed.success) {
@@ -98,6 +109,20 @@ export async function POST(request: Request) {
 
   // The processing fee only ever applies to card — ACH is the fee-free
   // alternative by design, so it must never be computed for that path.
+  // An override may only lower the fee: cap it at the fee the org's own
+  // settings would charge on this balance, so a client-supplied value can
+  // never inflate the charge above what the invoice + standard fee allows.
+  const standardFeeCents = computeProcessingFee(
+    {
+      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+      ccProcessingFeeBps: org.cc_processing_fee_bps,
+      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+    },
+    invoice.balance_cents,
+    false
+  ).feeCents;
+  const cappedOverrideFeeCents =
+    overrideFeeCents === undefined ? undefined : Math.min(overrideFeeCents, standardFeeCents);
   const { feeCents, totalChargeCents } =
     paymentMethod === "card"
       ? computeProcessingFee(
@@ -108,7 +133,7 @@ export async function POST(request: Request) {
           },
           invoice.balance_cents,
           waiveFee ?? false,
-          overrideFeeCents
+          cappedOverrideFeeCents
         )
       : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 

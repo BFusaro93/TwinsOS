@@ -10,6 +10,7 @@ import {
   MONTH_LABELS,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { runAnalysis } from "@/lib/reports/engine";
 import { annualBillingProfile, BILLABLE_CONTRACT_STATUSES, type ContractScheduleRow } from "@/lib/reports/contract-schedule";
 import { normalizeBillingFrequency } from "@/lib/contract-billing";
@@ -548,15 +549,16 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       });
       const earliestStart = months[0].start;
 
-      const { data, error } = await supabase
-        .from("clients")
-        .select("status, client_since, created_at, closed_at")
-        .is("deleted_at", null)
-        .or(
-          `client_since.gte.${earliestStart},created_at.gte.${earliestStart},closed_at.gte.${earliestStart}`
-        )
-        .limit(10000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("clients")
+          .select("status, client_since, created_at, closed_at")
+          .is("deleted_at", null)
+          .or(
+            `client_since.gte.${earliestStart},created_at.gte.${earliestStart},closed_at.gte.${earliestStart}`
+          )
+          .order("id")
+      );
 
       type Row = {
         status: string | null;
@@ -638,12 +640,13 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_year", timeZone);
 
-      const { data, error } = await supabase
-        .from("clients")
-        .select("status, client_since, created_at, closed_at")
-        .is("deleted_at", null)
-        .limit(20000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("clients")
+          .select("status, client_since, created_at, closed_at")
+          .is("deleted_at", null)
+          .order("id")
+      );
 
       type Row = {
         status: string | null;

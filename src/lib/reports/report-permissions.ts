@@ -4,20 +4,37 @@
  * dataset is gated by the same keys. Every key must exist in
  * src/types/crm-roles.ts.
  */
-const ACCOUNTING_DATASET_KEYS = [
+export const ACCOUNTING_DATASET_KEYS = [
   "acct_rpt_invoiced_income_by_client",
   "acct_rpt_invoices_with_balances",
   "acct_rpt_ar_aging",
 ];
 
-const PAYMENT_DATASET_KEYS = ["acct_rpt_payment_audit_summary", ...ACCOUNTING_DATASET_KEYS];
+export const PAYMENT_DATASET_KEYS = ["acct_rpt_payment_audit_summary", ...ACCOUNTING_DATASET_KEYS];
 
-const TIMESHEET_DATASET_KEYS = ["sched_rpt_job_hours_summary", "sched_rpt_employee_directory"];
+export const TIMESHEET_DATASET_KEYS = ["sched_rpt_job_hours_summary", "sched_rpt_employee_directory"];
 
-const ESTIMATE_DATASET_KEYS = [
+export const ESTIMATE_DATASET_KEYS = [
   "estimate_list",
   "crm_rpt_estimates_by_stage",
   "crm_rpt_won_estimates_by_service",
+];
+
+// Visit-level labor cost / job costing. Deliberately the union of the costing
+// reports' own keys (cogs, job costing, job cost summary) plus job hours, so no
+// role that can already see those reports is locked out of the matching data.
+const JOB_COSTING_DATASET_KEYS = [
+  "sched_rpt_job_costing",
+  "sched_rpt_job_cost_summary",
+  "sched_rpt_cogs",
+  "sched_rpt_job_hours_summary",
+];
+
+// Contract billing amounts.
+const CONTRACT_DATASET_KEYS = [
+  "crm_rpt_client_contracts",
+  "sched_rpt_package_summary",
+  ...ACCOUNTING_DATASET_KEYS,
 ];
 
 /**
@@ -127,6 +144,15 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "estimate-value-vs-actual": ESTIMATE_DATASET_KEYS,
   "close-ratios-by-sales-rep": ESTIMATE_DATASET_KEYS,
   "sales-activity-last-7-days": ESTIMATE_DATASET_KEYS,
+  // Bespoke reports that previously had no gate at all.
+  "statements": [...ACCOUNTING_DATASET_KEYS, "crm_rpt_client_balance"],
+  "production-rate-accuracy": JOB_COSTING_DATASET_KEYS,
+  "avb-hours-custom": JOB_COSTING_DATASET_KEYS,
+  "contract-service-usage": CONTRACT_DATASET_KEYS,
+  "clients-leads-stats": ["crm_rpt_new_clients", "crm_rpt_new_leads", "crm_rpt_new_client_count", "crm_rpt_company_scorecard"],
+  "address-verification": ["crm_rpt_client_contact_list", "crm_rpt_client_phone_list", "sched_rpt_visits"],
+  "skipped-visits": ["sched_rpt_visits"],
+  "tickets-past-due": ["tickets_view_modify"],
 };
 
 /**
@@ -139,14 +165,19 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
  * `view_report_center` could pull pay rates, labor cost, invoice/payment
  * history or estimate pricing via an ad-hoc analysis even when their role is
  * denied every prebuilt report over that data. Datasets with no entry here
- * (clients, jobs, visits, services, products, vendors, contracts, chemicals,
- * WIP, sales-rep month, contract usage, ...) are gated only by view_report_center.
+ * (clients, jobs, products, vendors, chemicals, sales-rep month, ...) are gated only by view_report_center.
  * Every key must exist in src/types/crm-roles.ts.
  */
 export const DATASET_PERMISSION_KEYS: Record<string, string[]> = {
   rpt_employees: ["sched_rpt_employee_directory"],
   rpt_timesheets: TIMESHEET_DATASET_KEYS,
   rpt_crew_drive_time: ["sched_rpt_job_hours_summary"],
+  // Visit rows carry labor cost and revenue; WIP carries contract value, EAC
+  // and gross profit — same keys as the costing / WIP prebuilt reports.
+  rpt_job_visits: JOB_COSTING_DATASET_KEYS,
+  rpt_job_services: JOB_COSTING_DATASET_KEYS,
+  rpt_projects_wip: ["sched_rpt_job_costing", "sched_rpt_job_cost_summary"],
+  rpt_contracts: CONTRACT_DATASET_KEYS,
   rpt_invoices: ACCOUNTING_DATASET_KEYS,
   rpt_invoice_line_items: ACCOUNTING_DATASET_KEYS,
   rpt_payments: PAYMENT_DATASET_KEYS,

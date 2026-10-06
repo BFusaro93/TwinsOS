@@ -3,6 +3,8 @@ import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { daysBetweenYmd, shiftYmd, todayInZone } from "@/lib/time/zone";
 
 export async function POST(
   request: Request,
@@ -45,9 +47,32 @@ export async function POST(
     created_by: _cb,
     deleted_at: _da,
     stage: _stage,
+    // stage_id is omitted on purpose: fn_estimates_sync_stage lets a non-null
+    // stage_id win over `stage` on INSERT, so copying it would silently put the
+    // duplicate back in the source's pipeline stage (Won, Sent, ...) with
+    // stage = 'draft' overwritten. Leaving it null makes the trigger derive it
+    // from stage = 'draft'.
+    stage_id: _stageId,
     reason: _reason,
     ...restFields
   } = src;
+
+  // A copy is a fresh draft: probability follows the draft stage's configured
+  // value (not the source's Won/Lost 100%/0%), and the dates re-base to today
+  // while keeping the original validity span.
+  const { data: draftStage } = await supabase
+    .from("crm_estimate_stages")
+    .select("probability_bps")
+    .eq("org_id", src.org_id)
+    .eq("stage_key", "draft")
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+  const today = todayInZone(await getOrgTimeZone(supabase, src.org_id));
+  const validUntil: string | null =
+    src.valid_until_date && src.estimate_date
+      ? shiftYmd(today, Math.max(0, daysBetweenYmd(src.estimate_date, src.valid_until_date)))
+      : null;
 
   const newDescription = body.description ?? `${src.description} (Copy)`;
   const { data: newEst, error: estErr } = await supabase
@@ -57,6 +82,9 @@ export async function POST(
       description: newDescription,
       stage: "draft",
       reason: null,
+      ...(draftStage ? { probability_bps: draftStage.probability_bps } : {}),
+      estimate_date: today,
+      valid_until_date: validUntil,
       // A copy is a fresh draft: nothing about acceptance, deposits, sending or
       // the upsell claim (unique per ticket) carries over from the source.
       upsell_ticket_id: null,
@@ -156,6 +184,47 @@ export async function POST(
         const { error: siErr } = await supabase.from("estimate_line_item_subitems").insert(newSubitems);
         if (siErr) return failAndCleanup(siErr.message);
       }
+    }
+  }
+
+  // Milestone billing plan: copy the plan as fresh pending rows (never the
+  // invoice link or invoiced status — the copy has billed nothing). If the plan
+  // can't be copied, fall back to installments so the copy isn't left claiming
+  // a milestone plan with no milestones.
+  if (src.payment_plan_type === "milestones") {
+    const { data: milestones, error: msErr } = await supabase
+      .from("estimate_milestones")
+      .select("*")
+      .eq("estimate_id", id)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true });
+    if (msErr) return failAndCleanup(msErr.message);
+    if (milestones?.length) {
+      const newMilestones = (milestones as Record<string, unknown>[]).map((m) => {
+        const {
+          id: _mid,
+          created_at: _mca,
+          updated_at: _mua,
+          deleted_at: _mda,
+          org_id: _morg,
+          invoice_id: _minv,
+          project_id: _mproj,
+          status: _mstatus,
+          ...mRest
+        } = m;
+        return {
+          ...mRest,
+          org_id: newEst.org_id,
+          estimate_id: newEst.id,
+          project_id: null,
+          invoice_id: null,
+          status: "pending",
+        };
+      });
+      const { error: insErr } = await supabase.from("estimate_milestones").insert(newMilestones);
+      if (insErr) return failAndCleanup(insErr.message);
+    } else {
+      await supabase.from("estimates").update({ payment_plan_type: "installments" }).eq("id", newEst.id);
     }
   }
 

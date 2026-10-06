@@ -447,6 +447,26 @@ export function useUpdateClientProperty() {
       property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string; addressVerdict?: AddressVerdict | null; lat?: number | null; lng?: number | null };
     }) => {
       const supabase = createClient();
+      // If an address field changed and this save carries no fresh verification
+      // result, the stored coordinates/verdict describe the OLD address — null
+      // them so routing/geocoding doesn't send crews to the previous location.
+      let addressStale = false;
+      if (property.addressVerdict === undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: cur } = await (supabase as any)
+          .from("client_properties")
+          .select("address, city, state, zip")
+          .eq("id", id)
+          .maybeSingle();
+        if (cur) {
+          const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+          addressStale =
+            (property.address !== undefined && norm(property.address) !== norm(cur.address)) ||
+            (property.city !== undefined && norm(property.city) !== norm(cur.city)) ||
+            (property.state !== undefined && norm(property.state) !== norm(cur.state)) ||
+            (property.zip !== undefined && norm(property.zip) !== norm(cur.zip));
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("client_properties")
@@ -465,6 +485,12 @@ export function useUpdateClientProperty() {
             address_verified_at: property.addressVerdict ? new Date().toISOString() : null,
             ...(property.lat != null && { lat: property.lat }),
             ...(property.lng != null && { lng: property.lng }),
+          }),
+          ...(addressStale && {
+            address_verdict: null,
+            address_verified_at: null,
+            lat: null,
+            lng: null,
           }),
         })
         .eq("id", id);
@@ -599,10 +625,10 @@ async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
   // Paged: a bare select stops at PostgREST's 1000-row cap, so in a larger org
   // most existing clients would be missing from the maps and re-imported as
   // duplicates.
-  const existing = await fetchAllRows<{ id: string; primary_email: string | null; primary_phone: string | null }>(() =>
+  const existing = await fetchAllRows<{ id: string; status: string | null; primary_email: string | null; primary_phone: string | null }>(() =>
     supabase
       .from("clients")
-      .select("id, primary_email, primary_phone")
+      .select("id, status, primary_email, primary_phone")
       .is("deleted_at", null)
       .order("id"),
   );
@@ -614,7 +640,8 @@ async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
       .filter((c) => phoneDedupeKey(c.primary_phone))
       .map((c) => [phoneDedupeKey(c.primary_phone)!, c.id])
   );
-  return { byEmail, byPhone };
+  const statusById = new Map((existing ?? []).map((c) => [c.id, c.status]));
+  return { byEmail, byPhone, statusById };
 }
 
 export function useBulkImportClients() {
@@ -834,6 +861,29 @@ export function useUpdateClient() {
         before = data;
       }
 
+      // Address edits with no fresh verification result leave lat/lng and the
+      // address verdict describing the OLD address — detect and null them.
+      const addressKeys = [
+        ["billingAddress", "billing_address"], ["billingCity", "billing_city"],
+        ["billingState", "billing_state"], ["billingZip", "billing_zip"],
+        ["serviceAddress", "service_address"], ["serviceCity", "service_city"],
+        ["serviceState", "service_state"], ["serviceZip", "service_zip"],
+      ] as const;
+      let addressStale = false;
+      if (updates.addressVerdict === undefined && addressKeys.some(([k]) => updates[k] !== undefined)) {
+        const { data: curAddr } = await supabase
+          .from("clients")
+          .select("billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip")
+          .eq("id", id)
+          .maybeSingle();
+        if (curAddr) {
+          const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+          addressStale = addressKeys.some(([k, col]) =>
+            updates[k] !== undefined && norm(updates[k] as string | null) !== norm(curAddr[col] as string | null)
+          );
+        }
+      }
+
       const smsOptInJustEnabled = updates.smsOptIn === true && before && before.sms_opt_in !== true;
       // Status is editable from the Edit Client → Details tab; a lead moved to
       // active there is the same business event as the "Convert" button, so
@@ -867,6 +917,12 @@ export function useUpdateClient() {
             address_verified_at: updates.addressVerdict ? new Date().toISOString() : null,
             ...(updates.lat != null && { lat: updates.lat }),
             ...(updates.lng != null && { lng: updates.lng }),
+          }),
+          ...(addressStale && {
+            address_verdict: null,
+            address_verified_at: null,
+            lat: null,
+            lng: null,
           }),
           billing_same_as_service: updates.billingSameAsService,
           source: updates.source,
@@ -1318,7 +1374,9 @@ export function useRecipientSearch(query: string) {
     queryKey: ["recipient-search", q],
     queryFn: async (): Promise<RecipientSuggestion[]> => {
       const supabase = createClient();
-      const like = `%${q}%`;
+      // Commas and parentheses are PostgREST .or() grammar — left in, a name
+      // like "Smith, John" or "Acme (East)" splits the filter and 400s.
+      const like = `%${q.replace(/[,()"\\]/g, " ").trim()}%`;
       const [clientsRes, contactsRes] = await Promise.all([
         supabase
           .from("clients")
@@ -1329,8 +1387,9 @@ export function useRecipientSearch(query: string) {
           .limit(6),
         supabase
           .from("client_contacts")
-          .select("id, first_name, last_name, email, clients(display_name)")
+          .select("id, first_name, last_name, email, clients!inner(display_name, deleted_at)")
           .is("deleted_at", null)
+          .is("clients.deleted_at", null)
           .not("email", "is", null)
           .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like}`)
           .limit(6),
@@ -1450,15 +1509,22 @@ export function useBulkImportLeads() {
 
       // Load every existing (non-deleted) client once so each row can be matched
       // against an existing account by email/phone instead of creating a duplicate.
-      const { byEmail, byPhone } = await loadClientDedupMaps(supabase);
+      const { byEmail, byPhone, statusById } = await loadClientDedupMaps(supabase);
 
       let created = 0;
       let matched = 0;
       let skipped = 0;
+      let failed = 0;
 
       for (const r of rows) {
+        // One bad row (constraint error, transient failure) must not abort the
+        // rest of the import after earlier rows were already written.
+        try {
         const displayName = r.displayName?.trim();
         if (!displayName) { skipped++; continue; }
+
+        const emailRaw = r.primaryEmail?.trim() || null;
+        if (emailRaw && !EMAIL_RE.test(emailRaw)) { skipped++; continue; }
 
         const email = r.primaryEmail?.trim().toLowerCase() || null;
         const phone = toE164Us(r.primaryPhone);
@@ -1466,11 +1532,15 @@ export function useBulkImportLeads() {
         const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
 
         if (matchedClientId) {
-          // Row matches an existing client by email or phone — tag it rather than duplicate the account.
-          await supabase.from("client_tags").upsert(
-            { client_id: matchedClientId, tag: "imported-lead" },
-            { onConflict: "org_id,client_id,tag", ignoreDuplicates: true }
-          );
+          // Row matches an existing client by email or phone — tag it rather than
+          // duplicate the account. Only an existing LEAD gets the imported-lead
+          // tag; tagging an active client would misfile it in lead segments.
+          if (statusById.get(matchedClientId) === "lead") {
+            await supabase.from("client_tags").upsert(
+              { client_id: matchedClientId, tag: "imported-lead" },
+              { onConflict: "org_id,client_id,tag", ignoreDuplicates: true }
+            );
+          }
           matched++;
           continue;
         }
@@ -1499,9 +1569,12 @@ export function useBulkImportLeads() {
           if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
         }
         created++;
+        } catch {
+          failed++;
+        }
       }
 
-      return { created, matched, skipped };
+      return { created, matched, skipped, failed };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -1645,37 +1718,61 @@ export function useCancelClient() {
     mutationFn: async ({ clientId, reason }: { clientId: string; reason: string }) => {
       const supabase = createClient();
       const { data: before } = await supabase.from("clients").select("status").eq("id", clientId).single();
-      const { error } = await supabase
+      // Already cancelled/lost records are left alone: re-cancelling would
+      // overwrite the original reason (a lost lead's reason, in particular).
+      const { data: updated, error } = await supabase
         .from("clients")
         .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
-        .eq("id", clientId);
+        .eq("id", clientId)
+        .not("status", "in", "(cancelled,lost)")
+        .select("id");
       if (error) throw error;
-      return { wasLead: before?.status === "lead" };
+      return { changed: (updated?.length ?? 0) > 0, wasLead: before?.status === "lead" };
     },
     onSuccess: (result, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
-      fireAutomationTrigger({ triggerType: result?.wasLead ? "lead_cancelled" : "client_cancelled", clientId });
+      if (result?.changed) {
+        fireAutomationTrigger({ triggerType: result.wasLead ? "lead_cancelled" : "client_cancelled", clientId });
+      }
     },
   });
 }
 
-/** Activate a single client — sets status = active. */
+/** Activate a single client — sets status = active. A lead moved to active is
+ *  a conversion (same as useConvertLeadToClient): stamp client_since. */
 export function useActivateClient() {
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (clientId: string) => {
       const supabase = createClient();
+      const { data: before } = await supabase.from("clients").select("status").eq("id", clientId).maybeSingle();
+      if (!before || before.status === "active") return { changed: false, wasLead: false };
+      const wasLead = before.status === "lead";
       const { error } = await supabase
         .from("clients")
-        .update({ status: "active", cancellation_reason: null, closed_at: null })
-        .eq("id", clientId);
+        .update({
+          status: "active",
+          cancellation_reason: null,
+          closed_at: null,
+          ...(wasLead && { client_since: todayInZone(orgTimeZone) }),
+        })
+        .eq("id", clientId)
+        .eq("status", before.status);
       if (error) throw error;
+      if (wasLead) await logClientActivity(supabase, clientId, "Converted from lead to client");
+      return { changed: true, wasLead };
     },
-    onSuccess: (_d, clientId) => {
+    onSuccess: (result, clientId) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
-      fireAutomationTrigger({ triggerType: "client_reactivated", clientId });
+      if (result?.changed) {
+        fireAutomationTrigger({
+          triggerType: result.wasLead ? "lead_converted_to_client" : "client_reactivated",
+          clientId,
+        });
+      }
     },
   });
 }
@@ -1751,32 +1848,73 @@ export function useBulkCancelClients() {
   return useMutation({
     mutationFn: async ({ clientIds, reason }: { clientIds: string[]; reason: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // Skip records already cancelled/lost so their original reason isn't overwritten.
+      const { data: rows, error: readErr } = await supabase
+        .from("clients")
+        .select("id, status")
+        .in("id", clientIds)
+        .not("status", "in", "(cancelled,lost)");
+      if (readErr) throw readErr;
+      const targets = rows ?? [];
+      if (targets.length === 0) return { changed: [] as { id: string; wasLead: boolean }[] };
+      const { data: updated, error } = await supabase
         .from("clients")
         .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
-        .in("id", clientIds);
+        .in("id", targets.map((t) => t.id))
+        .not("status", "in", "(cancelled,lost)")
+        .select("id");
       if (error) throw error;
+      const updatedIds = new Set((updated ?? []).map((u) => u.id));
+      return {
+        changed: targets.filter((t) => updatedIds.has(t.id)).map((t) => ({ id: t.id, wasLead: t.status === "lead" })),
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      for (const c of result.changed) {
+        fireAutomationTrigger({ triggerType: c.wasLead ? "lead_cancelled" : "client_cancelled", clientId: c.id });
+      }
     },
   });
 }
 
-/** Bulk activate many clients. */
+/** Bulk activate many clients. Leads convert (client_since stamped); already-active rows are skipped. */
 export function useBulkActivateClients() {
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (clientIds: string[]) => {
       const supabase = createClient();
-      const { error } = await supabase
+      const { data: rows, error: readErr } = await supabase
         .from("clients")
-        .update({ status: "active", cancellation_reason: null, closed_at: null })
-        .in("id", clientIds);
-      if (error) throw error;
+        .select("id, status")
+        .in("id", clientIds)
+        .neq("status", "active");
+      if (readErr) throw readErr;
+      const leadIds = (rows ?? []).filter((r) => r.status === "lead").map((r) => r.id);
+      const otherIds = (rows ?? []).filter((r) => r.status !== "lead").map((r) => r.id);
+      if (leadIds.length > 0) {
+        const { error } = await supabase
+          .from("clients")
+          .update({ status: "active", cancellation_reason: null, closed_at: null, client_since: todayInZone(orgTimeZone) })
+          .in("id", leadIds)
+          .eq("status", "lead");
+        if (error) throw error;
+      }
+      if (otherIds.length > 0) {
+        const { error } = await supabase
+          .from("clients")
+          .update({ status: "active", cancellation_reason: null, closed_at: null })
+          .in("id", otherIds)
+          .neq("status", "lead");
+        if (error) throw error;
+      }
+      return { leadIds, otherIds };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      for (const id of result.leadIds) fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
+      for (const id of result.otherIds) fireAutomationTrigger({ triggerType: "client_reactivated", clientId: id });
     },
   });
 }

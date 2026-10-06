@@ -711,56 +711,78 @@ function CloseOutDialog({
 
   async function handleCloseOut() {
     try {
+      // Idempotent: a visit already completed (a re-run after a partial
+      // failure, or a double-click) is skipped entirely — re-running its
+      // update would re-fire completion side-effects and re-posting its
+      // material row would double the storm's material cost.
+      const pending = visits.filter((v) => v.status !== "completed");
+      if (pending.length === 0) {
+        toast.info("These visits are already closed out");
+        onDone();
+        onOpenChange(false);
+        return;
+      }
       const totalQty = materialQty ? parseFloat(materialQty) : 1;
       const unitCostCents = materialUnitCost ? Math.round(parseFloat(materialUnitCost) * 100) : 0;
       const totalHours = actualHours ? parseFloat(actualHours) : null;
       // The qty/hours fields are entered once for the whole batch (e.g. "10
       // bags of salt" / "2.5 hrs" for this close-out), not per stop — split
-      // evenly across the selected visits so a multi-stop close-out doesn't
+      // evenly across the visits being closed so a multi-stop close-out doesn't
       // multiply material cost and actual hours by the visit count in Job
       // Costing/COGS and hourly-billed invoicing (both key off per-visit
       // values). A single-visit close-out is unaffected (divide by 1).
-      const qty = totalQty / visits.length;
-      const hoursPerVisit = totalHours !== null ? totalHours / visits.length : null;
-      await Promise.all(visits.map((v) => updateVisit({
-        id: v.id,
-        jobId: v.jobId,
-        jobType: v.job?.jobType,
-        updates: {
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          snow_depth_inches: depth ? Math.max(0, parseFloat(depth)) : null,
-          temperature: temp ? parseFloat(temp) : null,
-          asset_type: assetType || null,
-          materials_used: materialName
-            ? [{ name: materialName, qty, rate_cents: unitCostCents }]
-            : [],
-          ...(hoursPerVisit !== null ? { actual_hours: hoursPerVisit } : {}),
-        },
-      })));
-      // materials_used on crm_job_visits is display-only — it never feeds
-      // Job Costing/COGS, which read crm_jobs.actual_material_cost_cents,
-      // maintained only via the crm_job_materials table. Without this, every
-      // snow storm's salt/material cost silently showed as $0 in those
-      // reports no matter what was logged here.
-      if (materialName && qty > 0) {
-        await Promise.all(visits.map((v) =>
-          fetch(`/api/crm/jobs/${v.jobId}/materials`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              description: materialName,
-              qty,
-              unitCostCents,
-              visitId: v.id,
-            }),
-          }).catch(() => {
-            // Non-fatal — the visit itself is already closed out; a failed
-            // material-cost record shouldn't block the whole close-out.
-          })
-        ));
+      const qty = totalQty / pending.length;
+      const hoursPerVisit = totalHours !== null ? totalHours / pending.length : null;
+      // Completion fires per-client side effects (auto-invoice, review
+      // requests…), so visits for the SAME client run one after another —
+      // parallel completions race each other into duplicate invoices — while
+      // different clients still run concurrently (same shape as bulk-complete).
+      const byClient = new Map<string, CRMJobVisit[]>();
+      for (const v of pending) {
+        const key = v.clientId ?? v.id;
+        byClient.set(key, [...(byClient.get(key) ?? []), v]);
       }
-      toast.success(`Closed out ${visits.length} visit${visits.length > 1 ? "s" : ""}`);
+      await Promise.all([...byClient.values()].map(async (group) => {
+        for (const v of group) {
+          await updateVisit({
+            id: v.id,
+            jobId: v.jobId,
+            jobType: v.job?.jobType,
+            updates: {
+              status: "completed",
+              completed_at: new Date().toISOString(),
+              snow_depth_inches: depth ? Math.max(0, parseFloat(depth)) : null,
+              temperature: temp ? parseFloat(temp) : null,
+              asset_type: assetType || null,
+              materials_used: materialName
+                ? [{ name: materialName, qty, rate_cents: unitCostCents }]
+                : [],
+              ...(hoursPerVisit !== null ? { actual_hours: hoursPerVisit } : {}),
+            },
+          });
+          // materials_used on crm_job_visits is display-only — it never feeds
+          // Job Costing/COGS, which read crm_jobs.actual_material_cost_cents,
+          // maintained only via the crm_job_materials table. Without this, every
+          // snow storm's salt/material cost silently showed as $0 in those
+          // reports no matter what was logged here.
+          if (materialName && qty > 0) {
+            await fetch(`/api/crm/jobs/${v.jobId}/materials`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                description: materialName,
+                qty,
+                unitCostCents,
+                visitId: v.id,
+              }),
+            }).catch(() => {
+              // Non-fatal — the visit itself is already closed out; a failed
+              // material-cost record shouldn't block the whole close-out.
+            });
+          }
+        }
+      }));
+      toast.success(`Closed out ${pending.length} visit${pending.length > 1 ? "s" : ""}`);
       onDone();
       onOpenChange(false);
     } catch {

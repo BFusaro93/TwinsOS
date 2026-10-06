@@ -48,7 +48,7 @@ import {
 import { formatCurrency, cn, relativeTime, formatDateShort, formatHours } from "@/lib/utils";
 import { useOrgDates, useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
-import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
+import { allocateStopHours, computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
 import {
@@ -729,14 +729,12 @@ function JobDetailSheet({
   // commits status/crew/rate together, which is easy to skip when all you
   // meant to do was fix a time.
   async function saveAppointmentTime(field: "start_time" | "end_time", value: string) {
-    // Reject a save that would put End at or before Start — independently
-    // editing the two fields (this is on-blur, one field at a time) has no
-    // other guard against that, and a visit with End before Start silently
-    // breaks every hours computation that reads it.
+    // Reject a save that would put End equal to Start (a zero-length window).
+    // End BEFORE Start is an overnight shift and is allowed.
     const newStart = field === "start_time" ? value : startTime;
     const newEnd = field === "end_time" ? value : endTime;
-    if (isEndBeforeStart(newStart, newEnd)) {
-      toast.error("End time must be after Start time");
+    if (isEndEqualStart(newStart, newEnd)) {
+      toast.error("End time can't be the same as Start time");
       if (field === "start_time") setStartTime(visit.startTime ?? ""); else setEndTime(visit.endTime ?? "");
       return;
     }
@@ -755,19 +753,26 @@ function JobDetailSheet({
     // Job Start/End are the actual times (crew punches often need dispatcher
     // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
     // app and report date-filters agree with whatever the dispatcher enters.
-    const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
-    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value, orgTz) : null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updates: Record<string, any> = { [field]: value || null, [clockField]: clockIso };
+    // An overnight End (before Start) lands on the next calendar day.
+    const clockIso = value
+      ? dateAndTimeToIso(visit.scheduledDate, value, orgTz, field === "end_time" && newStart && value < newStart ? 1 : 0)
+      : null;
     // A genuine change means any actual_hours override measured before this
     // correction (e.g. the stop clock-out flow's figure) is now stale —
-    // clear it so computeActualHours() and the DB rollup recompute from the
-    // corrected time instead of staying frozen. Guarded on an actual change
-    // so a blur with no edit doesn't wipe a real measured value.
-    const existingValue = field === "start_time" ? visit.startTime : visit.endTime;
-    if ((value || null) !== (existingValue || null)) updates.actual_hours = null;
+    // applyStopTimePatch re-allocates the stop's hours across ALL its visits
+    // (and moves every sibling's times together) instead of nulling only this
+    // one. Guarded on an actual change inside, so a blur with no edit doesn't
+    // wipe a real measured value.
+    const patch: StopTimePatch = field === "start_time"
+      ? { startTime: value || null, clockedInAt: clockIso }
+      : { endTime: value || null, clockedOutAt: clockIso };
     try {
-      await updateVisit({ id: visit.id, updates });
+      await applyStopTimePatch({
+        visit,
+        stopVisits: stopVisitsFor(visit, allVisits),
+        patch,
+        updateVisit: (args) => updateVisit(args),
+      });
       // Only reached in the non-divergent case (see the "Multiple times"
       // guard around the inputs below) — every member already tracked here
       // shares the same value on the side not being edited, safe to carry
@@ -828,21 +833,34 @@ function JobDetailSheet({
       toast.error("Men count must be a valid positive number");
       return;
     }
+    // Several fields are PRE-FILLED with derived values (computed hours, the
+    // service/job rate fallback, the job's inherited crew). Writing them back
+    // unconditionally froze those derived values into per-visit overrides
+    // every time someone just edited a note — and a tiny production-rate
+    // budget (0.0000667, shown as "0.00") would have been saved as explicit 0.
+    // Only send a field the dispatcher actually changed from what was seeded.
+    const seedActual   = hoursInputValue(computeActualHours(visit));
+    const seedBudgeted = hoursInputValue(computeBudgetedHours(visit));
+    const seedRate     = String(visit.rateCents != null ? visit.rateCents / 100
+                              : rateFallbackCents != null ? rateFallbackCents / 100
+                              : "");
+    const seedCrewId   = effectiveCrewId({ ...visit, job }) ?? "";
+    const crewChanged  = crewId !== seedCrewId;
     const updates: Parameters<typeof updateVisit>[0]["updates"] = {
       status,
       sub_status: subStatus || null,
-      crew_id: crewId || null,
+      ...(crewChanged ? { crew_id: crewId || null } : {}),
       // Emptying the crew picker on a visit that HAD an effective crew is a
       // deliberate per-visit unassign (crew_id NULL alone would inherit the
       // job's crew again). An explicit crew clears the flag server-side.
-      ...(!crewId && effectiveCrewId({ ...visit, job }) ? { crew_unassigned: true } : {}),
+      ...(crewChanged && !crewId && seedCrewId ? { crew_unassigned: true } : {}),
       start_time: startTime || null,
       end_time: endTime || null,
-      actual_hours: actualHours ? parseFloat(actualHours) : null,
-      budgeted_hours: budgetedHoursInput ? parseFloat(budgetedHoursInput) : null,
+      ...(actualHours !== seedActual ? { actual_hours: actualHours ? parseFloat(actualHours) : null } : {}),
+      ...(budgetedHoursInput !== seedBudgeted ? { budgeted_hours: budgetedHoursInput ? parseFloat(budgetedHoursInput) : null } : {}),
       men_count: parsedMenCount,
       qty: qty ? parseFloat(qty) : null,
-      rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null,
+      ...(rateCents !== seedRate ? { rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null } : {}),
       notes_to_client: notesToClient || null,
       invoice_description: invoiceDesc || null,
       is_high_priority: highPriorityOverride,
@@ -2311,13 +2329,103 @@ function dateAndTimeToIso(date: string, time: string, timeZone: string, dayOffse
   return d ? d.toISOString() : null;
 }
 
-// Native <input type="time"> always yields zero-padded 24h "HH:MM", so a
-// plain string compare is a valid time-of-day ordering — no Date parsing
-// needed. Only rejects when BOTH sides are actually set; an empty value
-// means "not entered yet" (e.g. saving Start before End exists), not a
-// real end-before-start problem, and must be allowed through.
-function isEndBeforeStart(start: string, end: string): boolean {
-  return !!start && !!end && end <= start;
+// Native <input type="time"> always yields zero-padded 24h "HH:MM". End
+// BEFORE Start is a legitimate overnight shift (snow/storm visits cross
+// midnight — computeActualHours and Edit Job Times both treat it as the next
+// day), so only End == Start (a zero-length window, almost always an unset or
+// fat-fingered field) is rejected. Only rejects when BOTH sides are actually
+// set; an empty value means "not entered yet" and must be allowed through.
+function isEndEqualStart(start: string, end: string): boolean {
+  return !!start && !!end && end.slice(0, 5) === start.slice(0, 5);
+}
+
+/** Every visit in the same stop as `visit` (including itself) — the unit that clocks in/out together. */
+function stopVisitsFor(visit: CRMJobVisit, allVisits: CRMJobVisit[]): CRMJobVisit[] {
+  const stop = groupVisitsIntoStops(allVisits).find((st) => st.visits.some((v) => v.id === visit.id));
+  return stop?.visits ?? [visit];
+}
+
+/** Whole-visit hours (already men-multiplied, net of break) for an HH:MM start/end pair; overnight-aware. */
+function durationHoursBetween(start: string | null, end: string | null): number | null {
+  if (!start || !end) return null;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return null;
+  let mins = eh * 60 + em - (sh * 60 + sm);
+  if (mins < 0) mins += 24 * 60;
+  return mins > 0 ? mins / 60 : null;
+}
+
+interface StopTimePatch {
+  startTime?: string | null;
+  endTime?: string | null;
+  clockedInAt?: string | null;
+  clockedOutAt?: string | null;
+}
+
+/**
+ * Applies a Start/End (and matching clock-in/out) correction to a visit AND
+ * every other live visit in its stop. A stop clocks in/out as one unit: the
+ * clock-out flow writes the same clocked_in_at on every sibling and splits the
+ * measured hours across them (allocateStopHours). Editing only one sibling
+ * left the others on the old instant — recomputeStopLabor() finds siblings by
+ * identical clocked_in_at, so labor was double counted — and nulling only the
+ * edited visit's actual_hours left the siblings' stale shares in place next
+ * to a full-duration figure on the edited one. Here every sibling gets the
+ * same times and the stop's hours are re-allocated across them together.
+ */
+async function applyStopTimePatch({
+  visit,
+  stopVisits,
+  patch,
+  extra,
+  updateVisit,
+}: {
+  visit: CRMJobVisit;
+  stopVisits: CRMJobVisit[];
+  patch: StopTimePatch;
+  /** Extra fields for the edited visit only (e.g. men_count). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extra?: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  updateVisit: (args: { id: string; updates: Record<string, any> }) => Promise<unknown>;
+}): Promise<void> {
+  const siblings = stopVisits.filter(
+    (v) => v.id !== visit.id && v.status !== "cancelled" && v.status !== "skipped" && v.scheduledDate === visit.scheduledDate
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fields: Record<string, any> = {};
+  if ("startTime" in patch) fields.start_time = patch.startTime || null;
+  if ("endTime" in patch) fields.end_time = patch.endTime || null;
+  if ("clockedInAt" in patch) fields.clocked_in_at = patch.clockedInAt ?? null;
+  if ("clockedOutAt" in patch) fields.clocked_out_at = patch.clockedOutAt ?? null;
+
+  const timesChanged =
+    ("startTime" in patch && (patch.startTime || null) !== (visit.startTime || null)) ||
+    ("endTime" in patch && (patch.endTime || null) !== (visit.endTime || null));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ownUpdates: Record<string, any> = { ...fields, ...(extra ?? {}) };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const siblingUpdates = new Map<string, Record<string, any>>();
+  if (timesChanged) {
+    const start = ("startTime" in patch ? patch.startTime : visit.startTime)?.slice(0, 5) ?? null;
+    const end = ("endTime" in patch ? patch.endTime : visit.endTime)?.slice(0, 5) ?? null;
+    const duration = durationHoursBetween(start, end);
+    const net = duration != null ? Math.max(0, duration - Math.max(0, visit.breakMinutes ?? 0) / 60) : null;
+    const men = Number(extra?.men_count ?? visit.menCount) || 1;
+    // Several visits share the measured stop time → split it; a lone visit just
+    // derives from its own times (null clears the stale override).
+    const alloc = net != null && net > 0 && siblings.length > 0
+      ? allocateStopHours({ durationHours: net, menCount: men, visits: [visit, ...siblings] })
+      : null;
+    ownUpdates.actual_hours = alloc?.get(visit.id) ?? null;
+    for (const s of siblings) {
+      siblingUpdates.set(s.id, { ...fields, actual_hours: alloc?.get(s.id) ?? null });
+    }
+  }
+  await updateVisit({ id: visit.id, updates: ownUpdates });
+  await Promise.all([...siblingUpdates].map(([id, updates]) => updateVisit({ id, updates })));
 }
 
 // Dispatch board Start/End is time ON SITE, not a reserved appointment
@@ -2409,10 +2517,13 @@ function EditJobTimesDialog({
   onOpenChange,
   visit,
   anchorVisitId,
+  stopVisits,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   visit: CRMJobVisit;
+  /** Every visit in this visit's stop — Start/End and hours are re-synced across all of them. */
+  stopVisits: CRMJobVisit[];
   /** The stop's anchor visit id — a "stop" (same client/day/crew/address)
    * clocks in/out as one unit, so crm_crew_member_times rows always live
    * against the anchor, even when this dialog was opened for one of its
@@ -2492,21 +2603,26 @@ function EditJobTimesDialog({
     const latestOut = outs.length > 0 ? outs.reduce((a, b) => (a > b ? a : b)) : null;
     const newStart = earliestIn ? isoToDateAndTime(earliestIn, visitDate, tz).time : null;
     const newEnd = latestOut ? isoToDateAndTime(latestOut, visitDate, tz).time : null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updates: Record<string, any> = {};
-    // A rolled-up Start/End change means the real punch times moved —
-    // clear any explicit actual_hours override (e.g. the men-multiplied
-    // figure the stop clock-out flow wrote) so computeActualHours() and the
-    // crm_recompute_job_actual_hours DB trigger both fall back to deriving
-    // it fresh from these corrected times instead of a now-stale number.
+    // A rolled-up Start/End change means the real punch times moved — the
+    // explicit actual_hours override (e.g. the men-multiplied figure the stop
+    // clock-out flow wrote) is stale, and clocked_in_at/out must follow the
+    // new times or computeActualHours() keeps deriving from the OLD punches.
+    // applyStopTimePatch moves every sibling in the stop together and
+    // re-allocates the stop's hours across them.
     // Compare against just the HH:MM portion — isoToDateAndTime().time never
     // includes seconds, but visit.startTime/endTime come straight from a
     // Postgres `time` column (HH:MM:SS) and would otherwise never equal it,
     // firing this update (and clearing actual_hours) on every render.
-    if (newStart && newStart !== (visit.startTime ?? "").slice(0, 5)) { updates.start_time = newStart; updates.actual_hours = null; }
-    if (newEnd && newEnd !== (visit.endTime ?? "").slice(0, 5)) { updates.end_time = newEnd; updates.actual_hours = null; }
-    if (Object.keys(updates).length > 0) {
-      updateVisit.mutate({ id: visitId, updates });
+    const patch: StopTimePatch = {};
+    if (newStart && newStart !== (visit.startTime ?? "").slice(0, 5)) { patch.startTime = newStart; patch.clockedInAt = earliestIn; }
+    if (newEnd && newEnd !== (visit.endTime ?? "").slice(0, 5)) { patch.endTime = newEnd; patch.clockedOutAt = latestOut; }
+    if (Object.keys(patch).length > 0) {
+      applyStopTimePatch({
+        visit,
+        stopVisits,
+        patch,
+        updateVisit: (args) => updateVisit.mutateAsync(args),
+      }).catch(() => toast.error("Failed to sync visit times"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes, visitId, visitDate, tz]);
@@ -2808,13 +2924,12 @@ function VisitRow({
   const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endVal   || "").slice(0, 5);
 
   async function saveVisitTime(field: "start_time" | "end_time", value: string) {
-    // Same End-after-Start guard as the job panel's saveAppointmentTime —
-    // editing Start/End independently (one field at a time, on blur) has no
-    // other check keeping them in order.
+    // Same End-equals-Start guard as the job panel's saveAppointmentTime —
+    // End before Start is a valid overnight shift, equal is not.
     const newStart = field === "start_time" ? value : startVal;
     const newEnd = field === "end_time" ? value : endVal;
-    if (isEndBeforeStart(newStart, newEnd)) {
-      toast.error("End time must be after Start time");
+    if (isEndEqualStart(newStart, newEnd)) {
+      toast.error("End time can't be the same as Start time");
       if (field === "start_time") setStartVal(visit.startTime ?? ""); else setEndVal(visit.endTime ?? "");
       return;
     }
@@ -2827,35 +2942,40 @@ function VisitRow({
       newEnd
     );
     if (conflictWith) toast.warning(`This crew is already scheduled at ${conflictWith} during this window`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updates: Record<string, any> = { [field]: value || null };
     // Start/End IS the crew's actual time on site (a dispatcher correction of
     // — or manual stand-in for — a real punch), not just a scheduled
     // appointment window. Keep clocked_in_at/clocked_out_at in sync so the
     // crew app and report date-filters agree with whatever the dispatcher
-    // enters.
-    const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
-    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value, orgTz) : null;
-    updates[clockField] = clockIso;
+    // enters. An overnight End (before Start) lands on the next calendar day.
+    const clockIso = value
+      ? dateAndTimeToIso(visit.scheduledDate, value, orgTz, field === "end_time" && newStart && value < newStart ? 1 : 0)
+      : null;
+    const patch: StopTimePatch = field === "start_time"
+      ? { startTime: value || null, clockedInAt: clockIso }
+      : { endTime: value || null, clockedOutAt: clockIso };
     // A genuine change to Start/End means whatever actual_hours was measured
     // before (e.g. the stop clock-out flow's men-multiplied figure) no longer
-    // reflects reality — clear the override so computeActualHours() and the
-    // DB rollup both fall back to deriving it fresh from the corrected time.
-    // Guarded on an actual change so merely focusing/blurring the field
-    // without editing it doesn't silently wipe a real measured value.
-    const existingValue = field === "start_time" ? visit.startTime : visit.endTime;
-    if ((value || null) !== (existingValue || null)) updates.actual_hours = null;
+    // reflects reality — applyStopTimePatch re-allocates the stop's hours
+    // across every visit in the stop and moves their times together.
     // Typing a time is what actually sends a crew out for the day — fill an
     // EMPTY headcount from who's really on that crew today (Team Assignment).
     // Only when men_count is still 0/null: an explicit Men value entered on
     // the sheet or the row is the dispatcher's call and must not be
     // overwritten by a roster count (see C-11).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const extra: Record<string, any> = {};
     if (visitCrewId && !visit.menCount) {
       const crewSize = effectiveCrewSize(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize);
-      if (crewSize > 0) updates.men_count = crewSize;
+      if (crewSize > 0) extra.men_count = crewSize;
     }
     try {
-      await updateVisit.mutateAsync({ id: visit.id, updates });
+      await applyStopTimePatch({
+        visit,
+        stopVisits: stopVisitsFor(visit, allVisits),
+        patch,
+        extra,
+        updateVisit: (args) => updateVisit.mutateAsync(args),
+      });
       // This is only reached in the non-divergent case (the input is only
       // editable when startHasMultipleTimes/endHasMultipleTimes is false) —
       // so every member already tracked here shares the same value on the
@@ -5185,6 +5305,7 @@ export function DispatchBoard() {
           open={!!editTimesVisit}
           onOpenChange={(o) => { if (!o) setEditTimesVisitId(null); }}
           anchorVisitId={anchorVisitIdByVisitId.get(editTimesVisit.id) ?? editTimesVisit.id}
+          stopVisits={stopVisitsFor(editTimesVisit, allVisits)}
         />
       )}
 

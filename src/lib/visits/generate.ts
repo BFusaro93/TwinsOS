@@ -70,6 +70,8 @@ interface GeneratorService {
   sort_order: number | null;
   /** Visit budget for this service (estimate line's visit count); null = no cap. */
   max_visits?: number | null;
+  /** Crew size for this service; null = fall back to the job-level man_count. */
+  team_size?: number | null;
 }
 
 interface ExistingVisit {
@@ -133,7 +135,9 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
 
   const orgId = job.org_id ?? args.fallbackOrgId ?? null;
   const menCount = Math.max(1, Number(job.man_count ?? 1) || 1);
-  const base = (date: string, occurrence: string, serviceId: string | null): VisitInsert => ({
+  // A service-linked visit takes its own service's team size (as estimate
+  // conversion does) so a 1-man service on a 3-man-max job isn't tripled.
+  const base = (date: string, occurrence: string, serviceId: string | null, teamSize?: number | null): VisitInsert => ({
     ...(orgId ? { org_id: orgId } : {}),
     job_id: job.id,
     client_id: job.client_id,
@@ -141,7 +145,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
     scheduled_date: date,
     occurrence_date: occurrence,
     job_service_id: serviceId,
-    men_count: menCount,
+    men_count: teamSize && teamSize > 0 ? Math.round(teamSize) : menCount,
     priority: job.priority ?? 1,
     notes_to_crew: job.notes_to_crew ?? null,
   });
@@ -197,7 +201,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
       if (claimedServices.has(s.id) || identity.has(keyOf(s.id, s.start_date))) continue;
       if (unlinkedHolds(s.start_date)) continue;
       if (!hasBudget(s.id)) continue;
-      out.push(base(s.start_date, s.start_date, s.id));
+      out.push(base(s.start_date, s.start_date, s.id, s.team_size));
       claimedServices.add(s.id);
       spend(s.id);
     }
@@ -239,7 +243,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
       if (identity.has(key) || liveKeys.has(key)) continue;
       if (!hasBudget(s.id)) continue;
       if (cap != null && liveCount + out.length >= cap) break outer;
-      out.push(base(date, date, s.id));
+      out.push(base(date, date, s.id, s.team_size));
       identity.add(key);
       spend(s.id);
       if (out.length >= maxVisits) break outer;
@@ -349,7 +353,7 @@ export async function generateVisitsForJobs(
   for (const ids of chunk(jobs.map((j) => j.id), 100)) {
     const { rows, error } = await selectAllRows<GeneratorService>(() => supabase
       .from("crm_job_services")
-      .select("id, job_id, included, start_recurring, start_date, sort_order, max_visits")
+      .select("id, job_id, included, start_recurring, start_date, sort_order, max_visits, team_size")
       .in("job_id", ids));
     if (error) { result.errors.push(error); return result; }
     services.push(...rows);

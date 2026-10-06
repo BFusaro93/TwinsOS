@@ -94,6 +94,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       interface Row {
         chemical_amount: number | null;
         solution_amount: number | null;
+        unit: { name: string | null } | null;
         product: { name: string | null } | null;
         crm_job_visits: {
           status: string | null;
@@ -109,7 +110,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         let query = supabase
           .from("crm_chemical_applications")
           .select(
-            "chemical_amount, solution_amount, product:product_id(name), crm_job_visits!inner(status, scheduled_date, clients:client_id(display_name))"
+            "chemical_amount, solution_amount, unit:crm_chemical_lookup_items!crm_chemical_applications_unit_of_measure_id_fkey(name), product:product_id(name), crm_job_visits!inner(status, scheduled_date, clients:client_id(display_name))"
           )
           .is("deleted_at", null)
           // Dispatched = on the crew's board but not started; still to be loaded.
@@ -119,6 +120,10 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         return query;
       });
 
+      // Amounts are recorded in whatever unit each application used (gal, oz,
+      // lb…), so quantities are only addable within the SAME unit — group by
+      // chemical + unit instead of summing mixed units into one number.
+      const SEP = "\u0000";
       const totalsByChemical = new Map<string, number>();
       const usageByClientChemical = new Map<string, Map<string, number>>();
 
@@ -126,8 +131,10 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         const visit = r.crm_job_visits;
         if (!visit) continue;
         const chemical = r.product?.name || "(unknown)";
+        const unit = r.unit?.name ?? "";
+        const chemKey = `${chemical}${SEP}${unit}`;
         const amount = r.chemical_amount ?? 0;
-        totalsByChemical.set(chemical, (totalsByChemical.get(chemical) ?? 0) + amount);
+        totalsByChemical.set(chemKey, (totalsByChemical.get(chemKey) ?? 0) + amount);
 
         const client = visit.clients?.display_name || "(unknown client)";
         let byChemical = usageByClientChemical.get(client);
@@ -135,26 +142,34 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
           byChemical = new Map<string, number>();
           usageByClientChemical.set(client, byChemical);
         }
-        byChemical.set(chemical, (byChemical.get(chemical) ?? 0) + amount);
+        byChemical.set(chemKey, (byChemical.get(chemKey) ?? 0) + amount);
       }
 
       const resultRows = [...usageByClientChemical.entries()].flatMap(([client_name, byChemical]) =>
-        [...byChemical.entries()].map(([chemical_name, quantity]) => ({
-          client_name,
-          chemical_name,
-          quantity: Math.round(quantity * 10000) / 10000,
-        }))
+        [...byChemical.entries()].map(([chemKey, quantity]) => {
+          const [chemical_name, unit] = chemKey.split(SEP);
+          return {
+            client_name,
+            chemical_name,
+            unit,
+            quantity: Math.round(quantity * 10000) / 10000,
+          };
+        })
       );
 
       const totalNote =
         [...totalsByChemical.entries()]
-          .map(([name, qty]) => `${name}: ${Math.round(qty * 10000) / 10000}`)
+          .map(([chemKey, qty]) => {
+            const [name, unit] = chemKey.split(SEP);
+            return `${name}: ${Math.round(qty * 10000) / 10000}${unit ? ` ${unit}` : ""}`;
+          })
           .join(" · ") || "No chemicals scheduled in this range.";
 
       return buildResult(
         [
           col("client_name", "Client"),
           col("chemical_name", "Chemical"),
+          col("unit", "Unit"),
           col("quantity", "Concentrate Needed", "number", false),
         ],
         resultRows,

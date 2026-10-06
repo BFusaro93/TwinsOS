@@ -6,6 +6,9 @@ import { generateCompanyReportFlags } from "@/lib/company-report/flags";
 import { computeLandscaptKpiActuals } from "@/lib/kpi/landscapt-kpi-compute";
 import type { CompanyReportData } from "@/types/company-report";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
+import { PAYMENT_DATASET_KEYS } from "@/lib/reports/report-permissions";
 
 const log = logger.child("api/crm/company-report");
 
@@ -36,12 +39,22 @@ export async function GET() {
   });
   if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  // The report is built on invoices, payments, AR aging and estimate pricing,
+  // so it also needs the same accounting keys analysis/run requires for those
+  // datasets (admins pass inside has_settings_permission).
+  if (!(await hasAnySettingsPermission(supabase, PAYMENT_DATASET_KEYS))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const now = new Date();
-    const year = now.getFullYear();
+    // The year is the ORG's calendar year — the server runs UTC, so
+    // getFullYear() flips to next year at 7-8pm Eastern on Dec 31.
+    const timeZone = await getMyTimeZone(supabase);
+    const year = Number(todayInZone(timeZone).slice(0, 4));
 
     const [report, kpiActuals, targets] = await Promise.all([
-      computeCompanyReport(supabase, await getMyTimeZone(supabase), now),
+      computeCompanyReport(supabase, timeZone, now),
       computeLandscaptKpiActuals(supabase, year),
       loadKpiTargets(supabase, String(year)),
     ]);

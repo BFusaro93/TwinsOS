@@ -1792,12 +1792,17 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           toast.success("Invoice description saved");
                         }}
                         onSkip={async (reason) => {
-                          await updateVisit.mutateAsync({ id: v.id, updates: { status: "skipped", completion_notes: reason || null } });
+                          await updateVisit.mutateAsync({ id: v.id, updates: { status: "skipped", skip_reason: reason || null } });
                           toast.success("Visit skipped");
                         }}
                         onDispatch={async (date, crewId) => {
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           const updates: Record<string, any> = { scheduled_date: date, crew_id: crewId };
+                          // visit.crew_id is usually null (the crew lives on the job),
+                          // so clearing the picker must write the explicit per-visit
+                          // "no crew" override or the visit silently keeps the job's crew.
+                          if (crewId) updates.crew_unassigned = false;
+                          else if (v.crewUnassigned !== true && (v.crewId || v.job?.crewId)) updates.crew_unassigned = true;
                           // Flip status/dispatched_at on any transition INTO
                           // "dispatched" — not just from "scheduled". This
                           // matches DispatchBoard's local JobDetailSheet: a
@@ -1808,7 +1813,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           // silently leaving status/timestamp untouched.
                           // Reassigning an already-dispatched visit to a
                           // different date/crew still leaves status alone.
-                          const isFirstDispatch = v.status !== "dispatched";
+                          // A visit already clocked in (in_progress) keeps its status —
+                          // reassigning date/crew must not knock it back to "dispatched".
+                          const isFirstDispatch = v.status !== "dispatched" && v.status !== "in_progress";
                           if (isFirstDispatch) {
                             updates.status = "dispatched";
                             updates.dispatched_at = new Date().toISOString();
@@ -2041,14 +2048,16 @@ function VisitRow({
   const [showChemicals, setShowChemicals] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [dispatchDate, setDispatchDate] = useState(visit.scheduledDate ?? "");
-  const [dispatchCrew, setDispatchCrew] = useState(visit.crewId ?? "");
+  // Effective crew: visit.crew_id is usually null and the crew lives on the job.
+  const effectiveDispatchCrew = visit.crewUnassigned ? "" : (visit.crewId ?? visit.job?.crewId ?? "");
+  const [dispatchCrew, setDispatchCrew] = useState(effectiveDispatchCrew);
   const [dispatchSaving, setDispatchSaving] = useState(false);
   // Re-sync when the visit's own date/crew changes elsewhere (e.g. edited on
   // the Dispatch Board) so reopening this editor doesn't show stale values.
   useEffect(() => {
     setDispatchDate(visit.scheduledDate ?? "");
-    setDispatchCrew(visit.crewId ?? "");
-  }, [visit.id, visit.scheduledDate, visit.crewId]);
+    setDispatchCrew(effectiveDispatchCrew);
+  }, [visit.id, visit.scheduledDate, effectiveDispatchCrew]);
 
   const isTerminal = visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled";
   // Visits on package/waiting-list jobs commonly start out as unassigned

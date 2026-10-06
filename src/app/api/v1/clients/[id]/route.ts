@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { CLIENT_SELECT, shapeClient } from "../shape";
 import { updateClientSchema } from "../validation";
 
@@ -83,6 +85,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     previousSmsOptIn = (current.sms_opt_in as boolean | null) ?? false;
   }
   const smsOptInJustEnabled = body.smsOptIn === true && !previousSmsOptIn;
+  // lead -> active is a conversion: stamp client_since (the conversion date)
+  // exactly as useConvertLeadToClient does, since reports key off it.
+  const convertingLead = previousStatus === "lead" && body.status === "active";
+  const clientSince = convertingLead
+    ? todayInZone(await getOrgTimeZone(db, auth.orgId))
+    : null;
 
   const { data, error } = await db
     .from("clients")
@@ -93,6 +101,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.accountNumber !== undefined && { account_number: body.accountNumber }),
       ...(body.accountType !== undefined && { account_type: body.accountType }),
       ...(body.status !== undefined && { status: body.status }),
+      ...(clientSince && { client_since: clientSince }),
       ...(body.primaryPhone !== undefined && { primary_phone: body.primaryPhone }),
       ...(body.primaryEmail !== undefined && { primary_email: body.primaryEmail }),
       ...(body.billingAddress !== undefined && { billing_address: body.billingAddress }),
@@ -156,14 +165,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Same status-transition triggers useUpdateClient fires. Narrower than
     // the app (skips tag/opt-in-specific triggers, which aren't tied to a
     // status change) but covers the meaningful lifecycle transitions.
-    if (previousStatus === "lead" && body.status !== "lead") {
+    if (previousStatus === "lead" && (body.status === "cancelled" || body.status === "lost")) {
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_cancelled" });
+    } else if (previousStatus === "lead" && body.status === "active") {
       await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_converted_to_client" });
     } else if (body.status === "cancelled") {
-      await fireSimpleTrigger(db, {
-        orgId: auth.orgId,
-        clientId: id,
-        triggerType: previousStatus === "lead" ? "lead_cancelled" : "client_cancelled",
-      });
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "client_cancelled" });
     } else if ((previousStatus === "inactive" || previousStatus === "cancelled") && body.status === "active") {
       await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "client_reactivated" });
     }

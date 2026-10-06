@@ -30,8 +30,8 @@ function defaultDateRange(timeZone: string) {
   return { from: ymd(year, month, 1), to: isoInZone(now, timeZone) };
 }
 
-function OverUnderCell({ cents }: { cents: number }) {
-  if (cents === 0) return <span className="text-slate-400">—</span>;
+function OverUnderCell({ cents }: { cents: number | null }) {
+  if (cents == null || cents === 0) return <span className="text-slate-400">—</span>;
   const positive = cents > 0;
   return (
     <span className={cn("flex items-center justify-end gap-0.5 tabular-nums font-medium", positive ? "text-green-600" : "text-red-600")}>
@@ -82,12 +82,12 @@ function downloadCSV(rows: JobCostingReportRow[]) {
       csvText(r.crewName ?? ""),
       r.menCount,
       r.budgetedHours.toFixed(1),
-      r.actualManHours.toFixed(1),
-      r.hoursVariance.toFixed(1),
+      r.hasActuals ? r.actualManHours.toFixed(1) : "",
+      r.hoursVariance == null ? "" : r.hoursVariance.toFixed(1),
       (r.budgetedRateCents / 100).toFixed(2),
-      (r.revPerManHrCents / 100).toFixed(2),
+      r.revPerManHrCents == null ? "" : (r.revPerManHrCents / 100).toFixed(2),
       (r.targetRateCents / 100).toFixed(2),
-      (r.overUnderCents / 100).toFixed(2),
+      r.overUnderCents == null ? "" : (r.overUnderCents / 100).toFixed(2),
       (r.laborCostCents / 100).toFixed(2),
       r.laborEstimated ? "Y" : "N",
       (r.revenueCents / 100).toFixed(2),
@@ -155,6 +155,12 @@ export default function JobCostingReportPage() {
     const totalProfit = sum((r) => r.grossProfitCents);
     const totalBudgetedHours = sum((r) => r.budgetedHours);
     const totalManHours = sum((r) => r.actualManHours);
+    // Variance and rev/man-hr only use visits that actually recorded hours —
+    // a visit with no hours would add its budget/revenue against 0 worked.
+    const withActuals = rows.filter((r) => r.hasActuals);
+    const actualsHours = withActuals.reduce((s, r) => s + r.actualManHours, 0);
+    const actualsBudgeted = withActuals.reduce((s, r) => s + r.budgetedHours, 0);
+    const actualsRevenue = withActuals.reduce((s, r) => s + r.revenueCents, 0);
     return {
       totalRevenue,
       totalLabor,
@@ -162,11 +168,11 @@ export default function JobCostingReportPage() {
       totalProfit,
       totalBudgetedHours,
       totalManHours,
-      hoursVariance: totalManHours - totalBudgetedHours,
+      hoursVariance: actualsHours - actualsBudgeted,
       marginPct: pctOf(totalProfit, totalRevenue),
       laborPct: pctOf(totalLabor, totalRevenue),
       budgetedRateCents: ratioOf(totalRevenue, totalBudgetedHours),
-      revPerManHrCents: ratioOf(totalRevenue, totalManHours),
+      revPerManHrCents: ratioOf(actualsRevenue, actualsHours),
       laborEstimatedCount: rows.filter((r) => r.laborEstimated).length,
       laborMissingCount: rows.filter((r) => r.laborSource === "none").length,
     };
@@ -279,7 +285,7 @@ export default function JobCostingReportPage() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const hrsPositive = r.hoursVariance <= 0;
+                  const hrsPositive = (r.hoursVariance ?? 0) <= 0;
                   const marginGood = r.marginPct >= 40;
                   return (
                     <tr key={r.visitId} className="border-b last:border-0 hover:bg-slate-50">
@@ -296,9 +302,9 @@ export default function JobCostingReportPage() {
                       <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                         {r.budgetedHours > 0 ? fmtHrs(r.budgetedHours) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{fmtHrs(r.actualManHours)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{r.hasActuals ? fmtHrs(r.actualManHours) : "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {r.budgetedHours > 0 ? (
+                        {r.hoursVariance != null && r.budgetedHours > 0 ? (
                           <span className={hrsPositive ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
                             {r.hoursVariance > 0 ? "+" : ""}{fmtHrs(r.hoursVariance)}
                           </span>
@@ -308,7 +314,7 @@ export default function JobCostingReportPage() {
                         {r.budgetedRateCents > 0 ? formatCurrency(r.budgetedRateCents) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-800">
-                        {r.revPerManHrCents > 0 ? formatCurrency(r.revPerManHrCents) : "—"}
+                        {r.revPerManHrCents != null && r.revPerManHrCents > 0 ? formatCurrency(r.revPerManHrCents) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                         {r.targetRateCents > 0 ? formatCurrency(r.targetRateCents) : "—"}

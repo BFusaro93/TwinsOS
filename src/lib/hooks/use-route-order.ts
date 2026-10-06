@@ -71,15 +71,29 @@ export function useCrewRouteOrder(fromDate: string, toDate?: string) {
     enabled: days.length > 0,
     queryFn: async (): Promise<RouteOrderMap> => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_crew_route_order")
-        .select("crew_id, day_of_week, job_id, position")
-        .in("day_of_week", days);
-      if (error) throw error;
+      type RouteRow = { crew_id: string; day_of_week: number; job_id: string; position: number };
+      // PostgREST caps a response at 1000 rows and this table holds one row per
+      // (crew, weekday, job), so a busy org exceeds that — page deterministically.
+      const PAGE = 1000;
+      const rows: RouteRow[] = [];
+      for (let offset = 0; ; offset += PAGE) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("crm_crew_route_order")
+          .select("crew_id, day_of_week, job_id, position")
+          .in("day_of_week", days)
+          .order("crew_id")
+          .order("day_of_week")
+          .order("job_id")
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as RouteRow[];
+        rows.push(...page);
+        if (page.length < PAGE) break;
+      }
 
       const map: RouteOrderMap = new Map();
-      for (const row of (data ?? []) as { crew_id: string; day_of_week: number; job_id: string; position: number }[]) {
+      for (const row of rows) {
         map.set(routeOrderKey(row.crew_id, row.day_of_week, row.job_id), row.position);
       }
       return map;

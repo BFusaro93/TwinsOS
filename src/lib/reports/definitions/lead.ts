@@ -9,6 +9,7 @@ import {
   netPaymentCents,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
 import { shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 
@@ -210,12 +211,10 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
         .select("cancellation_reason, closed_at")
         // A closed lead is status 'lost' (cancelled = a real client who left).
         .eq("status", "lost")
-        .is("deleted_at", null)
-        .limit(5000);
+        .is("deleted_at", null);
       if (from) query = query.gte("closed_at", `${from} 00:00:00`);
       if (to) query = query.lte("closed_at", `${to} 23:59:59.999`);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() => query.order("id"));
 
       interface Row {
         cancellation_reason: string | null;

@@ -3,6 +3,12 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { computeLandscaptKpiActuals } from "@/lib/kpi/landscapt-kpi-compute";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
+import {
+  ESTIMATE_DATASET_KEYS,
+  PAYMENT_DATASET_KEYS,
+  TIMESHEET_DATASET_KEYS,
+} from "@/lib/reports/report-permissions";
 
 const log = logger.child("api/crm/kpi-scorecard/actuals");
 
@@ -38,7 +44,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await computeLandscaptKpiActuals(supabase, parsed.data.year);
+    // Mirror analysis/run's DATASET_PERMISSION_KEYS: money, estimate pricing
+    // and payroll areas are computed only for roles holding the matching keys
+    // (admins pass inside has_settings_permission). Other areas stay open
+    // behind view_report_center, as before.
+    const [money, estimates, payroll] = await Promise.all([
+      hasAnySettingsPermission(supabase, PAYMENT_DATASET_KEYS),
+      hasAnySettingsPermission(supabase, ESTIMATE_DATASET_KEYS),
+      hasAnySettingsPermission(supabase, TIMESHEET_DATASET_KEYS),
+    ]);
+    const allowedAreas = new Set(["clients", "visits", "tickets", "damage_cases", "injury_cases"]);
+    if (money) ["invoices", "payments", "contracts"].forEach((a) => allowedAreas.add(a));
+    if (estimates) ["jobs", "estimates"].forEach((a) => allowedAreas.add(a));
+    if (payroll) ["timesheets", "employees"].forEach((a) => allowedAreas.add(a));
+
+    const result = await computeLandscaptKpiActuals(supabase, parsed.data.year, undefined, allowedAreas);
     return NextResponse.json(result);
   } catch (err) {
     log.error("compute failed", { error: err instanceof Error ? err.message : String(err) });

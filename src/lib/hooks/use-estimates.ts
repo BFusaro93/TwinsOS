@@ -371,6 +371,18 @@ export function useUpdateEstimate() {
           .select("client_id, portal_accepted_at")
           .eq("id", id)
           .single();
+        if (current && current.client_id !== patch.client_id) {
+          // The old client's property doesn't belong to the new client, and
+          // any live proposal links would keep showing this estimate under
+          // the old recipient's token — revoke them.
+          if (!("property_id" in patch)) finalPatch = { ...finalPatch, property_id: null };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from("estimate_share_tokens")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("estimate_id", id)
+            .is("deleted_at", null);
+        }
         if (current && current.client_id !== patch.client_id && current.portal_accepted_at) {
           // Re-pointing an already-accepted estimate to a different client
           // would otherwise keep the stale acceptance/signature attached to
@@ -378,13 +390,17 @@ export function useUpdateEstimate() {
           // bug as the signed-contract client reassignment fix
           // (CONTRACT_FINANCIAL_FIELDS in use-contracts.ts).
           finalPatch = {
-            ...patch,
+            ...finalPatch,
             stage: "sent",
             portal_accepted_at: null,
             portal_signature_name: null,
             portal_user_id: null,
           };
         }
+      }
+      // A new expiry date must be able to trigger its own reminder.
+      if ("valid_until_date" in finalPatch && !("expiry_notified_at" in finalPatch)) {
+        finalPatch = { ...finalPatch, expiry_notified_at: null };
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

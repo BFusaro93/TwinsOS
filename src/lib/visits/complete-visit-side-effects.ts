@@ -531,17 +531,40 @@ export async function applyVisitCompletionSideEffects(
               .insert(toLineRows(invoiceId, existingItemCount ?? 0))
               .select("id");
             if (lineErr) throw lineErr;
-            await linkProductLines(insertedLines as { id: string }[] | null);
 
             // Atomic increment — two visits for the same client completing
             // concurrently must not both read the same stale totals and have
             // the second write clobber the first. The RPC also re-derives
             // tax_cents from the invoice's line items at the invoice's
             // tax_rate_bps, so appended taxable visits are taxed too.
-            await supabase.rpc("increment_invoice_totals", {
+            const { error: incErr } = await supabase.rpc("increment_invoice_totals", {
               p_invoice_id: invoiceId,
               p_delta_cents: subtotal,
             });
+            if (incErr) {
+              // The lines are already on the draft but its header totals never
+              // moved. Remove the lines we just added so the invoice stays
+              // internally consistent (and the visit can be re-invoiced on the
+              // next attempt), then surface the failure.
+              const insertedIds = ((insertedLines ?? []) as { id: string }[]).map((l) => l.id);
+              if (insertedIds.length > 0) {
+                const { error: undoErr } = await supabase
+                  .from("crm_invoice_line_items")
+                  .delete()
+                  .in("id", insertedIds);
+                if (undoErr) {
+                  log.error("auto-invoice rollback of appended lines failed", {
+                    invoiceId,
+                    error: undoErr.message,
+                  });
+                }
+              }
+              throw incErr;
+            }
+
+            // Link job products only once the totals include their lines, so a
+            // failed increment above never leaves a material marked invoiced.
+            await linkProductLines(insertedLines as { id: string }[] | null);
 
             if (j.client_id) {
               await supabase.rpc("sync_client_balance", { p_client_id: j.client_id });
