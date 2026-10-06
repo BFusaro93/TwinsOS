@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing svix headers" }, { status: 400 });
   }
 
-  let event: { type: string; data: { email_id?: string; created_at?: string } };
+  let event: { type: string; data: { email_id?: string; created_at?: string; bounce?: { type?: string } } };
   try {
     const wh = new Webhook(secret);
     event = wh.verify(payload, {
@@ -100,7 +100,10 @@ export async function POST(request: Request) {
   // excludes a bounced address (marketing or transactional), while
   // do_not_market now means only what its name says.
   // See 20260919010000_client_email_bounce_suppression.sql.
-  if (event.type === "email.bounced" && updated?.client_id) {
+  // Only a hard bounce means the address is dead — a Transient one (mailbox
+  // full, server down) must not permanently block every future send.
+  const isSoftBounce = event.data.bounce?.type?.toLowerCase() === "transient";
+  if (event.type === "email.bounced" && updated?.client_id && !isSoftBounce) {
     const { error: suppressErr } = await supabase
       .from("clients")
       .update({ email_bounced_at: event.data.created_at ?? new Date().toISOString() })

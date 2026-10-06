@@ -54,6 +54,8 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
 import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
 import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -105,11 +107,6 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   // Excluded from cash-basis reporting (rpt_payments.is_cash = false).
   { value: "AR Write-off",             label: "AR Write-off (non-cash)" },
 ];
-
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
 
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T12:00:00");
@@ -477,7 +474,8 @@ function RecordPaymentDialog({
   invoiceId: string; clientId: string; balanceCents: number; open: boolean; onOpenChange: (o: boolean) => void;
 }) {
   const [amount, setAmount] = useState((balanceCents/100).toFixed(2));
-  const [date, setDate] = useState(todayStr());
+  const orgTimeZone = useOrgTimeZone();
+  const [date, setDate] = useState(todayInZone(orgTimeZone));
   const [method, setMethod] = useState<PaymentMethod>("Check");
   const [ref, setRef] = useState("");
   const { mutateAsync: record, isPending } = useRecordPayment();

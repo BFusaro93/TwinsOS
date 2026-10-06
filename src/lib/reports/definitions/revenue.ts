@@ -14,6 +14,7 @@ import {
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { zoneDateParts } from "@/lib/time/zone";
 
 // ============================================================
 // Revenue section — pre-built reports.
@@ -566,9 +567,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       valueColumns: ["current_year_total", "last_year_total"],
       config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
     },
-    run: async ({ supabase }) => {
-      const now = new Date();
-      const thisYear = now.getFullYear();
+    run: async ({ supabase, timeZone }) => {
+      const thisYear = zoneDateParts(new Date(), timeZone).year;
       const lastYear = thisYear - 1;
 
       const data = await fetchAllRows<unknown>(() =>
@@ -623,9 +623,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       valueColumns: ["current_year_paid", "last_year_paid"],
       config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
     },
-    run: async ({ supabase }) => {
-      const now = new Date();
-      const thisYear = now.getFullYear();
+    run: async ({ supabase, timeZone }) => {
+      const thisYear = zoneDateParts(new Date(), timeZone).year;
       const lastYear = thisYear - 1;
 
       const data = await fetchAllRows<unknown>(() =>

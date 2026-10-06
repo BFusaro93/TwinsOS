@@ -186,7 +186,10 @@ function findMissingRequiredFields(
       ? !value
       : MULTI_VALUE_TYPES.has(field.field_type)
         ? !Array.isArray(value) || value.length === 0
-        : value == null || String(value).trim() === "";
+        : field.field_type === "checkbox" || field.field_type === "sms_optin"
+          // Unchecked widgets store the string "false" — that is not an answer.
+          ? String(value ?? "").trim() !== "true"
+          : value == null || String(value).trim() === "";
     if (isEmpty) missing.push(field.label || "This field");
   }
   return missing;

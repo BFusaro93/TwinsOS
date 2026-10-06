@@ -529,12 +529,28 @@ export function useUpdateClientPropertyZones() {
       // contains zones of that type. Properties whose turf_sqft / mulch_bed_sqft
       // / parking_lot_sqft / gross_sqft were typed in by hand (no zones) were
       // being wiped to null by `sum || null` the moment any zone was saved.
+      //
+      // The exception: a type that HAD zones before this save and has none now
+      // (the user deleted the last Turf zone) must be cleared, or the old total
+      // stays on the property and the estimating engine keeps pricing it.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: prior } = await (supabase as any)
+        .from("client_properties")
+        .select("zones")
+        .eq("id", propertyId)
+        .maybeSingle();
+      const priorZones: PropertyZone[] = Array.isArray(prior?.zones) ? prior.zones : [];
       const hasType = (t: string) => zones.some((z) => z.type === t);
+      const hadType = (t: string) => priorZones.some((z) => z.type === t);
       const rollup: Record<string, number | null> = {};
       if (hasType("turf")) rollup.turf_sqft = sums.turf || null;
+      else if (hadType("turf")) rollup.turf_sqft = null;
       if (hasType("mulch_bed")) rollup.mulch_bed_sqft = sums.mulch || null;
+      else if (hadType("mulch_bed")) rollup.mulch_bed_sqft = null;
       if (hasType("parking_lot")) rollup.parking_lot_sqft = sums.parking || null;
+      else if (hadType("parking_lot")) rollup.parking_lot_sqft = null;
       if (zones.length > 0) rollup.gross_sqft = sums.gross || null;
+      else if (priorZones.length > 0) rollup.gross_sqft = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("client_properties")

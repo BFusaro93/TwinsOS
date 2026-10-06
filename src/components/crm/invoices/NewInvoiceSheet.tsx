@@ -9,6 +9,8 @@ import { useCreateInvoice, useDeleteInvoice } from "@/lib/hooks/use-invoices";
 import { InvoiceDetail } from "./InvoiceDetail";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { useConfirm } from "@/components/shared/useConfirm";
 import type { CRMInvoice } from "@/types/crm-invoices";
 
@@ -48,6 +50,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
   // run left a stray empty draft behind (D-23).
   const creatingRef = useRef(false);
 
+  const orgTimeZone = useOrgTimeZone();
   const { data: clients } = useClients();
   const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { mutateAsync: createInvoice } = useCreateInvoice();
@@ -61,8 +64,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
     if (open && defaultClientId && !invoiceId && !creatingRef.current) {
       creatingRef.current = true;
       setCreating(true);
-      const d = new Date();
-      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const today = todayInZone(orgTimeZone);
       createInvoice({ clientId: defaultClientId, description: "", invoiceDate: today, projectId: defaultProjectId ?? null })
         .then((inv) => { setInvoiceId(inv.id); setDraftClientId(defaultClientId); })
         .catch(() => toast.error("Failed to create invoice"))
@@ -154,8 +156,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
     creatingRef.current = true;
     setCreating(true);
     try {
-      const d = new Date();
-      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const today = todayInZone(orgTimeZone);
       const inv = await createInvoice({ clientId, description: "", invoiceDate: today });
       setInvoiceId(inv.id);
       setDraftClientId(clientId);

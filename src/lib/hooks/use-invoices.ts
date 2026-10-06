@@ -8,6 +8,7 @@ import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/inte
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import {
   computeAutoInvoiceTotals,
   resolveAutoInvoiceTaxRateBps,
@@ -576,12 +577,27 @@ export function useBulkImportInvoices() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: clients } = await (supabase as any)
         .from("clients")
-        .select("id, display_name, default_payment_method")
+        .select("id, display_name, default_payment_method, default_terms")
         .is("deleted_at", null);
+      // Two clients sharing a display name can't be told apart by the CSV's
+      // clientName column — flag those rows instead of picking one at random.
+      const byName = new Map<string, string>();
+      const ambiguousNames = new Set<string>();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const byName = new Map((clients ?? []).map((c: any) => [c.display_name.trim().toLowerCase(), c.id]));
+      for (const c of (clients ?? []) as any[]) {
+        const key = String(c.display_name).trim().toLowerCase();
+        if (byName.has(key)) ambiguousNames.add(key);
+        else byName.set(key, c.id);
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const defaultPaymentMethodById = new Map((clients ?? []).map((c: any) => [c.id, c.default_payment_method ?? null]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const defaultTermsById = new Map((clients ?? []).map((c: any) => [c.id, c.default_terms ?? null]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: orgTermsRow } = await (supabase as any)
+        .from("organizations")
+        .select("default_billing_terms")
+        .maybeSingle();
 
       let created = 0;
       let skipped = 0;
@@ -590,7 +606,13 @@ export function useBulkImportInvoices() {
 
       for (const [idx, r] of rows.entries()) {
         const rowNo = idx + 1;
-        const clientId = byName.get(r.clientName?.trim().toLowerCase() ?? "");
+        const nameKey = r.clientName?.trim().toLowerCase() ?? "";
+        if (ambiguousNames.has(nameKey)) {
+          warnings.push({ row: rowNo, reason: `more than one client is named "${r.clientName?.trim()}" — row skipped` });
+          skipped++;
+          continue;
+        }
+        const clientId = byName.get(nameKey);
         // "amount" is the subtotal (net of line discounts), "discount" the
         // invoice-level discount, "taxAmount" the tax — same columns the
         // export writes. parseCsvMoneyCents strips "$" and thousands
@@ -626,6 +648,21 @@ export function useBulkImportInvoices() {
           warnings.push({ row: rowNo, reason: `unrecognized status "${r.status?.trim()}" imported as "draft"` });
         }
 
+        // A negative amount (or a discount past the amount) would violate the
+        // total_cents >= 0 constraint; report the row rather than aborting the
+        // rest of the import part-way.
+        if (totalCents < 0) {
+          warnings.push({ row: rowNo, reason: "total is negative (discount exceeds amount) — row skipped" });
+          skipped++;
+          continue;
+        }
+
+        const invoiceDate = r.invoiceDate?.trim() || todayInZone(orgTimeZone);
+        // A blank due date derives from the client's/org's terms — a null
+        // due_date is skipped by the invoice-past-due automation forever.
+        const invoiceTerms = resolveInvoiceTerms(defaultTermsById.get(clientId) as string | null, orgTermsRow?.default_billing_terms);
+        const dueDate = r.dueDate?.trim() || computeDueDate(invoiceDate, invoiceTerms);
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: invoice, error } = await (supabase as any)
           .from("crm_invoices")
@@ -633,8 +670,8 @@ export function useBulkImportInvoices() {
             created_by: user?.id ?? null,
             client_id: clientId,
             description: r.description.trim(),
-            invoice_date: r.invoiceDate?.trim() || todayInZone(orgTimeZone),
-            due_date: r.dueDate?.trim() || null,
+            invoice_date: invoiceDate,
+            due_date: dueDate,
             po_number: r.poNumber?.trim() || null,
             status,
             subtotal_cents: amountCents,
@@ -647,7 +684,13 @@ export function useBulkImportInvoices() {
           })
           .select("id")
           .single();
-        if (error) throw error;
+        if (error || !invoice) {
+          // Report the row and keep going — throwing here left earlier rows
+          // created with no result ever shown to the importer.
+          warnings.push({ row: rowNo, reason: `could not be imported: ${error?.message ?? "insert failed"}` });
+          skipped++;
+          continue;
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: invoiceNumber } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });

@@ -258,6 +258,11 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         if (!attachments[field.id]) {
           newErrors[field.id] = `${field.label || "This field"} is required`;
         }
+      } else if (field.fieldType === "checkbox" || field.fieldType === "sms_optin") {
+        // Unchecked widgets store "false", which is not an answer.
+        if (values[field.id]?.trim() !== "true") {
+          newErrors[field.id] = `${field.label || "This field"} is required`;
+        }
       } else {
         if (!values[field.id]?.trim()) {
           newErrors[field.id] = `${field.label || "This field"} is required`;

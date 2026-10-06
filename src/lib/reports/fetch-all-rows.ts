@@ -13,22 +13,38 @@
 
 interface PageResult {
   data: unknown;
-  error: { message: string } | null;
+  error: { message: string; code?: string } | null;
 }
 
 interface Rangeable {
   range(from: number, to: number): PromiseLike<PageResult>;
+  order?(column: string): Rangeable;
 }
 
 const DEFAULT_PAGE_SIZE = 1000;
 
+// Offset paging without an ORDER BY has no guarantee that page N+1 continues
+// where page N stopped — past 1000 rows, rows can repeat or go missing, and
+// totals drift between runs. Every page is therefore tie-broken on `id`, which
+// callers' own ordering (if any) still takes precedence over.
 export async function fetchAllRows<T>(
   build: () => Rangeable,
   pageSize = DEFAULT_PAGE_SIZE
 ): Promise<T[]> {
   const out: T[] = [];
+  // A relation with no `id` column (42703 undefined_column) pages unordered
+  // rather than failing the report.
+  let orderById = true;
   for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await build().range(offset, offset + pageSize - 1);
+    const fetchPage = (ordered: boolean) => {
+      const q = build();
+      return (ordered && q.order ? q.order("id") : q).range(offset, offset + pageSize - 1);
+    };
+    let { data, error } = await fetchPage(orderById);
+    if (error?.code === "42703" && orderById) {
+      orderById = false;
+      ({ data, error } = await fetchPage(false));
+    }
     if (error) throw new Error(error.message);
     const page = (data as T[] | null) ?? [];
     out.push(...page);
