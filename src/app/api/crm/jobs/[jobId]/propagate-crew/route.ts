@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { z } from "zod";
+
+const BodySchema = z.object({
+  crewId: z.string().uuid().nullable(),
+  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "fromDate must be YYYY-MM-DD"),
+});
 
 export async function POST(
   request: Request,
@@ -17,8 +23,32 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { jobId } = await params;
-  const body = await request.json() as { crewId: string | null; fromDate: string };
-  const { crewId, fromDate } = body;
+  if (!z.string().uuid().safeParse(jobId).success) {
+    return NextResponse.json({ error: "Invalid job id" }, { status: 400 });
+  }
+  const parsed = BodySchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  const { crewId, fromDate } = parsed.data;
+
+  // Org always comes from the session, never the body.
+  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: job } = await (supabase as any)
+    .from("crm_jobs").select("id").eq("id", jobId).eq("org_id", profile.org_id).is("deleted_at", null).maybeSingle();
+  if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+
+  // A crew id from another org (or a deleted crew) must never be stamped on
+  // this org's visits. null = clear the crew, which needs no lookup.
+  if (crewId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: crew } = await (supabase as any)
+      .from("crm_crews").select("id").eq("id", crewId).eq("org_id", profile.org_id).is("deleted_at", null).maybeSingle();
+    if (!crew) return NextResponse.json({ error: "Crew not found" }, { status: 404 });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error, count } = await (supabase as any)

@@ -102,9 +102,15 @@ function dayKey(ws: string, idx: number) {
   return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`;
 }
 
+// Local calendar date as YYYY-MM-DD. toISOString() is UTC, which flips to
+// tomorrow after ~8pm Eastern and picked the wrong week/day.
+function localYmd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
 function dayIso(ws: string, idx: number) {
   const d = new Date(ws + "T12:00:00"); d.setDate(d.getDate() + idx);
-  return d.toISOString().split("T")[0];
+  return localYmd(d);
 }
 
 function dayLbl(ws: string, idx: number) {
@@ -114,7 +120,7 @@ function dayLbl(ws: string, idx: number) {
 
 const thisSunday = () => {
   const d = new Date(); d.setDate(d.getDate() + (7-d.getDay())%7);
-  return d.toISOString().split("T")[0];
+  return localYmd(d);
 };
 
 function gDate(s: string) {

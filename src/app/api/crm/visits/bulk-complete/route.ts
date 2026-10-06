@@ -42,7 +42,8 @@ export async function POST(request: Request) {
   const { data: visitRows } = await (supabase as any)
     .from("crm_job_visits")
     .select("id, client_id")
-    .in("id", ids);
+    .in("id", ids)
+    .is("deleted_at", null);
   const clientById = new Map<string, string>(
     ((visitRows ?? []) as { id: string; client_id: string | null }[]).map((r) => [r.id, r.client_id ?? `visit:${r.id}`])
   );

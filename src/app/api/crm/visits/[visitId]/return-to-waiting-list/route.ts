@@ -36,12 +36,22 @@ export async function POST(
 
   const { data: visit, error: visitErr } = await db
     .from("crm_job_visits")
-    .select("id, job_id, client_id, scheduled_date")
+    .select("id, job_id, client_id, scheduled_date, status, clocked_in_at")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
   if (visitErr || !visit) {
     return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+  }
+
+  // Only a visit that was dispatched but never worked can go back: once the
+  // crew has clocked in (or it's in progress/completed/skipped) there is real
+  // history here, and soft-deleting it would erase it.
+  if (!["scheduled", "dispatched"].includes(visit.status) || visit.clocked_in_at) {
+    return NextResponse.json(
+      { error: "Only a scheduled or dispatched visit that hasn't been clocked in can be returned to the waiting list" },
+      { status: 409 }
+    );
   }
 
   const { data: job, error: jobErr } = await db
