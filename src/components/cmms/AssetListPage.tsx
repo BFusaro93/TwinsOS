@@ -119,7 +119,9 @@ export function AssetListPage() {
       (asset.model ?? "").toLowerCase().includes(q) ||
       (asset.division ?? "").toLowerCase().includes(q) ||
       (asset.location ?? "").toLowerCase().includes(q) ||
-      (asset.licensePlate ?? "").toLowerCase().includes(q);
+      (asset.licensePlate ?? "").toLowerCase().includes(q) ||
+      (asset.serialNumber ?? "").toLowerCase().includes(q) ||
+      (asset.engineSerialNumber ?? "").toLowerCase().includes(q);
     const matchStatus = matchesFilter(asset.status, filterValues.status);
     const matchType = matchesFilter(asset.assetType, filterValues.assetType);
     const matchMake = matchesFilter(asset.make ?? "", filterValues.make);
@@ -376,6 +378,24 @@ export function AssetListPage() {
                     licensePlate: a.licensePlate ?? "",
                     location: a.location ?? "",
                     status: a.status,
+                    division: a.division ?? "",
+                    manufacturer: a.manufacturer ?? "",
+                    engineModel: a.engineModel ?? "",
+                    engineSerialNumber: a.engineSerialNumber ?? "",
+                    airFilterPartNumber: a.airFilterPartNumber ?? "",
+                    oilFilterPartNumber: a.oilFilterPartNumber ?? "",
+                    sparkPlugPartNumber: a.sparkPlugPartNumber ?? "",
+                    barcode: a.barcode ?? "",
+                    purchaseVendorName: a.purchaseVendorName ?? "",
+                    purchaseDate: a.purchaseDate ?? "",
+                    purchasePrice: a.purchasePrice != null ? (a.purchasePrice / 100).toFixed(2) : "",
+                    paymentMethod: a.paymentMethod ?? "",
+                    financeInstitution: a.financeInstitution ?? "",
+                    warrantyStartDate: a.warrantyStartDate ?? "",
+                    warrantyTermMonths: a.warrantyTermMonths ?? "",
+                    warrantyEndDate: a.warrantyEndDate ?? "",
+                    warrantyNotes: a.warrantyNotes ?? "",
+                    notes: a.notes ?? "",
                   })),
                   "assets-export.csv"
                 )
