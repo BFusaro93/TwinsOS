@@ -54,17 +54,17 @@ export function EstimatePhotosTab({ estimateId }: Props) {
         className={cn(
           "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
           dragging
-            ? "border-brand-400 bg-brand-50"
-            : "border-slate-200 bg-white hover:border-slate-300"
+            ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30"
+            : "border-border bg-card hover:border-slate-300 dark:hover:border-neutral-700"
         )}
       >
-        <Camera className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300")} />
-        <p className="text-sm font-medium text-slate-600 mb-1">
+        <Camera className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300 dark:text-neutral-600")} />
+        <p className="text-sm font-medium text-slate-600 dark:text-neutral-400 mb-1">
           {dragging ? "Drop photos here" : "Drag & drop photos here"}
         </p>
-        <p className="text-xs text-slate-400 mb-3">or</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500 mb-3">or</p>
         <label className="cursor-pointer">
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-neutral-300 shadow-sm hover:bg-slate-50 dark:hover:bg-muted/40">
             <ImagePlus className="h-3.5 w-3.5" /> Browse photos
           </span>
           <input
@@ -76,21 +76,21 @@ export function EstimatePhotosTab({ estimateId }: Props) {
           />
         </label>
         {upload.isPending && (
-          <p className="mt-3 text-xs text-slate-400">Uploading…</p>
+          <p className="mt-3 text-xs text-slate-400 dark:text-neutral-500">Uploading…</p>
         )}
       </div>
 
       {/* Photo grid */}
       {isLoading ? (
-        <div className="text-xs text-slate-400 text-center py-4">Loading…</div>
+        <div className="text-xs text-slate-400 dark:text-neutral-500 text-center py-4">Loading…</div>
       ) : photos.length === 0 ? (
-        <div className="text-xs text-slate-400 text-center py-2">No photos yet</div>
+        <div className="text-xs text-slate-400 dark:text-neutral-500 text-center py-2">No photos yet</div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {photos.map((photo) => (
-            <div key={photo.id} className="group overflow-hidden rounded-lg border bg-white shadow-sm">
+            <div key={photo.id} className="group overflow-hidden rounded-lg border bg-card shadow-sm">
               <button
-                className="relative block aspect-square w-full overflow-hidden bg-slate-100"
+                className="relative block aspect-square w-full overflow-hidden bg-muted"
                 onClick={() => setViewPhoto(photo)}
                 title="View full size"
               >
@@ -107,7 +107,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-slate-300">
+                  <div className="flex h-full items-center justify-center text-slate-300 dark:text-neutral-600">
                     <Camera className="h-8 w-8" />
                   </div>
                 )}
@@ -116,7 +116,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                 <input
                   defaultValue={photo.caption ?? ""}
                   placeholder="Add caption…"
-                  className="min-w-0 flex-1 bg-transparent text-xs text-slate-600 placeholder:text-slate-300 focus:outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-xs text-slate-600 dark:text-neutral-400 placeholder:text-slate-300 dark:placeholder:text-neutral-600 focus:outline-none"
                   onBlur={(e) => {
                     const caption = e.target.value.trim();
                     if (caption !== (photo.caption ?? "")) {
@@ -130,8 +130,8 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                   className={cn(
                     "rounded p-1 transition-colors",
                     photo.customerFacing
-                      ? "text-brand-500 hover:bg-brand-50"
-                      : "text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+                      ? "text-brand-500 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
+                      : "text-slate-300 dark:text-neutral-600 hover:bg-muted hover:text-muted-foreground"
                   )}
                   title={photo.customerFacing ? "Customer facing — shown on estimate document" : "Internal only — click to show on estimate document"}
                 >
@@ -143,7 +143,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                     await remove.mutateAsync(photo.id);
                     toast.success("Photo removed");
                   }}
-                  className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                  className="rounded p-1 text-slate-300 dark:text-neutral-600 opacity-0 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 group-hover:opacity-100"
                   title="Delete"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -169,7 +169,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
             />
           )}
           {viewPhoto?.caption && (
-            <p className="px-2 pb-1 text-center text-sm text-slate-600">{viewPhoto.caption}</p>
+            <p className="px-2 pb-1 text-center text-sm text-slate-600 dark:text-neutral-400">{viewPhoto.caption}</p>
           )}
         </DialogContent>
       </Dialog>

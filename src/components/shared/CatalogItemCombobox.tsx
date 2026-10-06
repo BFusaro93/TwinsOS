@@ -124,7 +124,7 @@ export function CatalogItemCombobox({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{p.name}</p>
                         {p.partNumber && (
-                          <p className="font-mono text-xs text-slate-400">{p.partNumber}</p>
+                          <p className="font-mono text-xs text-slate-400 dark:text-neutral-500">{p.partNumber}</p>
                         )}
                       </div>
                     </CommandItem>
@@ -150,7 +150,7 @@ export function CatalogItemCombobox({
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{p.name}</p>
                           {p.partNumber && (
-                            <p className="font-mono text-xs text-slate-400">{p.partNumber}</p>
+                            <p className="font-mono text-xs text-slate-400 dark:text-neutral-500">{p.partNumber}</p>
                           )}
                         </div>
                       </CommandItem>
@@ -166,7 +166,7 @@ export function CatalogItemCombobox({
             {onCreateNewProduct && (
               <button
                 type="button"
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-blue-600 hover:bg-slate-100"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-muted"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   setOpen(false);
@@ -178,12 +178,12 @@ export function CatalogItemCombobox({
               </button>
             )}
             {onCreateNewProduct && onCreateNewPart && (
-              <div className="w-px bg-slate-200" />
+              <div className="w-px bg-slate-200 dark:bg-neutral-700" />
             )}
             {onCreateNewPart && (
               <button
                 type="button"
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-blue-600 hover:bg-slate-100"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-muted"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   setOpen(false);

@@ -70,20 +70,20 @@ export function RecipientChipInput({ label, emails, onChange, placeholder }: Rec
   return (
     <div ref={containerRef} className="relative">
       <div
-        className="flex flex-wrap items-center gap-1.5 rounded-md border bg-white px-3 py-2 text-sm cursor-text min-h-[38px]"
+        className="flex flex-wrap items-center gap-1.5 rounded-md border bg-card px-3 py-2 text-sm cursor-text min-h-[38px]"
         onClick={() => inputRef.current?.focus()}
       >
-        <span className="text-slate-400 text-xs font-medium w-8 shrink-0">{label}</span>
+        <span className="text-slate-400 dark:text-neutral-500 text-xs font-medium w-8 shrink-0">{label}</span>
         {emails.map((email) => (
           <span
             key={email}
-            className="flex items-center gap-1 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-xs"
+            className="flex items-center gap-1 bg-muted text-slate-700 dark:text-neutral-300 rounded px-1.5 py-0.5 text-xs"
           >
             {email}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); removeEmail(email); }}
-              className="text-slate-400 hover:text-slate-700 leading-none"
+              className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 leading-none"
               aria-label={`Remove ${email}`}
             >
               ×
@@ -99,21 +99,21 @@ export function RecipientChipInput({ label, emails, onChange, placeholder }: Rec
           onKeyDown={handleKeyDown}
           onBlur={() => { if (inputValue.trim()) addEmail(inputValue); }}
           placeholder={emails.length === 0 ? placeholder : ""}
-          className="flex-1 min-w-[160px] text-xs outline-none bg-transparent placeholder:text-slate-400"
+          className="flex-1 min-w-[160px] text-xs outline-none bg-transparent placeholder:text-slate-400 dark:placeholder:text-neutral-500"
         />
       </div>
 
       {showSuggestions && filteredSuggestions.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full rounded-md border bg-white py-1 shadow-lg max-h-56 overflow-auto">
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-card py-1 shadow-lg max-h-56 overflow-auto">
           {filteredSuggestions.map((s) => (
             <button
               key={s.key}
               type="button"
               onMouseDown={(e) => { e.preventDefault(); addEmail(s.email); }}
-              className="flex w-full flex-col items-start px-3 py-1.5 text-left hover:bg-slate-50"
+              className="flex w-full flex-col items-start px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
             >
-              <span className="text-xs font-medium text-slate-700">{s.name || s.email}</span>
-              <span className="text-[11px] text-slate-400">{s.email} · {s.sublabel}</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">{s.name || s.email}</span>
+              <span className="text-[11px] text-slate-400 dark:text-neutral-500">{s.email} · {s.sublabel}</span>
             </button>
           ))}
         </div>

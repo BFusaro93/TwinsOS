@@ -110,7 +110,7 @@ function DirectCostRow({
   }
 
   return (
-    <tr className="group border-b border-slate-100 text-xs hover:bg-slate-50">
+    <tr className="group border-b border-slate-100 dark:border-neutral-800 text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
       {/* Description */}
       <td className="min-w-[160px] px-3 py-1.5">
         {row.costType === "product_material" ? (
@@ -128,7 +128,7 @@ function DirectCostRow({
               onChange={(e) => update("description", e.target.value)}
               onBlur={save}
               placeholder="Description override"
-              className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+              className="w-full rounded border border-border bg-card px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
             />
           </div>
         ) : (
@@ -136,7 +136,7 @@ function DirectCostRow({
             value={row.description}
             onChange={(e) => update("description", e.target.value)}
             onBlur={save}
-            className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+            className="w-full rounded border border-border bg-card px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
           />
         )}
       </td>
@@ -147,7 +147,7 @@ function DirectCostRow({
           value={row.costType}
           onChange={(e) => { update("costType", e.target.value as DirectCostType); }}
           onBlur={save}
-          className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs focus:outline-none"
+          className="rounded border border-border bg-card px-1 py-0.5 text-xs focus:outline-none"
         >
           {Object.entries(COST_TYPE_LABELS).map(([v, l]) => (
             <option key={v} value={v}>{l}</option>
@@ -162,7 +162,7 @@ function DirectCostRow({
           value={row.qty}
           onChange={(e) => update("qty", Number(e.target.value) || 0)}
           onBlur={save}
-          className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+          className="w-full rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
       </td>
 
@@ -173,17 +173,17 @@ function DirectCostRow({
           value={row.rateCents / 100}
           onChange={(e) => update("rateCents", Math.round((Number(e.target.value) || 0) * 100))}
           onBlur={save}
-          className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+          className="w-full rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
       </td>
 
       {/* Total */}
-      <td className="w-20 px-3 py-1.5 text-right tabular-nums text-slate-700">
+      <td className="w-20 px-3 py-1.5 text-right tabular-nums text-slate-700 dark:text-neutral-300">
         {centsToDisplay(row.totalCents)}
       </td>
 
       {/* Overhead */}
-      <td className="w-20 px-3 py-1.5 text-right tabular-nums text-slate-500">
+      <td className="w-20 px-3 py-1.5 text-right tabular-nums text-muted-foreground">
         {centsToDisplay(row.overheadCents)}
       </td>
 
@@ -192,14 +192,14 @@ function DirectCostRow({
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
           <button
             onClick={handleDelete}
-            className="rounded p-0.5 text-slate-400 hover:text-red-500"
+            className="rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
-        {isPending && <span className="text-[10px] text-slate-400">…</span>}
+        {isPending && <span className="text-[10px] text-slate-400 dark:text-neutral-500">…</span>}
         {dirty && !isPending && (
-          <button onClick={save} className="text-[10px] font-medium text-brand-500 hover:underline">
+          <button onClick={save} className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:underline">
             save
           </button>
         )}
@@ -243,10 +243,10 @@ export function EstimateDirectCostsGrid({
   const totalOverhead = items.reduce((s, i) => s + i.overheadCents, 0);
 
   return (
-    <div className="min-h-[150px] shrink-0 overflow-x-auto rounded-lg border bg-white shadow-sm">
+    <div className="min-h-[150px] shrink-0 overflow-x-auto rounded-lg border bg-card shadow-sm">
       <table className="w-full min-w-[600px] text-xs">
-        <thead className="bg-slate-200">
-          <tr className="text-left font-semibold text-slate-600">
+        <thead className="bg-slate-200 dark:bg-neutral-700">
+          <tr className="text-left font-semibold text-slate-600 dark:text-neutral-400">
             <th className="px-3 py-2" title="Non-catalog costs tracked against this job's profitability — labor, subcontractors, equipment rental, materials, or other one-off costs. Not billed to the client as their own line unless you add a matching line item above.">Direct Costs</th>
             <th className="px-3 py-2" title="Labor, Sub Contract, Service, Product/Material, Asset/Equipment, or Other">Type</th>
             <th className="px-3 py-2" title="Quantity">Qty</th>
@@ -261,7 +261,7 @@ export function EstimateDirectCostsGrid({
             <DirectCostRow key={item.id} item={item} estimateId={estimateId} overheadSettings={overheadSettings} products={products} />
           ))}
           {/* totals row */}
-          <tr className="border-t bg-slate-50 text-xs font-semibold text-slate-600">
+          <tr className="border-t bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-slate-600 dark:text-neutral-400">
             <td className="px-3 py-1.5" colSpan={4} />
             <td className="px-3 py-1.5 text-right tabular-nums">{centsToDisplay(totalCents)}</td>
             <td className="px-3 py-1.5 text-right tabular-nums">{centsToDisplay(totalOverhead)}</td>
@@ -273,7 +273,7 @@ export function EstimateDirectCostsGrid({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 text-xs text-slate-500 hover:text-slate-800"
+          className="h-7 text-xs text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
           onClick={addItem}
         >
           <Plus className="mr-1 h-3.5 w-3.5" />

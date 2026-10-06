@@ -14,7 +14,7 @@ interface DateRangeFilterProps {
 export function DateRangeFilter({ value, onChange, label = "Date", autoFocus = true }: DateRangeFilterProps) {
   const { from, to } = parseDateRange(value);
   return (
-    <div className="ml-2 flex items-center gap-1 text-xs text-slate-500">
+    <div className="ml-2 flex items-center gap-1 text-xs text-muted-foreground">
       <Input
         autoFocus={autoFocus}
         type="date"

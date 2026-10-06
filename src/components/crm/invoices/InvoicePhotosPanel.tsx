@@ -103,7 +103,7 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           {attached.length} of {INVOICE_PHOTO_LIMIT} photos included. They print on the invoice PDF and show on the online invoice page.
         </p>
         {canEdit && (
@@ -121,11 +121,11 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
         )}
       </div>
 
-      {error && <p className="text-xs text-red-600">{error instanceof Error ? error.message : "Failed to load photos"}</p>}
-      {isLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error instanceof Error ? error.message : "Failed to load photos"}</p>}
+      {isLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400 dark:text-neutral-500" />}
 
       {attached.length === 0 && !isLoading && (
-        <p className="rounded border border-dashed py-6 text-center text-xs text-slate-400">No photos on this invoice yet.</p>
+        <p className="rounded border border-dashed py-6 text-center text-xs text-slate-400 dark:text-neutral-500">No photos on this invoice yet.</p>
       )}
 
       {(["visit_photo", "job_photo", "upload"] as const).map((src) => {
@@ -133,22 +133,22 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
         if (list.length === 0) return null;
         return (
           <div key={src}>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{SOURCE_LABEL[src]}</p>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{SOURCE_LABEL[src]}</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {list.map((p) => (
-                <div key={p.id} className="rounded border bg-white p-1.5">
+                <div key={p.id} className="rounded border bg-card p-1.5">
                   <div className="relative">
                     {p.signedUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={p.signedUrl} alt={p.caption ?? "Invoice photo"} className="h-28 w-full rounded object-cover" />
                     ) : (
-                      <div className="flex h-28 w-full items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400">Unavailable</div>
+                      <div className="flex h-28 w-full items-center justify-center rounded bg-muted text-[10px] text-slate-400 dark:text-neutral-500">Unavailable</div>
                     )}
                     {canEdit && (
                       <button
                         type="button"
                         aria-label="Remove photo from invoice"
-                        className="absolute right-1 top-1 rounded bg-white/90 p-1 text-slate-600 shadow hover:text-red-600"
+                        className="absolute right-1 top-1 rounded bg-card/90 p-1 text-slate-600 dark:text-neutral-400 shadow hover:text-red-600 dark:hover:text-red-400"
                         onClick={() => remove.mutate([p.id], { onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to remove photo") })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -168,7 +168,7 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
       })}
 
       {picking && canEdit && (
-        <div className="space-y-3 rounded-md border bg-slate-50 p-3">
+        <div className="space-y-3 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
           <div className="flex items-center gap-2">
             <Input
               value={search}
@@ -186,27 +186,27 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
               </Button>
             )}
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">
             Shows photos from this invoice&apos;s visits and jobs, plus photo jobs linked to this client or project. Photo jobs that were only
             created with a customer name need the search above.
           </p>
 
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-          {!isLoading && candidates.length === 0 && <p className="text-xs text-slate-400">No other photos found.</p>}
+          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400 dark:text-neutral-500" />}
+          {!isLoading && candidates.length === 0 && <p className="text-xs text-slate-400 dark:text-neutral-500">No other photos found.</p>}
 
           {[...groups.entries()].map(([label, list]) => (
             <div key={label}>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{label}</p>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {list.map((c) => (
-                  <label key={key(c)} className="relative block cursor-pointer overflow-hidden rounded border bg-white">
+                  <label key={key(c)} className="relative block cursor-pointer overflow-hidden rounded border bg-card">
                     {c.signedUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={c.signedUrl} alt={c.caption ?? "Photo"} loading="lazy" className="h-20 w-full object-cover" />
                     ) : (
-                      <div className="flex h-20 items-center justify-center bg-slate-100 text-[10px] text-slate-400">Unavailable</div>
+                      <div className="flex h-20 items-center justify-center bg-muted text-[10px] text-slate-400 dark:text-neutral-500">Unavailable</div>
                     )}
-                    <Checkbox className="absolute left-1 top-1 bg-white" checked={selected.has(key(c))} onCheckedChange={() => toggle(c)} />
+                    <Checkbox className="absolute left-1 top-1 bg-card" checked={selected.has(key(c))} onCheckedChange={() => toggle(c)} />
                   </label>
                 ))}
               </div>

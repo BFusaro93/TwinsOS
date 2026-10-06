@@ -423,32 +423,32 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5 text-green-600" />
+            <Briefcase className="h-5 w-5 text-green-600 dark:text-green-400" />
             Convert Estimate to Job
           </DialogTitle>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Select which services to include, then set a scheduled date and crew.
           </p>
         </DialogHeader>
 
         {/* Client summary */}
-        <div className="rounded-lg bg-slate-50 border px-4 py-3 text-sm">
-          <p className="font-medium text-slate-800">{estimate.clientName ?? "Unknown Client"}</p>
+        <div className="rounded-lg bg-slate-50 dark:bg-muted/40 border px-4 py-3 text-sm">
+          <p className="font-medium text-slate-800 dark:text-neutral-100">{estimate.clientName ?? "Unknown Client"}</p>
           {estimate.clientAddress && (
-            <p className="text-slate-500 text-xs mt-0.5">
+            <p className="text-muted-foreground text-xs mt-0.5">
               {estimate.clientAddress}, {estimate.clientCity}, {estimate.clientState}
             </p>
           )}
-          <p className="text-xs text-slate-400 mt-0.5">Estimate #{estimate.estimateNumber} — {estimate.description}</p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Estimate #{estimate.estimateNumber} — {estimate.description}</p>
         </div>
 
         {/* Line item selector */}
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
-            <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            <Label className="text-xs font-semibold text-slate-600 dark:text-neutral-400 uppercase tracking-wide">
               Services to Include
             </Label>
-            <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={(v) => toggleAll(!!v)}
@@ -457,7 +457,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             </label>
           </div>
           {hasSingle && hasMulti && (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-xs text-slate-600 dark:text-neutral-400">
               <span>This estimate mixes one-time and multi-visit lines — convert each group as its own job:</span>
               <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => selectByVisits("single")}>
                 One-time lines
@@ -468,19 +468,19 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             </div>
           )}
           {legacyConverted && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
               This estimate was converted to a job before line-by-line conversion. Add further services on that job instead.
             </p>
           )}
           {tierUndecided && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
               This is a tiered proposal and no tier has been chosen yet. Check the lines for the tier the client picked.
             </p>
           )}
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b text-xs text-slate-500 font-semibold uppercase tracking-wide">
+                <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs text-muted-foreground font-semibold uppercase tracking-wide">
                   <th className="w-10 px-3 py-2" />
                   <th className="px-3 py-2 text-left">Service</th>
                   <th className="px-3 py-2 text-right">Visits</th>
@@ -491,7 +491,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               <tbody>
                 {lineItems.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400 text-xs">
+                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400 dark:text-neutral-500 text-xs">
                       No line items on this estimate.
                     </td>
                   </tr>
@@ -510,11 +510,11 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               </tbody>
               {selectedItems.length > 0 && (
                 <tfoot>
-                  <tr className="border-t bg-slate-50">
-                    <td colSpan={4} className="px-3 py-2 text-xs font-semibold text-slate-600 text-right">
+                  <tr className="border-t bg-slate-50 dark:bg-muted/40">
+                    <td colSpan={4} className="px-3 py-2 text-xs font-semibold text-slate-600 dark:text-neutral-400 text-right">
                       {selectedItems.length} service{selectedItems.length !== 1 ? "s" : ""} selected
                     </td>
-                    <td className="px-3 py-2 text-right text-sm font-bold text-slate-800">
+                    <td className="px-3 py-2 text-right text-sm font-bold text-slate-800 dark:text-neutral-100">
                       {formatCurrency(totalCents)}
                     </td>
                   </tr>
@@ -523,7 +523,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             </table>
           </div>
           {pricingShortfallCents > 0 && (
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
               Some prices don&apos;t divide evenly across their visits, so each visit is
               rounded down to the cent — this job will bill {formatCurrency(totalCents - pricingShortfallCents)},{" "}
               {formatCurrency(pricingShortfallCents)} less than accepted. Adjust a visit&apos;s
@@ -535,13 +535,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         {/* Materials selector */}
         {materialItems.length > 0 && (
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            <Label className="text-xs font-semibold text-slate-600 dark:text-neutral-400 uppercase tracking-wide">
               Materials to Include
             </Label>
             <div className="rounded-lg border overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b text-xs text-slate-500 font-semibold uppercase tracking-wide">
+                  <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs text-muted-foreground font-semibold uppercase tracking-wide">
                     <th className="w-10 px-3 py-2" />
                     <th className="px-3 py-2 text-left">Product</th>
                     <th className="px-3 py-2 text-right">Qty</th>
@@ -561,7 +561,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-400 dark:text-neutral-500">
               Materials are internal cost, not part of the client&apos;s price: selected ones are recorded on the job&apos;s Products as non-billable usage (at cost) for job costing, and are never invoiced.
             </p>
           </div>
@@ -570,7 +570,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         {/* Job settings */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">Job Type</Label>
+            <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Job Type</Label>
             <Select value={jobType} onValueChange={setJobType}>
               <SelectTrigger className="text-sm">
                 <SelectValue />
@@ -584,10 +584,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </div>
 
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">
+            <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">
               <CalendarDays className="inline h-3.5 w-3.5 mr-1" />
               Scheduled Date
-              <span className="ml-1 text-slate-400 font-normal">(optional)</span>
+              <span className="ml-1 text-slate-400 dark:text-neutral-500 font-normal">(optional)</span>
             </Label>
             <Input
               type="date"
@@ -599,7 +599,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
           {jobType === "project" && (
             <div className="flex flex-col gap-1">
-              <Label className="text-xs font-medium text-slate-600">Project</Label>
+              <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Project</Label>
               <div className="flex gap-2">
                 <Select value={projectId ?? "none"} onValueChange={(v) => setProjectId(v === "none" ? null : v)}>
                   <SelectTrigger className="text-sm"><SelectValue placeholder="Link a project…" /></SelectTrigger>
@@ -614,7 +614,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 dark:text-neutral-500">
                 Links this job to a Projects (PO cost-tracking) record for job costing and the WIP report.
               </p>
             </div>
@@ -622,7 +622,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
           {jobType === "recurring" && (
             <div className="flex flex-col gap-1">
-              <Label className="text-xs font-medium text-slate-600">Schedule *</Label>
+              <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Schedule *</Label>
               {crmSchedules.length > 0 ? (
                 <Select value={schedule} onValueChange={setSchedule}>
                   <SelectTrigger className="text-sm"><SelectValue placeholder="Select schedule…" /></SelectTrigger>
@@ -644,7 +644,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           )}
 
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">Assign Crew{rf.req("crew")}</Label>
+            <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Assign Crew{rf.req("crew")}</Label>
             <Select value={crewId || "none"} onValueChange={(v) => setCrewId(v === "none" ? "" : v)}>
               <SelectTrigger className="text-sm">
                 <SelectValue placeholder="Unassigned" />
@@ -659,7 +659,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </div>
 
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">Sales Rep{rf.req("sales_rep")}</Label>
+            <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Sales Rep{rf.req("sales_rep")}</Label>
             <Select value={salesRepId ?? "none"} onValueChange={(v) => setSalesRepId(v === "none" ? null : v)}>
               <SelectTrigger className="text-sm">
                 <SelectValue placeholder="Unassigned" />
@@ -674,7 +674,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </div>
 
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">
+            <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">
               <Tag className="inline h-3.5 w-3.5 mr-1" />
               Date Sold
             </Label>
@@ -687,7 +687,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </div>
 
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">Crew Size (men)</Label>
+            <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Crew Size (men)</Label>
             <Input
               type="number"
               min={1}
@@ -699,7 +699,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </div>
 
           <div className="flex flex-col gap-1 col-span-2">
-            <Label className="text-xs font-medium text-slate-600">Notes to Crew / Job Notes</Label>
+            <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Notes to Crew / Job Notes</Label>
             <Textarea
               value={notesToCrew}
               onChange={(e) => setNotesToCrew(e.target.value)}
@@ -758,26 +758,26 @@ function ServiceRow({
   return (
     <tr
       className={`border-b last:border-0 transition-colors ${
-        converted ? "opacity-60" : checked ? "bg-green-50 cursor-pointer" : "hover:bg-slate-50 cursor-pointer"
+        converted ? "opacity-60" : checked ? "bg-green-50 dark:bg-green-950/40 cursor-pointer" : "hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
       }`}
       onClick={onToggle}
     >
       <td className="px-3 py-2.5 text-center">
         <Checkbox checked={checked} disabled={converted} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} />
       </td>
-      <td className="px-3 py-2.5 font-medium text-slate-800">
+      <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-neutral-100">
         {li.serviceName ?? "—"}
         {tierLabel && (
-          <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-normal text-slate-500">{tierLabel}</span>
+          <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">{tierLabel}</span>
         )}
         {converted ? (
-          <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-normal uppercase text-green-700">Converted</span>
+          <span className="ml-2 rounded bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 text-[10px] font-normal uppercase text-green-700 dark:text-green-400">Converted</span>
         ) : li.status && li.status !== "quote" && (
-          <span className="ml-2 text-[10px] text-slate-400 font-normal uppercase">{li.status}</span>
+          <span className="ml-2 text-[10px] text-slate-400 dark:text-neutral-500 font-normal uppercase">{li.status}</span>
         )}
       </td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{li.visits}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{li.qty}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">{li.visits}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">{li.qty}</td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium">
         {formatCurrency(netCents)}
       </td>
@@ -799,11 +799,11 @@ function MaterialRow({
   onQtyChange: (qty: number) => void;
 }) {
   return (
-    <tr className={`border-b last:border-0 transition-colors ${checked ? "bg-green-50" : "hover:bg-slate-50"}`}>
+    <tr className={`border-b last:border-0 transition-colors ${checked ? "bg-green-50 dark:bg-green-950/40" : "hover:bg-slate-50 dark:hover:bg-muted/40"}`}>
       <td className="px-3 py-2.5 text-center cursor-pointer" onClick={onToggle}>
         <Checkbox checked={checked} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} />
       </td>
-      <td className="px-3 py-2.5 font-medium text-slate-800 cursor-pointer" onClick={onToggle}>
+      <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-neutral-100 cursor-pointer" onClick={onToggle}>
         {item.description}
       </td>
       <td className="px-3 py-2.5 text-right">

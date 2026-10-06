@@ -49,7 +49,7 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
       <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
         <PaymentElement options={{ wallets: { link: "never" } }} />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Charge {formatCurrency(totalChargeCents)}
@@ -147,16 +147,16 @@ export function ChargeCardDialog({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-brand-500" />
+            <CreditCard className="h-4 w-4 text-brand-500 dark:text-brand-400" />
             Collect Payment
           </DialogTitle>
         </DialogHeader>
 
         {succeeded ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <Check className="h-8 w-8 text-green-500" />
-            <p className="text-sm font-medium text-slate-900">Payment submitted</p>
-            <p className="text-xs text-slate-500">
+            <Check className="h-8 w-8 text-green-500 dark:text-green-400" />
+            <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Payment submitted</p>
+            <p className="text-xs text-muted-foreground">
               The invoice balance will update in a few seconds once it&apos;s confirmed.
             </p>
             <Button size="sm" className="mt-2" onClick={() => handleOpenChange(false)}>
@@ -165,33 +165,33 @@ export function ChargeCardDialog({
           </div>
         ) : !intent ? (
           !hasPublishableKey() ? (
-            <p className="py-4 text-sm text-slate-500">
+            <p className="py-4 text-sm text-muted-foreground">
               Card payments aren&apos;t configured yet. Add the Stripe environment variables to enable this.
             </p>
           ) : (
             <div className="flex flex-col gap-4 py-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Balance Due</span>
+                <span className="text-muted-foreground">Balance Due</span>
                 <span className="font-semibold tabular-nums">{formatCurrency(balanceCents)}</span>
               </div>
               {savedPaymentMethod && (
-                <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="text-sm text-slate-700">{savedPaymentMethod.summary} on file</span>
+                <div className="flex items-center justify-between rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2">
+                  <span className="text-sm text-slate-700 dark:text-neutral-300">{savedPaymentMethod.summary} on file</span>
                   <Button size="sm" onClick={() => void handleChargeSaved()} disabled={chargeSaved.isPending}>
                     {chargeSaved.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                     Charge Saved
                   </Button>
                 </div>
               )}
-              {savedPaymentMethod && <p className="text-xs text-slate-400">Or enter a new payment method:</p>}
+              {savedPaymentMethod && <p className="text-xs text-slate-400 dark:text-neutral-500">Or enter a new payment method:</p>}
               <div className={`grid gap-2 ${achEnabled ? "grid-cols-2" : "grid-cols-1"}`}>
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("card")}
                   className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                     paymentMethod === "card"
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                      ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                      : "border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                   }`}
                 >
                   Card
@@ -202,8 +202,8 @@ export function ChargeCardDialog({
                     onClick={() => setPaymentMethod("us_bank_account")}
                     className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                       paymentMethod === "us_bank_account"
-                        ? "border-brand-500 bg-brand-50 text-brand-700"
-                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                        ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                        : "border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                     }`}
                   >
                     Bank Transfer (ACH)
@@ -218,7 +218,7 @@ export function ChargeCardDialog({
                       checked={waiveFee}
                       onCheckedChange={(v) => setWaiveFee(v === true)}
                     />
-                    <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600">
+                    <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600 dark:text-neutral-400">
                       Waive credit card processing fee
                     </Label>
                   </div>
@@ -229,13 +229,13 @@ export function ChargeCardDialog({
                       disabled={waiveFee}
                       onCheckedChange={(v) => setOverrideFee(v === true)}
                     />
-                    <Label htmlFor="override-fee" className="text-sm font-normal text-slate-600">
+                    <Label htmlFor="override-fee" className="text-sm font-normal text-slate-600 dark:text-neutral-400">
                       Override fee amount
                     </Label>
                   </div>
                   {overrideFee && !waiveFee && (
                     <div className="flex items-center gap-2 pl-6">
-                      <span className="text-sm text-slate-500">$</span>
+                      <span className="text-sm text-muted-foreground">$</span>
                       <Input
                         type="number"
                         step="0.01"
@@ -264,12 +264,12 @@ export function ChargeCardDialog({
           <div className="flex flex-col gap-4 py-2">
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Balance Due</span>
+                <span className="text-muted-foreground">Balance Due</span>
                 <span className="tabular-nums">{formatCurrency(intent.balanceCents)}</span>
               </div>
               {intent.feeCents > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Processing Fee</span>
+                  <span className="text-muted-foreground">Processing Fee</span>
                   <span className="tabular-nums">{formatCurrency(intent.feeCents)}</span>
                 </div>
               )}

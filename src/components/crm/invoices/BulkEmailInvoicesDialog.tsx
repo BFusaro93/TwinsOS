@@ -116,7 +116,7 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Each invoice is sent to its own client&apos;s email on file, using the subject/body below.
           </p>
 
@@ -176,7 +176,7 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
                   type="button"
                   title={mt.label}
                   onClick={() => richTextRef.current?.insertContent(mt.tag)}
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                  className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:text-neutral-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400"
                 >
                   {mt.tag}
                 </button>
@@ -184,7 +184,7 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-slate-500">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Checkbox checked={includePdf} onCheckedChange={(v) => setIncludePdf(!!v)} />
             <Paperclip className="h-3.5 w-3.5" />
             Attach each invoice&apos;s PDF to its email

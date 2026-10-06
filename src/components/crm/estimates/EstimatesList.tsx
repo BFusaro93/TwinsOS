@@ -57,12 +57,12 @@ const ESTIMATE_COLUMNS: ColumnDef[] = [
 // crm_estimate_stages), so these stay a fixed palette keyed by stage_key.
 // Labels, order, and which stages exist at all come from the DB below.
 const FALLBACK_STAGE_COLOR: Record<string, string> = {
-  draft:    "bg-slate-100 text-slate-600",
-  quote:    "bg-blue-100 text-blue-700",
-  sent:     "bg-yellow-100 text-yellow-700",
-  accepted: "bg-green-100 text-green-700",
-  lost:     "bg-red-100 text-red-600",
-  invoiced: "bg-teal-100 text-teal-700",
+  draft:    "bg-muted text-slate-600 dark:text-neutral-400",
+  quote:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  sent:     "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  accepted: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  lost:     "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  invoiced: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",
 };
 
 const FALLBACK_STAGE_LABEL: Record<string, string> = {
@@ -182,7 +182,7 @@ export function EstimatesList({ clientId }: Props) {
   const stageColor = useMemo(() => {
     const map: Record<string, string> = { ...FALLBACK_STAGE_COLOR };
     for (const s of estimateStages) {
-      if (!map[s.stageKey]) map[s.stageKey] = "bg-slate-100 text-slate-600";
+      if (!map[s.stageKey]) map[s.stageKey] = "bg-muted text-slate-600 dark:text-neutral-400";
     }
     return map;
   }, [estimateStages]);
@@ -370,8 +370,8 @@ export function EstimatesList({ clientId }: Props) {
       )}
 
       {/* ── 2. White column filter bar ── */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
-        <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
+      <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
+        <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {FILTER_BUTTONS.map(({ key, label }) => (
             <button
@@ -383,8 +383,8 @@ export function EstimatesList({ clientId }: Props) {
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
                 activeFilterKey === key
-                  ? "bg-brand-100 text-brand-700 font-medium"
-                  : "hover:bg-slate-100 text-slate-600"
+                  ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+                  : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
             >
               {label}
@@ -403,7 +403,7 @@ export function EstimatesList({ clientId }: Props) {
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>
@@ -428,7 +428,7 @@ export function EstimatesList({ clientId }: Props) {
                 variant="outline"
                 className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
               >
-                Actions {someSelected && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>}
+                Actions {someSelected && <span className="ml-1 rounded-full bg-card/20 px-1.5 text-[10px]">{selectedIds.size}</span>}
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
@@ -478,7 +478,7 @@ export function EstimatesList({ clientId }: Props) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     disabled={!someSelected}
-                    className="text-red-600 focus:text-red-600"
+                    className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                     onSelect={() => bulkSetStage("lost")}
                   >
                     Mark as Lost
@@ -504,7 +504,7 @@ export function EstimatesList({ clientId }: Props) {
                   className={cn(
                     "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                     !stageSet && stageFilter === value
-                      ? "bg-white text-slate-800"
+                      ? "bg-card text-slate-800 dark:text-neutral-100"
                       : "text-slate-300 hover:text-white"
                   )}
                 >
@@ -513,8 +513,8 @@ export function EstimatesList({ clientId }: Props) {
                     <span className={cn(
                       "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
                       !stageSet && stageFilter === value
-                        ? "bg-slate-200 text-slate-700"
-                        : "bg-white/20 text-white"
+                        ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300"
+                        : "bg-card/20 text-white"
                     )}>
                       {count}
                     </span>
@@ -524,12 +524,12 @@ export function EstimatesList({ clientId }: Props) {
             })}
           </div>
           {stageSet && (
-            <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded bg-white px-2 py-1 text-xs font-medium text-slate-800">
+            <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded bg-card px-2 py-1 text-xs font-medium text-slate-800 dark:text-neutral-100">
               Stages: {stageSet.map((st) => stageLabel[st] ?? st).join(", ")}
               <button
                 type="button"
                 onClick={() => setStageSet(null)}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
                 aria-label="Clear stage filter"
                 title="Clear stage filter"
               >
@@ -553,7 +553,7 @@ export function EstimatesList({ clientId }: Props) {
             className={cn(
               "flex h-7 w-7 items-center justify-center rounded border transition-colors",
               viewMode === "list"
-                ? "border-white bg-white text-slate-700"
+                ? "border-white bg-card text-slate-700 dark:text-neutral-300"
                 : "border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
             )}
           >
@@ -565,7 +565,7 @@ export function EstimatesList({ clientId }: Props) {
             className={cn(
               "flex h-7 w-7 items-center justify-center rounded border transition-colors",
               viewMode === "pipeline"
-                ? "border-white bg-white text-slate-700"
+                ? "border-white bg-card text-slate-700 dark:text-neutral-300"
                 : "border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
             )}
           >
@@ -594,14 +594,14 @@ export function EstimatesList({ clientId }: Props) {
 
       {/* Table */}
       {viewMode === "list" && (
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+            <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-3 py-2.5">
                 <input
                   type="checkbox"
-                  className="rounded border-slate-300 accent-brand-500"
+                  className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                   checked={allSelected}
                   onChange={toggleAll}
                 />
@@ -630,7 +630,7 @@ export function EstimatesList({ clientId }: Props) {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} className="py-20 text-center text-sm text-slate-400">
+                <td colSpan={colSpan} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {stageFilter !== "all" || stageSet || activeFilterKey || search
                     ? "No estimates match the current filters"
                     : "No estimates yet — create one to get started"}
@@ -644,15 +644,15 @@ export function EstimatesList({ clientId }: Props) {
                   : 0;
                 return (
                   <tr key={e.id} className={cn(
-                    "group border-b hover:bg-slate-50",
+                    "group border-b hover:bg-slate-50 dark:hover:bg-muted/40",
                     canEdit && "cursor-pointer",
-                    selectedIds.has(e.id) && "bg-brand-50"
+                    selectedIds.has(e.id) && "bg-brand-50 dark:bg-brand-900/30"
                   )} onClick={canEdit ? () => router.push(`/crm/estimates/${e.id}`) : undefined}>
 
                     <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
-                        className="rounded border-slate-300 accent-brand-500"
+                        className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                         checked={selectedIds.has(e.id)}
                         onChange={() => toggleRow(e.id)}
                       />
@@ -660,7 +660,7 @@ export function EstimatesList({ clientId }: Props) {
                     {visibleColumns.map((col) => {
                       switch (col.key) {
                         case "number":
-                          return <td key={col.key} className="px-3 py-2.5 text-xs font-mono text-slate-400">{e.estimateNumber ? `#${e.estimateNumber}` : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-xs font-mono text-slate-400 dark:text-neutral-500">{e.estimateNumber ? `#${e.estimateNumber}` : "—"}</td>;
                         case "stage":
                           return (
                             <td key={col.key} className="px-3 py-2.5">
@@ -672,7 +672,7 @@ export function EstimatesList({ clientId }: Props) {
                         case "client":
                           return (
                             <td key={col.key} className="px-3 py-2.5 max-w-[180px]" onClick={(ev) => ev.stopPropagation()}>
-                              <Link href={`/crm/clients/${e.clientId}`} className="block font-medium text-brand-600 hover:underline truncate">
+                              <Link href={`/crm/clients/${e.clientId}`} className="block font-medium text-brand-600 dark:text-brand-400 hover:underline truncate">
                                 {e.clientName ?? "—"}
                               </Link>
                               {(() => {
@@ -680,7 +680,7 @@ export function EstimatesList({ clientId }: Props) {
                                   .filter(Boolean)
                                   .join(", ");
                                 return fullAddress ? (
-                                  <p className="text-[10px] text-slate-400 truncate">{fullAddress}</p>
+                                  <p className="text-[10px] text-slate-400 dark:text-neutral-500 truncate">{fullAddress}</p>
                                 ) : null;
                               })()}
                             </td>
@@ -688,29 +688,29 @@ export function EstimatesList({ clientId }: Props) {
                         case "description":
                           return (
                             <td key={col.key} className="px-3 py-2.5 max-w-[200px]">
-                              <Link href={`/crm/estimates/${e.id}`} className="block text-slate-700 hover:text-brand-600 hover:underline truncate text-xs">
+                              <Link href={`/crm/estimates/${e.id}`} className="block text-slate-700 dark:text-neutral-300 hover:text-brand-600 dark:hover:text-brand-400 hover:underline truncate text-xs">
                                 {e.description || "(no description)"}
                               </Link>
                             </td>
                           );
                         case "date":
-                          return <td key={col.key} className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">{e.estimateDate ? formatDate(e.estimateDate) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{e.estimateDate ? formatDate(e.estimateDate) : "—"}</td>;
                         case "valid_until":
-                          return <td key={col.key} className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">{e.validUntilDate ? formatDate(e.validUntilDate) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{e.validUntilDate ? formatDate(e.validUntilDate) : "—"}</td>;
                         case "sales_rep":
-                          return <td key={col.key} className="px-3 py-2.5 text-xs text-slate-600">{e.salesRepName ?? "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-xs text-slate-600 dark:text-neutral-400">{e.salesRepName ?? "—"}</td>;
                         case "prob":
-                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs text-slate-500">{e.probabilityBps > 0 ? `${(e.probabilityBps / 100).toFixed(0)}%` : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs text-muted-foreground">{e.probabilityBps > 0 ? `${(e.probabilityBps / 100).toFixed(0)}%` : "—"}</td>;
                         // Income / GP / Margin: "—" only when the estimate has no
                         // priced revenue yet (truly unknown). Once revenue exists,
                         // a $0 gross profit or 0% margin is a real figure — show it.
                         case "income":
-                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{hasRevenue ? formatCurrency(e.revenueCents) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700 dark:text-neutral-300">{hasRevenue ? formatCurrency(e.revenueCents) : "—"}</td>;
                         case "gp":
-                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{hasRevenue ? formatCurrency(e.grossProfitCents ?? 0) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700 dark:text-neutral-300">{hasRevenue ? formatCurrency(e.grossProfitCents ?? 0) : "—"}</td>;
                         case "margin":
                           return (
-                            <td key={col.key} className={cn("px-3 py-2.5 text-right text-xs font-medium", marginBps >= 3000 ? "text-green-600" : marginBps >= 1500 ? "text-yellow-600" : marginBps > 0 ? "text-red-500" : "text-slate-400")}>
+                            <td key={col.key} className={cn("px-3 py-2.5 text-right text-xs font-medium", marginBps >= 3000 ? "text-green-600 dark:text-green-400" : marginBps >= 1500 ? "text-yellow-600 dark:text-yellow-400" : marginBps > 0 ? "text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500")}>
                               {hasRevenue ? bpsToPercent(marginBps) : "—"}
                             </td>
                           );

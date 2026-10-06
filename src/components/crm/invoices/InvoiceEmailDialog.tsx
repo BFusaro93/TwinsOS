@@ -272,7 +272,7 @@ export function InvoiceEmailDialog({
                     type="button"
                     title={mt.label}
                     onClick={() => richTextRef.current?.insertContent(mt.tag)}
-                    className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                    className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:text-neutral-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400"
                   >
                     {mt.tag}
                   </button>
@@ -281,13 +281,13 @@ export function InvoiceEmailDialog({
             </TabsContent>
 
             <TabsContent value="preview" className="mt-2">
-              <div className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto">
+              <div className="min-h-[240px] rounded border bg-card p-4 text-sm overflow-auto">
                 <SandboxedHtmlPreview html={previewResolve(bodyHtml)} minHeight={208} />
               </div>
             </TabsContent>
           </Tabs>
 
-          <label className="flex items-center gap-2 text-xs text-slate-500">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Checkbox checked={includePdf} onCheckedChange={(v) => setIncludePdf(!!v)} />
             <Paperclip className="h-3.5 w-3.5" />
             Attach the invoice PDF to this email
@@ -295,8 +295,8 @@ export function InvoiceEmailDialog({
 
           {/* Photos included in the PDF and on the online invoice page. Chosen
               here at send time; also manageable from the invoice's Photos tab. */}
-          <details className="rounded border bg-slate-50/50 px-3 py-2">
-            <summary className="cursor-pointer text-xs font-medium text-slate-600">
+          <details className="rounded border bg-slate-50/50 dark:bg-muted/40 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium text-slate-600 dark:text-neutral-400">
               Photos to include (PDF and online invoice)
             </summary>
             <div className="mt-3 max-h-[40vh] overflow-y-auto">
