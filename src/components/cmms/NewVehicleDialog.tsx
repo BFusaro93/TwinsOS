@@ -97,7 +97,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
 
   // Warranty
   const [warranty, setWarranty] = useState<WarrantyFormValue>(EMPTY_WARRANTY_FORM);
-  const resolvedWarranty = resolveWarrantyForm(warranty, purchaseDate || null);
+  const resolvedWarranty = resolveWarrantyForm(warranty, purchaseDate || null, initialData);
 
   // Notes
   const [notes, setNotes] = useState("");
@@ -217,7 +217,9 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       parentAssetId: null,
       location: location !== "none" ? location : null,
       purchaseVendorId: purchaseVendorId || null,
-      purchaseVendorName: vendor?.name ?? null,
+      // A vendor typed/imported as text has a name but no linked vendor row —
+      // keep it unless the user picked a different vendor.
+      purchaseVendorName: vendor?.name ?? (purchaseVendorId || !isEditing ? null : (initialData?.purchaseVendorName ?? null)),
       purchaseDate: purchaseDate || null,
       purchasePrice: purchasePrice ? Math.round(parseFloat(purchasePrice) * 100) : null,
       paymentMethod: (paymentMethod as import("@/types/cmms").PaymentMethod) || null,

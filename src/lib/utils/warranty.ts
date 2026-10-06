@@ -121,7 +121,18 @@ export interface ResolvedWarranty {
   error: string | null;
 }
 
-export function resolveWarrantyForm(v: WarrantyFormValue, purchaseDate: string | null): ResolvedWarranty {
+/**
+ * `existing` is the saved record when editing. If the period inputs (start,
+ * term) are unchanged, its stored end date is kept as-is rather than
+ * re-derived, so opening and saving a record for an unrelated field never
+ * shifts a warranty end date (older records store the exact anniversary, the
+ * form derives the day before).
+ */
+export function resolveWarrantyForm(
+  v: WarrantyFormValue,
+  purchaseDate: string | null,
+  existing?: WarrantyRecordFields | null,
+): ResolvedWarranty {
   const notes = v.notes.trim() || null;
   if (v.mode === "term") {
     const n = Number(v.termValue);
@@ -139,8 +150,17 @@ export function resolveWarrantyForm(v: WarrantyFormValue, purchaseDate: string |
     if (!start) {
       return { fields: { warrantyStartDate: null, warrantyTermMonths: null, warrantyEndDate: null, warrantyNotes: notes }, error: "Add a warranty start date or a purchase date so the end date can be worked out." };
     }
+    const unchanged =
+      existing?.warrantyEndDate &&
+      existing.warrantyStartDate === start &&
+      existing.warrantyTermMonths === months;
     return {
-      fields: { warrantyStartDate: start, warrantyTermMonths: months, warrantyEndDate: warrantyEndFromTerm(start, months), warrantyNotes: notes },
+      fields: {
+        warrantyStartDate: start,
+        warrantyTermMonths: months,
+        warrantyEndDate: unchanged ? existing.warrantyEndDate : warrantyEndFromTerm(start, months),
+        warrantyNotes: notes,
+      },
       error: null,
     };
   }
