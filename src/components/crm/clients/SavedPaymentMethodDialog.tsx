@@ -49,7 +49,7 @@ function SetupForm({ onSuccess }: { onSuccess: (setupIntentId: string) => void }
       <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
         <PaymentElement options={{ wallets: { link: "never" } }} />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Save Payment Method
@@ -118,27 +118,27 @@ export function SavedPaymentMethodDialog({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-brand-500" />
+            <CreditCard className="h-4 w-4 text-brand-500 dark:text-brand-400" />
             Save Payment Method
           </DialogTitle>
         </DialogHeader>
 
         {succeeded ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <Check className="h-8 w-8 text-green-500" />
-            <p className="text-sm font-medium text-slate-900">Payment method saved</p>
+            <Check className="h-8 w-8 text-green-500 dark:text-green-400" />
+            <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Payment method saved</p>
             <Button size="sm" className="mt-2" onClick={() => handleOpenChange(false)}>
               Done
             </Button>
           </div>
         ) : !intent ? (
           !hasPublishableKey() ? (
-            <p className="py-4 text-sm text-slate-500">
+            <p className="py-4 text-sm text-muted-foreground">
               Card payments aren&apos;t configured yet. Add the Stripe environment variables to enable this.
             </p>
           ) : (
             <div className="flex flex-col gap-4 py-2">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 dark:text-neutral-400">
                 Save a card or bank account on file for this client to charge on demand, or enroll in autopay below.
               </p>
               <div className={`grid gap-2 ${achEnabled ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -147,8 +147,8 @@ export function SavedPaymentMethodDialog({
                   onClick={() => setPaymentMethod("card")}
                   className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                     paymentMethod === "card"
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                      ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                      : "border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                   }`}
                 >
                   Card
@@ -159,8 +159,8 @@ export function SavedPaymentMethodDialog({
                     onClick={() => setPaymentMethod("us_bank_account")}
                     className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                       paymentMethod === "us_bank_account"
-                        ? "border-brand-500 bg-brand-50 text-brand-700"
-                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                        ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                        : "border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                     }`}
                   >
                     Bank Account (ACH)
@@ -173,12 +173,12 @@ export function SavedPaymentMethodDialog({
                   checked={enableAutopay}
                   onCheckedChange={(v) => setEnableAutopay(v === true)}
                 />
-                <Label htmlFor="enable-autopay" className="text-sm font-normal text-slate-600">
+                <Label htmlFor="enable-autopay" className="text-sm font-normal text-slate-600 dark:text-neutral-400">
                   Automatically charge this method (autopay)
                 </Label>
               </div>
               {!enableAutopay && (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 dark:text-neutral-500">
                   This method will be kept on file for staff to charge manually, but won&apos;t appear in the To Charge queues.
                 </p>
               )}

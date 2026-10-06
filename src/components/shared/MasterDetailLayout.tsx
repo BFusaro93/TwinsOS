@@ -24,7 +24,7 @@ export function MasterDetailLayout({
   return (
     <div
       className={cn(
-        "flex h-full overflow-hidden rounded-lg border bg-white shadow-sm",
+        "flex h-full overflow-hidden rounded-lg border bg-card shadow-sm",
         className
       )}
     >
@@ -58,7 +58,7 @@ export function MasterDetailLayout({
                   variant="ghost"
                   size="sm"
                   onClick={onBack}
-                  className="gap-1.5 text-slate-600"
+                  className="gap-1.5 text-slate-600 dark:text-neutral-400"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back to list

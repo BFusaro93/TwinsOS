@@ -31,7 +31,7 @@ export function RecordDetailTabs({
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="h-10 rounded-none border-b-2 border-transparent px-4 pb-0 pt-0 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+              className="h-10 rounded-none border-b-2 border-transparent px-4 pb-0 pt-0 text-sm font-medium text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
             >
               {tab.label}
             </TabsTrigger>

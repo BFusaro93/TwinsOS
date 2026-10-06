@@ -67,11 +67,11 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing, initialTab
       <div className="fixed inset-0 z-40 bg-black/40" onClick={() => onOpenChange(false)} />
       <div className="fixed right-0 top-0 bottom-0 z-50 flex max-w-[100vw] shadow-2xl" style={{ width }}>
         <div
-          className="flex w-8 cursor-ew-resize flex-col items-center bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0 border-r border-slate-200"
+          className="flex w-8 cursor-ew-resize flex-col items-center bg-muted hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors flex-shrink-0 border-r border-border"
           onMouseDown={startDrag}
         >
           <button
-            className="mt-3 rounded p-1 text-slate-400 hover:bg-slate-300 hover:text-slate-700 transition-colors cursor-pointer"
+            className="mt-3 rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-slate-300 dark:hover:bg-neutral-600 hover:text-slate-700 dark:hover:text-neutral-300 transition-colors cursor-pointer"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => onOpenChange(false)}
             title="Close"
@@ -79,10 +79,10 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing, initialTab
             <X className="h-4 w-4" />
           </button>
           <div className="flex flex-1 items-center">
-            <GripVertical className="h-4 w-4 text-slate-300" />
+            <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-600" />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto bg-white">
+        <div className="flex-1 overflow-y-auto bg-card">
           <JobDetail jobId={jobId} initialEditing={initialEditing} initialTab={initialTab} onClose={() => onOpenChange(false)} />
         </div>
       </div>

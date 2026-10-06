@@ -32,9 +32,9 @@ export function StatusFlowIndicator({
                 className={cn(
                   "flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-semibold transition-colors",
                   isCompleted && "border-brand-500 bg-brand-500 text-white",
-                  isCurrent && !isError && "border-brand-500 bg-white text-brand-600",
+                  isCurrent && !isError && "border-brand-500 bg-card text-brand-600 dark:text-brand-400",
                   isError && "border-red-500 bg-red-500 text-white",
-                  !isCompleted && !isCurrent && "border-slate-200 bg-white text-slate-400"
+                  !isCompleted && !isCurrent && "border-border bg-card text-slate-400 dark:text-neutral-500"
                 )}
               >
                 {isCompleted ? (
@@ -48,9 +48,9 @@ export function StatusFlowIndicator({
               <span
                 className={cn(
                   "whitespace-nowrap text-[10px] font-medium",
-                  isCurrent && !isError && "text-brand-600",
-                  isError && "text-red-600",
-                  !isCurrent && "text-slate-400"
+                  isCurrent && !isError && "text-brand-600 dark:text-brand-400",
+                  isError && "text-red-600 dark:text-red-400",
+                  !isCurrent && "text-slate-400 dark:text-neutral-500"
                 )}
               >
                 {step.label}
@@ -61,7 +61,7 @@ export function StatusFlowIndicator({
               <div
                 className={cn(
                   "mb-4 h-0.5 flex-1",
-                  i < currentIndex ? "bg-brand-500" : "bg-slate-200"
+                  i < currentIndex ? "bg-brand-500" : "bg-slate-200 dark:bg-neutral-700"
                 )}
               />
             )}

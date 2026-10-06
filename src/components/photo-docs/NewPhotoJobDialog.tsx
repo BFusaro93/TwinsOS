@@ -86,7 +86,7 @@ export function NewPhotoJobDialog({ open, onOpenChange, defaultClientId, onCreat
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="photo-job-name">
-                Job Name <span className="text-red-500">*</span>
+                Job Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="photo-job-name"

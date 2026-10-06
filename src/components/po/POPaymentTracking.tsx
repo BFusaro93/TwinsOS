@@ -22,11 +22,11 @@ function CheckRow({ label, checked, sublabel, pending, readOnly, onToggle }: Che
       type="button"
       onClick={onToggle}
       disabled={pending || readOnly}
-      className="flex w-full items-center gap-3 rounded-md px-1 py-1.5 text-left hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+      className="flex w-full items-center gap-3 rounded-md px-1 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
     >
       <div className={cn(
         "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-        checked ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 bg-white text-slate-300"
+        checked ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-card text-slate-300 dark:text-neutral-600"
       )}>
         {pending
           ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -36,8 +36,8 @@ function CheckRow({ label, checked, sublabel, pending, readOnly, onToggle }: Che
         }
       </div>
       <div>
-        <span className={cn("text-sm", checked ? "text-slate-900" : "text-slate-400")}>{label}</span>
-        {sublabel && <span className="ml-2 text-xs text-slate-400">{sublabel}</span>}
+        <span className={cn("text-sm", checked ? "text-slate-900 dark:text-neutral-100" : "text-slate-400 dark:text-neutral-500")}>{label}</span>
+        {sublabel && <span className="ml-2 text-xs text-slate-400 dark:text-neutral-500">{sublabel}</span>}
       </div>
     </button>
   );
@@ -92,7 +92,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
 
   return (
     <div className="rounded-md border p-4">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
         Payment Tracking
       </p>
       <CheckRow
@@ -120,7 +120,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
             setCheckNumber(e.target.value);
             saveCheckNumber(e.target.value);
           }}
-          className="w-36 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 placeholder:text-slate-300 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="w-36 rounded border border-border bg-card px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 placeholder:text-slate-300 dark:placeholder:text-neutral-600 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
       </div>
       <CheckRow

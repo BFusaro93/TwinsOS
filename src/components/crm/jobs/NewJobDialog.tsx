@@ -735,7 +735,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             </div>
 
             {clientHasNoAddress && (
-              <div className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <div className="flex items-start gap-2 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
                 <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
                 <span>
                   <strong>{effectiveClientName}</strong> has no service address on file. The crew
@@ -762,7 +762,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   ) : (
                     <>
                       <Input value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="e.g. Bi-weekly Monday Even" />
-                      <p className="text-xs text-slate-400">Configure schedules in CRM Settings → Schedules</p>
+                      <p className="text-xs text-slate-400 dark:text-neutral-500">Configure schedules in CRM Settings → Schedules</p>
                     </>
                   )}
                 </div>
@@ -771,9 +771,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <Input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>End Date <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+                  <Label>End Date <span className="text-xs font-normal text-slate-400 dark:text-neutral-500">(optional)</span></Label>
                   <Input type="date" value={recurrenceEnd} min={startDate || undefined} onChange={(e) => setRecurrenceEnd(e.target.value)} />
-                  <p className="text-xs text-slate-400">Visits are generated from the start date through this date (or year end if blank).</p>
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">Visits are generated from the start date through this date (or year end if blank).</p>
                 </div>
               </div>
             )}
@@ -791,12 +791,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">
                     No packages configured yet. Add one in CRM Settings → Packages.
                   </p>
                 )}
                 {packageId && (
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">
                     Visits and dates below are pulled from the package&rsquo;s schedule — adjust any row for this client if needed.
                   </p>
                 )}
@@ -816,19 +816,19 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               </div>
             )}
             {jobType === "package" && (
-              <p className="text-xs text-slate-400 -mt-2">
+              <p className="text-xs text-slate-400 dark:text-neutral-500 -mt-2">
                 Package jobs are scheduled within this date range and go to the Waiting List for opportunistic dispatch, rather than a fixed date.
                 {packageId && " Changing the Start Date shifts every step window by the same number of days."}
               </p>
             )}
             {jobType === "package" && packageId && (
-              <div className="flex items-center gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm">
-                <span className="text-slate-500">Monthly</span>
-                <span className="font-semibold text-slate-800">{formatCurrency(packageMonthlyCents)}</span>
-                <span className="text-slate-300">·</span>
-                <span className="text-slate-500">Total</span>
-                <span className="font-semibold text-slate-800">{formatCurrency(serviceTotalCents)}</span>
-                <span className="text-xs text-slate-400">({packageMonths} month{packageMonths === 1 ? "" : "s"}, {services.length} step{services.length === 1 ? "" : "s"})</span>
+              <div className="flex items-center gap-2 rounded-md border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Monthly</span>
+                <span className="font-semibold text-slate-800 dark:text-neutral-100">{formatCurrency(packageMonthlyCents)}</span>
+                <span className="text-slate-300 dark:text-neutral-600">·</span>
+                <span className="text-muted-foreground">Total</span>
+                <span className="font-semibold text-slate-800 dark:text-neutral-100">{formatCurrency(serviceTotalCents)}</span>
+                <span className="text-xs text-slate-400 dark:text-neutral-500">({packageMonths} month{packageMonths === 1 ? "" : "s"}, {services.length} step{services.length === 1 ? "" : "s"})</span>
               </div>
             )}
 
@@ -919,7 +919,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         type="button"
                         onClick={() => toggleSnowDay(d)}
                         className={`rounded border px-2 py-0.5 text-xs transition-colors ${
-                          snowDaysAuthorized.includes(d) ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 bg-white text-slate-600"
+                          snowDaysAuthorized.includes(d) ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-card text-slate-600 dark:text-neutral-400"
                         }`}
                       >
                         {d}
@@ -976,7 +976,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 {services.map((svc, i) => (
                   <div
                     key={i}
-                    className="grid min-w-[640px] items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
+                    className="grid min-w-[640px] items-center gap-1.5 border-b last:border-0 bg-card px-3 py-2"
                     style={{
                       gridTemplateColumns: showServiceDate
                         ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
@@ -1005,7 +1005,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       onCommit={(cost) => updateService(i, { rateCents: Math.round(cost * 100) })}
                     />
                     {rowIsAutoHrs(svc.serviceId) ? (
-                      <span className="flex h-7 items-center justify-end pr-1 text-xs font-medium text-blue-600" title="Auto-calculated from production rate">
+                      <span className="flex h-7 items-center justify-end pr-1 text-xs font-medium text-blue-600 dark:text-blue-400" title="Auto-calculated from production rate">
                         {svc.budgetedHours.toFixed(2)}
                       </span>
                     ) : (
@@ -1018,14 +1018,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       />
                     )}
                     <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateTeamSize(i, parseInt(e.target.value) || 1)} className="h-7 text-xs" />
-                    <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>
-                    <button type="button" onClick={() => removeService(i)} disabled={services.length === 1} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 disabled:opacity-30">
+                    <span className="text-xs text-slate-700 dark:text-neutral-300 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>
+                    <button type="button" onClick={() => removeService(i)} disabled={services.length === 1} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-30">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 ))}
                 </div>
-                <div className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+                <div className="flex items-center justify-between border-t bg-slate-50 dark:bg-muted/40 px-3 py-2 text-xs font-medium text-slate-700 dark:text-neutral-300">
                   <span>Service Total</span>
                   <span>{formatCurrency(serviceTotalCents)}</span>
                 </div>
@@ -1053,12 +1053,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <span />
                 </div>
                 {productRows.length === 0 && (
-                  <div className="px-3 py-3 text-center text-xs text-slate-400 bg-white">No products on this job yet.</div>
+                  <div className="px-3 py-3 text-center text-xs text-slate-400 dark:text-neutral-500 bg-card">No products on this job yet.</div>
                 )}
                 {productRows.map((row, i) => (
                   <div
                     key={i}
-                    className="grid min-w-[480px] items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
+                    className="grid min-w-[480px] items-center gap-1.5 border-b last:border-0 bg-card px-3 py-2"
                     style={{ gridTemplateColumns: "2fr 1fr 1fr 1.2fr 28px" }}
                   >
                     <Select value={row.productId || ""} onValueChange={(v) => pickProduct(i, v)}>
@@ -1075,15 +1075,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       selectOnFocus
                       onCommit={(price) => updateProductRow(i, { unitPriceCents: Math.round(price * 100) })}
                     />
-                    <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(row.qty * row.unitPriceCents)}</span>
-                    <button type="button" onClick={() => removeProductRow(i)} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500">
+                    <span className="text-xs text-slate-700 dark:text-neutral-300 font-medium text-right pr-1">{formatCurrency(row.qty * row.unitPriceCents)}</span>
+                    <button type="button" onClick={() => removeProductRow(i)} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 ))}
                 </div>
                 {productRows.length > 0 && (
-                  <div className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+                  <div className="flex items-center justify-between border-t bg-slate-50 dark:bg-muted/40 px-3 py-2 text-xs font-medium text-slate-700 dark:text-neutral-300">
                     <span>Product Total</span>
                     <span>{formatCurrency(productTotalCents)}</span>
                   </div>
@@ -1112,18 +1112,18 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 { label: "Budget Hrs", value: `${totalBudgetedHours.toFixed(2)} hrs` },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-slate-500">{row.label}</span>
+                  <span className="text-muted-foreground">{row.label}</span>
                   <span className={
                     row.colored
-                      ? grossProfitCents >= 0 ? "font-semibold text-green-600" : "font-semibold text-red-600"
-                      : row.bold ? "font-semibold text-slate-800" : "text-slate-700"
+                      ? grossProfitCents >= 0 ? "font-semibold text-green-600 dark:text-green-400" : "font-semibold text-red-600 dark:text-red-400"
+                      : row.bold ? "font-semibold text-slate-800 dark:text-neutral-100" : "text-slate-700 dark:text-neutral-300"
                   }>
                     {row.value}
                   </span>
                 </div>
               ))}
             </div>
-            <div className="border-t bg-slate-50 px-3 py-2 text-[10px] text-slate-400">
+            <div className="border-t bg-slate-50 dark:bg-muted/40 px-3 py-2 text-[10px] text-slate-400 dark:text-neutral-500">
               Labor rate from org settings
             </div>
           </div>

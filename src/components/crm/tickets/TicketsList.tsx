@@ -60,10 +60,10 @@ import type {
 import { SearchInput } from "@/components/shared/SearchInput";
 
 const STATUS_CLASS: Record<TicketStatus, string> = {
-  open:    "border border-red-400 text-red-600",
-  on_hold: "border border-orange-400 text-orange-600",
-  pending: "bg-yellow-100 text-yellow-700",
-  closed:  "bg-green-100 text-green-700",
+  open:    "border border-red-400 text-red-600 dark:text-red-400",
+  on_hold: "border border-orange-400 text-orange-600 dark:text-orange-400",
+  pending: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  closed:  "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
 };
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -74,10 +74,10 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 };
 
 const PRIORITY_CLASS: Record<TicketPriority, string> = {
-  urgent: "bg-red-100 text-red-700",
-  high: "bg-orange-100 text-orange-700",
-  normal: "bg-slate-100 text-slate-600",
-  low: "bg-slate-50 text-slate-400",
+  urgent: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
+  high: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
+  normal: "bg-muted text-slate-600 dark:text-neutral-400",
+  low: "bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500",
 };
 
 function StatusBadge({ status }: { status: TicketStatus }) {
@@ -236,7 +236,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
                     "flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
                     form.type === t.value
                       ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                   )}
                 >
                   {t.label}
@@ -253,17 +253,17 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
                 onClick={() => setClientDropOpen((o) => !o)}
                 className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
               >
-                <span className={form.clientId ? "text-slate-900" : "text-slate-400"}>
+                <span className={form.clientId ? "text-slate-900 dark:text-neutral-100" : "text-slate-400 dark:text-neutral-500"}>
                   {form.clientId
                     ? (clients ?? []).find((c) => c.id === form.clientId)?.displayName ?? "Select client…"
                     : "Select client…"}
                 </span>
-                <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                <ChevronDown className="h-4 w-4 text-slate-400 dark:text-neutral-500 shrink-0" />
               </button>
               {clientDropOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg">
+                <div className="absolute z-50 mt-1 w-full rounded-md border bg-card shadow-lg">
                   <div className="relative border-b">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
                     <input
                       autoFocus
                       value={clientSearch}
@@ -275,7 +275,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
                   <div className="max-h-48 overflow-y-auto py-1">
                     <button
                       type="button"
-                      className="w-full px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
+                      className="w-full px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
                       onClick={() => { set("clientId", null); setClientDropOpen(false); setClientSearch(""); }}
                     >
                       No client
@@ -285,8 +285,8 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
                         key={c.id}
                         type="button"
                         className={cn(
-                          "w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50",
-                          form.clientId === c.id ? "bg-brand-50 text-brand-700 font-medium" : "text-slate-800"
+                          "w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted/40",
+                          form.clientId === c.id ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : "text-slate-800 dark:text-neutral-100"
                         )}
                         onClick={() => { set("clientId", c.id); setClientDropOpen(false); setClientSearch(""); }}
                       >
@@ -294,7 +294,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
                       </button>
                     ))}
                     {filteredClients.length === 0 && (
-                      <p className="px-3 py-2 text-sm text-slate-400">No clients found</p>
+                      <p className="px-3 py-2 text-sm text-slate-400 dark:text-neutral-500">No clients found</p>
                     )}
                   </div>
                 </div>
@@ -412,10 +412,10 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
             </div>
           </div>
 
-          <div className="flex items-start justify-between gap-4 rounded-md border border-slate-200 px-3 py-2.5">
+          <div className="flex items-start justify-between gap-4 rounded-md border border-border px-3 py-2.5">
             <div>
               <Label htmlFor="new-ticket-portal-visible" className="text-sm font-medium">Show in client portal</Label>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {form.clientId
                   ? "The client sees the subject, category, status and notes — never comments or files."
                   : "Pick a client to share this ticket in their portal."}
@@ -704,30 +704,30 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       <div className="grid shrink-0 grid-cols-5 gap-1.5 sm:gap-3">
         {(typeFilter === "call"
           ? [
-              { label: "Total Calls",  value: stats.typeTotal,  color: "text-slate-900" },
-              { label: "This Week",    value: stats.thisWeek,   color: "text-blue-600" },
-              { label: "This Month",   value: stats.thisMonth,  color: "text-indigo-600" },
-              { label: "Open",         value: stats.open,       color: "text-red-600" },
-              { label: "Closed",       value: stats.closed,     color: "text-green-600" },
+              { label: "Total Calls",  value: stats.typeTotal,  color: "text-slate-900 dark:text-neutral-100" },
+              { label: "This Week",    value: stats.thisWeek,   color: "text-blue-600 dark:text-blue-400" },
+              { label: "This Month",   value: stats.thisMonth,  color: "text-indigo-600 dark:text-indigo-400" },
+              { label: "Open",         value: stats.open,       color: "text-red-600 dark:text-red-400" },
+              { label: "Closed",       value: stats.closed,     color: "text-green-600 dark:text-green-400" },
             ]
           : [
-              { label: "Total",   value: stats.total,   color: "text-slate-900" },
-              { label: "Open",    value: stats.open,    color: "text-red-600" },
-              { label: "On Hold", value: stats.on_hold, color: "text-orange-600" },
-              { label: "Pending", value: stats.pending, color: "text-yellow-600" },
-              { label: "Closed",  value: stats.closed,  color: "text-green-600" },
+              { label: "Total",   value: stats.total,   color: "text-slate-900 dark:text-neutral-100" },
+              { label: "Open",    value: stats.open,    color: "text-red-600 dark:text-red-400" },
+              { label: "On Hold", value: stats.on_hold, color: "text-orange-600 dark:text-orange-400" },
+              { label: "Pending", value: stats.pending, color: "text-yellow-600 dark:text-yellow-400" },
+              { label: "Closed",  value: stats.closed,  color: "text-green-600 dark:text-green-400" },
             ]
         ).map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white px-1 py-2 shadow-sm text-center sm:p-4">
-            <p className="truncate text-[9px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[10px] sm:tracking-widest">{s.label}</p>
+          <div key={s.label} className="rounded-lg border bg-card px-1 py-2 shadow-sm text-center sm:p-4">
+            <p className="truncate text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 sm:text-[10px] sm:tracking-widest">{s.label}</p>
             <p className={`mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* White column filter bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
-        <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
+      <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
+        <span className="shrink-0 text-xs font-medium text-muted-foreground mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {COL_FILTERS.map(({ key, label }) => (
             <button
@@ -739,8 +739,8 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
                 activeColFilter === key
-                  ? "bg-brand-100 text-brand-700 font-medium"
-                  : "hover:bg-slate-100 text-slate-600"
+                  ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+                  : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
             >
               {label}
@@ -780,7 +780,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               )}
               <button
                 onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -802,7 +802,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               >
                 Actions
                 {someSelected && (
-                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>
+                  <span className="ml-1 rounded-full bg-card/20 px-1.5 text-[10px]">{selectedIds.size}</span>
                 )}
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>
@@ -870,7 +870,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                   statusFilter === key
-                    ? "bg-white text-slate-800"
+                    ? "bg-card text-slate-800 dark:text-neutral-100"
                     : "text-slate-300 hover:text-white"
                 )}
               >
@@ -878,7 +878,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 {quickCounts[key] > 0 && (
                   <span className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                    statusFilter === key ? "bg-slate-200 text-slate-700" : "bg-white/20 text-white"
+                    statusFilter === key ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-card/20 text-white"
                   )}>
                     {quickCounts[key]}
                   </span>
@@ -899,16 +899,16 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       </div>
 
       {/* Table */}
-      <div className="shrink-0 overflow-x-auto bg-white lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-auto">
+      <div className="shrink-0 overflow-x-auto bg-card lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleAll}
-                  className="rounded border-slate-300 accent-brand-500"
+                  className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                 />
               </th>
               <th className="px-4 py-3">{listTypeLabel} #</th>
@@ -935,7 +935,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search ? `No ${listTypeLabel.toLowerCase()}s match your search` : `No ${listTypeLabel.toLowerCase()}s yet`}
                 </td>
               </tr>
@@ -943,7 +943,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               filtered.map((t) => (
                 <tr
                   key={t.id}
-                  className={cn("border-b hover:bg-slate-50 cursor-pointer", selectedIds.has(t.id) && "bg-brand-50")}
+                  className={cn("border-b hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer", selectedIds.has(t.id) && "bg-brand-50 dark:bg-brand-900/30")}
                   onClick={() => setSelectedTicketId(t.id)}
                 >
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -951,10 +951,10 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                       type="checkbox"
                       checked={selectedIds.has(t.id)}
                       onChange={() => toggleOne(t.id)}
-                      className="rounded border-slate-300 accent-brand-500"
+                      className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                     />
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                  <td className="px-4 py-3 font-mono text-xs text-slate-400 dark:text-neutral-500">
                     #{t.ticketNumber}
                   </td>
                   <td className="px-4 py-3">
@@ -966,21 +966,21 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                   {!clientId && (
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       {t.clientId ? (
-                        <Link href={`/crm/clients/${t.clientId}`} className="font-medium text-brand-600 hover:underline">
+                        <Link href={`/crm/clients/${t.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                           {t.clientName ?? "—"}
                         </Link>
                       ) : (
-                        <span className="font-medium text-slate-400">{t.clientName ?? "—"}</span>
+                        <span className="font-medium text-slate-400 dark:text-neutral-500">{t.clientName ?? "—"}</span>
                       )}
                     </td>
                   )}
-                  <td className="px-4 py-3 text-slate-800 font-medium">
+                  <td className="px-4 py-3 text-slate-800 dark:text-neutral-100 font-medium">
                     {t.subject ?? "(no subject)"}
                   </td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{t.category ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{t.assignedTo ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{formatDate(t.dueDate)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{formatDate(t.updatedAt)}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.category ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.assignedTo ?? "—"}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(t.dueDate)}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(t.updatedAt)}</td>
                 </tr>
               ))
             )}

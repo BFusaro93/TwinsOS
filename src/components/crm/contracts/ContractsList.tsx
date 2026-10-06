@@ -73,12 +73,12 @@ const CONTRACT_STATUSES: ContractStatus[] = ["draft", "sent", "signed", "active"
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
-  draft:     "bg-slate-100 text-slate-600",
-  sent:      "bg-blue-100 text-blue-700",
-  signed:    "bg-purple-100 text-purple-700",
-  active:    "bg-green-100 text-green-700",
-  expired:   "bg-yellow-100 text-yellow-700",
-  cancelled: "bg-red-100 text-red-600",
+  draft:     "bg-muted text-slate-600 dark:text-neutral-400",
+  sent:      "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  signed:    "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
+  active:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  expired:   "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  cancelled: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
 const MONTHS: { key: keyof MonthlyAmounts; label: string }[] = [
@@ -132,7 +132,7 @@ function Section({ label, children, className }: { label: string; children: Reac
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-3 grid grid-cols-1 sm:grid-cols-[160px_1fr] items-start gap-3">
-      <span className="pt-2 text-sm text-slate-700">{label}</span>
+      <span className="pt-2 text-sm text-slate-700 dark:text-neutral-300">{label}</span>
       <div>{children}</div>
     </div>
   );
@@ -240,13 +240,13 @@ function ContractDetailsTab({
         </FieldRow>
         {state.lineItems.length > 0 && (
           <FieldRow label="Invoice Line Items">
-            <div className="rounded border bg-slate-50 p-1.5">
+            <div className="rounded border bg-slate-50 dark:bg-muted/40 p-1.5">
               {state.lineItems.map((item, i) => (
                 <div key={i} className="flex items-center gap-1 py-0.5 text-sm">
                   <span className="flex-1 truncate">{item}</span>
-                  <button onClick={() => moveItem(i, -1)} className="p-0.5 text-slate-400 hover:text-slate-600"><ArrowUp className="h-3 w-3" /></button>
-                  <button onClick={() => moveItem(i, 1)} className="p-0.5 text-slate-400 hover:text-slate-600"><ArrowDown className="h-3 w-3" /></button>
-                  <button onClick={() => removeItem(i)} className="p-0.5 text-slate-400 hover:text-red-500"><X className="h-3 w-3" /></button>
+                  <button onClick={() => moveItem(i, -1)} className="p-0.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"><ArrowUp className="h-3 w-3" /></button>
+                  <button onClick={() => moveItem(i, 1)} className="p-0.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"><ArrowDown className="h-3 w-3" /></button>
+                  <button onClick={() => removeItem(i)} className="p-0.5 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"><X className="h-3 w-3" /></button>
                 </div>
               ))}
             </div>
@@ -260,7 +260,7 @@ function ContractDetailsTab({
           <div className="flex flex-col gap-2">
             {monthsLeft.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
-                <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
+                <span className="w-24 shrink-0 text-sm text-slate-600 dark:text-neutral-400">{label}</span>
                 <CurrencyInput
                   className="h-7 w-28 text-sm"
                   cents={state.monthlyAmounts[key] ?? 0}
@@ -270,7 +270,7 @@ function ContractDetailsTab({
                 />
                 {key === "jan" && (
                   <button
-                    className="text-xs font-semibold text-brand-600 hover:underline"
+                    className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
                     onClick={autoFill}
                   >
                     Auto Fill
@@ -283,7 +283,7 @@ function ContractDetailsTab({
           <div className="flex flex-col gap-2">
             {monthsRight.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
-                <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
+                <span className="w-24 shrink-0 text-sm text-slate-600 dark:text-neutral-400">{label}</span>
                 <CurrencyInput
                   className="h-7 w-28 text-sm"
                   cents={state.monthlyAmounts[key] ?? 0}
@@ -295,9 +295,9 @@ function ContractDetailsTab({
             ))}
           </div>
           {/* Right-side settings */}
-          <div className="flex flex-col gap-2 pl-4 border-l border-slate-200">
+          <div className="flex flex-col gap-2 pl-4 border-l border-border">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-slate-600">Billing Day of Month</span>
+              <span className="text-sm text-slate-600 dark:text-neutral-400">Billing Day of Month</span>
               <Input
                 type="number"
                 min={1} max={31}
@@ -307,14 +307,14 @@ function ContractDetailsTab({
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-slate-600">Bill 1 Month in Advance</span>
+              <span className="text-sm text-slate-600 dark:text-neutral-400">Bill 1 Month in Advance</span>
               <Checkbox
                 checked={state.billMonthInAdvance}
                 onCheckedChange={(v) => onChange({ billMonthInAdvance: !!v })}
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-slate-600">Payment Type</span>
+              <span className="text-sm text-slate-600 dark:text-neutral-400">Payment Type</span>
               <Select value={state.paymentType} onValueChange={(v) => onChange({ paymentType: v })}>
                 <SelectTrigger className="h-7 w-32 shrink-0 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent>
@@ -323,19 +323,19 @@ function ContractDetailsTab({
               </Select>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-slate-600">PO Number</span>
+              <span className="text-sm text-slate-600 dark:text-neutral-400">PO Number</span>
               <Input className="h-7 w-32 shrink-0 text-sm" value={state.poNumber} onChange={(e) => onChange({ poNumber: e.target.value })} />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-slate-600">Auto Generate</span>
+              <span className="text-sm text-slate-600 dark:text-neutral-400">Auto Generate</span>
               <Checkbox checked={state.autoGenerate} onCheckedChange={(v) => onChange({ autoGenerate: !!v })} />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-slate-600">Active</span>
+              <span className="text-sm text-slate-600 dark:text-neutral-400">Active</span>
               <Checkbox checked={state.isActive} onCheckedChange={(v) => onChange({ isActive: !!v })} />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-slate-600">Include Sub Properties by Default</span>
+              <span className="text-sm text-slate-600 dark:text-neutral-400">Include Sub Properties by Default</span>
               <Checkbox checked={state.includeSubProperties} onCheckedChange={(v) => onChange({ includeSubProperties: !!v })} />
             </div>
           </div>
@@ -387,19 +387,19 @@ function ServiceLineItemPicker({ onAdd }: { onAdd: (name: string) => void }) {
             filtered.map((s) => (
               <button
                 key={s.id}
-                className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => pick(s.name)}
               >
-                <span className="font-medium text-slate-900">{s.name}</span>
+                <span className="font-medium text-slate-900 dark:text-neutral-100">{s.name}</span>
                 {!!s.defaultRateCents && s.defaultRateCents > 0 && (
-                  <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                  <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">
                     {formatCurrency(s.defaultRateCents)}
                   </span>
                 )}
               </button>
             ))
           ) : (
-            <div className="px-3 py-3 text-xs text-slate-400">
+            <div className="px-3 py-3 text-xs text-slate-400 dark:text-neutral-500">
               {lc ? `No services matching “${search}”` : "No services found"}
             </div>
           )}
@@ -479,12 +479,12 @@ function StatCard({
   label, value, detail, emphasize,
 }: { label: string; value: string; detail?: string; emphasize?: boolean }) {
   return (
-    <div className="rounded border bg-slate-50 p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={cn("mt-1 text-2xl font-bold", emphasize ? "text-brand-600" : "text-slate-800")}>
+    <div className="rounded border bg-slate-50 dark:bg-muted/40 p-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{label}</div>
+      <div className={cn("mt-1 text-2xl font-bold", emphasize ? "text-brand-600 dark:text-brand-400" : "text-slate-800 dark:text-neutral-100")}>
         {value}
       </div>
-      {detail && <div className="mt-1 text-xs text-slate-500">{detail}</div>}
+      {detail && <div className="mt-1 text-xs text-muted-foreground">{detail}</div>}
     </div>
   );
 }
@@ -529,14 +529,14 @@ function ContractOverviewTab({ contract }: { contract: CRMContract }) {
         {loadingProps ? (
           <Skeleton className="h-4 w-full" />
         ) : coveredProperties.length === 0 ? (
-          <p className="text-sm text-slate-400">No covered locations found for this client.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No covered locations found for this client.</p>
         ) : (
           <ul className="divide-y">
             {coveredProperties.map((p) => (
               <li key={p.id} className="flex items-center justify-between py-1.5 text-sm">
-                <span className="text-slate-700">
+                <span className="text-slate-700 dark:text-neutral-300">
                   {p.name || p.address || "Untitled property"}
-                  {p.isMaster && <span className="ml-2 text-xs text-slate-400">(Primary)</span>}
+                  {p.isMaster && <span className="ml-2 text-xs text-slate-400 dark:text-neutral-500">(Primary)</span>}
                 </span>
               </li>
             ))}
@@ -564,7 +564,7 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
   if (!contractId) {
     return (
       <Section label="Scheduled Services">
-        <p className="text-sm text-slate-400">Save the contract first to assign jobs.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Save the contract first to assign jobs.</p>
       </Section>
     );
   }
@@ -576,7 +576,7 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-xs font-semibold text-slate-500">
+            <tr className="border-b text-left text-xs font-semibold text-muted-foreground">
               <th className="py-2 pr-3">Jobs Under Contract</th>
               <th className="py-2 pr-3">Rate</th>
               <th className="py-2 pr-3">Schedule / Type</th>
@@ -591,7 +591,7 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-4 text-sm text-slate-400">
+                <td colSpan={5} className="py-4 text-sm text-slate-400 dark:text-neutral-500">
                   No scheduled services on this contract yet.
                 </td>
               </tr>
@@ -602,17 +602,17 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
                 const hours = job.services?.reduce((sum, s) => sum + (Number(s.budgetedHours) || 0), 0) ?? job.budgetedHours ?? 0;
                 return (
                   <tr key={job.id} className="border-b last:border-0">
-                    <td className="py-1.5 pr-3 text-slate-700">
+                    <td className="py-1.5 pr-3 text-slate-700 dark:text-neutral-300">
                       {serviceNames || JOB_TYPE_LABEL[job.jobType] || job.jobType}
                     </td>
-                    <td className="py-1.5 pr-3 text-slate-600">
+                    <td className="py-1.5 pr-3 text-slate-600 dark:text-neutral-400">
                       {job.rateCents != null ? formatCurrency(job.rateCents) : "—"}
                     </td>
-                    <td className="py-1.5 pr-3 text-slate-600">
+                    <td className="py-1.5 pr-3 text-slate-600 dark:text-neutral-400">
                       {job.schedule || JOB_TYPE_LABEL[job.jobType] || job.jobType}
                     </td>
-                    <td className="py-1.5 pr-3 text-slate-600">{qty}</td>
-                    <td className="py-1.5 text-slate-600">{hours || "—"}</td>
+                    <td className="py-1.5 pr-3 text-slate-600 dark:text-neutral-400">{qty}</td>
+                    <td className="py-1.5 text-slate-600 dark:text-neutral-400">{hours || "—"}</td>
                   </tr>
                 );
               })
@@ -665,7 +665,7 @@ function IncludedServiceRow({
 
   return (
     <tr className="group border-b last:border-0">
-      <td className="py-1.5 pr-4 text-slate-700">{service.serviceName}</td>
+      <td className="py-1.5 pr-4 text-slate-700 dark:text-neutral-300">{service.serviceName}</td>
       <td className="py-1.5 pr-4 text-right">
         {editing ? (
           <div className="flex items-center justify-end gap-1.5">
@@ -683,21 +683,21 @@ function IncludedServiceRow({
           </div>
         ) : (
           <button
-            className="text-slate-700 hover:underline"
+            className="text-slate-700 dark:text-neutral-300 hover:underline"
             onClick={() => { setCountDraft(String(service.visitsIncluded)); setEditing(true); }}
           >
             {service.visitsIncluded}
           </button>
         )}
       </td>
-      <td className={cn("py-1.5 pr-4 text-right font-medium", overIncluded ? "text-red-600" : "text-slate-600")}>
+      <td className={cn("py-1.5 pr-4 text-right font-medium", overIncluded ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-neutral-400")}>
         {usedCount}
         {overIncluded && <span className="ml-1 text-xs font-normal">(over)</span>}
       </td>
       <td className="py-1.5">
         <button
           onClick={() => remove({ id: service.id, contractId })}
-          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+          className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -759,7 +759,7 @@ function IncludedServicesTab({ contractId }: { contractId?: string }) {
   if (!contractId) {
     return (
       <Section label="Included Services">
-        <p className="text-sm text-slate-400">Save the contract first to bundle included services.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Save the contract first to bundle included services.</p>
       </Section>
     );
   }
@@ -783,7 +783,7 @@ function IncludedServicesTab({ contractId }: { contractId?: string }) {
 
   return (
     <Section label="Included Services">
-      <p className="mb-3 text-xs text-slate-500">
+      <p className="mb-3 text-xs text-muted-foreground">
         Visits bundled into this contract&apos;s price, e.g. 25 mowings for a seasonal maintenance
         plan. Tracked against actual completed visits — doesn&apos;t block scheduling, just flags
         when a service runs over.
@@ -791,7 +791,7 @@ function IncludedServicesTab({ contractId }: { contractId?: string }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-xs font-semibold text-slate-500">
+            <tr className="border-b text-left text-xs font-semibold text-muted-foreground">
               <th className="py-2 pr-4">Service</th>
               <th className="py-2 pr-4 text-right">Included</th>
               <th className="py-2 pr-4 text-right">Used</th>
@@ -802,7 +802,7 @@ function IncludedServicesTab({ contractId }: { contractId?: string }) {
             {loadingServices ? (
               <tr><td colSpan={4} className="py-4"><Skeleton className="h-4 w-full" /></td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={4} className="py-4 text-sm text-slate-400">No bundled services yet.</td></tr>
+              <tr><td colSpan={4} className="py-4 text-sm text-slate-400 dark:text-neutral-500">No bundled services yet.</td></tr>
             ) : (
               rows.map((s) => (
                 <IncludedServiceRow
@@ -832,7 +832,7 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
   if (!contractId) {
     return (
       <div>
-        <p className="py-4 text-sm text-slate-400">Save the contract first to add notes.</p>
+        <p className="py-4 text-sm text-slate-400 dark:text-neutral-500">Save the contract first to add notes.</p>
       </div>
     );
   }
@@ -847,16 +847,16 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded border bg-slate-50 p-2">
+      <div className="rounded border bg-slate-50 dark:bg-muted/40 p-2">
         {isLoading ? (
           <Skeleton className="h-8 w-full" />
         ) : (notes ?? []).length === 0 ? (
-          <p className="text-sm text-slate-400">No notes yet.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No notes yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-xs font-semibold text-slate-500">
+                <tr className="border-b text-left text-xs font-semibold text-muted-foreground">
                   <th className="pb-1 pr-4">Internal Note</th>
                   <th className="pb-1 pr-4">Created</th>
                   <th className="pb-1">Modified</th>
@@ -866,13 +866,13 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
               <tbody>
                 {(notes ?? []).map((n) => (
                   <tr key={n.id} className="group border-b last:border-0">
-                    <td className="py-1.5 pr-4 text-slate-700">{n.body}</td>
-                    <td className="py-1.5 pr-4 text-xs text-slate-400">{fmtDate(n.createdAt.slice(0, 10))}</td>
-                    <td className="py-1.5 text-xs text-slate-400">{fmtDate(n.updatedAt.slice(0, 10))}</td>
+                    <td className="py-1.5 pr-4 text-slate-700 dark:text-neutral-300">{n.body}</td>
+                    <td className="py-1.5 pr-4 text-xs text-slate-400 dark:text-neutral-500">{fmtDate(n.createdAt.slice(0, 10))}</td>
+                    <td className="py-1.5 text-xs text-slate-400 dark:text-neutral-500">{fmtDate(n.updatedAt.slice(0, 10))}</td>
                     <td className="py-1.5">
                       <button
                         onClick={() => delNote({ id: n.id, contractId: contractId! })}
-                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+                        className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -1099,8 +1099,8 @@ export function ContractDialog({
                 className={cn(
                   "border-b-2 px-3 py-1.5 text-sm font-medium transition-colors",
                   activeTab === t.id
-                    ? "border-brand-500 text-brand-600"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
+                    ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                    : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
                 )}
               >
                 {t.label}
@@ -1153,10 +1153,10 @@ export function ContractDialog({
           <Button onClick={save} disabled={isPending} className="min-w-24">
             {isPending ? "Saving…" : "Save"}
           </Button>
-          <span className="text-sm text-slate-400">or</span>
+          <span className="text-sm text-slate-400 dark:text-neutral-500">or</span>
           <button
             onClick={() => onOpenChange(false)}
-            className="text-sm text-brand-600 hover:underline"
+            className="text-sm text-brand-600 dark:text-brand-400 hover:underline"
           >
             Cancel
           </button>
@@ -1358,25 +1358,25 @@ export function ContractsList({ clientId }: Props) {
               className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
             >
               Actions {selected.size > 0 && (
-                <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selected.size}</span>
+                <span className="ml-1 rounded-full bg-card/20 px-1.5 text-[10px]">{selected.size}</span>
               )}
               <ChevronDown className="ml-1 h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" sideOffset={4} className="w-52 z-50">
-            <DropdownMenuLabel className="text-xs text-slate-500">Actions</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Actions</DropdownMenuLabel>
             {canAdd && <DropdownMenuItem onSelect={openNew}>Add Contract</DropdownMenuItem>}
             <DropdownMenuItem onSelect={() => { setSearch(""); clearSelection(); }}>Clear Filters</DropdownMenuItem>
             {canEdit && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-xs text-slate-500">Active/Inactive</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Active/Inactive</DropdownMenuLabel>
                 <DropdownMenuItem onSelect={() => bulkSetActive(true)} disabled={selected.size === 0}>Make Active</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => bulkSetActive(false)} disabled={selected.size === 0}>Make Inactive</DropdownMenuItem>
               </>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-slate-500">Invoice/Export</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Invoice/Export</DropdownMenuLabel>
             {canCreateInvoices && (
               <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices || selected.size === 0}>
                 {generatingInvoices ? "Creating…" : "Create Invoices"}
@@ -1396,13 +1396,13 @@ export function ContractsList({ clientId }: Props) {
                 onClick={() => setFilter(f)}
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
-                  filter === f ? "bg-white text-slate-800" : "text-slate-300 hover:text-white"
+                  filter === f ? "bg-card text-slate-800 dark:text-neutral-100" : "text-slate-300 hover:text-white"
                 )}
               >
                 {label}
                 <span className={cn(
                   "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                  filter === f ? "bg-slate-200 text-slate-700" : "bg-white/20 text-white"
+                  filter === f ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-card/20 text-white"
                 )}>
                   {counts[f]}
                 </span>
@@ -1413,17 +1413,17 @@ export function ContractsList({ clientId }: Props) {
 
         {/* Search */}
         <div className="relative ml-2">
-          <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search…"
-            className="h-7 w-56 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
+            className="h-7 w-56 pl-7 text-xs bg-card border-border focus-visible:ring-0"
           />
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
             >
               <X className="h-3 w-3" />
             </button>
@@ -1446,14 +1446,14 @@ export function ContractsList({ clientId }: Props) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-3 py-3">
                 <input
                   type="checkbox"
-                  className="rounded border-slate-300 accent-brand-500"
+                  className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                   checked={selected.size === filtered.length && filtered.length > 0}
                   onChange={(e) => e.target.checked ? selectAll() : clearSelection()}
                 />
@@ -1483,7 +1483,7 @@ export function ContractsList({ clientId }: Props) {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={visibleKeys.length + 3} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={visibleKeys.length + 3} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   No contracts found
                 </td>
               </tr>
@@ -1493,15 +1493,15 @@ export function ContractsList({ clientId }: Props) {
                   key={c.id}
                   onClick={canEdit ? () => openEdit(c) : undefined}
                   className={cn(
-                    "group border-b hover:bg-slate-50",
+                    "group border-b hover:bg-slate-50 dark:hover:bg-muted/40",
                     canEdit && "cursor-pointer",
-                    selected.has(c.id) && "bg-brand-50"
+                    selected.has(c.id) && "bg-brand-50 dark:bg-brand-900/30"
                   )}
                 >
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 accent-brand-500"
+                      className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                       checked={selected.has(c.id)}
                       onChange={() => toggleSelect(c.id)}
                     />
@@ -1510,7 +1510,7 @@ export function ContractsList({ clientId }: Props) {
                     {canEdit && (
                       <button
                         onClick={() => openEdit(c)}
-                        className="text-slate-400 hover:text-slate-700"
+                        className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -1518,46 +1518,46 @@ export function ContractsList({ clientId }: Props) {
                   </td>
                   {!clientId && visibleKeys.includes("client") && (
                     <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <Link href={`/crm/clients/${c.clientId}`} className="font-medium text-brand-600 hover:underline">
+                      <Link href={`/crm/clients/${c.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                         {c.clientName ?? "—"}
                       </Link>
                     </td>
                   )}
                   {visibleKeys.includes("contract") && (
-                    <td className="px-3 py-2.5 font-medium text-slate-800">{c.title}</td>
+                    <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-neutral-100">{c.title}</td>
                   )}
                   {visibleKeys.includes("status") && (
                     <td className="px-3 py-2.5">
                       <span className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
-                        STATUS_COLOR[c.status] ?? "bg-slate-100 text-slate-600"
+                        STATUS_COLOR[c.status] ?? "bg-muted text-slate-600 dark:text-neutral-400"
                       )}>
                         {c.status}
                       </span>
                     </td>
                   )}
                   {visibleKeys.includes("billing_day") && (
-                    <td className="px-3 py-2.5 text-sm text-slate-500">{ordinal(c.billingDayOfMonth)}</td>
+                    <td className="px-3 py-2.5 text-sm text-muted-foreground">{ordinal(c.billingDayOfMonth)}</td>
                   )}
                   {visibleKeys.includes("amount") && (
-                    <td className="px-3 py-2.5 text-right font-medium text-slate-700">
+                    <td className="px-3 py-2.5 text-right font-medium text-slate-700 dark:text-neutral-300">
                       {c.monthlyAmountCents > 0 ? formatCurrency(c.monthlyAmountCents) : "—"}
                     </td>
                   )}
                   {visibleKeys.includes("start_date") && (
-                    <td className="px-3 py-2.5 text-xs text-slate-500">{fmtDate(c.startDate)}</td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtDate(c.startDate)}</td>
                   )}
                   {visibleKeys.includes("end_date") && (
-                    <td className="px-3 py-2.5 text-xs text-slate-500">{fmtDate(c.endDate)}</td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtDate(c.endDate)}</td>
                   )}
                   {visibleKeys.includes("last_bill") && (
-                    <td className="px-3 py-2.5 text-xs text-slate-500">{fmtDate(c.lastBilledDate)}</td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtDate(c.lastBilledDate)}</td>
                   )}
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     {canDelete && (
                       <button
                         onClick={() => void handleDelete(c)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
+                        className="opacity-0 group-hover:opacity-100 text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -1571,7 +1571,7 @@ export function ContractsList({ clientId }: Props) {
       </div>
 
       {/* Count */}
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
         {isLoading ? "…" : `${filtered.length} contract${filtered.length !== 1 ? "s" : ""} found`}
       </p>
 

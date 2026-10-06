@@ -22,14 +22,14 @@ export const PO_STATUS_LABELS: Record<POStatus, string> = {
 };
 
 export const PO_STATUS_COLORS: Record<POStatus, string> = {
-  requested: "bg-slate-100 text-slate-700 border-slate-200",
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  approved: "bg-green-100 text-green-800 border-green-200",
-  ordered: "bg-blue-100 text-blue-800 border-blue-200",
-  canceled: "bg-slate-200 text-slate-500 border-slate-300",
-  completed: "bg-blue-100 text-blue-800 border-blue-200",
-  rejected: "bg-red-100 text-red-800 border-red-200",
-  partially_fulfilled: "bg-orange-100 text-orange-800 border-orange-200",
+  requested: "bg-muted text-slate-700 dark:text-neutral-300 border-border",
+  pending: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
+  approved: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800",
+  ordered: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  canceled: "bg-slate-200 dark:bg-neutral-700 text-muted-foreground border-slate-300 dark:border-neutral-700",
+  completed: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  rejected: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800",
+  partially_fulfilled: "bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800",
 };
 
 // ─── Approval Status ─────────────────────────────────────────────────────────
@@ -44,12 +44,12 @@ export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
 };
 
 export const APPROVAL_STATUS_COLORS: Record<ApprovalStatus, string> = {
-  draft: "bg-slate-100 text-slate-600 border-slate-200",
-  pending_approval: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  approved: "bg-green-100 text-green-800 border-green-200",
-  rejected: "bg-red-100 text-red-800 border-red-200",
-  ordered: "bg-blue-100 text-blue-800 border-blue-200",
-  closed: "bg-slate-200 text-slate-600 border-slate-300",
+  draft: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  pending_approval: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
+  approved: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800",
+  rejected: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800",
+  ordered: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  closed: "bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-400 border-slate-300 dark:border-neutral-700",
 };
 
 // ─── Work Order Status ────────────────────────────────────────────────────────
@@ -63,11 +63,11 @@ export const WO_STATUS_LABELS: Record<WorkOrderStatus, string> = {
 };
 
 export const WO_STATUS_COLORS: Record<WorkOrderStatus, string> = {
-  open: "bg-blue-50 text-blue-700 border-blue-200",
-  on_hold: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  in_progress: "bg-brand-100 text-brand-800 border-brand-200",
-  done: "bg-green-100 text-green-800 border-green-200",
-  skipped: "bg-slate-100 text-slate-500 border-slate-200",
+  open: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  on_hold: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
+  in_progress: "bg-brand-100 dark:bg-brand-900/40 text-brand-800 dark:text-brand-300 border-brand-200 dark:border-brand-800",
+  done: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800",
+  skipped: "bg-muted text-muted-foreground border-border",
 };
 
 // ─── Work Order Priority ──────────────────────────────────────────────────────
@@ -80,10 +80,10 @@ export const WO_PRIORITY_LABELS: Record<WorkOrderPriority, string> = {
 };
 
 export const WO_PRIORITY_COLORS: Record<WorkOrderPriority, string> = {
-  low: "bg-slate-100 text-slate-600 border-slate-200",
-  medium: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  high: "bg-red-100 text-red-700 border-red-200",
-  critical: "bg-red-200 text-red-900 border-red-300",
+  low: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  medium: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
+  high: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  critical: "bg-red-200 dark:bg-red-800/50 text-red-900 dark:text-red-200 border-red-300 dark:border-red-700",
 };
 
 // ─── Product Category ─────────────────────────────────────────────────────────
@@ -95,9 +95,9 @@ export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
 };
 
 export const PRODUCT_CATEGORY_COLORS: Record<ProductCategory, string> = {
-  maintenance_part: "bg-purple-100 text-purple-700 border-purple-200",
-  stocked_material: "bg-teal-100 text-teal-700 border-teal-200",
-  project_material: "bg-orange-100 text-orange-700 border-orange-200",
+  maintenance_part: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+  stocked_material: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800",
+  project_material: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
 };
 
 // ─── Project Status ───────────────────────────────────────────────────────────
@@ -112,12 +112,12 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 };
 
 export const PROJECT_STATUS_COLORS: Record<ProjectStatus, string> = {
-  sold: "bg-purple-100 text-purple-700 border-purple-200",
-  scheduled: "bg-blue-100 text-blue-700 border-blue-200",
-  in_progress: "bg-green-100 text-green-800 border-green-200",
-  complete: "bg-teal-100 text-teal-800 border-teal-200",
-  on_hold: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  canceled: "bg-slate-100 text-slate-600 border-slate-200",
+  sold: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+  scheduled: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  in_progress: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800",
+  complete: "bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-300 border-teal-200 dark:border-teal-800",
+  on_hold: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
+  canceled: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
 };
 
 // ─── Asset Status ─────────────────────────────────────────────────────────────
@@ -131,11 +131,11 @@ export const ASSET_STATUS_LABELS: Record<string, string> = {
 };
 
 export const ASSET_STATUS_COLORS: Record<string, string> = {
-  active: "bg-green-100 text-green-800 border-green-200",
-  inactive: "bg-slate-100 text-slate-600 border-slate-200",
-  in_shop: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  out_of_service: "bg-red-100 text-red-700 border-red-200",
-  disposed: "bg-slate-200 text-slate-500 border-slate-300",
+  active: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800",
+  inactive: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  in_shop: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
+  out_of_service: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  disposed: "bg-slate-200 dark:bg-neutral-700 text-muted-foreground border-slate-300 dark:border-neutral-700",
 };
 
 // ─── Maintenance Request Status ───────────────────────────────────────────────
@@ -149,11 +149,11 @@ export const REQUEST_STATUS_LABELS: Record<MaintenanceRequestStatus, string> = {
 };
 
 export const REQUEST_STATUS_COLORS: Record<MaintenanceRequestStatus, string> = {
-  open: "bg-blue-50 text-blue-700 border-blue-200",
-  in_review: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  approved: "bg-green-100 text-green-800 border-green-200",
-  converted: "bg-green-100 text-green-800 border-green-200",
-  rejected: "bg-red-100 text-red-700 border-red-200",
+  open: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  in_review: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
+  approved: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800",
+  converted: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800",
+  rejected: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
 };
 
 // ─── PM Frequency ─────────────────────────────────────────────────────────────
@@ -221,9 +221,9 @@ export const INJURY_SEVERITY_LABELS: Record<string, string> = {
 };
 
 export const INJURY_INCIDENT_TYPE_COLORS: Record<string, string> = {
-  injury: "bg-red-100 text-red-800",
-  illness: "bg-purple-100 text-purple-800",
-  near_miss: "bg-sky-100 text-sky-800",
+  injury: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300",
+  illness: "bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300",
+  near_miss: "bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-300",
 };
 
 export const INJURY_INCIDENT_TYPE_LABELS: Record<string, string> = {

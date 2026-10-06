@@ -15,7 +15,7 @@ export function POListPanel({ orders, selectedId, onSelect }: POListPanelProps) 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto">
       {orders.length === 0 && (
-        <p className="px-4 py-8 text-center text-sm text-slate-400">
+        <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
           No purchase orders found
         </p>
       )}
@@ -29,8 +29,8 @@ export function POListPanel({ orders, selectedId, onSelect }: POListPanelProps) 
             key={po.id}
             onClick={() => onSelect(po.id)}
             className={cn(
-              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
-              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 hover:bg-brand-50"
+              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40",
+              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-50 dark:hover:bg-brand-900/30"
             )}
           >
             {/* Vendor avatar */}
@@ -46,15 +46,15 @@ export function POListPanel({ orders, selectedId, onSelect }: POListPanelProps) 
             {/* Content */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-semibold text-slate-900">
+                <span className="truncate text-sm font-semibold text-slate-900 dark:text-neutral-100">
                   {po.poNumber}
                 </span>
-                <span className="shrink-0 text-sm font-medium text-slate-700">
+                <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-neutral-300">
                   {formatCurrency(po.grandTotal)}
                 </span>
               </div>
               <div className="mt-0.5 flex items-center justify-between gap-2">
-                <span className="truncate text-xs text-slate-500">
+                <span className="truncate text-xs text-muted-foreground">
                   {po.vendorName} · {po.lineItems.length}{" "}
                   {po.lineItems.length === 1 ? "item" : "items"}
                 </span>

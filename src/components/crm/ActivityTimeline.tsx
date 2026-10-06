@@ -15,17 +15,17 @@ import {
 import type { ClientActivity } from "@/types/crm";
 
 const TYPE_META: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-  note:      { icon: MessageSquare, color: "bg-slate-100 text-slate-600",    label: "Note" },
-  call:      { icon: Phone,         color: "bg-blue-100 text-blue-600",      label: "Call" },
-  email:     { icon: Mail,          color: "bg-indigo-100 text-indigo-600",  label: "Email" },
-  invoice:   { icon: FileText,      color: "bg-amber-100 text-amber-700",    label: "Invoice" },
-  payment:   { icon: DollarSign,    color: "bg-green-100 text-green-700",    label: "Payment" },
-  job:       { icon: Calendar,      color: "bg-teal-100 text-teal-700",      label: "Job" },
-  job_visit: { icon: Calendar,      color: "bg-teal-100 text-teal-700",      label: "Visit" },
-  estimate:  { icon: ClipboardList, color: "bg-purple-100 text-purple-700",  label: "Estimate" },
-  contract:  { icon: FileText,      color: "bg-orange-100 text-orange-700",  label: "Contract" },
-  automation:{ icon: Zap,           color: "bg-pink-100 text-pink-700",      label: "Automation" },
-  ticket:    { icon: Ticket,        color: "bg-red-100 text-red-600",        label: "Ticket" },
+  note:      { icon: MessageSquare, color: "bg-muted text-slate-600 dark:text-neutral-400",    label: "Note" },
+  call:      { icon: Phone,         color: "bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",      label: "Call" },
+  email:     { icon: Mail,          color: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400",  label: "Email" },
+  invoice:   { icon: FileText,      color: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",    label: "Invoice" },
+  payment:   { icon: DollarSign,    color: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",    label: "Payment" },
+  job:       { icon: Calendar,      color: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",      label: "Job" },
+  job_visit: { icon: Calendar,      color: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",      label: "Visit" },
+  estimate:  { icon: ClipboardList, color: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",  label: "Estimate" },
+  contract:  { icon: FileText,      color: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",  label: "Contract" },
+  automation:{ icon: Zap,           color: "bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-400",      label: "Automation" },
+  ticket:    { icon: Ticket,        color: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",        label: "Ticket" },
 };
 
 type FilterTab = "all" | "notes" | "visits" | "transactions" | "estimates";
@@ -105,7 +105,7 @@ function ActivityRow({
 
   return (
     <div
-      className={`flex gap-3 py-3 ${isClickable ? "cursor-pointer hover:bg-slate-50 rounded-md -mx-2 px-2" : ""}`}
+      className={`flex gap-3 py-3 ${isClickable ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40 rounded-md -mx-2 px-2" : ""}`}
       onClick={isClickable ? handleClick : undefined}
     >
       <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${meta.color}`}>
@@ -116,30 +116,30 @@ function ActivityRow({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {item.subject && !item.subject.startsWith("Invoice created:") && (
-                <p className="truncate text-sm font-medium text-slate-800">{item.subject}</p>
+                <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">{item.subject}</p>
               )}
               {(!item.subject || item.subject.startsWith("Invoice created:")) && (
-                <span className="text-xs font-medium text-slate-500 capitalize">{meta.label}</span>
+                <span className="text-xs font-medium text-muted-foreground capitalize">{meta.label}</span>
               )}
             </div>
-            {item.body && <p className="text-sm text-slate-600 whitespace-pre-line mt-0.5">{item.body}</p>}
-            {item.sentTo && <p className="text-xs text-slate-400">To: {item.sentTo}</p>}
+            {item.body && <p className="text-sm text-slate-600 dark:text-neutral-400 whitespace-pre-line mt-0.5">{item.body}</p>}
+            {item.sentTo && <p className="text-xs text-slate-400 dark:text-neutral-500">To: {item.sentTo}</p>}
             {item.amountCents != null && (
-              <p className={`text-sm font-medium ${item.amountCents < 0 ? "text-green-600" : "text-slate-700"}`}>
+              <p className={`text-sm font-medium ${item.amountCents < 0 ? "text-green-600 dark:text-green-400" : "text-slate-700 dark:text-neutral-300"}`}>
                 {item.amountCents < 0 ? "−" : ""}{formatCurrency(Math.abs(item.amountCents))}
-                {item.status && <span className="ml-2 text-xs font-normal capitalize text-slate-400">{item.status}</span>}
+                {item.status && <span className="ml-2 text-xs font-normal capitalize text-slate-400 dark:text-neutral-500">{item.status}</span>}
               </p>
             )}
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-xs text-slate-500">{formatDate(item.occurredAt)}</p>
-            <p className="text-[10px] text-slate-400">{formatTime(item.occurredAt)}</p>
+            <p className="text-xs text-muted-foreground">{formatDate(item.occurredAt)}</p>
+            <p className="text-[10px] text-slate-400 dark:text-neutral-500">{formatTime(item.occurredAt)}</p>
           </div>
         </div>
         {(item.createdByName || item.sourceClientName) && (
-          <p className="mt-0.5 text-[11px] text-slate-400">
+          <p className="mt-0.5 text-[11px] text-slate-400 dark:text-neutral-500">
             {item.sourceClientName && (
-              <span className="mr-1.5 rounded bg-slate-100 px-1 py-0.5 font-medium text-slate-500">
+              <span className="mr-1.5 rounded bg-muted px-1 py-0.5 font-medium text-muted-foreground">
                 {item.sourceClientName}
               </span>
             )}
@@ -211,13 +211,13 @@ export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onIn
               onClick={() => setActiveTab(tab.value)}
               className={`shrink-0 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors ${
                 activeTab === tab.value
-                  ? "border-brand-500 text-brand-600"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
+                  ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                  : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
               }`}
             >
               {tab.label}
               {count > 0 && (
-                <span className={`ml-1.5 rounded-full px-1.5 py-0 text-[10px] ${activeTab === tab.value ? "bg-brand-100 text-brand-600" : "bg-slate-100 text-slate-400"}`}>
+                <span className={`ml-1.5 rounded-full px-1.5 py-0 text-[10px] ${activeTab === tab.value ? "bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400" : "bg-muted text-slate-400 dark:text-neutral-500"}`}>
                   {count}
                 </span>
               )}
@@ -233,7 +233,7 @@ export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onIn
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
         ) : visible.length === 0 ? (
-          <div className="flex h-32 items-center justify-center text-sm text-slate-400">
+          <div className="flex h-32 items-center justify-center text-sm text-slate-400 dark:text-neutral-500">
             {activeTab === "all" ? "No activity yet" : `No ${tabDef?.label.toLowerCase()} yet`}
           </div>
         ) : (

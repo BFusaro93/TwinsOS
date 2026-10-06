@@ -280,7 +280,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 noneLabel="Select client…"
               />
               {errors.clientId && (
-                <p className="text-xs text-red-500">{errors.clientId.message}</p>
+                <p className="text-xs text-red-500 dark:text-red-400">{errors.clientId.message}</p>
               )}
             </div>
           )}
@@ -314,7 +314,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               className={errors.description ? "border-red-400" : ""}
             />
             {errors.description && (
-              <p className="text-xs text-red-500">{errors.description.message}</p>
+              <p className="text-xs text-red-500 dark:text-red-400">{errors.description.message}</p>
             )}
           </div>
 
@@ -387,13 +387,13 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
 
           {/* Template preview */}
           {selectedTemplate?.items?.length ? (
-            <div className="rounded-md bg-brand-50 border border-brand-100 px-3 py-2">
-              <p className="text-xs font-medium text-brand-700 mb-1">
+            <div className="rounded-md bg-brand-50 dark:bg-brand-900/30 border border-brand-100 dark:border-brand-900 px-3 py-2">
+              <p className="text-xs font-medium text-brand-700 dark:text-brand-400 mb-1">
                 {selectedTemplate.items.length} service{selectedTemplate.items.length !== 1 ? "s" : ""} will be added:
               </p>
               <ul className="space-y-0.5">
                 {selectedTemplate.items.slice(0, 5).map((item) => (
-                  <li key={item.id} className="text-[11px] text-brand-600">
+                  <li key={item.id} className="text-[11px] text-brand-600 dark:text-brand-400">
                     · {item.serviceName}
                     {item.rateCents > 0 && ` — $${(item.rateCents / 100).toFixed(2)}`}
                   </li>

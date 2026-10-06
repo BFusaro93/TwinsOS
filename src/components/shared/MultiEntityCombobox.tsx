@@ -121,7 +121,7 @@ export function MultiEntityCombobox({
                             "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
                             isSelected
                               ? "border-brand-500 bg-brand-500"
-                              : "border-slate-300 bg-white"
+                              : "border-slate-300 dark:border-neutral-700 bg-card"
                           )}
                         >
                           {isSelected && (
@@ -131,7 +131,7 @@ export function MultiEntityCombobox({
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{a.name}</p>
                           {(a.make || a.model || a.assetTag) && (
-                            <p className="truncate text-xs text-slate-400">
+                            <p className="truncate text-xs text-slate-400 dark:text-neutral-500">
                               {[a.make, a.model, a.assetTag].filter(Boolean).join(" · ")}
                             </p>
                           )}
@@ -165,7 +165,7 @@ export function MultiEntityCombobox({
                               "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
                               isSelected
                                 ? "border-brand-500 bg-brand-500"
-                                : "border-slate-300 bg-white"
+                                : "border-slate-300 dark:border-neutral-700 bg-card"
                             )}
                           >
                             {isSelected && (
@@ -175,7 +175,7 @@ export function MultiEntityCombobox({
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium">{v.name}</p>
                             {(v.year || v.make || v.model) && (
-                              <p className="truncate text-xs text-slate-400">
+                              <p className="truncate text-xs text-slate-400 dark:text-neutral-500">
                                 {[v.year, v.make, v.model, v.licensePlate]
                                   .filter(Boolean)
                                   .join(" · ")}
@@ -197,7 +197,7 @@ export function MultiEntityCombobox({
                     <CommandItem
                       value="__clear__"
                       onSelect={() => onValuesChange([])}
-                      className="justify-center text-xs text-slate-500"
+                      className="justify-center text-xs text-muted-foreground"
                     >
                       Clear all selections
                     </CommandItem>
@@ -222,7 +222,7 @@ export function MultiEntityCombobox({
               <button
                 type="button"
                 onClick={(e) => remove(key, e)}
-                className="ml-0.5 rounded text-slate-400 hover:text-slate-700"
+                className="ml-0.5 rounded text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
                 aria-label={`Remove ${getLabel(key)}`}
               >
                 <X className="h-3 w-3" />

@@ -7,7 +7,14 @@
  * To ship a module: run scripts/dark-mode-codemod.mjs over it, review the
  * pages in both themes, then add its prefix below.
  */
-export const DARK_MODE_ROUTE_PREFIXES: readonly string[] = ["/crm/crew", "/crm/scheduling/dispatch"];
+export const DARK_MODE_ROUTE_PREFIXES: readonly string[] = [
+  "/crm/crew",
+  "/crm/scheduling/dispatch",
+  "/crm/clients",
+  "/crm/accounting/purchase-orders",
+  "/cmms/work-orders",
+  "/po/orders",
+];
 
 export function isDarkModeReady(pathname: string | null): boolean {
   if (!pathname) return false;

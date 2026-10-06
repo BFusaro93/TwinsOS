@@ -30,11 +30,11 @@ function formatDate(iso: string) {
 
 function FileIcon({ mimeType }: { mimeType: string | null }) {
   const mime = mimeType ?? "";
-  if (mime.startsWith("image/")) return <Image className="h-5 w-5 text-blue-500" />;
+  if (mime.startsWith("image/")) return <Image className="h-5 w-5 text-blue-500 dark:text-blue-400" />;
   if (mime.includes("spreadsheet") || mime.includes("excel") || mime.includes("csv"))
-    return <FileSpreadsheet className="h-5 w-5 text-green-600" />;
-  if (mime.includes("pdf")) return <FileText className="h-5 w-5 text-red-500" />;
-  return <File className="h-5 w-5 text-slate-400" />;
+    return <FileSpreadsheet className="h-5 w-5 text-green-600 dark:text-green-400" />;
+  if (mime.includes("pdf")) return <FileText className="h-5 w-5 text-red-500 dark:text-red-400" />;
+  return <File className="h-5 w-5 text-slate-400 dark:text-neutral-500" />;
 }
 
 function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void }) {
@@ -84,11 +84,11 @@ function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void 
   }
 
   return (
-    <div className="group flex items-center gap-3 border-b px-4 py-3 hover:bg-slate-50">
+    <div className="group flex items-center gap-3 border-b px-4 py-3 hover:bg-slate-50 dark:hover:bg-muted/40">
       <FileIcon mimeType={file.mimeType} />
       <div className="flex-1 min-w-0">
-        <p className="truncate text-sm font-medium text-slate-800">{file.name}</p>
-        <p className="text-xs text-slate-400">{formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}</p>
+        <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">{file.name}</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">{formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}</p>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button
@@ -114,7 +114,7 @@ function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void 
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 text-slate-400 hover:text-red-500"
+          className="h-7 w-7 p-0 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
           onClick={handleDelete}
           disabled={deleting}
           title="Delete"
@@ -156,8 +156,8 @@ export function ClientFilesTab({ clientId }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 border-b bg-slate-50 px-4 py-2 shrink-0">
-        <span className="text-xs text-slate-400">
+      <div className="flex items-center justify-between gap-3 border-b bg-slate-50 dark:bg-muted/40 px-4 py-2 shrink-0">
+        <span className="text-xs text-slate-400 dark:text-neutral-500">
           {isLoading ? "…" : `${(files ?? []).length} file${(files ?? []).length !== 1 ? "s" : ""}`}
         </span>
         <Button
@@ -185,15 +185,15 @@ export function ClientFilesTab({ clientId }: Props) {
           className={cn(
             "cursor-pointer flex flex-col items-center gap-2 rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors",
             dragging
-              ? "border-brand-400 bg-brand-50 text-brand-600"
-              : "border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50"
+              ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400"
+              : "border-border text-slate-400 dark:text-neutral-500 hover:border-slate-300 dark:hover:border-neutral-700 hover:bg-slate-50 dark:hover:bg-muted/40"
           )}
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
         >
-          <Upload className={cn("h-6 w-6", dragging ? "text-brand-500" : "text-slate-300")} />
+          <Upload className={cn("h-6 w-6", dragging ? "text-brand-500 dark:text-brand-400" : "text-slate-300 dark:text-neutral-600")} />
           <p className="text-sm font-medium">
             {dragging ? "Drop to upload" : "Drag & drop files here"}
           </p>
@@ -208,13 +208,13 @@ export function ClientFilesTab({ clientId }: Props) {
             ))}
           </div>
         ) : (files ?? []).length > 0 ? (
-          <div className="rounded-lg border bg-white overflow-hidden">
+          <div className="rounded-lg border bg-card overflow-hidden">
             {(files ?? []).map((f) => (
               <FileRow key={f.id} file={f} onDeleted={refetch} />
             ))}
           </div>
         ) : (
-          <p className="text-center text-xs text-slate-400">No files uploaded yet</p>
+          <p className="text-center text-xs text-slate-400 dark:text-neutral-500">No files uploaded yet</p>
         )}
       </div>
     </div>

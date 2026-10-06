@@ -44,8 +44,8 @@ export function SnowMonthlyBillingLink({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3">
-      <Label className="text-xs text-slate-500">Billing Contract (required for Monthly Flat Rate)</Label>
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-3">
+      <Label className="text-xs text-muted-foreground">Billing Contract (required for Monthly Flat Rate)</Label>
       <Select value={contractId ?? "none"} onValueChange={handleLink}>
         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Link a contract…" /></SelectTrigger>
         <SelectContent>
@@ -58,14 +58,14 @@ export function SnowMonthlyBillingLink({
         </SelectContent>
       </Select>
       {missingOrInactive ? (
-        <p className="flex items-start gap-1.5 text-[11px] text-amber-700">
+        <p className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           {contractId
             ? "The linked contract is inactive or has auto-generate off — this job will not be billed automatically."
             : "This job has no linked contract, so it will never be billed. Monthly Flat Rate billing runs entirely through Contracts (Accounting → Contracts), not this job screen."}
         </p>
       ) : (
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[11px] text-slate-400 dark:text-neutral-500">
           Billed automatically via this contract on day {linkedContract.billingDayOfMonth} of each month.
         </p>
       )}

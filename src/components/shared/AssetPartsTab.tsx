@@ -105,7 +105,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
     <div className="p-6">
       {/* Header row */}
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           {allLinked.length} part{allLinked.length !== 1 ? "s" : ""} linked
         </p>
         {canWriteEquipt && (
@@ -119,20 +119,20 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
       {/* Parts table / empty */}
       {allLinked.length === 0 ? (
         <div className="flex h-32 items-center justify-center rounded-md border border-dashed">
-          <p className="text-sm text-slate-400">No parts linked to this {recordLabel}.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No parts linked to this {recordLabel}.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
+              <tr className="bg-slate-50 dark:bg-muted/40">
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                   Part Name
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                   Part #
                 </th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">
+                <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">
                   On Hand
                 </th>
                 <th className="w-8 px-2 py-2" />
@@ -143,33 +143,33 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
                 const part = allParts?.find((p) => p.id === ap.partId);
                 const isLow = part && part.quantityOnHand <= part.minimumStock;
                 return (
-                  <tr key={ap.id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <tr key={ap.id} className="border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                     <td className="px-3 py-2">
                       <button
-                        className="text-left font-medium text-brand-600 hover:underline"
+                        className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                         onClick={() => handlePartClick(ap)}
                       >
                         {ap.partName}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-slate-500">{ap.partNumber}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{ap.partNumber}</td>
                     <td className="px-3 py-2 text-right">
                       {part ? (
                         <span
                           className={
-                            isLow ? "font-medium text-red-600" : "text-slate-700"
+                            isLow ? "font-medium text-red-600 dark:text-red-400" : "text-slate-700 dark:text-neutral-300"
                           }
                         >
                           {part.quantityOnHand}
                         </span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-400 dark:text-neutral-500">—</span>
                       )}
                     </td>
                     <td className="px-2 py-2">
                       {canWriteEquipt && (
                         <button
-                          className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                          className="rounded p-1 text-slate-300 dark:text-neutral-600 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                           title="Unlink part"
                           onClick={() => removeAssetPart({ id: ap.id, assetId })}
                         >
@@ -196,7 +196,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
           </DialogHeader>
 
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
             <Input
               placeholder="Search by name or part #…"
               value={search}
@@ -208,7 +208,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
 
           <div className="max-h-72 overflow-y-auto">
             {filteredAvailable.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">
+              <p className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                 {search ? "No parts match your search." : "All parts are already linked."}
               </p>
             ) : (
@@ -216,17 +216,17 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
                 {filteredAvailable.map((part) => (
                   <li key={part.id}>
                     <button
-                      className="flex w-full items-start gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50 disabled:opacity-50"
+                      className="flex w-full items-start gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-muted/40 disabled:opacity-50"
                       disabled={linking}
                       onClick={() => handleLink(part)}
                     >
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-800">{part.name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{part.name}</p>
+                        <p className="text-xs text-muted-foreground">
                           {part.partNumber}{((part.categories?.length ? part.categories : part.category ? [part.category] : []).length > 0) && <> &middot; {(part.categories?.length ? part.categories : [part.category]).join(", ")}</>}
                         </p>
                       </div>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">
                         {part.quantityOnHand} on hand
                       </span>
                     </button>

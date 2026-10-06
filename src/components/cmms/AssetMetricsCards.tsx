@@ -17,10 +17,10 @@ const WINDOWS: { value: number; label: string }[] = [
 type Tone = "neutral" | "good" | "warn" | "bad";
 
 const TONE_VALUE: Record<Tone, string> = {
-  neutral: "text-slate-900",
-  good: "text-green-700",
-  warn: "text-amber-600",
-  bad: "text-red-600",
+  neutral: "text-slate-900 dark:text-neutral-100",
+  good: "text-green-700 dark:text-green-400",
+  warn: "text-amber-600 dark:text-amber-400",
+  bad: "text-red-600 dark:text-red-400",
 };
 
 function MetricCard({ label, value, sub, tone = "neutral", title }: {
@@ -31,10 +31,10 @@ function MetricCard({ label, value, sub, tone = "neutral", title }: {
   title?: string;
 }) {
   return (
-    <div className="rounded-lg border bg-white p-3 shadow-sm" title={title}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+    <div className="rounded-lg border bg-card p-3 shadow-sm" title={title}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{label}</p>
       <p className={cn("mt-1 text-xl font-bold tabular-nums", TONE_VALUE[tone])}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
@@ -70,7 +70,7 @@ export function AssetMetricsCards({ assetId, warrantyEndDate, purchasePrice }: A
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Performance</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Performance</p>
         <SegmentedControl
           ariaLabel="Reliability window"
           size="sm"
@@ -81,13 +81,13 @@ export function AssetMetricsCards({ assetId, warrantyEndDate, purchasePrice }: A
       </div>
 
       {isError ? (
-        <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-slate-400">
+        <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-slate-400 dark:text-neutral-500">
           Performance figures couldn&apos;t be loaded.
         </p>
       ) : isLoading || !m ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-[84px] animate-pulse rounded-lg border bg-slate-100" />
+            <div key={i} className="h-[84px] animate-pulse rounded-lg border bg-muted" />
           ))}
         </div>
       ) : (
@@ -126,7 +126,7 @@ function MetricsGrid({ m, windowLabel, warranty, warrantyEndDate, purchasePrice 
         title="Time active ÷ time in service. Inactive (parked) and disposed time isn't counted either way."
         sub={
           m.downSince
-            ? <span className="font-medium text-red-600">Down since {formatDate(m.downSince)}</span>
+            ? <span className="font-medium text-red-600 dark:text-red-400">Down since {formatDate(m.downSince)}</span>
             : m.uptimePct === null
               ? "No in-service time in this window"
               : `${hours(m.downtimeHours)} down · ${m.downtimeEvents} event${m.downtimeEvents === 1 ? "" : "s"}`

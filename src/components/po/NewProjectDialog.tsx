@@ -161,7 +161,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
             {/* Project Name — full width */}
             <div className="sm:sm:col-span-2 grid gap-1.5">
               <Label htmlFor="project-name">
-                Project Name <span className="text-red-500">*</span>
+                Project Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="project-name"
@@ -174,7 +174,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
             {/* Customer / Client — full width */}
             <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="project-customer">
-                Customer / Client <span className="text-red-500">*</span>
+                Customer / Client <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="project-customer"

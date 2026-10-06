@@ -45,6 +45,7 @@ import { NewProductDialog } from "./NewProductDialog";
 import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useChartColors } from "@/lib/theme/use-chart-colors";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
@@ -67,8 +68,8 @@ interface ProductDetailSheetProps {
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-3 gap-2 py-2">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="col-span-2 text-sm text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="col-span-2 text-sm text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -95,20 +96,20 @@ function DetailsTab({
   return (
     <div className="p-6 flex flex-col gap-5">
       {product.isInventory && (
-        <div className="rounded-md border border-green-200 bg-green-50 p-4">
+        <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Quantity on Hand
               </p>
-              <p className="mt-1 text-2xl font-bold text-green-700">
+              <p className="mt-1 text-2xl font-bold text-green-700 dark:text-green-400">
                 {qtyOnHand}
               </p>
             </div>
           </div>
           {onOrderQty > 0 && (
             <div className="mt-2">
-              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+              <Badge variant="outline" className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400">
                 {onOrderQty} on order
               </Badge>
             </div>
@@ -129,7 +130,7 @@ function DetailsTab({
       {/* Vendors */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vendors</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Vendors</p>
           {canManageInventory && (
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
               Manage
@@ -145,11 +146,11 @@ function DetailsTab({
             <div className="flex flex-col gap-1.5">
               {allVendors.map((v, i) => (
                 <div key={v.vendorId} className="flex items-center gap-2">
-                  <span className="text-sm text-slate-700">{v.vendorName}</span>
+                  <span className="text-sm text-slate-700 dark:text-neutral-300">{v.vendorName}</span>
                   {i === 0 && (
                     <Badge
                       variant="outline"
-                      className="border-brand-200 bg-brand-50 text-brand-700 text-xs"
+                      className="border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 text-xs"
                     >
                       Primary
                     </Badge>
@@ -158,7 +159,7 @@ function DetailsTab({
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No vendor assigned</p>
+            <p className="text-sm text-slate-400 dark:text-neutral-500">No vendor assigned</p>
           );
         })()}
       </div>
@@ -166,7 +167,7 @@ function DetailsTab({
       <Separator />
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Pricing
         </p>
         <dl>
@@ -180,10 +181,10 @@ function DetailsTab({
         <>
           <Separator />
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Description
             </p>
-            <p className="whitespace-pre-line text-sm text-slate-700">{product.description}</p>
+            <p className="whitespace-pre-line text-sm text-slate-700 dark:text-neutral-300">{product.description}</p>
           </div>
         </>
       )}
@@ -207,6 +208,7 @@ function HistoryTab({
   onPOClick?: (poId: string) => void;
   onWOClick?: (woId: string) => void;
 }) {
+  const chartColors = useChartColors();
   const { data: allParts = [] } = useParts();
   const linkedPart = allParts.find((p) => p.productItemId === product.id) ?? null;
 
@@ -257,13 +259,13 @@ function HistoryTab({
     <div className="p-6">
       {pos.length === 0 ? (
         <div className="flex h-48 items-center justify-center">
-          <p className="text-sm text-slate-400">No purchase history found for this product.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No purchase history found for this product.</p>
         </div>
       ) : (
         <>
           {priceHistory.length > 1 && (
             <div className="mb-6">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Unit Cost Trend
               </p>
               <ResponsiveContainer width="100%" height={180}>
@@ -271,15 +273,15 @@ function HistoryTab({
                   data={priceHistory}
                   margin={{ top: 4, right: 8, bottom: 0, left: 8 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tick={{ fontSize: 11, fill: chartColors.axis }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tick={{ fontSize: 11, fill: chartColors.axis }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => `$${v.toLocaleString()}`}
@@ -287,9 +289,11 @@ function HistoryTab({
                   />
                   <Tooltip
                     formatter={(value: number) => [`$${value.toFixed(2)}`, "Unit Cost"]}
-                    labelStyle={{ color: "#475569", fontSize: 12 }}
+                    labelStyle={{ color: chartColors.label, fontSize: 12 }}
                     contentStyle={{
-                      border: "1px solid #e2e8f0",
+                      border: `1px solid ${chartColors.tooltipBorder}`,
+                      backgroundColor: chartColors.tooltipBg,
+                      color: chartColors.tooltipText,
                       borderRadius: "6px",
                       fontSize: 12,
                     }}
@@ -307,41 +311,41 @@ function HistoryTab({
             </div>
           )}
 
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Purchase Orders
           </p>
           <div className="overflow-hidden rounded-md border">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                <tr className="bg-slate-50 dark:bg-muted/40">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">PO #</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Qty</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Unit Cost</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {[...pos].reverse().map((po) => {
                   const li = po.lineItems.find((l) => l.productItemId === product.id)!;
                   return (
-                    <tr key={po.id} className="border-t border-slate-100">
+                    <tr key={po.id} className="border-t border-slate-100 dark:border-neutral-800">
                       <td className="px-3 py-2 font-mono text-xs font-medium">
                         {onPOClick ? (
                           <button
                             type="button"
                             onClick={() => onPOClick(po.id)}
-                            className="font-medium text-brand-600 hover:text-brand-700 hover:underline"
+                            className="font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline"
                           >
                             {po.poNumber}
                           </button>
                         ) : (
-                          <span className="text-slate-800">{po.poNumber}</span>
+                          <span className="text-slate-800 dark:text-neutral-100">{po.poNumber}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                      <td className="px-3 py-2 text-muted-foreground">{formatDate(po.poDate ?? po.createdAt)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700 dark:text-neutral-300">{li.quantity}</td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {formatCurrency(li.unitCost)}
                       </td>
                       <td className="px-3 py-2">
@@ -358,21 +362,21 @@ function HistoryTab({
       {/* WO usage history — only for maintenance parts with a linked part */}
       {linkedPart && (
         <div className="mt-6">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Work Order Usage
           </p>
           {woHistory.length === 0 ? (
-            <p className="text-sm text-slate-400">No work order usage recorded yet.</p>
+            <p className="text-sm text-slate-400 dark:text-neutral-500">No work order usage recorded yet.</p>
           ) : (
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">WO #</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Title</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                  <tr className="bg-slate-50 dark:bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">WO #</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Title</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Qty</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -380,23 +384,23 @@ function HistoryTab({
                     const wo = row.work_orders;
                     if (!wo) return null;
                     return (
-                      <tr key={row.id} className="border-t border-slate-100">
+                      <tr key={row.id} className="border-t border-slate-100 dark:border-neutral-800">
                         <td className="px-3 py-2 font-mono text-xs font-semibold">
                           {onWOClick ? (
                             <button
                               type="button"
                               onClick={() => onWOClick(wo.id)}
-                              className="text-brand-600 hover:underline"
+                              className="text-brand-600 dark:text-brand-400 hover:underline"
                             >
                               {wo.work_order_number}
                             </button>
                           ) : (
-                            <span className="text-slate-800">{wo.work_order_number}</span>
+                            <span className="text-slate-800 dark:text-neutral-100">{wo.work_order_number}</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{wo.title}</td>
-                        <td className="px-3 py-2 text-slate-500">{formatDate(wo.created_at)}</td>
-                        <td className="px-3 py-2 text-right text-slate-700">{row.quantity}</td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-neutral-400">{wo.title}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{formatDate(wo.created_at)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700 dark:text-neutral-300">{row.quantity}</td>
                         <td className="px-3 py-2">
                           <StatusBadge variant={wo.status as import("@/types").WorkOrderStatus} label={(WO_STATUS_LABELS as Record<string, string>)[wo.status] ?? wo.status} />
                         </td>
@@ -427,7 +431,7 @@ function ChemicalTab({ product }: { product: ProductItem }) {
                 href={product.epaUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="text-brand-600 hover:underline"
+                className="text-brand-600 dark:text-brand-400 hover:underline"
               >
                 {product.epaUrl}
               </a>
@@ -439,7 +443,7 @@ function ChemicalTab({ product }: { product: ProductItem }) {
           label="Restricted Use"
           value={
             product.restrictedProduct ? (
-              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+              <Badge variant="outline" className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400">
                 Restricted
               </Badge>
             ) : (
@@ -453,7 +457,7 @@ function ChemicalTab({ product }: { product: ProductItem }) {
         <>
           <Separator />
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Active Ingredients
             </p>
             <dl>
@@ -469,10 +473,10 @@ function ChemicalTab({ product }: { product: ProductItem }) {
         <>
           <Separator />
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Label Instructions
             </p>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{product.labelInstructions}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-neutral-300">{product.labelInstructions}</p>
           </div>
         </>
       )}
@@ -481,17 +485,17 @@ function ChemicalTab({ product }: { product: ProductItem }) {
         <>
           <Separator />
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Client Route Sheet Instructions
             </p>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{product.routeSheetInstructions}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-neutral-300">{product.routeSheetInstructions}</p>
           </div>
         </>
       )}
 
       <Separator />
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Application Rates
         </p>
         <ChemicalApplicationRatesEditor productId={product.id} />
@@ -646,7 +650,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                    className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
                     onClick={() => setDeleteConfirmOpen(true)}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -660,7 +664,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
                   label={PRODUCT_CATEGORY_LABELS[product.category]}
                 />
                 {product.isInventory && (
-                  <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700">
+                  <span className="rounded-full border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 px-2 py-0.5 text-xs font-medium text-teal-700 dark:text-teal-400">
                     Inventory
                   </span>
                 )}
@@ -681,7 +685,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
                 <TabsTrigger
                   key={v}
                   value={v}
-                  className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none capitalize"
+                  className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none capitalize"
                 >
                   {v}
                 </TabsTrigger>

@@ -74,50 +74,50 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
   const cls = "h-4 w-4 shrink-0";
   switch (type) {
     case "approval_required":
-      return <ShieldCheck className={cn(cls, "text-amber-500")} />;
+      return <ShieldCheck className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "approved":
-      return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
+      return <ThumbsUp className={cn(cls, "text-emerald-500 dark:text-emerald-400")} />;
     case "rejected":
-      return <ThumbsDown className={cn(cls, "text-red-500")} />;
+      return <ThumbsDown className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "wo_assigned":
-      return <Wrench className={cn(cls, "text-brand-500")} />;
+      return <Wrench className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
     case "wo_overdue":
-      return <AlertTriangle className={cn(cls, "text-red-500")} />;
+      return <AlertTriangle className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "low_stock":
-      return <Package className={cn(cls, "text-amber-500")} />;
+      return <Package className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "pm_due":
-      return <CalendarClock className={cn(cls, "text-violet-500")} />;
+      return <CalendarClock className={cn(cls, "text-violet-500 dark:text-violet-400")} />;
     case "wo_status_changed":
-      return <Activity className={cn(cls, "text-blue-500")} />;
+      return <Activity className={cn(cls, "text-blue-500 dark:text-blue-400")} />;
     case "wo_comment":
-      return <MessageSquare className={cn(cls, "text-slate-400")} />;
+      return <MessageSquare className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
     case "estimate_change_request":
-      return <MessageSquarePlus className={cn(cls, "text-amber-500")} />;
+      return <MessageSquarePlus className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "estimate_client_accepted":
-      return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
+      return <ThumbsUp className={cn(cls, "text-emerald-500 dark:text-emerald-400")} />;
     case "estimate_client_rejected":
-      return <ThumbsDown className={cn(cls, "text-red-500")} />;
+      return <ThumbsDown className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "estimate_deposit_excess":
-      return <CircleAlert className={cn(cls, "text-amber-500")} />;
+      return <CircleAlert className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "estimate_deposit_failed":
-      return <CircleAlert className={cn(cls, "text-red-500")} />;
+      return <CircleAlert className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "ticket_created":
     case "ticket_assigned":
-      return <MessageSquarePlus className={cn(cls, "text-brand-500")} />;
+      return <MessageSquarePlus className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
     case "ticket_comment":
-      return <MessageSquare className={cn(cls, "text-slate-400")} />;
+      return <MessageSquare className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
     case "contract_expiring":
-      return <CalendarClock className={cn(cls, "text-amber-500")} />;
+      return <CalendarClock className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "automation_alert":
-      return <Bell className={cn(cls, "text-amber-500")} />;
+      return <Bell className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "sales_meeting_reminder":
-      return <CalendarClock className={cn(cls, "text-sky-500")} />;
+      return <CalendarClock className={cn(cls, "text-sky-500 dark:text-sky-400")} />;
     case "comment_mention":
-      return <AtSign className={cn(cls, "text-brand-500")} />;
+      return <AtSign className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
     case "injury_reported":
-      return <HeartPulse className={cn(cls, "text-red-500")} />;
+      return <HeartPulse className={cn(cls, "text-red-500 dark:text-red-400")} />;
     default:
-      return <Bell className={cn(cls, "text-slate-400")} />;
+      return <Bell className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
   }
 }
 
@@ -483,7 +483,7 @@ export function NotificationsBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative shrink-0 text-slate-500">
+        <Button variant="ghost" size="icon" className="relative shrink-0 text-muted-foreground">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold leading-none text-white">
@@ -497,9 +497,9 @@ export function NotificationsBell() {
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Notifications</h3>
             {unreadCount > 0 && (
-              <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-xs font-medium text-brand-700">
+              <span className="rounded-full bg-brand-100 dark:bg-brand-900/40 px-1.5 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-400">
                 {unreadCount} new
               </span>
             )}
@@ -508,7 +508,7 @@ export function NotificationsBell() {
             <button
               type="button"
               onClick={markAllRead}
-              className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+              className="flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
             >
               <CheckCheck className="h-3.5 w-3.5" />
               Mark all read
@@ -519,7 +519,7 @@ export function NotificationsBell() {
         {/* List */}
         <div className="max-h-[420px] overflow-y-auto">
           {notifications.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
+            <div className="flex flex-col items-center gap-2 py-10 text-slate-400 dark:text-neutral-500">
               <Bell className="h-8 w-8 opacity-30" />
               <p className="text-sm">No notifications</p>
             </div>
@@ -530,8 +530,8 @@ export function NotificationsBell() {
                 type="button"
                 onClick={() => handleNotifClick(notif)}
                 className={cn(
-                  "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50",
-                  notif.readAt === null && "bg-brand-50 hover:bg-brand-50/80"
+                  "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40",
+                  notif.readAt === null && "bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-50/80 dark:hover:bg-brand-900/30"
                 )}
               >
                 <div className="mt-0.5">
@@ -542,16 +542,16 @@ export function NotificationsBell() {
                     className={cn(
                       "text-sm",
                       notif.readAt === null
-                        ? "font-semibold text-slate-900"
-                        : "font-medium text-slate-700"
+                        ? "font-semibold text-slate-900 dark:text-neutral-100"
+                        : "font-medium text-slate-700 dark:text-neutral-300"
                     )}
                   >
                     {notif.title}
                   </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500 line-clamp-2">
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground line-clamp-2">
                     {notif.body}
                   </p>
-                  <p className="mt-1 text-xs text-slate-400">{timeAgo(notif.createdAt)}</p>
+                  <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">{timeAgo(notif.createdAt)}</p>
                 </div>
                 {notif.readAt === null && (
                   <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" />

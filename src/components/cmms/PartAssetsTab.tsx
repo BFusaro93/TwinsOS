@@ -106,7 +106,7 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
     <div className="p-6">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           {items.length} asset{items.length !== 1 ? "s" : ""} / vehicle{items.length !== 1 ? "s" : ""} linked
         </p>
         {canWriteEquipt && (
@@ -120,33 +120,33 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
       {/* Table or empty state */}
       {items.length === 0 ? (
         <div className="flex h-32 items-center justify-center rounded-md border border-dashed">
-          <p className="text-sm text-slate-400">No assets or vehicles linked to this part.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No assets or vehicles linked to this part.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Name</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Asset Type</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+              <tr className="bg-slate-50 dark:bg-muted/40">
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Name</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Asset Type</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
                 <th className="w-10" />
               </tr>
             </thead>
             <tbody>
               {items.map(({ kind, record, linkId }) => (
-                <tr key={record.id} className="border-t border-slate-100 hover:bg-slate-50">
+                <tr key={record.id} className="border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                   <td className="px-3 py-2">
                     <button
                       type="button"
                       onClick={() => onRecordClick?.({ kind, record, linkId } as LinkedRecord)}
-                      className="font-medium text-brand-600 hover:underline text-left"
+                      className="font-medium text-brand-600 dark:text-brand-400 hover:underline text-left"
                     >
                       {record.name}
                     </button>
                   </td>
                   <td className="px-3 py-2">
-                    <span className="flex items-center gap-1.5 text-slate-500">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
                       {kind === "vehicle" ? (
                         <Truck className="h-3.5 w-3.5 shrink-0" />
                       ) : (
@@ -167,7 +167,7 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
                     {canWriteEquipt && <button
                       type="button"
                       title="Unlink"
-                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                      className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
                       onClick={(e) => {
                         e.stopPropagation();
                         removeLink(
@@ -193,12 +193,12 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
             <DialogTitle>Link Asset / Vehicle</DialogTitle>
             <DialogDescription>
               Select an asset or vehicle to associate with{" "}
-              <span className="font-medium text-slate-700">{partName}</span>.
+              <span className="font-medium text-slate-700 dark:text-neutral-300">{partName}</span>.
             </DialogDescription>
           </DialogHeader>
 
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
             <Input
               placeholder="Search by name, asset tag, or license plate…"
               value={search}
@@ -210,7 +210,7 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
 
           <div className="max-h-72 overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">
+              <p className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                 {search ? "No results match your search." : "All assets and vehicles are already linked."}
               </p>
             ) : (
@@ -218,11 +218,11 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
                 {filtered.map(({ kind, record }) => (
                   <li key={record.id}>
                     <button
-                      className="flex w-full items-center gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50 disabled:opacity-50"
+                      className="flex w-full items-center gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-muted/40 disabled:opacity-50"
                       disabled={linking}
                       onClick={() => handleLink({ kind, record } as LinkedRecord)}
                     >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                         {kind === "vehicle" ? (
                           <Truck className="h-3.5 w-3.5" />
                         ) : (
@@ -230,8 +230,8 @@ export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: P
                         )}
                       </span>
                       <div className="flex-1 overflow-hidden">
-                        <p className="truncate text-sm font-medium text-slate-800">{record.name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">{record.name}</p>
+                        <p className="text-xs text-muted-foreground">
                           {kind === "vehicle" ? "Vehicle" : "Asset"}
                           {(record as Asset).assetTag
                             ? ` · ${(record as Asset).assetTag}`

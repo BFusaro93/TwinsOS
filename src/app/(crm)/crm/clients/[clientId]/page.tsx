@@ -7,7 +7,7 @@ interface Props {
 export default async function ClientDetailPage({ params }: Props) {
   const { clientId } = await params;
   return (
-    <div className="h-full overflow-hidden rounded-lg border bg-white shadow-sm">
+    <div className="h-full overflow-hidden rounded-lg border bg-card shadow-sm">
       <ClientDetailPanel clientId={clientId} />
     </div>
   );

@@ -53,7 +53,7 @@ function MultiSelectValue({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("h-7 w-full justify-between px-2 text-xs font-normal", selected.length === 0 && "text-slate-400")}
+          className={cn("h-7 w-full justify-between px-2 text-xs font-normal", selected.length === 0 && "text-slate-400 dark:text-neutral-500")}
         >
           <span className="truncate">{triggerLabel}</span>
           <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
@@ -71,7 +71,7 @@ function MultiSelectValue({
                   <CommandItem key={o.v} value={o.l} onSelect={() => toggle(o.v)} className="text-xs">
                     <div className={cn(
                       "mr-2 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors",
-                      isSelected ? "border-brand-500 bg-brand-500" : "border-slate-300 bg-white"
+                      isSelected ? "border-brand-500 bg-brand-500" : "border-slate-300 dark:border-neutral-700 bg-card"
                     )}>
                       {isSelected && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
                     </div>
@@ -84,7 +84,7 @@ function MultiSelectValue({
               <>
                 <CommandSeparator />
                 <CommandGroup>
-                  <CommandItem value="__clear__" onSelect={() => onChange("")} className="justify-center text-xs text-slate-500">
+                  <CommandItem value="__clear__" onSelect={() => onChange("")} className="justify-center text-xs text-muted-foreground">
                     Clear selection
                   </CommandItem>
                 </CommandGroup>
@@ -130,7 +130,7 @@ export function ClientFilterPopover({
         <Button
           variant="outline"
           size="sm"
-          className={cn("h-9 gap-1.5 shrink-0", activeCount > 0 && "border-brand-500 text-brand-600")}
+          className={cn("h-9 gap-1.5 shrink-0", activeCount > 0 && "border-brand-500 text-brand-600 dark:text-brand-400")}
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Filters
@@ -150,7 +150,7 @@ export function ClientFilterPopover({
         </div>
         <div className="p-3 space-y-2 max-h-[60vh] overflow-y-auto">
           {rows.length === 0 && (
-            <p className="text-xs text-slate-400 text-center py-4">No filters applied. Click &ldquo;+ Add Filter&rdquo; to start.</p>
+            <p className="text-xs text-slate-400 dark:text-neutral-500 text-center py-4">No filters applied. Click &ldquo;+ Add Filter&rdquo; to start.</p>
           )}
           {rows.map((row) => {
             const fieldDef = fields.find((f) => f.value === row.field) ?? fields[0];
@@ -168,7 +168,7 @@ export function ClientFilterPopover({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="max-h-64">
-                    <div className="px-2 py-1.5 border-b bg-white">
+                    <div className="px-2 py-1.5 border-b bg-card">
                       <Input
                         className="h-6 text-xs"
                         placeholder="Filter: Enter keywords"
@@ -224,7 +224,7 @@ export function ClientFilterPopover({
                       onChange={(e) => updateRow(row.id, { value: e.target.value })} />
                   )}
                 </div>
-                <button onClick={() => removeRow(row.id)} className="shrink-0 text-slate-400 hover:text-red-500 p-0.5">
+                <button onClick={() => removeRow(row.id)} className="shrink-0 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 p-0.5">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -232,7 +232,7 @@ export function ClientFilterPopover({
           })}
         </div>
         <div className="border-t px-3 py-2">
-          <button onClick={addRow} className="text-xs text-brand-600 hover:text-brand-700 font-medium">
+          <button onClick={addRow} className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 font-medium">
             + Add Filter
           </button>
         </div>

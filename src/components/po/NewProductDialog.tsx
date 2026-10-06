@@ -251,13 +251,13 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                 <TabsList className="h-9 bg-transparent p-0">
                   <TabsTrigger
                     value="details"
-                    className="h-9 rounded-none border-b-2 border-transparent px-3 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                    className="h-9 rounded-none border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
                   >
                     Details
                   </TabsTrigger>
                   <TabsTrigger
                     value="chemical"
-                    className="h-9 rounded-none border-b-2 border-transparent px-3 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                    className="h-9 rounded-none border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
                   >
                     Chemical
                   </TabsTrigger>
@@ -269,7 +269,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
             {/* Name — full width */}
             <div className="col-span-2 grid gap-1.5">
               <Label htmlFor="product-name">
-                Name <span className="text-red-500">*</span>
+                Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="product-name"
@@ -282,7 +282,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
             {/* Category — half width */}
             <div className="grid gap-1.5">
               <Label htmlFor="product-category">
-                Category <span className="text-red-500">*</span>
+                Category <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger id="product-category">
@@ -325,8 +325,8 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
             {/* Maintenance-part-only: part category + min stock */}
             {isMaintPart && (
               <>
-                <div className="col-span-2 rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-600">
+                <div className="col-span-2 rounded-md border border-brand-100 dark:border-brand-900 bg-brand-50 dark:bg-brand-900/30 px-3 py-2.5">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">
                     Equipt Settings
                   </p>
                   <div className="grid grid-cols-2 gap-3">
@@ -537,7 +537,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                             placeholder="0.0"
                             className="pr-6"
                           />
-                          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-neutral-500">
                             %
                           </span>
                         </div>
@@ -545,7 +545,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 shrink-0 text-slate-400 hover:text-red-500"
+                          className="h-8 w-8 shrink-0 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                           onClick={() => removeIngredient(i)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -564,7 +564,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                   </div>
                 </div>
                 {isEditing && (
-                  <p className="mt-2 text-xs text-brand-600/80">
+                  <p className="mt-2 text-xs text-brand-600/80 dark:text-brand-400/80">
                     Application rates can be managed from the product&apos;s detail panel after saving.
                   </p>
                 )}
@@ -573,7 +573,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
           </Tabs>
 
           {saveError && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-red-600 dark:text-red-400">
               {saveError instanceof Error
                 ? saveError.message
                 : typeof saveError === "object" && saveError !== null && "message" in saveError

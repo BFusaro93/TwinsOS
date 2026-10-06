@@ -56,7 +56,7 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
           {!disabled && (
             <button
               onClick={() => onRemove(tag)}
-              className="rounded-full hover:bg-slate-300 p-0.5 transition-colors"
+              className="rounded-full hover:bg-slate-300 dark:hover:bg-neutral-600 p-0.5 transition-colors"
               aria-label={`Remove tag ${tag}`}
             >
               <X className="h-2.5 w-2.5" />
@@ -68,7 +68,7 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
       {!disabled && !open && (
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-0.5 rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-xs text-slate-400 hover:border-slate-400 hover:text-slate-600 transition-colors"
+          className="flex items-center gap-0.5 rounded-full border border-dashed border-slate-300 dark:border-neutral-700 px-2 py-0.5 text-xs text-slate-400 dark:text-neutral-500 hover:border-slate-400 dark:hover:border-neutral-600 hover:text-slate-600 dark:hover:text-neutral-400 transition-colors"
         >
           <Plus className="h-3 w-3" />
           Add tag
@@ -87,12 +87,12 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
             className="h-6 w-32 px-2 text-xs"
           />
           {filtered.length > 0 && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border bg-white shadow-md">
+            <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border bg-card shadow-md">
               {filtered.map((s) => (
                 <button
                   key={s}
                   onMouseDown={(e) => { e.preventDefault(); commit(s); }}
-                  className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-slate-50"
+                  className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                 >
                   {s}
                 </button>
@@ -100,7 +100,7 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
             </div>
           )}
           {filtered.length === 0 && input.trim() && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border bg-white shadow-md px-3 py-2 text-xs text-slate-400">
+            <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border bg-card shadow-md px-3 py-2 text-xs text-slate-400 dark:text-neutral-500">
               {canCreateNew
                 ? "No matching tags. Add tags in Settings."
                 : "No matching tags. You don't have permission to create new tags."}

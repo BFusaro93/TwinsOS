@@ -78,7 +78,7 @@ function MultiSelectFilter({
             size="sm"
             className={cn(
               "h-9 w-[160px] justify-between gap-1 font-normal",
-              hasActive && "border-brand-400 text-brand-700",
+              hasActive && "border-brand-400 text-brand-700 dark:text-brand-400",
               // Extra right padding so text doesn't overlap the clear button
               hasActive && "pr-8"
             )}
@@ -111,7 +111,7 @@ function MultiSelectFilter({
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
                     checked
                       ? "border-brand-500 bg-brand-500"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-neutral-700 bg-card"
                   )}
                 >
                   {checked && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
@@ -130,7 +130,7 @@ function MultiSelectFilter({
                   e.preventDefault();
                   onChange([]);
                 }}
-                className="cursor-pointer justify-center text-xs text-slate-500 hover:text-slate-700"
+                className="cursor-pointer justify-center text-xs text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
               >
                 Clear all
               </DropdownMenuItem>
@@ -144,7 +144,7 @@ function MultiSelectFilter({
         <button
           type="button"
           aria-label="Clear filter"
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-brand-600 opacity-60 hover:opacity-100"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-brand-600 dark:text-brand-400 opacity-60 hover:opacity-100"
           onClick={() => onChange([])}
         >
           <X className="h-3.5 w-3.5" />

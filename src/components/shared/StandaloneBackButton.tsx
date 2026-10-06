@@ -36,7 +36,7 @@ export function StandaloneBackButton() {
       size="icon"
       aria-label="Go back"
       onClick={() => router.back()}
-      className="shrink-0 text-slate-500"
+      className="shrink-0 text-muted-foreground"
     >
       <ArrowLeft className="h-5 w-5" />
     </Button>

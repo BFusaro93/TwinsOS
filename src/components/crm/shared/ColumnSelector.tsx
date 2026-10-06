@@ -26,14 +26,14 @@ export function ColumnSelector({ columns, visible, onToggle }: Props) {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 p-2">
-        <p className="px-1.5 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="px-1.5 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Show Columns
         </p>
         <div className="space-y-0.5">
           {columns.map((col) => (
             <label
               key={col.key}
-              className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-slate-50"
+              className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-slate-50 dark:hover:bg-muted/40"
             >
               <Checkbox
                 checked={visible[col.key] ?? true}

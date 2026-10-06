@@ -109,12 +109,12 @@ import { useConfirm } from "@/components/shared/useConfirm";
 
 // Stage colors are keyed by stage_key — fallback palette for system stages
 const DEFAULT_STAGE_COLORS: Record<string, string> = {
-  draft:    "bg-slate-100 text-slate-600",
-  quote:    "bg-blue-100 text-blue-700",
-  sent:     "bg-yellow-100 text-yellow-700",
-  accepted: "bg-green-100 text-green-700",
-  lost:     "bg-red-100 text-red-600",
-  invoiced: "bg-teal-100 text-teal-700",
+  draft:    "bg-muted text-slate-600 dark:text-neutral-400",
+  quote:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  sent:     "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  accepted: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  lost:     "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  invoiced: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",
 };
 
 const DEFAULT_STAGE_LIST: { stageKey: string; name: string }[] = [
@@ -175,17 +175,17 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
         className={cn(
           "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
           dragging
-            ? "border-brand-400 bg-brand-50"
-            : "border-slate-200 bg-white hover:border-slate-300"
+            ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30"
+            : "border-border bg-card hover:border-slate-300 dark:hover:border-neutral-700"
         )}
       >
-        <Upload className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300")} />
-        <p className="text-sm font-medium text-slate-600 mb-1">
+        <Upload className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300 dark:text-neutral-600")} />
+        <p className="text-sm font-medium text-slate-600 dark:text-neutral-400 mb-1">
           {dragging ? "Drop files here" : "Drag & drop files here"}
         </p>
-        <p className="text-xs text-slate-400 mb-3">or</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500 mb-3">or</p>
         <label className="cursor-pointer">
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-neutral-300 shadow-sm hover:bg-slate-50 dark:hover:bg-muted/40">
             <Paperclip className="h-3.5 w-3.5" /> Browse files
           </span>
           <input
@@ -196,30 +196,30 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
           />
         </label>
         {upload.isPending && (
-          <p className="mt-3 text-xs text-slate-400">Uploading…</p>
+          <p className="mt-3 text-xs text-slate-400 dark:text-neutral-500">Uploading…</p>
         )}
       </div>
 
       {/* File list */}
       {isLoading ? (
-        <div className="text-xs text-slate-400 text-center py-4">Loading…</div>
+        <div className="text-xs text-slate-400 dark:text-neutral-500 text-center py-4">Loading…</div>
       ) : attachments.length === 0 ? (
-        <div className="text-xs text-slate-400 text-center py-2">No attachments yet</div>
+        <div className="text-xs text-slate-400 dark:text-neutral-500 text-center py-2">No attachments yet</div>
       ) : (
-        <div className="rounded-lg border bg-white shadow-sm divide-y">
+        <div className="rounded-lg border bg-card shadow-sm divide-y">
           {attachments.map((a) => (
             <div key={a.id} className="flex items-center gap-3 px-4 py-3 group">
-              <Paperclip className="h-4 w-4 text-slate-300 shrink-0" />
+              <Paperclip className="h-4 w-4 text-slate-300 dark:text-neutral-600 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800 truncate">{a.fileName}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-medium text-slate-800 dark:text-neutral-100 truncate">{a.fileName}</p>
+                <p className="text-xs text-slate-400 dark:text-neutral-500">
                   {formatBytes(a.fileSize)} · {a.uploadedByName} · {new Date(a.createdAt).toLocaleDateString()}
                 </p>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => download.mutate({ storagePath: a.storagePath, fileName: a.fileName })}
-                  className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                  className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
                   title="Download"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -230,7 +230,7 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
                     await remove.mutateAsync({ id: a.id, storagePath: a.storagePath });
                     toast.success("Attachment removed");
                   }}
-                  className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                  className="rounded p-1 hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                   title="Delete"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -257,37 +257,37 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
   });
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+    <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
       <button
-        className="flex w-full items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+        className="flex w-full items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors text-left"
         onClick={() => setExpanded((p) => !p)}
       >
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-slate-800">
+          <span className="text-sm font-semibold text-slate-800 dark:text-neutral-100">
             Version {version.versionNumber}
           </span>
-          <span className="text-xs text-slate-400">{sentDate}</span>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">{sentDate}</span>
           {version.sentToEmail && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
               Sent to {version.sentToEmail}
             </span>
           )}
           {snapshot.sharedVia === "link" && !version.sentToEmail && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
               Shared via link
             </span>
           )}
           {snapshot.acceptedBy && (
-            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] text-green-700">
+            <span className="rounded-full bg-green-100 dark:bg-green-900/40 px-2 py-0.5 text-[10px] text-green-700 dark:text-green-400">
               Accepted by {snapshot.acceptedBy}{snapshot.acceptedVia === "client_portal" ? " (portal)" : ""}
             </span>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-slate-700">
+          <span className="text-sm font-semibold text-slate-700 dark:text-neutral-300">
             {formatCurrency(snapshot.totalCents)}
           </span>
-          <span className={cn("text-xs text-slate-400 transition-transform", expanded && "rotate-180")}>
+          <span className={cn("text-xs text-slate-400 dark:text-neutral-500 transition-transform", expanded && "rotate-180")}>
             ▾
           </span>
         </div>
@@ -297,7 +297,7 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
         <div className="border-t px-4 py-3 overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-slate-400 border-b">
+              <tr className="text-left text-slate-400 dark:text-neutral-500 border-b">
                 <th className="pb-1.5 pr-3 font-medium">Service</th>
                 <th className="pb-1.5 pr-3 font-medium text-right">Qty</th>
                 <th className="pb-1.5 pr-3 font-medium">Unit</th>
@@ -310,8 +310,8 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
               {snapshot.lineItems.map((li) => {
                 if (li.rowType === "section") {
                   return (
-                    <tr key={li.id} className="bg-slate-50">
-                      <td colSpan={6} className="py-1.5 pr-3 font-semibold text-slate-600 uppercase tracking-wide text-[10px]">
+                    <tr key={li.id} className="bg-slate-50 dark:bg-muted/40">
+                      <td colSpan={6} className="py-1.5 pr-3 font-semibold text-slate-600 dark:text-neutral-400 uppercase tracking-wide text-[10px]">
                         {li.sectionName ?? "Section"}
                       </td>
                     </tr>
@@ -319,25 +319,25 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
                 }
                 return (
                   <tr key={li.id} className="border-b last:border-0">
-                    <td className="py-1.5 pr-3 text-slate-800">
+                    <td className="py-1.5 pr-3 text-slate-800 dark:text-neutral-100">
                       <div>{li.serviceName ?? "—"}</div>
                       {li.estimateDesc && (
-                        <div className="text-[10px] text-slate-400">{stripHtml(li.estimateDesc)}</div>
+                        <div className="text-[10px] text-slate-400 dark:text-neutral-500">{stripHtml(li.estimateDesc)}</div>
                       )}
                     </td>
-                    <td className="py-1.5 pr-3 text-right text-slate-600">{li.qty}</td>
-                    <td className="py-1.5 pr-3 text-slate-500">{li.unitType ?? "—"}</td>
-                    <td className="py-1.5 pr-3 text-right text-slate-600">{li.visits}</td>
-                    <td className="py-1.5 pr-3 text-right text-slate-600">{formatCurrency(li.rateCents)}</td>
-                    <td className="py-1.5 text-right font-medium text-slate-800">{formatCurrency(li.totalCents)}</td>
+                    <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-neutral-400">{li.qty}</td>
+                    <td className="py-1.5 pr-3 text-muted-foreground">{li.unitType ?? "—"}</td>
+                    <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-neutral-400">{li.visits}</td>
+                    <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-neutral-400">{formatCurrency(li.rateCents)}</td>
+                    <td className="py-1.5 text-right font-medium text-slate-800 dark:text-neutral-100">{formatCurrency(li.totalCents)}</td>
                   </tr>
                 );
               })}
             </tbody>
             <tfoot>
               <tr className="border-t">
-                <td colSpan={5} className="pt-2 text-right text-slate-500 font-medium pr-3">Total</td>
-                <td className="pt-2 text-right font-semibold text-slate-800">{formatCurrency(snapshot.totalCents)}</td>
+                <td colSpan={5} className="pt-2 text-right text-muted-foreground font-medium pr-3">Total</td>
+                <td className="pt-2 text-right font-semibold text-slate-800 dark:text-neutral-100">{formatCurrency(snapshot.totalCents)}</td>
               </tr>
             </tfoot>
           </table>
@@ -450,7 +450,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stagesLoading, dbStages.length]);
 
-  const stageColor = (key: string) => DEFAULT_STAGE_COLORS[key] ?? "bg-slate-100 text-slate-600";
+  const stageColor = (key: string) => DEFAULT_STAGE_COLORS[key] ?? "bg-muted text-slate-600 dark:text-neutral-400";
   const stageName  = (key: string) => dbStages.find((s: DBEstimateStage) => s.stageKey === key)?.name
     ?? DEFAULT_STAGE_LIST.find((s) => s.stageKey === key)?.name ?? key;
   const stageList  = dbStages.length > 0
@@ -804,7 +804,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   }
 
   if (!estimate) {
-    return <div className="p-6 text-sm text-slate-500">Estimate not found.</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Estimate not found.</div>;
   }
 
   if (!permissionsLoading && !can("estimate_edit")) {
@@ -828,7 +828,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* ── top bar ─────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-white px-6 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-6 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
@@ -836,27 +836,27 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               if (backClientId) { router.push(`/crm/clients/${backClientId}`); return; }
               router.back();
             }}
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back
           </button>
           <div>
-            <h1 className="text-base font-semibold text-slate-900">
+            <h1 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
               Edit Estimate (#{estimate.estimateNumber})
-              <span className="ml-2 text-slate-400 text-sm font-normal">—</span>
+              <span className="ml-2 text-slate-400 dark:text-neutral-500 text-sm font-normal">—</span>
               <span className="ml-2">
                 <Badge className={cn("text-[10px]", stageColor(effectiveStage))}>
                   {stageName(effectiveStage)}
                 </Badge>
               </span>
               {estimate.reason && (effectiveStage === "accepted" || effectiveStage === "lost") && (
-                <span className="ml-2 text-xs text-slate-500 font-normal">
+                <span className="ml-2 text-xs text-muted-foreground font-normal">
                   · {estimate.reason}
                 </span>
               )}
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               Code: {estimate.id.slice(0, 8).toUpperCase()}
             </p>
           </div>
@@ -872,7 +872,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             <Button variant="outline" size="sm" className="h-8 text-xs"
               title={estimateJobs.length > 1 ? `${estimateJobs.length} jobs have been created from this estimate — opens the newest` : "A job has already been created from this estimate"}
               onClick={() => router.push(`/crm/scheduling/jobs/${estimateJobs[0].id}`)}>
-              <Briefcase className="mr-1 h-3.5 w-3.5 text-green-600" />
+              <Briefcase className="mr-1 h-3.5 w-3.5 text-green-600 dark:text-green-400" />
               {estimateJobs.length > 1 ? `View Jobs (${estimateJobs.length})` : "View Job"}
             </Button>
           )}
@@ -889,7 +889,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           <Button variant="outline" size="sm" className="h-8 text-xs"
             title="Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"
             onClick={() => setWonLostDialog("accepted")}>
-            <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500" />Accepted
+            <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500 dark:text-green-400" />Accepted
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             title="Mark this estimate's stage as Closed - Lost — updates the estimate only, not individual line items"
@@ -904,13 +904,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           <Button variant="outline" size="sm" className="h-8 text-xs"
             title="Mark this estimate's stage as Draft — updates the estimate only, not individual line items"
             onClick={() => handleStage("draft")}>
-            <Pencil className="mr-1 h-3.5 w-3.5 text-slate-400" />Draft
+            <Pencil className="mr-1 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />Draft
           </Button>
           {canSend && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               disabled={estimate.approvalStatus === "pending" || submittingForApproval}
               onClick={handleSendClick}>
-              <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />
+              <Send className="mr-1 h-3.5 w-3.5 text-yellow-500 dark:text-yellow-400" />
               {estimate.approvalStatus === "pending" ? "Awaiting Approval"
                 : estimate.approvalStatus === "rejected" ? "Resubmit for Approval"
                 : "Send"}
@@ -926,14 +926,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   ? `Copy the client's proposal link\n${liveProposalUrl}`
                   : "Copy a proposal link for this estimate (creates one if none is live yet)"}
                 onClick={() => void copyProposalLink()}>
-                <Link2 className="mr-1 h-3.5 w-3.5 text-slate-500" />
+                <Link2 className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
                 {liveProposalUrl ? "Copy link" : "Get link"}
               </Button>
               {liveProposalUrl && (
                 <Button variant="outline" size="sm" className="h-8 px-2 text-xs"
                   title="Open the client's proposal page in a new tab"
                   onClick={() => void openProposalLink()}>
-                  <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               )}
             </>
@@ -1032,17 +1032,17 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               }
             }}
           >
-            <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500" />
+            <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
             {creatingInvoice ? "Creating…" : "Invoice"}
           </Button>
-          <div className="ml-1 h-5 w-px bg-slate-200" />
+          <div className="ml-1 h-5 w-px bg-slate-200 dark:bg-neutral-700" />
           <Button
             variant="outline"
             size="sm"
             className="h-8 text-xs"
             onClick={() => window.open(`/api/crm/estimates/${estimate.id}/pdf`, "_blank")}
           >
-            <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" />
+            <Eye className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
             Preview
           </Button>
           <Button
@@ -1056,10 +1056,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               }
             }}
           >
-            <Printer className="mr-1 h-3.5 w-3.5 text-slate-500" />
+            <Printer className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
             Print
           </Button>
-          <div className="ml-1 h-5 w-px bg-slate-200" />
+          <div className="ml-1 h-5 w-px bg-slate-200 dark:bg-neutral-700" />
           <Button
             size="sm"
             className="h-8 text-xs"
@@ -1073,11 +1073,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       </div>
 
       {estimate.approvalStatus !== "not_required" && (
-        <div className="border-b bg-slate-50 px-6 py-3">
-          <p className="mb-2 text-xs font-medium text-slate-500">
+        <div className="border-b bg-slate-50 dark:bg-muted/40 px-6 py-3">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
             Approval Chain
             {estimate.approvalStatus === "rejected" && (
-              <span className="ml-2 font-semibold text-red-600">Rejected</span>
+              <span className="ml-2 font-semibold text-red-600 dark:text-red-400">Rejected</span>
             )}
           </p>
           <ApprovalChain entityId={estimate.id} />
@@ -1085,7 +1085,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       )}
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
-      <div className="flex gap-0 overflow-x-auto border-b bg-white px-4 md:px-6">
+      <div className="flex gap-0 overflow-x-auto border-b bg-card px-4 md:px-6">
         {(["details", "payment", "display", "notes", "photos", "attachments", "comments", "audit", "versions"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -1093,8 +1093,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             className={cn(
               "shrink-0 whitespace-nowrap px-4 py-2 text-sm capitalize transition-colors border-b-2",
               activeTab === t
-                ? "border-brand-500 text-brand-600 font-medium"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-brand-500 text-brand-600 dark:text-brand-400 font-medium"
+                : "border-transparent text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
             )}
           >
             {t === "audit" ? "Audit Trail"
@@ -1122,30 +1122,30 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   say so — the client still sees the old version and can't
                   accept until it's sent (or its link copied) again. */}
               {estimate.stage === "sent" && liveProposalUrl && shareLink?.changedSinceSent && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 shrink-0">
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 shrink-0">
                   Edited since Version {shareLink.publishedVersion} was sent — the client still sees Version {shareLink.publishedVersion} and can&apos;t accept until you send it again (Send, or Copy link).
                 </div>
               )}
 
               {/* Open change requests from the client */}
               {openChangeRequests.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 divide-y divide-amber-200 shrink-0">
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 divide-y divide-amber-200 dark:divide-amber-800 shrink-0">
                   {openChangeRequests.map((cr) => (
                     <div key={cr.id} className="flex items-start gap-3 p-3">
-                      <MessageSquarePlus className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                      <MessageSquarePlus className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-amber-900">
+                        <p className="text-sm text-amber-900 dark:text-amber-200">
                           <span className="font-semibold">{cr.requesterName}</span> requested changes:
                         </p>
-                        <p className="text-sm text-amber-800 mt-0.5">{cr.message}</p>
-                        <p className="text-xs text-amber-600 mt-1">
+                        <p className="text-sm text-amber-800 dark:text-amber-300 mt-0.5">{cr.message}</p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                           {new Date(cr.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                         </p>
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 text-xs shrink-0 bg-white"
+                        className="h-7 text-xs shrink-0 bg-card"
                         onClick={() => resolveChangeRequest({ id: cr.id, estimateId })}
                       >
                         Mark Resolved
@@ -1156,20 +1156,20 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               )}
 
               {/* Client info card + header form */}
-              <div className="rounded-lg border bg-white shadow-sm overflow-hidden shrink-0">
+              <div className="rounded-lg border bg-card shadow-sm overflow-hidden shrink-0">
                 <div className={cn("flex flex-col gap-0 lg:flex-row", compact && "flex-col")}>
 
                   {/* Client info card */}
                   <div className={cn(
-                    "shrink-0 bg-slate-50 p-4 flex flex-col gap-2",
+                    "shrink-0 bg-slate-50 dark:bg-muted/40 p-4 flex flex-col gap-2",
                     compact ? "w-full border-b" : "w-full border-b lg:w-56 lg:border-b-0 lg:border-r"
                   )}>
-                    <p className="text-xs font-semibold text-slate-800 uppercase tracking-wide">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-neutral-100 uppercase tracking-wide">
                       Client
                     </p>
-                    <p className="text-sm font-semibold text-slate-900">{estimate.clientName}</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{estimate.clientName}</p>
                     {estimate.clientAddress && (
-                      <div className="flex items-start gap-1.5 text-xs text-slate-500">
+                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
                         <span>
                           {estimate.clientAddress}
@@ -1178,26 +1178,26 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       </div>
                     )}
                     {estimate.clientPhone && (
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Phone className="h-3 w-3 shrink-0" />
                         {estimate.clientPhone}
                       </div>
                     )}
                     {estimate.clientSince && (
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[10px] text-slate-400 dark:text-neutral-500">
                         Client since {new Date(estimate.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" })}
                       </p>
                     )}
                     {estimate.salesRepName && (
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
                         <User className="h-3 w-3 shrink-0" />
                         {estimate.salesRepName}
                       </div>
                     )}
                     <div className="mt-auto pt-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-slate-400">Total</span>
-                        <span className="text-sm font-semibold text-slate-800">
+                        <span className="text-[10px] text-slate-400 dark:text-neutral-500">Total</span>
+                        <span className="text-sm font-semibold text-slate-800 dark:text-neutral-100">
                           {formatCurrency(estimate.totalCents)}
                         </span>
                       </div>
@@ -1327,7 +1327,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                                 saveHeader();
                               }}
                             />
-                            <span className="text-xs text-slate-500">Show on estimate document</span>
+                            <span className="text-xs text-muted-foreground">Show on estimate document</span>
                           </div>
                         </FieldRow>
                       </div>
@@ -1367,7 +1367,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               onBlur={() => saveHeader()}
                               className="h-8 w-20"
                             />
-                            <span className="text-xs text-slate-400">%</span>
+                            <span className="text-xs text-slate-400 dark:text-neutral-500">%</span>
                           </div>
                         </FieldRow>
                         <FieldRow label="PO Number">
@@ -1422,7 +1422,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                                   saveHeader();
                                 }}
                               />
-                              <span className="text-xs text-slate-500">Enable Good/Better/Best tiers</span>
+                              <span className="text-xs text-muted-foreground">Enable Good/Better/Best tiers</span>
                             </div>
                             {(headerEdits.tiers_enabled !== undefined
                               ? Boolean(headerEdits.tiers_enabled)
@@ -1467,17 +1467,17 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   .sort()[0];
                 const accepted = shareTokens.find((t) => t.acceptedAt);
                 return (
-                  <div className="flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
+                  <div className="flex items-center gap-3 rounded-md border bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1" title={liveProposalUrl ?? "No live proposal link — every link sent has expired or been accepted"}>
-                      <Send className="h-3 w-3 text-slate-400" />
+                      <Send className="h-3 w-3 text-slate-400 dark:text-neutral-500" />
                       <span>{shareTokens.length} link{shareTokens.length !== 1 ? "s" : ""} sent</span>
                       {liveProposalUrl && canSend && (
                         <>
-                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 hover:underline"
+                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 dark:text-brand-400 hover:underline"
                             onClick={() => void copyProposalLink()} title={liveProposalUrl}>
                             <Link2 className="h-3 w-3" /> Copy link
                           </button>
-                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 hover:underline"
+                          <button type="button" className="ml-1 inline-flex items-center gap-0.5 text-brand-600 dark:text-brand-400 hover:underline"
                             onClick={() => void openProposalLink()} title={liveProposalUrl}>
                             <ExternalLink className="h-3 w-3" /> Open
                           </button>
@@ -1485,20 +1485,20 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       )}
                     </div>
                     {totalViews > 0 ? (
-                      <div className="flex items-center gap-1 text-brand-600 font-medium">
+                      <div className="flex items-center gap-1 text-brand-600 dark:text-brand-400 font-medium">
                         <Eye className="h-3 w-3" />
                         <span>Viewed {totalViews} time{totalViews !== 1 ? "s" : ""}</span>
                         {firstViewed && (
-                          <span className="font-normal text-slate-400">
+                          <span className="font-normal text-slate-400 dark:text-neutral-500">
                             — first opened {new Date(firstViewed).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="italic text-slate-400">Not yet opened</span>
+                      <span className="italic text-slate-400 dark:text-neutral-500">Not yet opened</span>
                     )}
                     {accepted && (
-                      <div className="flex items-center gap-1 text-green-600 font-medium ml-auto">
+                      <div className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium ml-auto">
                         <CheckCircle2 className="h-3 w-3" />
                         <span>Accepted by {accepted.acceptedByName}</span>
                       </div>
@@ -1515,7 +1515,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   className="h-8 text-xs"
                   onClick={() => setAiDraftOpen(true)}
                 >
-                  <Sparkles className="mr-1 h-3.5 w-3.5 text-brand-500" />
+                  <Sparkles className="mr-1 h-3.5 w-3.5 text-brand-500 dark:text-brand-400" />
                   Draft with AI
                 </Button>
                 <Select
@@ -1636,13 +1636,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       className={cn(
                         "px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px",
                         lineItemFilter === t.value
-                          ? "border-brand-500 text-brand-600"
-                          : "border-transparent text-slate-500 hover:text-slate-800"
+                          ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                          : "border-transparent text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
                       )}
                     >
                       {t.label}
                       {cnt > 0 && (
-                        <span className="ml-1 text-[10px] text-slate-400">({cnt})</span>
+                        <span className="ml-1 text-[10px] text-slate-400 dark:text-neutral-500">({cnt})</span>
                       )}
                     </button>
                   );
@@ -1670,7 +1670,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           )}
 
           {activeTab === "payment" && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <div className="grid grid-cols-1 gap-x-10 gap-y-3 max-w-2xl sm:grid-cols-2">
                 <FieldRow label="Payment Plan" title="How the client will pay: a set number of monthly installments, or custom milestone payments">
                   <Select
@@ -1705,7 +1705,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           const schedule = computeInstallmentSchedule(estimate.totalCents, deposit, n, estimate.estimateDate, day);
                           if (schedule.length === 0) return null;
                           return (
-                            <p className="text-[10px] text-slate-400">
+                            <p className="text-[10px] text-slate-400 dark:text-neutral-500">
                               {schedule.length} × {formatCurrency(schedule[0].amountCents)}/mo starting {new Date(schedule[0].dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                             </p>
                           );
@@ -1730,7 +1730,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           className="h-8 w-20"
                           placeholder="—"
                         />
-                        <span className="text-[10px] text-slate-400">Blank = same day as estimate date</span>
+                        <span className="text-[10px] text-slate-400 dark:text-neutral-500">Blank = same day as estimate date</span>
                       </div>
                     </FieldRow>
                   </>
@@ -1743,7 +1743,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         ".00" and saved $2.01. Same D-19 bug that mangled
                         contract amounts. */}
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-400">$</span>
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">$</span>
                       <CurrencyInput
                         cents={
                           headerEdits.deposit_required_cents !== undefined
@@ -1759,7 +1759,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       />
                     </div>
                     {estimate.depositCollectedCents > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/40 px-2 py-0.5 text-[10px] font-medium text-green-700 dark:text-green-400">
                         Collected {formatCurrency(estimate.depositCollectedCents)}
                         {estimate.depositMethod ? ` via ${estimate.depositMethod}` : ""}
                         {estimate.depositCollectedAt
@@ -1780,7 +1780,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         retry while this is set, which is not obvious. */}
                     {estimate.depositCollectedCents === 0 && !!estimate.depositFailedAt && (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700"
+                        className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400"
                         title={`${estimate.depositFailedReason ?? "The payment was rejected."} The client can pay it again from their original proposal link — it re-opens automatically until a deposit is recorded.`}
                       >
                         {formatCurrency(estimate.depositFailedCents ?? 0)}{" "}
@@ -1794,7 +1794,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       !estimate.depositFailedAt &&
                       (estimate.depositPendingCents ?? 0) > 0 && (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300"
                         title={
                           estimate.depositPendingMethod === "us_bank_account"
                             ? "The client authorized a bank transfer. ACH debits take 3–5 business days to settle; the deposit is credited to their account automatically when it clears, and you'll be notified if it fails."
@@ -1815,7 +1815,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               </div>
               {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "milestones" && (
                 <div className="mt-4 flex flex-col gap-1.5 border-t pt-4">
-                  <Label className="text-xs font-medium text-slate-600">Milestones</Label>
+                  <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Milestones</Label>
                   <EstimateMilestonesEditor
                     estimateId={estimate.id}
                     clientId={estimate.clientId}
@@ -1842,14 +1842,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           )}
 
           {activeTab === "notes" && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <textarea
                 value={(headerEdits.notes as string) ?? (estimate.notes ?? "")}
                 onChange={(e) => patchHeader("notes", e.target.value)}
                 onBlur={() => saveHeader()}
                 rows={10}
                 placeholder="Add notes…"
-                className="w-full rounded border border-slate-200 p-2 text-sm focus:border-brand-400 focus:outline-none resize-none"
+                className="w-full rounded border border-border p-2 text-sm focus:border-brand-400 focus:outline-none resize-none"
               />
             </div>
           )}
@@ -1863,13 +1863,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           )}
 
           {activeTab === "comments" && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <CommentsSection recordType="crm_estimate" recordId={estimate.id} />
             </div>
           )}
 
           {activeTab === "audit" && (
-            <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
               <AuditTrailTab recordType="estimate" recordId={estimate.id} />
             </div>
           )}
@@ -1877,7 +1877,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           {activeTab === "versions" && (
             <div className="flex flex-col gap-3">
               {versions.length === 0 ? (
-                <div className="rounded-lg border bg-white p-8 text-center text-sm text-slate-400">
+                <div className="rounded-lg border bg-card p-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                   No versions yet — a snapshot is saved each time the estimate is sent.
                 </div>
               ) : versions.map((v) => (
@@ -1988,7 +1988,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 function FieldRow({ label, title, children }: { label: string; title?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 min-w-0">
-      <Label className="w-32 shrink-0 text-slate-500 text-xs" title={title}>{label}</Label>
+      <Label className="w-32 shrink-0 text-muted-foreground text-xs" title={title}>{label}</Label>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   );

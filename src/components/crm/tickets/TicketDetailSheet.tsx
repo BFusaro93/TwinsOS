@@ -200,7 +200,7 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
                 "flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
                 form.type === t.value
                   ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               )}>
               {t.label}
             </button>
@@ -408,11 +408,11 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
   return (
     <div>
       {isUpsell && !hasEstimateLink && canCreateEstimate && (
-        <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
-          <p className="text-xs font-medium text-emerald-900">
+        <div className="mb-3 rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-3">
+          <p className="text-xs font-medium text-emerald-900 dark:text-emerald-200">
             Crew suggested this work
           </p>
-          <p className="mt-0.5 text-xs text-emerald-700">
+          <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">
             Create the quote and link it back in one step, so this shows up as converted
             once it&apos;s won.
           </p>
@@ -429,22 +429,22 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
             )}
           </Button>
           {!ticket.clientId && (
-            <p className="mt-1.5 text-xs text-amber-700">
+            <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
               This ticket has no client, so there&apos;s nothing to quote against.
             </p>
           )}
         </div>
       )}
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Linked Records</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-2">Linked Records</p>
       {(links ?? []).length === 0 ? (
-        <p className="text-xs text-slate-400 mb-3">No links yet.</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500 mb-3">No links yet.</p>
       ) : (
         <ul className="space-y-1.5 mb-3">
           {(links ?? []).map((link) => (
             <li key={link.id} className="flex items-center gap-2 text-sm">
               <Badge variant="outline" className="text-[10px] capitalize shrink-0">{link.linkType}</Badge>
-              <span className="flex-1 text-slate-700 truncate text-xs">{link.linkedLabel}</span>
-              <button type="button" className="text-slate-400 hover:text-red-500"
+              <span className="flex-1 text-slate-700 dark:text-neutral-300 truncate text-xs">{link.linkedLabel}</span>
+              <button type="button" className="text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                 onClick={() => removeLink.mutate({ id: link.id, ticketId: ticket.id })}>
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -452,8 +452,8 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
           ))}
         </ul>
       )}
-      <div className="rounded-md border bg-slate-50 p-3 space-y-2">
-        <p className="text-xs font-medium text-slate-500">Add Link</p>
+      <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3 space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">Add Link</p>
         <div className="flex gap-2">
           <Select value={newLinkType} onValueChange={(v) => { setNewLinkType(v as "estimate" | "invoice" | "job" | "project"); setSelectedId(""); }}>
             <SelectTrigger className="h-8 text-xs w-28"><SelectValue /></SelectTrigger>
@@ -503,10 +503,10 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
   };
 
   const STATUS_BUTTONS: Array<{ status: TicketStatus; label: string; className: string }> = [
-    { status: "open",    label: "Mark Open",    className: "text-blue-700 border-blue-300 hover:bg-blue-50" },
-    { status: "on_hold", label: "Put On Hold",  className: "text-yellow-700 border-yellow-300 hover:bg-yellow-50" },
-    { status: "pending", label: "Mark Pending", className: "text-slate-700 border-slate-300 hover:bg-slate-50" },
-    { status: "closed",  label: "Close Ticket", className: "text-green-700 border-green-300 hover:bg-green-50" },
+    { status: "open",    label: "Mark Open",    className: "text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40" },
+    { status: "on_hold", label: "Put On Hold",  className: "text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-950/40" },
+    { status: "pending", label: "Mark Pending", className: "text-slate-700 dark:text-neutral-300 border-slate-300 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-muted/40" },
+    { status: "closed",  label: "Close Ticket", className: "text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-950/40" },
   ];
 
   const clearSmsWarning = useClearSmsConsentPendingPhone();
@@ -514,11 +514,11 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
   return (
     <div className="p-6 space-y-6">
       {ticket.smsConsentPendingPhone && (
-        <div className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="flex items-start gap-2.5 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="flex-1">
             <p className="font-medium">SMS consent given, but no phone number</p>
-            <p className="mt-0.5 text-xs text-amber-700">
+            <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
               This submission checked the text-message consent box, but no phone number was captured — consent couldn&apos;t
               be recorded on the client. Collect a phone number from them before texting.
             </p>
@@ -527,7 +527,7 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
             type="button"
             onClick={() => clearSmsWarning.mutate(ticket.id)}
             disabled={clearSmsWarning.isPending}
-            className="shrink-0 text-xs font-medium text-amber-700 hover:text-amber-900 hover:underline"
+            className="shrink-0 text-xs font-medium text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 hover:underline"
           >
             Dismiss
           </button>
@@ -536,7 +536,7 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
 
       {/* Status flow */}
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Status</p>
         <StatusFlowIndicator
           steps={TICKET_FLOW_STEPS}
           currentIndex={TICKET_STATUS_INDEX[ticket.status]}
@@ -570,8 +570,8 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
           ...(ticket.closedAt ? [{ label: "Closed", value: formatDate(ticket.closedAt) }] : []),
         ].map(({ label, value }) => (
           <div key={label}>
-            <dt className="text-xs font-medium text-slate-400">{label}</dt>
-            <dd className="mt-0.5 text-slate-900">{value}</dd>
+            <dt className="text-xs font-medium text-slate-400 dark:text-neutral-500">{label}</dt>
+            <dd className="mt-0.5 text-slate-900 dark:text-neutral-100">{value}</dd>
           </div>
         ))}
       </dl>
@@ -582,8 +582,8 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
         <>
           <hr />
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
-            <p className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm text-slate-700 leading-relaxed">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Notes</p>
+            <p className="whitespace-pre-wrap rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm text-slate-700 dark:text-neutral-300 leading-relaxed">
               {ticket.body}
             </p>
           </div>
@@ -618,14 +618,14 @@ function PortalVisibilityToggle({ ticket }: { ticket: CRMTicket }) {
   }
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-md border border-slate-200 px-3 py-2.5">
+    <div className="flex items-start justify-between gap-4 rounded-md border border-border px-3 py-2.5">
       <div className="flex items-start gap-2.5">
-        <Globe className={cn("mt-0.5 h-4 w-4 shrink-0", visible && hasClient ? "text-brand-600" : "text-slate-400")} />
+        <Globe className={cn("mt-0.5 h-4 w-4 shrink-0", visible && hasClient ? "text-brand-600 dark:text-brand-400" : "text-slate-400 dark:text-neutral-500")} />
         <div>
-          <Label htmlFor={`portal-visible-${ticket.id}`} className="text-sm font-medium text-slate-800">
+          <Label htmlFor={`portal-visible-${ticket.id}`} className="text-sm font-medium text-slate-800 dark:text-neutral-100">
             Show in client portal
           </Label>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {hasClient
               ? "The client sees the subject, category, status and notes — never comments, files or who it's assigned to."
               : "Link a client to this ticket to share it in their portal."}
@@ -665,23 +665,23 @@ function ContributorsTab({ ticket }: { ticket: CRMTicket }) {
 
   return (
     <div className="p-6 space-y-4">
-      <p className="text-xs text-slate-500 leading-relaxed">
+      <p className="text-xs text-muted-foreground leading-relaxed">
         Contributors are CC&apos;d on this ticket — they&apos;re visible to the team as participants in the conversation.
       </p>
       {(contributors ?? []).length === 0 ? (
-        <p className="text-xs text-slate-400">No contributors yet.</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">No contributors yet.</p>
       ) : (
         <ul className="space-y-2">
           {(contributors ?? []).map((c) => {
             const initials = c.userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
             return (
-              <li key={c.id} className="flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700">
+              <li key={c.id} className="flex items-center gap-3 rounded-md border bg-slate-50 dark:bg-muted/40 px-3 py-2">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-900/40 text-[10px] font-bold text-brand-700 dark:text-brand-400">
                   {initials}
                 </div>
-                <span className="flex-1 text-sm font-medium text-slate-700">{c.userName}</span>
+                <span className="flex-1 text-sm font-medium text-slate-700 dark:text-neutral-300">{c.userName}</span>
                 <button type="button" onClick={() => removeContributor.mutate({ id: c.id, ticketId: ticket.id })}
-                  className="text-slate-400 hover:text-red-500" title="Remove contributor">
+                  className="text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400" title="Remove contributor">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </li>
@@ -787,9 +787,9 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
           <div className="flex items-center justify-between border-b px-5 py-3 pr-10 shrink-0">
             <div className="min-w-0 mr-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-500">#{ticket.ticketNumber}</span>
-                <span className="text-slate-300">·</span>
-                <span className="text-sm font-semibold text-slate-900 truncate">{ticket.subject ?? "(no subject)"}</span>
+                <span className="text-sm font-semibold text-muted-foreground">#{ticket.ticketNumber}</span>
+                <span className="text-slate-300 dark:text-neutral-600">·</span>
+                <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100 truncate">{ticket.subject ?? "(no subject)"}</span>
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -804,7 +804,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
               </Button>
               <EditButton onClick={() => setEditing((v) => !v)} />
               <Button variant="ghost" size="icon"
-                className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
                 onClick={() => setDeleteConfirmOpen(true)}>
                 <Trash2 className="h-4 w-4" />
               </Button>

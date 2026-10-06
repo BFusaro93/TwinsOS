@@ -39,8 +39,8 @@ interface VehicleDetailPanelProps {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -114,22 +114,22 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onRe
   const status = getReminderStatus(dateStr, mileage, currentMiles);
 
   const colors: Record<ReminderStatus, string> = {
-    overdue:    "border-red-200 bg-red-50",
-    "due-soon": "border-amber-200 bg-amber-50",
-    ok:         "border-green-200 bg-green-50",
-    unset:      "border-slate-200 bg-slate-50",
+    overdue:    "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40",
+    "due-soon": "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40",
+    ok:         "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40",
+    unset:      "border-border bg-slate-50 dark:bg-muted/40",
   };
   const dotColors: Record<ReminderStatus, string> = {
     overdue:    "bg-red-500",
     "due-soon": "bg-amber-400",
     ok:         "bg-green-500",
-    unset:      "bg-slate-300",
+    unset:      "bg-slate-300 dark:bg-neutral-600",
   };
   const textColors: Record<ReminderStatus, string> = {
-    overdue:    "text-red-700",
-    "due-soon": "text-amber-700",
-    ok:         "text-green-700",
-    unset:      "text-slate-500",
+    overdue:    "text-red-700 dark:text-red-400",
+    "due-soon": "text-amber-700 dark:text-amber-400",
+    ok:         "text-green-700 dark:text-green-400",
+    unset:      "text-muted-foreground",
   };
 
   const hasAnyValue = !!dateStr || (hasMileage && mileage != null);
@@ -155,37 +155,37 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onRe
     <div className={cn("rounded-lg border p-3.5", colors[status])}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 text-slate-500">{icon}</div>
+          <div className="mt-0.5 text-muted-foreground">{icon}</div>
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-semibold text-slate-800">{label}</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{label}</p>
 
             {!hasAnyValue && (
-              <p className="text-xs text-slate-400">Not tracked</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">Not tracked</p>
             )}
 
             {dateStr && (
               <div className="flex items-center gap-2">
-                <span className="w-14 text-xs text-slate-400">By date:</span>
+                <span className="w-14 text-xs text-slate-400 dark:text-neutral-500">By date:</span>
                 <span className={cn("text-xs font-medium", textColors[status])}>
                   <span className={cn("mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle", dotColors[status])} />
                   {formatDate(dateStr)}
-                  <span className="ml-1 text-slate-400">({daysUntil(dateStr)})</span>
+                  <span className="ml-1 text-slate-400 dark:text-neutral-500">({daysUntil(dateStr)})</span>
                 </span>
               </div>
             )}
 
             {hasMileage && mileage != null && (
               <div className="flex items-center gap-2">
-                <span className="w-14 text-xs text-slate-400">By mileage:</span>
+                <span className="w-14 text-xs text-slate-400 dark:text-neutral-500">By mileage:</span>
                 <span className={cn("text-xs font-medium", (() => {
-                  if (currentMiles == null) return "text-slate-700";
+                  if (currentMiles == null) return "text-slate-700 dark:text-neutral-300";
                   const remaining = mileage - currentMiles;
                   if (remaining <= 0)   return textColors["overdue"];
                   if (remaining <= 500) return textColors["due-soon"];
                   return textColors["ok"];
                 })())}>
                   <span className={cn("mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle", (() => {
-                    if (currentMiles == null) return "bg-slate-300";
+                    if (currentMiles == null) return "bg-slate-300 dark:bg-neutral-600";
                     const remaining = mileage - currentMiles;
                     if (remaining <= 0)   return dotColors["overdue"];
                     if (remaining <= 500) return dotColors["due-soon"];
@@ -203,7 +203,7 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onRe
             )}
 
             {hasMileage && (dateStr || mileage != null) && (
-              <p className="mt-0.5 text-[10px] text-slate-400 italic">
+              <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500 italic">
                 Whichever comes first
               </p>
             )}
@@ -225,13 +225,13 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onRe
 
       {/* Inline reset form */}
       {resetting && (
-        <div className="mt-3 border-t border-slate-200 pt-3">
-          <p className="mb-2 text-xs font-medium text-slate-600">
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="mb-2 text-xs font-medium text-slate-600 dark:text-neutral-400">
             Set next {label.toLowerCase()} due
           </p>
           <div className={cn("grid gap-3", hasMileage ? "grid-cols-2" : "grid-cols-1")}>
             <div className="grid gap-1">
-              <label className="text-xs text-slate-500">Date</label>
+              <label className="text-xs text-muted-foreground">Date</label>
               <Input
                 type="date"
                 value={newDate}
@@ -241,7 +241,7 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onRe
             </div>
             {hasMileage && (
               <div className="grid gap-1">
-                <label className="text-xs text-slate-500">Mileage</label>
+                <label className="text-xs text-muted-foreground">Mileage</label>
                 <div className="relative">
                   <Input
                     type="number"
@@ -251,7 +251,7 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onRe
                     placeholder="e.g. 90000"
                     className="h-8 pr-7 text-sm"
                   />
-                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-neutral-500">
                     mi
                   </span>
                 </div>
@@ -321,7 +321,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
 
       {/* Service Reminders */}
       <div>
-        <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Service Reminders
         </p>
         <div className="flex flex-col gap-2">
@@ -387,7 +387,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
       <Separator />
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Vehicle Details
         </p>
         <dl>
@@ -408,7 +408,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
       {/* Quick Reference Part #'s — driven by settings */}
       {enabledFilters.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Quick Reference Part #&apos;s
           </p>
           <dl>
@@ -426,7 +426,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
       <Separator />
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Purchase Info
         </p>
         <dl>
@@ -455,10 +455,10 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
       <Separator />
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Notes</p>
           <span
             className={cn(
-              "flex items-center gap-1 text-xs font-medium text-green-600 transition-opacity duration-300",
+              "flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 transition-opacity duration-300",
               saved ? "opacity-100" : "opacity-0"
             )}
           >
@@ -472,7 +472,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
           readOnly={!canWriteEquipt}
           placeholder={canWriteEquipt ? "Add notes about this vehicle…" : "No notes"}
           rows={4}
-          className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="w-full resize-none rounded-md border border-border bg-card px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
       </div>
     </div>
@@ -514,8 +514,8 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">{vehicle.name}</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{vehicle.name}</h2>
+          <p className="text-sm text-muted-foreground">
             {vehicle.licensePlate ?? vehicle.vin ?? vehicle.assetTag}
           </p>
         </div>
@@ -536,7 +536,7 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
                   variant={status as Parameters<typeof StatusBadge>[0]["variant"]}
                   label={ASSET_STATUS_LABELS[status] ?? status}
                 />
-                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
@@ -544,7 +544,7 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
                 <DropdownMenuItem
                   key={value}
                   onSelect={() => handleStatusChange(value)}
-                  className={cn(value === status && "font-medium text-brand-600")}
+                  className={cn(value === status && "font-medium text-brand-600 dark:text-brand-400")}
                 >
                   {label}
                 </DropdownMenuItem>

@@ -473,7 +473,7 @@ export function AerialMeasurementDialog({
         </DialogHeader>
 
         {!properties || properties.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <p className="py-8 text-center text-sm text-muted-foreground">
             {addProperty.isPending
               ? "Setting up this client's property…"
               : client && !client.serviceAddress && !client.billingAddress
@@ -481,7 +481,7 @@ export function AerialMeasurementDialog({
                 : "Add a property to this client before taking measurements."}
           </p>
         ) : !orgSettings?.googleMapsApiKey ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <p className="py-8 text-center text-sm text-muted-foreground">
             Google Maps API key not configured. Add it in Settings → Integrations.
           </p>
         ) : (
@@ -501,7 +501,7 @@ export function AerialMeasurementDialog({
               </Select>
             )}
 
-            {mapsError && <p className="text-sm text-red-600">{mapsError}</p>}
+            {mapsError && <p className="text-sm text-red-600 dark:text-red-400">{mapsError}</p>}
 
             <div className="flex items-center gap-2">
               {!isDrawing ? (
@@ -510,7 +510,7 @@ export function AerialMeasurementDialog({
                 </Button>
               ) : (
                 <>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-muted-foreground">
                     Click the map to trace the boundary ({draftPointCount} point{draftPointCount === 1 ? "" : "s"})
                   </span>
                   <Button type="button" size="sm" onClick={finishDrawing} disabled={draftPointCount < 3}>
@@ -523,17 +523,17 @@ export function AerialMeasurementDialog({
               )}
             </div>
 
-            <div ref={mapDivRef} className="h-[420px] w-full rounded-md border border-slate-200 bg-slate-100" />
+            <div ref={mapDivRef} className="h-[420px] w-full rounded-md border border-border bg-muted" />
 
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               Click &ldquo;Trace a Zone&rdquo;, then click the map to place each corner of a turf area, bed, or
               hardscape, and click &ldquo;Finish Shape&rdquo; to close it. Drag a saved shape&rsquo;s corners to
               adjust it — the square footage updates automatically.
             </p>
 
             {zones.length > 0 && (
-              <div className="rounded-md border border-slate-200">
-                <div className="grid grid-cols-[1fr_10rem_6rem_2.5rem] gap-2 border-b bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div className="rounded-md border border-border">
+                <div className="grid grid-cols-[1fr_10rem_6rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <span>Zone name</span>
                   <span>Type</span>
                   <span className="text-right">Sq ft</span>
@@ -543,7 +543,7 @@ export function AerialMeasurementDialog({
                   {zones.map((z) => (
                     <div
                       key={z._id}
-                      className={`grid grid-cols-[1fr_10rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50" : ""}`}
+                      className={`grid grid-cols-[1fr_10rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50 dark:bg-red-950/40" : ""}`}
                     >
                       <div className="min-w-0">
                         <Input
@@ -552,7 +552,7 @@ export function AerialMeasurementDialog({
                           className="h-7 text-sm"
                         />
                         {z.invalid && (
-                          <p className="mt-0.5 text-[11px] text-red-600">
+                          <p className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">
                             This shape crosses itself — retrace it before saving.
                           </p>
                         )}
@@ -570,7 +570,7 @@ export function AerialMeasurementDialog({
                         </SelectContent>
                       </Select>
                       {z.path ? (
-                        <span className="text-right text-sm text-slate-600">{z.sqft.toLocaleString()}</span>
+                        <span className="text-right text-sm text-slate-600 dark:text-neutral-400">{z.sqft.toLocaleString()}</span>
                       ) : (
                         <Input
                           type="number"
@@ -581,7 +581,7 @@ export function AerialMeasurementDialog({
                       )}
                       <button
                         type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        className="flex h-7 w-7 items-center justify-center rounded text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400"
                         onClick={() => removeZone(z._id)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -589,15 +589,15 @@ export function AerialMeasurementDialog({
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center justify-end gap-1 border-t bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
+                <div className="flex items-center justify-end gap-1 border-t bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-neutral-400">
                   Total: {totalSqft.toLocaleString()} sq ft
                 </div>
               </div>
             )}
 
             {numberFieldDefs.length > 0 && (
-              <div className="rounded-md border border-slate-200">
-                <div className="border-b bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div className="rounded-md border border-border">
+                <div className="border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   Sync to Custom Fields
                 </div>
                 <div className="divide-y">
@@ -607,9 +607,9 @@ export function AerialMeasurementDialog({
                     return (
                       <div key={f.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                         <div className="min-w-0">
-                          <p className="truncate text-slate-700">{f.name}{f.unit ? ` (${f.unit})` : ""}</p>
+                          <p className="truncate text-slate-700 dark:text-neutral-300">{f.name}{f.unit ? ` (${f.unit})` : ""}</p>
                           {current != null && (
-                            <p className="text-xs text-slate-400">Current: {current.toLocaleString()}</p>
+                            <p className="text-xs text-slate-400 dark:text-neutral-500">Current: {current.toLocaleString()}</p>
                           )}
                         </div>
                         <Select

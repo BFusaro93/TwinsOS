@@ -29,7 +29,7 @@ export function AddressSuggestion({
 }) {
   if (state === "checking") {
     return (
-      <p className="flex items-center gap-1.5 text-xs text-slate-400">
+      <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-neutral-500">
         <Loader2 className="h-3 w-3 animate-spin" /> Checking address...
       </p>
     );
@@ -47,7 +47,7 @@ export function AddressSuggestion({
 
   if (verdictNeedsAttention(result.verdict)) {
     return (
-      <p className="flex items-start gap-1.5 text-xs text-amber-700">
+      <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
         <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
         <span>
           Google couldn&apos;t confirm this address. Double-check it - a crew will be
@@ -59,12 +59,12 @@ export function AddressSuggestion({
 
   if (differs) {
     return (
-      <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+      <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span>Did you mean</span>
         <button
           type="button"
           onClick={() => onAccept(result.normalized)}
-          className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-800 underline decoration-dotted hover:bg-slate-200"
+          className="rounded bg-muted px-1.5 py-0.5 font-medium text-slate-800 dark:text-neutral-100 underline decoration-dotted hover:bg-slate-200 dark:hover:bg-neutral-700"
         >
           {line}
         </button>
@@ -74,7 +74,7 @@ export function AddressSuggestion({
   }
 
   return (
-    <p className="flex items-center gap-1.5 text-xs text-emerald-600">
+    <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
       <Check className="h-3 w-3" />
       {result.source === "validation" ? "Address confirmed" : "Address found"}
     </p>

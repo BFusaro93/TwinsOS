@@ -155,10 +155,10 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go(`/crm/clients/${client.id}`)}
                 className="flex items-center gap-3"
               >
-                <Users className="h-4 w-4 shrink-0 text-slate-400" />
+                <Users className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{client.displayName}</span>
-                  <span className="truncate text-xs text-slate-400">
+                  <span className="truncate text-xs text-slate-400 dark:text-neutral-500">
                     {[client.primaryPhone, client.primaryEmail, typeof client.billingAddress === "object" && client.billingAddress ? (client.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
                   </span>
                 </div>
@@ -184,10 +184,10 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go(`/crm/clients/${lead.id}`)}
                 className="flex items-center gap-3"
               >
-                <UserPlus className="h-4 w-4 shrink-0 text-slate-400" />
+                <UserPlus className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{lead.displayName}</span>
-                  <span className="truncate text-xs text-slate-400">
+                  <span className="truncate text-xs text-slate-400 dark:text-neutral-500">
                     {[lead.primaryPhone, lead.primaryEmail, typeof lead.billingAddress === "object" && lead.billingAddress ? (lead.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
                   </span>
                 </div>
@@ -208,11 +208,11 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go(`/crm/accounting/invoices?open=${inv.id}`)}
                 className="flex items-center gap-3"
               >
-                <Receipt className="h-4 w-4 shrink-0 text-slate-400" />
+                <Receipt className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">INV-{inv.invoiceNumber}</span>
                   {inv.clientName && (
-                    <span className="truncate text-xs text-slate-400">{inv.clientName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{inv.clientName}</span>
                   )}
                 </div>
                 <StatusBadge variant={inv.status as Parameters<typeof StatusBadge>[0]["variant"]} label={inv.status} />
@@ -232,11 +232,11 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go(`/crm/estimates/${est.id}`)}
                 className="flex items-center gap-3"
               >
-                <ClipboardList className="h-4 w-4 shrink-0 text-slate-400" />
+                <ClipboardList className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">EST-{est.estimateNumber}</span>
                   {est.clientName && (
-                    <span className="truncate text-xs text-slate-400">{est.clientName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{est.clientName}</span>
                   )}
                 </div>
                 <StatusBadge variant={est.stage as Parameters<typeof StatusBadge>[0]["variant"]} label={est.stage} />
@@ -256,13 +256,13 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/cmms/work-orders", () => setSelectedWorkOrderId(wo.id))}
                 className="flex items-center gap-3"
               >
-                <Wrench className="h-4 w-4 shrink-0 text-slate-400" />
+                <Wrench className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">
                     {wo.workOrderNumber} — {wo.title}
                   </span>
                   {wo.assetName && (
-                    <span className="truncate text-xs text-slate-400">{wo.assetName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{wo.assetName}</span>
                   )}
                 </div>
                 <StatusBadge variant={wo.status} label={WO_STATUS_LABELS[wo.status]} />
@@ -282,10 +282,10 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/cmms/assets", () => setSelectedAssetId(asset.id))}
                 className="flex items-center gap-3"
               >
-                <Package className="h-4 w-4 shrink-0 text-slate-400" />
+                <Package className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{asset.name}</span>
-                  <span className="truncate text-xs text-slate-400">
+                  <span className="truncate text-xs text-slate-400 dark:text-neutral-500">
                     {[asset.make, asset.model, asset.year].filter(Boolean).join(" ")}
                     {asset.assetTag && ` · ${asset.assetTag}`}
                   </span>
@@ -310,10 +310,10 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/cmms/vehicles", () => setSelectedVehicleId(vehicle.id))}
                 className="flex items-center gap-3"
               >
-                <Truck className="h-4 w-4 shrink-0 text-slate-400" />
+                <Truck className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{vehicle.name}</span>
-                  <span className="truncate text-xs text-slate-400">
+                  <span className="truncate text-xs text-slate-400 dark:text-neutral-500">
                     {[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" ")}
                     {vehicle.licensePlate && ` · ${vehicle.licensePlate}`}
                   </span>
@@ -338,14 +338,14 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go(`/cmms/parts?open=${part.id}`)}
                 className="flex items-center gap-3"
               >
-                <Box className="h-4 w-4 shrink-0 text-slate-400" />
+                <Box className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{part.name}</span>
                   {part.partNumber && (
-                    <span className="font-mono text-xs text-slate-400">{part.partNumber}</span>
+                    <span className="font-mono text-xs text-slate-400 dark:text-neutral-500">{part.partNumber}</span>
                   )}
                 </div>
-                <span className="shrink-0 text-xs text-slate-500">
+                <span className="shrink-0 text-xs text-muted-foreground">
                   {part.quantityOnHand} in stock
                 </span>
               </CommandItem>
@@ -364,10 +364,10 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/po/products")}
                 className="flex items-center gap-3"
               >
-                <Leaf className="h-4 w-4 shrink-0 text-slate-400" />
+                <Leaf className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{product.name}</span>
-                  <span className="truncate text-xs text-slate-400">
+                  <span className="truncate text-xs text-slate-400 dark:text-neutral-500">
                     {product.category === "stocked_material" ? "Stocked Material" : "Project Material"}
                     {product.vendorName ? ` · ${product.vendorName}` : ""}
                   </span>
@@ -388,13 +388,13 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/po/requisitions", () => setSelectedRequisitionId(req.id))}
                 className="flex items-center gap-3"
               >
-                <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                <FileText className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">
                     {req.requisitionNumber}{req.title ? ` — ${req.title}` : ""}
                   </span>
                   {req.vendorName && (
-                    <span className="truncate text-xs text-slate-400">{req.vendorName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{req.vendorName}</span>
                   )}
                 </div>
                 <StatusBadge
@@ -417,11 +417,11 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/po/orders", () => setSelectedPOId(po.id))}
                 className="flex items-center gap-3"
               >
-                <ShoppingCart className="h-4 w-4 shrink-0 text-slate-400" />
+                <ShoppingCart className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{po.poNumber}</span>
                   {po.vendorName && (
-                    <span className="truncate text-xs text-slate-400">{po.vendorName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{po.vendorName}</span>
                   )}
                 </div>
                 <StatusBadge
@@ -444,11 +444,11 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/po/vendors")}
                 className="flex items-center gap-3"
               >
-                <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
+                <Building2 className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{vendor.name}</span>
                   {vendor.contactName && (
-                    <span className="truncate text-xs text-slate-400">{vendor.contactName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{vendor.contactName}</span>
                   )}
                 </div>
               </CommandItem>
@@ -467,11 +467,11 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go("/po/projects")}
                 className="flex items-center gap-3"
               >
-                <FolderKanban className="h-4 w-4 shrink-0 text-slate-400" />
+                <FolderKanban className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{project.name}</span>
                   {project.customerName && (
-                    <span className="truncate text-xs text-slate-400">{project.customerName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{project.customerName}</span>
                   )}
                 </div>
                 <StatusBadge
@@ -494,11 +494,11 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 onSelect={() => go(`/photos/jobs/${job.id}`)}
                 className="flex items-center gap-3"
               >
-                <Camera className="h-4 w-4 shrink-0 text-slate-400" />
+                <Camera className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{job.name}</span>
                   {job.customerName && (
-                    <span className="truncate text-xs text-slate-400">{job.customerName}</span>
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{job.customerName}</span>
                   )}
                 </div>
               </CommandItem>

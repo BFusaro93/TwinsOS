@@ -260,13 +260,13 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
         <div className="max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto px-1">
           <div className="flex flex-col gap-4">
             {/* Basic Info */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Basic Info
             </p>
 
             <div className="grid gap-1.5">
               <Label htmlFor="vehicle-name">
-                Asset Name <span className="text-red-500">*</span>
+                Asset Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="vehicle-name"
@@ -279,17 +279,17 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-asset-tag">
-                  Asset Tag <span className="text-red-500">*</span>
+                  Asset Tag <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Input
                   id="vehicle-asset-tag"
                   value={assetTag}
                   onChange={(e) => setAssetTag(e.target.value)}
                   placeholder="e.g. V-0012"
-                  className={assetTagError ? "border-red-400 focus-visible:ring-red-300" : ""}
+                  className={assetTagError ? "border-red-400 focus-visible:ring-red-300 dark:focus-visible:ring-red-700" : ""}
                 />
                 {assetTagError && (
-                  <p className="text-xs text-red-500">{assetTagError}</p>
+                  <p className="text-xs text-red-500 dark:text-red-400">{assetTagError}</p>
                 )}
               </div>
 
@@ -307,7 +307,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-type">
-                  Asset Type <span className="text-red-500">*</span>
+                  Asset Type <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Select value={assetType} onValueChange={setAssetType}>
                   <SelectTrigger id="asset-type">
@@ -341,7 +341,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             </div>
 
             {/* Vehicle Info */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Vehicle Info
             </p>
 
@@ -389,7 +389,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             </div>
 
             {/* Integrations */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Integrations
             </p>
             <div className="grid gap-1.5">
@@ -401,20 +401,20 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
                 placeholder="e.g. 281474978122443"
                 className="font-mono text-sm"
               />
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
                 Found in Samsara under Fleet → Vehicles → select vehicle → ID in the URL.
                 Used for reliable odometer sync matching.
               </p>
             </div>
 
             {/* Service Reminders */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Service Reminders
             </p>
 
             {/* Oil Change — date + mileage side by side */}
             <div>
-              <p className="mb-1.5 text-xs text-slate-500">
+              <p className="mb-1.5 text-xs text-muted-foreground">
                 Oil Change — set a date, mileage, or both (whichever comes first)
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -440,7 +440,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
                         placeholder="e.g. 85000"
                         className="pr-8"
                       />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-neutral-500">
                         mi
                       </span>
                     </div>
@@ -460,7 +460,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             </div>
 
             {/* Equipment Details */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Equipment Details
             </p>
 
@@ -518,7 +518,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             </div>
 
             {/* Assignment */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Assignment
             </p>
 
@@ -562,7 +562,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             </div>
 
             {/* Purchase Info */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Purchase Info
             </p>
 
@@ -630,7 +630,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             </div>
 
             {/* Quick Reference Part #s */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Quick Reference Part #&apos;s
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -664,7 +664,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             </div>
 
             {/* Warranty */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Warranty
             </p>
 
@@ -677,7 +677,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             />
 
             {/* Notes */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Notes
             </p>
 

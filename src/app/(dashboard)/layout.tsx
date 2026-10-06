@@ -49,7 +49,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background">
       <RealtimeSync />
       <SettingsLoader />
       <EquiptQuickAddOverlay />

@@ -53,7 +53,7 @@ function FilterDropdown({
             size="sm"
             className={cn(
               "h-9 w-full justify-between gap-1 font-normal",
-              hasActive && "border-brand-400 text-brand-700 pr-8"
+              hasActive && "border-brand-400 text-brand-700 dark:text-brand-400 pr-8"
             )}
           >
             <span className="truncate text-sm">
@@ -75,7 +75,7 @@ function FilterDropdown({
               >
                 <div className={cn(
                   "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-                  checked ? "border-brand-500 bg-brand-500" : "border-slate-300 bg-white"
+                  checked ? "border-brand-500 bg-brand-500" : "border-slate-300 dark:border-neutral-700 bg-card"
                 )}>
                   {checked && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
                 </div>
@@ -88,7 +88,7 @@ function FilterDropdown({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={(e) => { e.preventDefault(); onChange([]); }}
-                className="cursor-pointer justify-center text-xs text-slate-500 hover:text-slate-700"
+                className="cursor-pointer justify-center text-xs text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
               >
                 Clear
               </DropdownMenuItem>
@@ -101,7 +101,7 @@ function FilterDropdown({
         <button
           type="button"
           aria-label="Clear filter"
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-brand-600 opacity-70 hover:opacity-100"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-brand-600 dark:text-brand-400 opacity-70 hover:opacity-100"
           onClick={() => onChange([])}
         >
           <X className="h-3.5 w-3.5" />
@@ -140,13 +140,13 @@ export function AdvancedSearchDialog({
           size="sm"
           className={cn(
             "gap-1.5 shrink-0",
-            activeCount > 0 && "border-brand-400 text-brand-700"
+            activeCount > 0 && "border-brand-400 text-brand-700 dark:text-brand-400"
           )}
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Filters
           {activeCount > 0 && (
-            <span className="ml-0.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-xs font-medium leading-none text-brand-700">
+            <span className="ml-0.5 rounded-full bg-brand-100 dark:bg-brand-900/40 px-1.5 py-0.5 text-xs font-medium leading-none text-brand-700 dark:text-brand-400">
               {activeCount}
             </span>
           )}
@@ -156,7 +156,7 @@ export function AdvancedSearchDialog({
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+            <SlidersHorizontal className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
             Search Filters
           </DialogTitle>
         </DialogHeader>
@@ -169,7 +169,7 @@ export function AdvancedSearchDialog({
               const arrayVals = Array.isArray(vals) ? vals : [];
               return (
                 <div key={filter.key} className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-muted-foreground">
                     {filter.placeholder.replace(/^All /, "")}
                   </label>
                   <FilterDropdown
@@ -184,14 +184,14 @@ export function AdvancedSearchDialog({
 
           {/* Active filter summary */}
           {activeCount > 0 && (
-            <div className="flex items-center justify-between rounded-md border border-brand-100 bg-brand-50 px-3 py-2">
-              <p className="text-xs text-brand-700">
+            <div className="flex items-center justify-between rounded-md border border-brand-100 dark:border-brand-900 bg-brand-50 dark:bg-brand-900/30 px-3 py-2">
+              <p className="text-xs text-brand-700 dark:text-brand-400">
                 {activeCount} filter group{activeCount !== 1 ? "s" : ""} active — results are narrowed
               </p>
               <button
                 type="button"
                 onClick={clearAll}
-                className="text-xs font-medium text-brand-600 hover:underline"
+                className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
               >
                 Clear all
               </button>

@@ -138,7 +138,7 @@ export function AccountStatementDialog({ clientId, clientName, clientEmail, open
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-xs text-slate-600">
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
               <Checkbox checked={showLineItemDetails} onCheckedChange={(v) => setShowLineItemDetails(v === true)} />
               Show invoice/payment activity detail
             </label>
@@ -189,18 +189,18 @@ export function AccountStatementDialog({ clientId, clientName, clientEmail, open
 
           <div className="flex min-w-0 flex-col">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-slate-500">Preview</span>
+              <span className="text-xs font-semibold text-muted-foreground">Preview</span>
               <a
                 href={pdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex shrink-0 items-center gap-1 text-xs text-brand-600 hover:text-brand-700 hover:underline"
+                className="flex shrink-0 items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline"
               >
                 <Printer className="h-3.5 w-3.5" />
                 Open / Print
               </a>
             </div>
-            <div className="min-h-[420px] flex-1 overflow-hidden rounded-md border bg-slate-50">
+            <div className="min-h-[420px] flex-1 overflow-hidden rounded-md border bg-slate-50 dark:bg-muted/40">
               {/* key forces a reload when params change so the preview stays in sync */}
               <iframe key={pdfUrl} src={pdfUrl} title="Statement preview" className="h-[420px] w-full" />
             </div>

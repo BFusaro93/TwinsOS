@@ -199,10 +199,10 @@ export function POListPage() {
           onVisibleKeysChange={setVisibleKeys}
         />
       </div>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <SortableTableHead label="PO #" sortKey="poNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <SortableTableHead label="Vendor" sortKey="vendorName" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("status")     && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -226,7 +226,7 @@ export function POListPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No purchase orders found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No purchase orders found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -234,10 +234,10 @@ export function POListPage() {
             {!isLoading && sorted.map((po) => (
               <TableRow
                 key={po.id}
-                className="cursor-pointer hover:bg-slate-50"
+                className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => setSheetPOId(po.id)}
               >
-                <TableCell className="font-mono text-xs text-slate-500">{po.poNumber}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{po.poNumber}</TableCell>
                 <TableCell className="font-medium">{po.vendorName}</TableCell>
                 {col("status") && (
                   <TableCell>
@@ -248,7 +248,7 @@ export function POListPage() {
                   </TableCell>
                 )}
                 {col("lineItems") && (
-                  <TableCell className="text-right text-slate-600">
+                  <TableCell className="text-right text-slate-600 dark:text-neutral-400">
                     {po.lineItems.length}
                   </TableCell>
                 )}
@@ -258,15 +258,15 @@ export function POListPage() {
                   </TableCell>
                 )}
                 {col("payment") && (
-                  <TableCell className="text-slate-600">{paymentLabel(po)}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{paymentLabel(po)}</TableCell>
                 )}
                 {col("poDate") && (
-                  <TableCell className="text-slate-500">
+                  <TableCell className="text-muted-foreground">
                     {po.poDate ? formatDate(po.poDate) : "—"}
                   </TableCell>
                 )}
                 {col("createdAt") && (
-                  <TableCell className="text-slate-500">{formatDate(po.createdAt)}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(po.createdAt)}</TableCell>
                 )}
               </TableRow>
             ))}
@@ -282,11 +282,11 @@ export function POListPage() {
         title="Purchase Orders"
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center rounded-md border bg-white shadow-sm">
-              <Button variant="ghost" size="sm" className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")} onClick={() => setViewMode("list")}>
+            <div className="flex items-center rounded-md border bg-card shadow-sm">
+              <Button variant="ghost" size="sm" className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-muted font-semibold")} onClick={() => setViewMode("list")}>
                 <Minimize2 className="mr-1.5 h-3.5 w-3.5" />List
               </Button>
-              <Button variant="ghost" size="sm" className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")} onClick={() => setViewMode("table")}>
+              <Button variant="ghost" size="sm" className={cn("rounded-l-none px-3", viewMode === "table" && "bg-muted font-semibold")} onClick={() => setViewMode("table")}>
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
               </Button>
             </div>

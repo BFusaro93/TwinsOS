@@ -26,7 +26,7 @@ export function ImpersonationBanner() {
         type="button"
         onClick={() => endImpersonation.mutate(session.id)}
         disabled={endImpersonation.isPending}
-        className="shrink-0 rounded-md border border-white/40 bg-white/10 px-3 py-1 text-xs font-semibold transition-colors hover:bg-white/20 disabled:opacity-60"
+        className="shrink-0 rounded-md border border-white/40 bg-card/10 px-3 py-1 text-xs font-semibold transition-colors hover:bg-card/20 disabled:opacity-60"
       >
         {endImpersonation.isPending ? "Ending…" : "End Session"}
       </button>
