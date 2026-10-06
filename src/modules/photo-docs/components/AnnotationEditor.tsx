@@ -444,7 +444,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         </div>
         <Button
           size="sm"
-          className="ml-auto gap-1.5 bg-slate-200 text-slate-800 hover:bg-slate-300"
+          className="ml-auto gap-1.5 bg-neutral-200 text-neutral-800 hover:bg-neutral-300"
           onClick={handleSave}
           disabled={saving || !fabricReady}
         >
@@ -453,7 +453,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         </Button>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-neutral-500">
         {tool === "arrow"    && "Click and drag to draw an arrow"}
         {tool === "circle"   && "Click to place a circle"}
         {tool === "text"     && "Click to place a text label — double-click to edit"}
@@ -476,7 +476,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         <canvas ref={canvasRef} />
         {!fabricReady && (
           <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-[#111111]">
-            <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-neutral-500" />
           </div>
         )}
       </div>

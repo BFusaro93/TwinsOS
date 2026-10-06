@@ -39,7 +39,7 @@ export function BeforeAfterSlider({ before, after }: BeforeAfterSliderProps) {
           </div>
         </div>
       ) : (
-        <div className="flex h-40 items-center justify-center rounded-lg bg-slate-800 text-muted-foreground text-sm">
+        <div className="flex h-40 items-center justify-center rounded-lg bg-neutral-800 text-muted-foreground text-sm">
           Loading images…
         </div>
       )}

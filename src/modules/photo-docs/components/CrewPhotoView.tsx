@@ -84,7 +84,7 @@ export function CrewPhotoView({
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-square rounded-lg bg-slate-200 dark:bg-neutral-700" />
+              <Skeleton key={i} className="aspect-square rounded-lg" />
             ))}
           </div>
         ) : photos.length === 0 ? (
@@ -144,7 +144,7 @@ function CrewPhotoCard({
 
   return (
     <button
-      className="group relative aspect-square overflow-hidden rounded-xl border border-slate-700 bg-slate-800"
+      className="group relative aspect-square overflow-hidden rounded-xl border border-neutral-700 bg-neutral-800"
       onClick={onClick}
     >
       {displayUrl ? (
