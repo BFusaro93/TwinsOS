@@ -1334,6 +1334,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         </Button>
       </div>
       <div className="flex-1 overflow-x-auto pb-3">
+        {/* DndContext sits outside <table>: its accessibility <div>s are invalid children of <tbody> */}
+        <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
             <tr>
@@ -1372,7 +1374,6 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                 </td>
               </tr>
             )}
-            <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                 {items.map((item) =>
                   item.rowType === "section" ? (
@@ -1402,9 +1403,9 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                   )
                 )}
               </SortableContext>
-            </DndContext>
           </tbody>
         </table>
+        </DndContext>
       </div>
     </div>
   );
