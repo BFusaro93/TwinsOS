@@ -47,9 +47,9 @@ function formatBytes(bytes: number): string {
 
 function FileIcon({ fileType }: { fileType: string }) {
   if (fileType.startsWith("image/")) {
-    return <Image className="h-4 w-4 text-blue-500" />;
+    return <Image className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
   }
-  return <FileText className="h-4 w-4 text-slate-400" />;
+  return <FileText className="h-4 w-4 text-slate-400 dark:text-neutral-500" />;
 }
 
 export function AttachmentsSection({ recordType, recordId, canWrite }: AttachmentsSectionProps) {
@@ -128,14 +128,14 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
         onDrop={handleDrop}
         className={`rounded-md border-2 border-dashed transition-colors ${
           isDragging
-            ? "border-brand-400 bg-brand-50"
-            : "border-slate-200 bg-transparent hover:border-slate-300"
+            ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30"
+            : "border-border bg-transparent hover:border-slate-300 dark:hover:border-neutral-700"
         }`}
       >
         <Button
           variant="ghost"
           size="sm"
-          className="w-full gap-2 text-slate-500 hover:bg-transparent hover:text-slate-700"
+          className="w-full gap-2 text-muted-foreground hover:bg-transparent hover:text-slate-700 dark:hover:text-neutral-300"
           onClick={() => fileInputRef.current?.click()}
           disabled={isPending}
         >
@@ -153,14 +153,14 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
 
       {/* Per-file upload errors */}
       {fileErrors.length > 0 && (
-        <div className="flex flex-col gap-1 rounded-md border border-red-100 bg-red-50 px-3 py-2">
+        <div className="flex flex-col gap-1 rounded-md border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-3 py-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-red-700">
+            <p className="text-xs font-medium text-red-700 dark:text-red-400">
               {fileErrors.length === 1 ? "1 file failed to upload" : `${fileErrors.length} files failed to upload`}
             </p>
             <button
               type="button"
-              className="text-red-400 hover:text-red-600"
+              className="text-red-400 hover:text-red-600 dark:hover:text-red-400"
               onClick={() => setFileErrors([])}
             >
               <X className="h-3.5 w-3.5" />
@@ -168,7 +168,7 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
           </div>
           <ul className="mt-0.5 flex flex-col gap-0.5">
             {fileErrors.map((fe) => (
-              <li key={fe.fileName} className="text-xs text-red-600">
+              <li key={fe.fileName} className="text-xs text-red-600 dark:text-red-400">
                 <span className="font-medium">{fe.fileName}</span>
                 {" — "}
                 {fe.error}
@@ -180,18 +180,18 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
 
       {/* File list */}
       {isLoading ? (
-        <p className="text-sm text-slate-400">Loading files…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading files…</p>
       ) : attachments && attachments.length > 0 ? (
         <ul className="flex flex-col gap-1.5">
           {attachments.map((att) => (
             <li
               key={att.id}
-              className="flex items-center gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+              className="flex items-center gap-3 rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-3 py-2"
             >
               <FileIcon fileType={att.fileType} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-800">{att.fileName}</p>
-                <p className="text-xs text-slate-400">
+                <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">{att.fileName}</p>
+                <p className="text-xs text-slate-400 dark:text-neutral-500">
                   {formatBytes(att.fileSize)} · {att.uploadedByName} · {formatDate(att.createdAt)}
                 </p>
               </div>
@@ -199,9 +199,9 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
               {confirmDeleteId === att.id ? (
                 /* Inline confirm — replaces the action buttons */
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-slate-500">Delete this file?</span>
+                  <span className="text-xs text-muted-foreground">Delete this file?</span>
                   <button
-                    className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
+                    className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
                     disabled={deleteAttachment.isPending}
                     onClick={() => {
                       deleteAttachment.mutate(
@@ -215,7 +215,7 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
                       : "Delete"}
                   </button>
                   <button
-                    className="text-xs text-slate-400 hover:text-slate-600"
+                    className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
                     onClick={() => setConfirmDeleteId(null)}
                   >
                     Cancel
@@ -225,7 +225,7 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
                 /* Normal actions */
                 <div className="flex shrink-0 items-center gap-3">
                   <button
-                    className="text-xs text-brand-600 hover:underline"
+                    className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
                     onClick={() =>
                       download.mutate({ storagePath: att.storagePath, fileName: att.fileName })
                     }
@@ -234,7 +234,7 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
                   </button>
                   {canUpload && (!equiptRecord || canWriteEquipt || isOwn(att)) && (
                     <button
-                      className="text-slate-300 transition-colors hover:text-red-500"
+                      className="text-slate-300 dark:text-neutral-600 transition-colors hover:text-red-500 dark:hover:text-red-400"
                       title="Delete file"
                       onClick={() => setConfirmDeleteId(att.id)}
                     >
@@ -247,7 +247,7 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-slate-400">No files attached.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">No files attached.</p>
       )}
     </div>
   );

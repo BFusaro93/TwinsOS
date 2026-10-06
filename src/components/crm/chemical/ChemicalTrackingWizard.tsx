@@ -49,23 +49,23 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FlaskConical className="h-4 w-4 text-teal-600" />
+            <FlaskConical className="h-4 w-4 text-teal-600 dark:text-teal-400" />
             Chemical Tracking — {date}
           </DialogTitle>
         </DialogHeader>
 
         {chemicalVisits.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">
+          <p className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
             No chemical-tracking jobs scheduled for this date.
           </p>
         ) : (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between rounded-md border bg-slate-50 px-3 py-2">
+            <div className="flex items-center justify-between rounded-md border bg-slate-50 dark:bg-muted/40 px-3 py-2">
               <div>
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100">
                   {current.clientName ?? "Unknown client"}
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   {(current.job?.serviceAddress ?? "") +
                     (current.job?.serviceCity ? `, ${current.job.serviceCity}` : "")}
                   {current.serviceNames && current.serviceNames.length > 0
@@ -73,7 +73,7 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
                     : ""}
                 </p>
               </div>
-              <span className="shrink-0 text-xs font-medium text-slate-500">
+              <span className="shrink-0 text-xs font-medium text-muted-foreground">
                 {safeIndex + 1} of {chemicalVisits.length}
               </span>
             </div>

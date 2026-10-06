@@ -226,30 +226,30 @@ export function BulkEmailClientsDialog({
           <div className="space-y-1.5">
             <Label>To</Label>
             {loading ? (
-              <p className="text-xs text-slate-400">Loading recipients…</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">Loading recipients…</p>
             ) : (
               <>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-slate-600 dark:text-neutral-400">
                   {withEmail.length} recipient{withEmail.length === 1 ? "" : "s"} will receive this email
                   {withEmail.length > 0 && `: ${withEmail.map((r) => r.name).join(", ")}`}
                 </p>
                 {withoutEmail.length > 0 && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
                     {withoutEmail.length} skipped (no email on file): {withoutEmail.map((r) => r.name).join(", ")}
                   </p>
                 )}
                 {bounced.length > 0 && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
                     {bounced.length} skipped (email bounced): {bounced.map((r) => r.name).join(", ")}
                   </p>
                 )}
                 {purpose === "marketing" && optedOut.length > 0 && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
                     {optedOut.length} skipped (Do Not Market): {optedOut.map((r) => r.name).join(", ")}
                   </p>
                 )}
                 {purpose === "service" && optedOut.length > 0 && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     Includes {optedOut.length} client{optedOut.length === 1 ? "" : "s"} who opted out of
                     marketing — allowed for a service notice.
                   </p>
@@ -268,7 +268,7 @@ export function BulkEmailClientsDialog({
                 <SelectItem value="service">Service notice (about their scheduled work)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               {purpose === "marketing"
                 ? "Skips clients marked Do Not Market and adds an unsubscribe footer."
                 : "Reaches clients who opted out of marketing, with no unsubscribe footer — only for notices about work they have already contracted. Bounced addresses are still skipped."}
@@ -288,9 +288,9 @@ export function BulkEmailClientsDialog({
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
                 No templates yet —{" "}
-                <Link href="/crm/settings/documents" className="text-brand-600 hover:underline" target="_blank">
+                <Link href="/crm/settings/documents" className="text-brand-600 dark:text-brand-400 hover:underline" target="_blank">
                   create one in Documents with type &quot;Client&quot;
                 </Link>
                 , or just write a one-off message below.
@@ -310,7 +310,7 @@ export function BulkEmailClientsDialog({
               placeholder="Write your message…"
               minHeight={160}
             />
-            <p className="pt-1.5 text-[11px] text-slate-400">Click a tag to insert it into the message at your cursor:</p>
+            <p className="pt-1.5 text-[11px] text-slate-400 dark:text-neutral-500">Click a tag to insert it into the message at your cursor:</p>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {GENERAL_EMAIL_MERGE_TAGS.map((mt) => (
                 <button
@@ -318,7 +318,7 @@ export function BulkEmailClientsDialog({
                   type="button"
                   title={mt.label}
                   onClick={() => richTextRef.current?.insertContent(mt.tag)}
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                  className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:text-neutral-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400"
                 >
                   {mt.tag}
                 </button>

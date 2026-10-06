@@ -57,7 +57,7 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
   }
 
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-white px-3 py-2 shadow-sm">
+    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-3 py-2 shadow-sm">
       {/* Prev / days / next stay on one line; on a phone the day buttons
           shrink to fit instead of pushing the strip wider than the screen. */}
       <div className="flex min-w-0 max-w-full items-center gap-3 max-sm:gap-1">
@@ -86,8 +86,8 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
                 isSelected
                   ? "bg-brand-500 text-white"
                   : isToday
-                  ? "border border-brand-300 text-brand-600 hover:bg-brand-50"
-                  : "text-slate-600 hover:bg-slate-100"
+                  ? "border border-brand-300 dark:border-brand-700 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
+                  : "text-slate-600 dark:text-neutral-400 hover:bg-muted"
               )}
             >
               <span className="text-[10px] font-semibold uppercase">{DAY_LETTERS[i]}</span>
@@ -114,7 +114,7 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
           type="date"
           value={selectedDate}
           onChange={(e) => e.target.value && onDateChange(e.target.value)}
-          className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
       </div>
 
