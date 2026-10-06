@@ -40,25 +40,25 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ACTION_COLORS: Record<string, string> = {
-  enrolled: "bg-blue-50 text-blue-700 border-blue-200",
-  wait_advanced: "bg-slate-100 text-slate-600 border-slate-200",
-  email_sent: "bg-green-50 text-green-700 border-green-200",
-  email_skipped: "bg-orange-50 text-orange-700 border-orange-200",
-  sms_sent: "bg-green-50 text-green-700 border-green-200",
-  sms_skipped: "bg-orange-50 text-orange-700 border-orange-200",
-  ticket_created: "bg-blue-50 text-blue-700 border-blue-200",
-  field_updated: "bg-slate-100 text-slate-600 border-slate-200",
-  tags_updated: "bg-slate-100 text-slate-600 border-slate-200",
-  note_skipped: "bg-slate-100 text-slate-500 border-slate-200",
-  branch_true: "bg-slate-100 text-slate-600 border-slate-200",
-  branch_false: "bg-slate-100 text-slate-600 border-slate-200",
-  awaiting_approval: "bg-amber-50 text-amber-700 border-amber-200",
-  approval_approved: "bg-green-50 text-green-700 border-green-200",
-  approval_rejected: "bg-red-50 text-red-700 border-red-200",
-  alert_sent: "bg-purple-50 text-purple-700 border-purple-200",
-  stopped_by_condition: "bg-red-50 text-red-700 border-red-200",
-  completed: "bg-slate-100 text-slate-600 border-slate-200",
-  unsupported_event_type: "bg-slate-100 text-slate-500 border-slate-200",
+  enrolled: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  wait_advanced: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  email_sent: "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800",
+  email_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+  sms_sent: "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800",
+  sms_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+  ticket_created: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  field_updated: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  tags_updated: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  note_skipped: "bg-muted text-muted-foreground border-border",
+  branch_true: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  branch_false: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  awaiting_approval: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+  approval_approved: "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800",
+  approval_rejected: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  alert_sent: "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+  stopped_by_condition: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  completed: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  unsupported_event_type: "bg-muted text-muted-foreground border-border",
 };
 
 export function AutomationActivityLog() {
@@ -82,7 +82,7 @@ export function AutomationActivityLog() {
         description="Every enrollment, send, approval decision, and stop/complete event across all sequences."
       />
 
-      <div className="flex-1 overflow-auto rounded-lg border bg-white">
+      <div className="flex-1 overflow-auto rounded-lg border bg-card">
         {isLoading ? (
           <div className="flex flex-col gap-2 p-4">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -109,21 +109,21 @@ export function AutomationActivityLog() {
             <TableBody>
               {(entries ?? []).map((e) => (
                 <TableRow key={e.id}>
-                  <TableCell className="whitespace-nowrap text-xs text-slate-500">
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                     {formatDateTime(e.createdAt)}
                   </TableCell>
-                  <TableCell className="text-sm text-slate-700">
+                  <TableCell className="text-sm text-slate-700 dark:text-neutral-300">
                     {e.sequenceName ?? "—"}
                   </TableCell>
-                  <TableCell className="text-sm text-blue-600">
+                  <TableCell className="text-sm text-blue-600 dark:text-blue-400">
                     {e.clientName ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={ACTION_COLORS[e.action] ?? "bg-slate-100 text-slate-600"}>
+                    <Badge variant="outline" className={ACTION_COLORS[e.action] ?? "bg-muted text-slate-600 dark:text-neutral-400"}>
                       {ACTION_LABELS[e.action] ?? e.action}
                     </Badge>
                   </TableCell>
-                  <TableCell className="max-w-md truncate text-sm text-slate-500">
+                  <TableCell className="max-w-md truncate text-sm text-muted-foreground">
                     {e.detail ?? "—"}
                   </TableCell>
                 </TableRow>

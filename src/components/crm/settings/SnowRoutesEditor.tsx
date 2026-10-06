@@ -82,7 +82,7 @@ function ManageStopsDialog({
                 <SelectItem key={j.id} value={j.id}>{j.clientName ?? j.id}</SelectItem>
               ))}
               {available.length === 0 && (
-                <div className="px-2 py-1.5 text-xs text-slate-400">No more snow jobs to add</div>
+                <div className="px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500">No more snow jobs to add</div>
               )}
             </SelectContent>
           </Select>
@@ -91,19 +91,19 @@ function ManageStopsDialog({
           </Button>
         </div>
         <div className="divide-y max-h-80 overflow-y-auto">
-          {stops.length === 0 && <p className="py-3 text-sm text-slate-400">No stops yet.</p>}
+          {stops.length === 0 && <p className="py-3 text-sm text-slate-400 dark:text-neutral-500">No stops yet.</p>}
           {stops.map((s, i) => (
             <div key={s.id} className="flex items-center gap-2 py-2 text-sm">
-              <span className="w-5 text-xs text-slate-400 font-mono">{i + 1}</span>
+              <span className="w-5 text-xs text-slate-400 dark:text-neutral-500 font-mono">{i + 1}</span>
               <div className="flex-1 min-w-0">
-                <p className="truncate font-medium text-slate-700">{s.clientName ?? "—"}</p>
-                {s.serviceAddress && <p className="truncate text-xs text-slate-400">{s.serviceAddress}</p>}
+                <p className="truncate font-medium text-slate-700 dark:text-neutral-300">{s.clientName ?? "—"}</p>
+                {s.serviceAddress && <p className="truncate text-xs text-slate-400 dark:text-neutral-500">{s.serviceAddress}</p>}
               </div>
               <div className="flex flex-col">
                 <button
                   onClick={() => moveStop(i, -1)}
                   disabled={i === 0 || reorderStops.isPending}
-                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
+                  className="text-slate-300 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 disabled:opacity-30"
                   title="Move up"
                 >
                   <ChevronUp className="h-3.5 w-3.5" />
@@ -111,7 +111,7 @@ function ManageStopsDialog({
                 <button
                   onClick={() => moveStop(i, 1)}
                   disabled={i === stops.length - 1 || reorderStops.isPending}
-                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
+                  className="text-slate-300 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 disabled:opacity-30"
                   title="Move down"
                 >
                   <ChevronDown className="h-3.5 w-3.5" />
@@ -119,7 +119,7 @@ function ManageStopsDialog({
               </div>
               <button
                 onClick={() => removeStop.mutate({ id: s.id, routeId })}
-                className="text-slate-300 hover:text-red-500"
+                className="text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -155,12 +155,12 @@ export function SnowRoutesEditor() {
 
   return (
     <div className="space-y-1 px-1">
-      {routes.length === 0 && <p className="py-3 text-sm text-slate-400">No Master Routes yet. Add one below.</p>}
+      {routes.length === 0 && <p className="py-3 text-sm text-slate-400 dark:text-neutral-500">No Master Routes yet. Add one below.</p>}
       {routes.map((route) => (
         <div key={route.id} className="flex items-center gap-2 py-1.5 border-b last:border-b-0">
-          <RouteIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-          <span className="flex-1 text-sm font-medium text-slate-700 truncate">{route.name}</span>
-          <span className="text-xs text-slate-400">{route.stopCount ?? 0} stop{route.stopCount === 1 ? "" : "s"}</span>
+          <RouteIcon className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
+          <span className="flex-1 text-sm font-medium text-slate-700 dark:text-neutral-300 truncate">{route.name}</span>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">{route.stopCount ?? 0} stop{route.stopCount === 1 ? "" : "s"}</span>
           <Select
             value={route.defaultCrewId ?? "none"}
             onValueChange={(v) => updateRoute.mutate({ id: route.id, patch: { default_crew_id: v === "none" ? null : v } })}
@@ -180,7 +180,7 @@ export function SnowRoutesEditor() {
           </Button>
           <button
             onClick={() => deleteRoute.mutate(route.id)}
-            className="text-slate-300 hover:text-red-500"
+            className="text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             title="Delete route"
           >
             <Trash2 className="h-3.5 w-3.5" />

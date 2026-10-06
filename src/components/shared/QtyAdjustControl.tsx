@@ -115,7 +115,7 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
       <span
         className={cn(
           "ml-1 flex items-center gap-1 text-xs font-medium transition-opacity duration-300",
-          saved ? "text-green-600 opacity-100" : "text-slate-400 opacity-0"
+          saved ? "text-green-600 dark:text-green-400 opacity-100" : "text-slate-400 dark:text-neutral-500 opacity-0"
         )}
       >
         <Check className="h-3 w-3" />
@@ -135,7 +135,7 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
           </DialogHeader>
 
           <div className="space-y-1.5 py-2">
-            <Label htmlFor="qty-adjust-reason">Reason <span className="text-red-500">*</span></Label>
+            <Label htmlFor="qty-adjust-reason">Reason <span className="text-red-500 dark:text-red-400">*</span></Label>
             <Textarea
               id="qty-adjust-reason"
               placeholder="Why is this quantity changing? (e.g. physical count correction, damaged/scrapped, found extra stock)"

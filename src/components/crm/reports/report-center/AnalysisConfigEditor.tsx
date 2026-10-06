@@ -130,7 +130,7 @@ export function AnalysisConfigEditor({
                 {fields.map((field) => (
                   <label
                     key={field.key}
-                    className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
+                    className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300"
                   >
                     <Checkbox
                       disabled={grouped}
@@ -315,14 +315,14 @@ export function AnalysisConfigEditor({
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div>
-                <p className="mb-1.5 text-xs font-medium text-slate-600">Group By</p>
+                <p className="mb-1.5 text-xs font-medium text-slate-600 dark:text-neutral-400">Group By</p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
                   {fields
                     .filter((f) => !NUMERIC_FIELD_TYPES.includes(f.type))
                     .map((field) => (
                       <label
                         key={field.key}
-                        className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
+                        className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300"
                       >
                         <Checkbox
                           checked={groupBy.includes(field.key)}
@@ -341,7 +341,7 @@ export function AnalysisConfigEditor({
               </div>
 
               {groupBy.length > 0 && (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                   <Checkbox
                     checked={subtotals}
                     onCheckedChange={(checked) => setSubtotals(checked === true)}
@@ -358,7 +358,7 @@ export function AnalysisConfigEditor({
               ) : (
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-600">Aggregates</p>
+                  <p className="text-xs font-medium text-slate-600 dark:text-neutral-400">Aggregates</p>
                   <Button
                     variant="outline"
                     size="sm"
@@ -494,7 +494,7 @@ export function AnalysisConfigEditor({
                     placeholder="Column name"
                     className="h-8 w-36 text-sm"
                   />
-                  <span className="text-sm text-slate-500">=</span>
+                  <span className="text-sm text-muted-foreground">=</span>
                   <Select
                     value={formula.left}
                     onValueChange={(v) =>

@@ -69,7 +69,7 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-6 py-4 pr-12">
         <div>
           <p className="font-mono text-xs text-muted-foreground">{data.caseNumber}</p>
-          <h2 className="text-base font-semibold text-slate-900">{data.employeeName}</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{data.employeeName}</h2>
         </div>
         <div className="flex items-center gap-2">
           <Badge className={INJURY_INCIDENT_TYPE_COLORS[data.incidentType]}>{INJURY_INCIDENT_TYPE_LABELS[data.incidentType]}</Badge>
@@ -78,14 +78,14 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
             <DropdownMenuTrigger asChild>
               <button type="button" className="inline-flex items-center gap-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
                 <Badge className={`${INJURY_STATUS_COLORS[data.status]} text-xs`}>{INJURY_CASE_STATUS_LABELS[data.status]}</Badge>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               {Object.entries(INJURY_CASE_STATUS_LABELS).map(([value, label]) => (
                 <DropdownMenuItem
                   key={value}
-                  className={value === data.status ? "font-medium text-brand-600" : ""}
+                  className={value === data.status ? "font-medium text-brand-600 dark:text-brand-400" : ""}
                   onSelect={() => {
                     const next = value as InjuryCaseStatus;
                     if (next === data.status) return;
@@ -110,7 +110,7 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
             disabled={isClosed}
             title={isClosed ? "Reopen this case before deleting it" : "Delete case"}
             onClick={async () => {
@@ -154,7 +154,7 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
         <Row label="Suggested prevention">{data.preventionSuggestion}</Row>
         <Row label="Cause">{data.cause}</Row>
         <Row label="Corrective action">{data.correctiveAction}</Row>
-        {data.recordable && <Badge className="bg-red-100 text-red-800">OSHA recordable</Badge>}
+        {data.recordable && <Badge className="bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">OSHA recordable</Badge>}
         {(data.resolutionNotes || isClosed) && (
           <div className="flex items-start gap-2 text-sm">
             <div className="min-w-0 flex-1">
@@ -185,7 +185,7 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
               <TabsTrigger
                 key={v}
                 value={v}
-                className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium capitalize text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium capitalize text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
               >
                 {v === "audit" ? "audit trail" : v}
               </TabsTrigger>

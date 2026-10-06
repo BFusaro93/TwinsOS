@@ -380,13 +380,13 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
               className="h-8 w-full sm:w-80 text-sm"
               placeholder="Description (optional)"
             />
-            <label className="flex items-center gap-2 text-xs text-slate-600">
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
               <Checkbox
                 checked={visibleToCrew}
                 onCheckedChange={(v) => setVisibleToCrew(v === true)}
               />
               Show to crew logins
-              <span className="text-slate-400">— crew can open this dashboard from their home page</span>
+              <span className="text-slate-400 dark:text-neutral-500">— crew can open this dashboard from their home page</span>
             </label>
           </div>
           <div className="flex items-center gap-2">
@@ -397,7 +397,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
             {dashboardId && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-red-600">
+                  <Button variant="outline" size="sm" className="text-red-600 dark:text-red-400">
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </AlertDialogTrigger>
@@ -442,8 +442,8 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
             className={cn(
               "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
               tab.id === activeTabId
-                ? "border-brand-300 bg-brand-50 text-brand-900"
-                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                ? "border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/30 text-brand-900 dark:text-brand-200"
+                : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
             )}
           >
             {tab.name}
@@ -507,7 +507,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
           <Card>
             <CardContent className="flex flex-wrap items-center gap-4 pt-4">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-600">Tab Name</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Tab Name</span>
                 <Input
                   value={activeTab.name}
                   onChange={(e) => {
@@ -517,7 +517,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                   className="h-8 w-48 text-sm"
                 />
               </div>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                 <Checkbox
                   checked={activeTab.useDateFilter}
                   onCheckedChange={(checked) =>
@@ -526,7 +526,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                 />
                 Show a shared date range filter for this tab
               </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                 <Checkbox
                   checked={!!activeTab.useRepFilter}
                   onCheckedChange={(checked) =>
@@ -740,7 +740,7 @@ function PanelPreviewCard({
             variant="ghost"
             size="icon"
             aria-label="Remove panel"
-            className="text-red-600"
+            className="text-red-600 dark:text-red-400"
             onClick={onRemove}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -886,7 +886,7 @@ function SaveToGraphicsLibraryDialog({
             placeholder="Category (optional)"
             className="h-9 text-sm"
           />
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           <Button
             size="sm"
             onClick={() => void handleSave()}
@@ -917,7 +917,7 @@ function ReportPanelEditor({
   const def = getReport(panel.reportKey!);
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-4">
+    <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 dark:border-neutral-700 bg-slate-50/50 dark:bg-muted/40 p-4">
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Panel Settings</CardTitle>
@@ -1137,9 +1137,9 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-4">
+    <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 dark:border-neutral-700 bg-slate-50/50 dark:bg-muted/40 p-4">
       {savedReportId && (
-        <div className="flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800">
+        <div className="flex items-center justify-between rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-3 py-2 text-xs text-brand-800 dark:text-brand-300">
           <span>
             Linked to saved analysis{linkedReport ? `: "${linkedReport.name}"` : "…"}
           </span>
@@ -1189,7 +1189,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
             </SelectContent>
           </Select>
           {tabUsesDateFilter && (
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
               <Checkbox
                 checked={useTabDateRange}
                 onCheckedChange={(checked) => setUseTabDateRange(checked === true)}
@@ -1198,7 +1198,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
             </label>
           )}
           {tabUsesRepFilter && (
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
               <Checkbox
                 checked={useTabRepFilter}
                 onCheckedChange={(checked) => setUseTabRepFilter(checked === true)}
@@ -1231,7 +1231,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="w-32 text-xs font-medium text-slate-600">Label Column</span>
+              <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Label Column</span>
               <Select value={labelColumn} onValueChange={setLabelColumn}>
                 <SelectTrigger className="h-8 w-full sm:w-64 text-sm">
                   <SelectValue placeholder="Choose a label column…" />
@@ -1246,7 +1246,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
               </Select>
             </div>
             <div>
-              <p className="mb-1.5 text-xs font-medium text-slate-600">Value Column(s)</p>
+              <p className="mb-1.5 text-xs font-medium text-slate-600 dark:text-neutral-400">Value Column(s)</p>
               {visualType === "pie" ? (
                 <Select
                   value={valueColumns[0] ?? ""}
@@ -1268,7 +1268,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
                   {valueOptions.map((o) => (
                     <label
                       key={o.value}
-                      className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
+                      className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300"
                     >
                       <Checkbox
                         checked={valueColumns.includes(o.value)}
@@ -1287,7 +1287,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
               )}
             </div>
             {visualType === "bar" && valueColumns.length > 1 && (
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                 <Checkbox
                   checked={stacked}
                   onCheckedChange={(checked) => setStacked(checked === true)}
@@ -1297,7 +1297,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
             )}
             {(visualType === "bar" || visualType === "pie") && (
               <div className="flex flex-wrap items-center gap-3">
-                <span className="w-32 text-xs font-medium text-slate-600">Limit To</span>
+                <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Limit To</span>
                 <Input
                   type="number"
                   value={topN}
@@ -1306,7 +1306,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
                   className="h-8 w-44 text-sm"
                 />
                 {topN && (
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                     <Checkbox
                       checked={showOthers}
                       onCheckedChange={(checked) => setShowOthers(checked === true)}
@@ -1326,7 +1326,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
             <CardTitle className="text-sm">8. Chart Fields</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-3">
-            <span className="w-32 text-xs font-medium text-slate-600">KPI Value</span>
+            <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">KPI Value</span>
             <Select value={kpiColumn} onValueChange={setKpiColumn}>
               <SelectTrigger className="h-8 w-64 text-sm">
                 <SelectValue placeholder="Choose a value…" />
@@ -1350,7 +1350,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="w-32 text-xs font-medium text-slate-600">Gauge Value</span>
+              <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Gauge Value</span>
               <Select value={kpiColumn} onValueChange={setKpiColumn}>
                 <SelectTrigger className="h-8 w-64 text-sm">
                   <SelectValue placeholder="Choose a value…" />
@@ -1365,7 +1365,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
               </Select>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="w-32 text-xs font-medium text-slate-600">Budget Column</span>
+              <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Budget Column</span>
               <Select
                 value={budgetColumn || "__none"}
                 onValueChange={(v) => setBudgetColumn(v === "__none" ? "" : v)}
@@ -1388,7 +1388,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
             </div>
             {!budgetColumn && (
               <div className="flex flex-wrap items-center gap-3">
-                <span className="w-32 text-xs font-medium text-slate-600">Fixed Gauge Max</span>
+                <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Fixed Gauge Max</span>
                 <Input
                   type="number"
                   value={gaugeMax}
@@ -1409,7 +1409,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="w-32 text-xs font-medium text-slate-600">Row Label</span>
+              <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Row Label</span>
               <Select value={labelColumn} onValueChange={setLabelColumn}>
                 <SelectTrigger className="h-8 w-64 text-sm">
                   <SelectValue placeholder="Choose a row label column…" />
@@ -1424,7 +1424,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
               </Select>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="w-32 text-xs font-medium text-slate-600">Header Column</span>
+              <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Header Column</span>
               <Select value={crosstabHeaderColumn} onValueChange={setCrosstabHeaderColumn}>
                 <SelectTrigger className="h-8 w-64 text-sm">
                   <SelectValue placeholder="Choose a column to pivot into headers…" />
@@ -1439,7 +1439,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
               </Select>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="w-32 text-xs font-medium text-slate-600">Value Column</span>
+              <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Value Column</span>
               <Select value={valueColumns[0] ?? ""} onValueChange={(v) => setValueColumns([v])}>
                 <SelectTrigger className="h-8 w-64 text-sm">
                   <SelectValue placeholder="Choose a value to aggregate…" />

@@ -38,7 +38,7 @@ export function HelpMenu() {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 shrink-0 gap-1.5 rounded-full border-slate-200 px-3 text-slate-600 hover:text-slate-900"
+            className="h-9 shrink-0 gap-1.5 rounded-full border-border px-3 text-slate-600 dark:text-neutral-400 hover:text-slate-900 dark:hover:text-neutral-100"
             title="Help"
           >
             <HelpCircle className="h-4 w-4" />
@@ -47,31 +47,31 @@ export function HelpMenu() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem onSelect={() => setAskAiOpen(true)}>
-            <Sparkles className="mr-2 h-4 w-4 text-emerald-600" />
+            <Sparkles className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             Ask AI
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setFeedbackOpen(true)}>
-            <MessageSquarePlus className="mr-2 h-4 w-4 text-slate-500" />
+            <MessageSquarePlus className="mr-2 h-4 w-4 text-muted-foreground" />
             Send Feedback
           </DropdownMenuItem>
           {hasChatSupport && (
             <DropdownMenuItem onSelect={() => setChatOpen(true)}>
-              <MessageCircle className="mr-2 h-4 w-4 text-brand-600" />
+              <MessageCircle className="mr-2 h-4 w-4 text-brand-600 dark:text-brand-400" />
               Chat with us
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => router.push("/settings/support")}>
-            <LifeBuoy className="mr-2 h-4 w-4 text-slate-500" />
+            <LifeBuoy className="mr-2 h-4 w-4 text-muted-foreground" />
             Support
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => router.push("/settings/docs")}>
-            <BookOpen className="mr-2 h-4 w-4 text-slate-500" />
+            <BookOpen className="mr-2 h-4 w-4 text-muted-foreground" />
             Advanced Guides
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <a href={`mailto:${SUPPORT_EMAIL}?subject=Support%20request`}>
-              <Mail className="mr-2 h-4 w-4 text-slate-500" />
+              <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
               Email Support
             </a>
           </DropdownMenuItem>

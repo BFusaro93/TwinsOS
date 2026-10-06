@@ -83,7 +83,7 @@ export function DocsEyebrow({ children }: { children: ReactNode }) {
 
 export function TOCLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} className="block text-sm text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+    <a href={href} className="block text-sm text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline">
       {children}
     </a>
   );
@@ -99,18 +99,18 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-6 rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-      <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+    <section id={id} className="scroll-mt-6 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+      <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
         {title}
       </h2>
-      <div className="flex flex-col gap-3 text-sm leading-relaxed text-[#4a4a46]">{children}</div>
+      <div className="flex flex-col gap-3 text-sm leading-relaxed text-[#4a4a46] dark:text-neutral-300">{children}</div>
     </section>
   );
 }
 
 export function Callout({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
       {children}
     </div>
   );
@@ -121,8 +121,8 @@ export function Chip({ instant }: { instant: boolean }) {
     <span
       className={
         instant
-          ? "inline-flex rounded-full bg-[#e2f6d8] px-2 py-0.5 text-xs font-medium text-[#396927]"
-          : "inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+          ? "inline-flex rounded-full bg-[#e2f6d8] dark:bg-[#292c27] px-2 py-0.5 text-xs font-medium text-[#396927] dark:text-[#b4c6ad]"
+          : "inline-flex rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
       }
     >
       {instant ? "Instant" : "Polling"}
@@ -132,7 +132,7 @@ export function Chip({ instant }: { instant: boolean }) {
 
 export function Table({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-[#e6e6e0]">
+    <div className="overflow-x-auto rounded-md border border-[#e6e6e0] dark:border-border">
       <table className="w-full border-collapse text-sm">{children}</table>
     </div>
   );
@@ -140,7 +140,7 @@ export function Table({ children }: { children: ReactNode }) {
 
 export function TableHeadRow({ children }: { children: ReactNode }) {
   return (
-    <tr className="border-b border-[#e6e6e0] bg-[#f4f6f0] text-left text-xs uppercase tracking-wide text-[#5a5a56]">
+    <tr className="border-b border-[#e6e6e0] dark:border-border bg-[#f4f6f0] dark:bg-muted/50 text-left text-xs uppercase tracking-wide text-[#5a5a56] dark:text-neutral-300">
       {children}
     </tr>
   );

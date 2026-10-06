@@ -196,7 +196,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
             {/* Vendor Name — full width */}
             <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="vendor-name">
-                Vendor Name <span className="text-red-500">*</span>
+                Vendor Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="vendor-name"
@@ -281,19 +281,19 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
             {isEditing && (
               <div className="grid gap-1.5">
                 <Label>Status</Label>
-                <div className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2">
+                <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2">
                   <button
                     type="button"
                     role="switch"
                     aria-checked={isActive}
                     onClick={() => setIsActive(!isActive)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${isActive ? "bg-brand-500" : "bg-slate-200"}`}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${isActive ? "bg-brand-500" : "bg-slate-200 dark:bg-neutral-700"}`}
                   >
                     <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? "translate-x-4" : "translate-x-0"}`}
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow transition-transform ${isActive ? "translate-x-4" : "translate-x-0"}`}
                     />
                   </button>
-                  <span className="text-sm text-slate-700">{isActive ? "Active" : "Inactive"}</span>
+                  <span className="text-sm text-slate-700 dark:text-neutral-300">{isActive ? "Active" : "Inactive"}</span>
                 </div>
               </div>
             )}
@@ -315,12 +315,12 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
           </div>
 
           {formError && (
-            <p className="text-sm text-red-600">{formError}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
           )}
 
           {duplicateVendor && (
-            <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2.5">
-              <p className="text-sm text-yellow-800">
+            <div className="rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/40 px-3 py-2.5">
+              <p className="text-sm text-yellow-800 dark:text-yellow-300">
                 A vendor named <strong>{duplicateVendor.name}</strong> already exists. Are you sure you
                 want to create a duplicate?
               </p>

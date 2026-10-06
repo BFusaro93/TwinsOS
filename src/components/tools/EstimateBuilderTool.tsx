@@ -55,18 +55,18 @@ export function EstimateBuilderTool() {
   return (
     <div className="mx-auto max-w-3xl p-6">
       <div className="mb-2">
-        <h1 className="text-xl font-bold text-brand-600">Estimate Text/Language Generator</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-xl font-bold text-brand-600 dark:text-brand-400">Estimate Text/Language Generator</h1>
+        <p className="text-sm text-muted-foreground">
           Upload or paste a site visit transcript to get proposal-ready line item text
         </p>
       </div>
 
-      <hr className="my-4 border-slate-200" />
+      <hr className="my-4 border-border" />
 
-      <Card className="mb-5 border-brand-200 bg-brand-50/50">
+      <Card className="mb-5 border-brand-200 dark:border-brand-800 bg-brand-50/50 dark:bg-brand-900/30">
         <CardContent className="pt-6 text-sm leading-relaxed">
-          <p className="mb-2 text-sm font-semibold text-brand-600">📋 How to Use This Tool</p>
-          <ol className="list-decimal space-y-1 pl-5 text-slate-700">
+          <p className="mb-2 text-sm font-semibold text-brand-600 dark:text-brand-400">📋 How to Use This Tool</p>
+          <ol className="list-decimal space-y-1 pl-5 text-slate-700 dark:text-neutral-300">
             <li>
               Upload a transcript file <strong>(.txt, .vtt)</strong> <em>or</em> paste the transcript
               text directly into the box below.
@@ -84,17 +84,17 @@ export function EstimateBuilderTool() {
               estimate line item.
             </li>
           </ol>
-          <p className="mb-1 mt-3 font-semibold text-slate-800">
+          <p className="mb-1 mt-3 font-semibold text-slate-800 dark:text-neutral-100">
             Review Checklist Before Pasting into the Estimate:
           </p>
-          <ul className="list-disc space-y-1 pl-5 text-slate-600">
+          <ul className="list-disc space-y-1 pl-5 text-slate-600 dark:text-neutral-400">
             <li>All service areas and locations are accurately described</li>
             <li>Quantities and yardage match what has been calculated</li>
             <li>Any exclusions are clearly noted</li>
             <li>Pricing matches what was calculated</li>
             <li>Any clarification flags in the output have been resolved</li>
           </ul>
-          <p className="mt-3 italic text-slate-400">
+          <p className="mt-3 italic text-slate-400 dark:text-neutral-500">
             Note: This tool does not set pricing, submit the estimate, or replace the estimator&rsquo;s
             review.
           </p>
@@ -102,12 +102,12 @@ export function EstimateBuilderTool() {
       </Card>
 
       <div className="mb-4">
-        <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+        <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-neutral-300">
           Upload Transcript File{" "}
-          <span className="font-normal text-slate-400">(optional — .txt, .vtt)</span>
+          <span className="font-normal text-slate-400 dark:text-neutral-500">(optional — .txt, .vtt)</span>
         </label>
         <div className="flex items-center gap-3">
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-600 hover:bg-brand-100">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/30 px-3 py-2 text-sm font-semibold text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40">
             <Upload className="h-3.5 w-3.5" />
             Choose File
             <input
@@ -119,17 +119,17 @@ export function EstimateBuilderTool() {
             />
           </label>
           {fileName ? (
-            <span className="text-sm font-medium text-brand-600">{fileName}</span>
+            <span className="text-sm font-medium text-brand-600 dark:text-brand-400">{fileName}</span>
           ) : (
-            <span className="text-sm text-slate-400">No file selected</span>
+            <span className="text-sm text-slate-400 dark:text-neutral-500">No file selected</span>
           )}
         </div>
       </div>
 
       <div className="mb-4">
-        <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+        <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-neutral-300">
           Transcript Text{" "}
-          <span className="font-normal text-slate-400">
+          <span className="font-normal text-slate-400 dark:text-neutral-500">
             (paste here, or auto-filled from file upload above)
           </span>
         </label>
@@ -172,7 +172,7 @@ export function EstimateBuilderTool() {
       {generateProposal.data && (
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-bold text-slate-700">
+            <label className="text-sm font-bold text-slate-700 dark:text-neutral-300">
               Generated Proposal — Ready to paste into the estimate
             </label>
             <Button
@@ -192,10 +192,10 @@ export function EstimateBuilderTool() {
               )}
             </Button>
           </div>
-          <div className="min-h-[120px] whitespace-pre-wrap rounded-md border bg-slate-50 p-5 text-sm leading-relaxed">
+          <div className="min-h-[120px] whitespace-pre-wrap rounded-md border bg-slate-50 dark:bg-muted/40 p-5 text-sm leading-relaxed">
             {generateProposal.data}
           </div>
-          <p className="mt-2 text-xs italic text-slate-400">
+          <p className="mt-2 text-xs italic text-slate-400 dark:text-neutral-500">
             Always review before pasting into the estimate. Verify scope, quantities, and pricing
             with the estimator.
           </p>

@@ -123,14 +123,14 @@ function frequencyLabel(inv: CRMInvoice): string {
 }
 
 const STATUS_COLOR: Record<InvoiceStatus, string> = {
-  draft:   "bg-slate-100 text-slate-600",
-  printed: "bg-indigo-100 text-indigo-700",
-  sent:    "bg-blue-100 text-blue-700",
-  viewed:  "bg-purple-100 text-purple-700",
-  partial: "bg-yellow-100 text-yellow-700",
-  paid:    "bg-green-100 text-green-700",
-  overdue: "bg-red-100 text-red-600",
-  void:    "bg-slate-200 text-slate-500 line-through",
+  draft:   "bg-muted text-slate-600 dark:text-neutral-400",
+  printed: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400",
+  sent:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  viewed:  "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
+  partial: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  paid:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  overdue: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  void:    "bg-slate-200 dark:bg-neutral-700 text-muted-foreground line-through",
 };
 
 function formatDate(d: string) {
@@ -444,10 +444,10 @@ export function InvoicesList({ clientId }: Props) {
   }
 
   function SortIcon({ col }: { col: string }) {
-    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300" />;
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300 dark:text-neutral-500" />;
     return sortDir === "asc"
-      ? <ArrowUp className="ml-1 inline h-3 w-3 text-slate-600" />
-      : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600" />;
+      ? <ArrowUp className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />
+      : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />;
   }
 
   // The single-row Void button used to call the browser's native `confirm()`.
@@ -748,7 +748,7 @@ export function InvoicesList({ clientId }: Props) {
       )}
 
       {idsFilter && (
-        <div className="flex items-center justify-between border-b bg-brand-50 px-4 py-2 text-xs text-brand-800">
+        <div className="flex items-center justify-between border-b bg-brand-50 dark:bg-brand-900/30 px-4 py-2 text-xs text-brand-800 dark:text-brand-300">
           <span>Showing {idsFilter.size} just-generated invoice{idsFilter.size !== 1 ? "s" : ""}.</span>
           <Link href="/crm/accounting/invoices" className="font-medium underline underline-offset-2">
             View all invoices
@@ -757,8 +757,8 @@ export function InvoicesList({ clientId }: Props) {
       )}
 
       {/* ── FilterBar row ── */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
-        <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
+      <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
+        <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {FILTER_BUTTONS.map(({ key, label }) => (
             <button
@@ -770,8 +770,8 @@ export function InvoicesList({ clientId }: Props) {
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
                 activeFilterKey === key
-                  ? "bg-brand-100 text-brand-700 font-medium"
-                  : "hover:bg-slate-100 text-slate-600"
+                  ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+                  : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
             >
               {label}
@@ -805,7 +805,7 @@ export function InvoicesList({ clientId }: Props) {
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>
@@ -887,7 +887,7 @@ export function InvoicesList({ clientId }: Props) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 disabled={!someSelected}
-                className="text-red-600 focus:text-red-600"
+                className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                 onSelect={requestBulkVoid}
               >
                 Void Selected
@@ -912,7 +912,7 @@ export function InvoicesList({ clientId }: Props) {
                   className={cn(
                     "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                     quickFilter === key
-                      ? "bg-white text-slate-800"
+                      ? "bg-card text-slate-800 dark:text-neutral-100"
                       : "text-slate-300 hover:text-white"
                   )}
                 >
@@ -921,7 +921,7 @@ export function InvoicesList({ clientId }: Props) {
                     <span className={cn(
                       "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
                       quickFilter === key
-                        ? "bg-slate-200 text-slate-700"
+                        ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300"
                         : key === "past_due"
                           ? "bg-red-500/30 text-red-200"
                           : "bg-white/20 text-white"
@@ -950,14 +950,14 @@ export function InvoicesList({ clientId }: Props) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-3 py-3">
                 <input
                   type="checkbox"
-                  className="rounded border-slate-300 accent-brand-500"
+                  className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                   checked={allSelected}
                   onChange={toggleAll}
                 />
@@ -968,7 +968,7 @@ export function InvoicesList({ clientId }: Props) {
                 return (
                   <th
                     key={col.key}
-                    className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600" : "")}
+                    className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400" : "")}
                     onClick={sortable ? () => toggleSort(col.key) : undefined}
                   >
                     {col.label}
@@ -990,7 +990,7 @@ export function InvoicesList({ clientId }: Props) {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={colSpan} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search ? "No invoices match your search" : "No invoices"}
                 </td>
               </tr>
@@ -999,16 +999,16 @@ export function InvoicesList({ clientId }: Props) {
                 <tr
                   key={inv.id}
                   className={cn(
-                    "group cursor-pointer border-b hover:bg-slate-50",
-                    isOverdue(inv) && "bg-red-50/40",
-                    selectedIds.has(inv.id) && "bg-brand-50"
+                    "group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40",
+                    isOverdue(inv) && "bg-red-50/40 dark:bg-red-950/40",
+                    selectedIds.has(inv.id) && "bg-brand-50 dark:bg-brand-900/30"
                   )}
                   onClick={() => setOpenInvoiceId(inv.id)}
                 >
                   <td className="w-10 px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 accent-brand-500"
+                      className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                       checked={selectedIds.has(inv.id)}
                       onChange={() => toggleRow(inv.id)}
                     />
@@ -1017,7 +1017,7 @@ export function InvoicesList({ clientId }: Props) {
                     switch (col.key) {
                       case "number":
                         return (
-                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 font-mono text-xs text-slate-400">
+                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 font-mono text-xs text-slate-400 dark:text-neutral-500">
                             {inv.invoiceNumber != null ? `#${inv.invoiceNumber}` : "—"}
                           </td>
                         );
@@ -1027,12 +1027,12 @@ export function InvoicesList({ clientId }: Props) {
                             <Link
                               href={`/crm/clients/${inv.clientId}`}
                               title={inv.clientName ?? undefined}
-                              className="block font-medium text-brand-600 hover:underline truncate"
+                              className="block font-medium text-brand-600 dark:text-brand-400 hover:underline truncate"
                             >
                               {inv.clientName}
                             </Link>
                             {inv.clientAddress && (
-                              <p className="text-[10px] text-slate-400 truncate" title={inv.clientAddress}>{inv.clientAddress}</p>
+                              <p className="text-[10px] text-slate-400 dark:text-neutral-500 truncate" title={inv.clientAddress}>{inv.clientAddress}</p>
                             )}
                           </td>
                         );
@@ -1054,7 +1054,7 @@ export function InvoicesList({ clientId }: Props) {
                                 money just hasn't arrived yet. */}
                             {hasPaymentInFlight(inv) && (
                               <span
-                                className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                                className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
                                 title={pendingChargeTooltip(inv)}
                               >
                                 <Clock className="h-2.5 w-2.5" />
@@ -1065,10 +1065,10 @@ export function InvoicesList({ clientId }: Props) {
                         );
                       }
                       case "date":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-slate-500">{formatDate(inv.invoiceDate)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-muted-foreground">{formatDate(inv.invoiceDate)}</td>;
                       case "due":
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs", isOverdue(inv) ? "text-red-600 font-medium" : "text-slate-500")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs", isOverdue(inv) ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground")}>
                             {inv.dueDate
                               ? formatDate(inv.dueDate)
                               : inv.terms === "due_on_receipt" && inv.invoiceDate
@@ -1077,17 +1077,17 @@ export function InvoicesList({ clientId }: Props) {
                           </td>
                         );
                       case "total":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700">{formatCurrency(inv.totalCents)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(inv.totalCents)}</td>;
                       case "balance":
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", inv.balanceCents > 0 ? "text-red-600" : "text-green-600")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", inv.balanceCents > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400")}>
                             {formatCurrency(inv.balanceCents)}
                           </td>
                         );
                       case "accountBalance": {
                         const acct = accountBalanceByClient.get(inv.clientId) ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", acct > 0 ? "text-red-600" : acct < 0 ? "text-green-600" : "text-slate-500")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", acct > 0 ? "text-red-600 dark:text-red-400" : acct < 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
                             {acct < 0 ? "−" : ""}{formatCurrency(Math.abs(acct))}
                           </td>
                         );
@@ -1095,7 +1095,7 @@ export function InvoicesList({ clientId }: Props) {
                       case "prepay": {
                         const prepay = inv.clientPrepayCents ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", prepay > 0 ? "text-blue-600" : "text-slate-400")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", prepay > 0 ? "text-blue-600 dark:text-blue-400" : "text-slate-400 dark:text-neutral-500")}>
                             {formatCurrency(prepay)}
                           </td>
                         );
@@ -1103,28 +1103,28 @@ export function InvoicesList({ clientId }: Props) {
                       case "credits": {
                         const credits = inv.clientCreditsCents ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", credits > 0 ? "text-green-600" : "text-slate-400")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", credits > 0 ? "text-green-600 dark:text-green-400" : "text-slate-400 dark:text-neutral-500")}>
                             {formatCurrency(credits)}
                           </td>
                         );
                       }
                       case "paymentType":
                         return (
-                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">
+                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">
                             {paymentTypeLabel(inv) || "—"}
                           </td>
                         );
                       case "delivery":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">{deliveryLabel(inv)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">{deliveryLabel(inv)}</td>;
                       case "frequency":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-500">{frequencyLabel(inv)}</td>;
+                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">{frequencyLabel(inv)}</td>;
                       default: return null;
                     }
                   })}
                   {/* Zero-width cell: the hover actions float over the row's right edge so
                       they don't reserve a blank column beside the data. */}
                   <td className="relative w-0 p-0">
-                    <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-md bg-white/95 px-1 opacity-0 shadow-sm group-hover:opacity-100">
+                    <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-md bg-card/95 px-1 opacity-0 shadow-sm group-hover:opacity-100">
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenInvoiceId(inv.id)}>
                         <FileText className="mr-1 h-3 w-3" /> Open
                       </Button>
@@ -1136,7 +1136,7 @@ export function InvoicesList({ clientId }: Props) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 text-xs text-brand-600 hover:text-brand-700"
+                            className="h-7 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
                             onClick={(e) => { e.stopPropagation(); void handleCharge(inv); }}
                             disabled={chargingId === inv.id || chargingAll || hasPaymentInFlight(inv)}
                           >
@@ -1154,7 +1154,7 @@ export function InvoicesList({ clientId }: Props) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 text-xs text-slate-400 hover:text-red-500 disabled:opacity-40 disabled:hover:text-slate-400"
+                              className="h-7 text-xs text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 disabled:hover:text-slate-400 dark:disabled:hover:text-neutral-500"
                               disabled={blocked !== null}
                               onClick={(e) => { e.stopPropagation(); requestVoid(inv); }}
                             >
@@ -1186,7 +1186,7 @@ export function InvoicesList({ clientId }: Props) {
           <DialogHeader>
             <DialogTitle>Void Invoice?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             {voidTarget
               ? `Invoice #${voidTarget.invoiceNumber} will be marked void and its balance removed from the client's account.`
               : ""}
@@ -1208,9 +1208,9 @@ export function InvoicesList({ clientId }: Props) {
               Charge {chargeableNow.length} invoice{chargeableNow.length === 1 ? "" : "s"}?
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             {pendingInQueue > 0 && (
-              <span className="mb-2 block font-medium text-amber-700">
+              <span className="mb-2 block font-medium text-amber-700 dark:text-amber-400">
                 {pendingInQueue} invoice{pendingInQueue === 1 ? "" : "s"} in this tab {pendingInQueue === 1 ? "has" : "have"}{" "}
                 a payment already in progress and will be skipped.
               </span>
@@ -1235,7 +1235,7 @@ export function InvoicesList({ clientId }: Props) {
           <DialogHeader>
             <DialogTitle>Void {selectedIds.size} invoice{selectedIds.size === 1 ? "" : "s"}?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             Their balances are removed from the clients&apos; accounts. Locked invoices and
             invoices with payments applied are skipped — you&apos;ll get a reason for each.
           </p>

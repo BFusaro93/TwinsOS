@@ -94,7 +94,7 @@ export function RepairCostReport() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[1, 2, 3, 4].map((i) => <ReportSkeletonCard key={i} />)}
         </div>
-        <div className="h-64 animate-pulse rounded-lg border bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-lg border bg-muted" />
       </div>
     );
   }
@@ -104,13 +104,13 @@ export function RepairCostReport() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-400 dark:text-neutral-500">
           Parts, labor and vendor charges on work orders, dated by completion. Excludes skipped work orders.
         </p>
         <select
           value={range}
           onChange={(e) => setRange(e.target.value as SpendRange)}
-          className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+          className="shrink-0 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-slate-700 dark:text-neutral-300"
           aria-label="Date range"
         >
           {SPEND_RANGE_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -128,12 +128,12 @@ export function RepairCostReport() {
         <ReportStatCard label="Labor" value={formatCurrency(totals.labor)} sub={pct(totals.labor, totals.total)} onClick={() => setDetailKind("labor")} />
         <ReportStatCard label="Vendors / Subs" value={formatCurrency(totals.vendor)} sub={pct(totals.vendor, totals.total)} onClick={() => setDetailKind("vendor")} />
       </div>
-      <p className="-mt-3 text-xs text-slate-500">
+      <p className="-mt-3 text-xs text-muted-foreground">
         Preventive maintenance: {formatCurrency(preventive)} · Reactive: {formatCurrency(totals.total - preventive)}
       </p>
 
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <div className="rounded-lg border bg-card p-6 shadow-sm">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Repair Spend by Month ({rangeLabel})
         </p>
         <ResponsiveContainer width="100%" height={260}>
@@ -158,12 +158,12 @@ export function RepairCostReport() {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <div className="rounded-lg border bg-card p-6 shadow-sm">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Top 5 Assets by Repair Spend ({rangeLabel})
         </p>
         {byAsset.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-400">No costs recorded on work orders in this range</p>
+          <p className="py-6 text-center text-xs text-slate-400 dark:text-neutral-500">No costs recorded on work orders in this range</p>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={byAsset} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>

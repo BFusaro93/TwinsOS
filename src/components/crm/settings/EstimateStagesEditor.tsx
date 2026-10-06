@@ -105,7 +105,7 @@ function StageRow({ stage }: { stage: EstimateStage }) {
           />
         ) : (
           <button
-            className="text-left text-sm font-medium text-slate-800 hover:text-brand-600"
+            className="text-left text-sm font-medium text-slate-800 dark:text-neutral-100 hover:text-brand-600 dark:hover:text-brand-400"
             onClick={() => setEditingName(true)}
             title="Click to rename"
           >
@@ -132,11 +132,11 @@ function StageRow({ stage }: { stage: EstimateStage }) {
               }}
               disabled={saving}
             />
-            <span className="text-xs text-slate-400">%</span>
+            <span className="text-xs text-slate-400 dark:text-neutral-500">%</span>
           </div>
         ) : (
           <button
-            className="text-sm text-slate-600 hover:text-brand-600"
+            className="text-sm text-slate-600 dark:text-neutral-400 hover:text-brand-600 dark:hover:text-brand-400"
             onClick={() => setEditingProb(true)}
             title="Click to edit probability"
           >
@@ -162,12 +162,12 @@ function StageRow({ stage }: { stage: EstimateStage }) {
 
       {stage.isSystem ? (
         <div className="w-7" title="System stages cannot be deleted">
-          <span className="text-xs text-slate-300">—</span>
+          <span className="text-xs text-slate-300 dark:text-neutral-500">—</span>
         </div>
       ) : (
         <button
           onClick={() => void handleDelete()}
-          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+          className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
           title="Delete stage"
         >
           <X className="h-4 w-4" />
@@ -212,7 +212,7 @@ function AddStageForm() {
   return (
     <div className="flex items-end gap-2 pt-3 flex-wrap">
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-slate-500">Name</span>
+        <span className="text-xs text-muted-foreground">Name</span>
         <Input
           className="h-8 w-40 text-sm"
           placeholder="e.g. Pending Review"
@@ -225,7 +225,7 @@ function AddStageForm() {
         />
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-slate-500">Key</span>
+        <span className="text-xs text-muted-foreground">Key</span>
         <Input
           className="h-8 w-32 font-mono text-sm"
           placeholder="pending_review"
@@ -235,7 +235,7 @@ function AddStageForm() {
         />
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-slate-500">Probability %</span>
+        <span className="text-xs text-muted-foreground">Probability %</span>
         <div className="flex items-center gap-1">
           <Input
             className="h-8 w-16 text-sm"
@@ -245,7 +245,7 @@ function AddStageForm() {
             value={prob}
             onChange={(e) => setProb(e.target.value)}
           />
-          <span className="text-xs text-slate-400">%</span>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">%</span>
         </div>
       </div>
       <Button size="sm" className="h-8" onClick={() => void handleAdd()} disabled={saving}>
@@ -267,16 +267,16 @@ export function EstimateStagesEditor() {
   }, [isLoading, stages.length, seed]);
 
   if (isLoading || seeding) {
-    return <p className="py-2 text-sm text-slate-400">Loading…</p>;
+    return <p className="py-2 text-sm text-slate-400 dark:text-neutral-500">Loading…</p>;
   }
 
   return (
     <div>
       <div className="flex items-center gap-4 pb-2 border-b">
-        <span className="flex-1 text-xs font-medium text-slate-500 uppercase tracking-wide">Name</span>
-        <span className="w-24 text-xs font-medium text-slate-500 uppercase tracking-wide">Probability</span>
-        <span className="w-20 text-xs font-medium text-slate-500 uppercase tracking-wide">Key</span>
-        <span className="w-16 text-xs font-medium text-slate-500 uppercase tracking-wide">Active</span>
+        <span className="flex-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Name</span>
+        <span className="w-24 text-xs font-medium text-muted-foreground uppercase tracking-wide">Probability</span>
+        <span className="w-20 text-xs font-medium text-muted-foreground uppercase tracking-wide">Key</span>
+        <span className="w-16 text-xs font-medium text-muted-foreground uppercase tracking-wide">Active</span>
         <div className="w-7" />
       </div>
       <div className="divide-y">

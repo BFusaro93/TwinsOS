@@ -202,12 +202,12 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
     );
   }
 
-  if (isLoading) return <p className="text-sm text-slate-400">Loading application rates…</p>;
+  if (isLoading) return <p className="text-sm text-slate-400 dark:text-neutral-500">Loading application rates…</p>;
 
   return (
     <div className="flex flex-col gap-3">
       {rows.length === 0 && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-400 dark:text-neutral-500">
           No application rates yet. Add one to define how much of this chemical to use per area.
         </p>
       )}
@@ -223,13 +223,13 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
                   )
                 }
               />
-              <span className="text-xs text-slate-500">Default rate</span>
+              <span className="text-xs text-muted-foreground">Default rate</span>
             </div>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-slate-400 hover:text-red-500"
+              className="h-6 w-6 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
               onClick={() => removeRow(i)}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -237,7 +237,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           </div>
 
           <div className="grid gap-1">
-            <label className="text-xs text-slate-500">Application Method</label>
+            <label className="text-xs text-muted-foreground">Application Method</label>
             <Select
               value={row.applicationMethodId ?? "none"}
               onValueChange={(v) => updateRow(i, { applicationMethodId: v === "none" ? null : v })}
@@ -257,7 +257,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           </div>
 
           <div className="grid gap-1">
-            <label className="text-xs text-slate-500">Product Cost ($)</label>
+            <label className="text-xs text-muted-foreground">Product Cost ($)</label>
             <Input
               className="h-8 text-xs"
               type="number"
@@ -269,7 +269,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           </div>
 
           <div className="grid gap-1">
-            <label className="text-xs text-slate-500">Applied</label>
+            <label className="text-xs text-muted-foreground">Applied</label>
             <div className="flex gap-1">
               <Input
                 className="h-8 text-xs"
@@ -299,7 +299,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           </div>
 
           <div className="grid gap-1">
-            <label className="text-xs text-slate-500">Area</label>
+            <label className="text-xs text-muted-foreground">Area</label>
             <div className="flex gap-1">
               <Input
                 className="h-8 text-xs"
@@ -328,10 +328,10 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
             </div>
           </div>
 
-          <div className="col-span-2 flex flex-col gap-2 rounded-md border border-slate-100 bg-slate-50 p-2">
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-2">
             <div className="flex flex-wrap items-center gap-4">
               {(["none", "water", "product"] as ChemicalMixType[]).map((mt) => (
-                <label key={mt} className="flex items-center gap-1.5 text-xs text-slate-700">
+                <label key={mt} className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-neutral-300">
                   <input
                     type="radio"
                     name={`mix-type-${i}`}
@@ -346,7 +346,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
 
             {row.mixType === "water" && (
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-slate-500">Chemical</span>
+                <span className="text-muted-foreground">Chemical</span>
                 <Input
                   className="h-8 w-16 text-xs"
                   type="number"
@@ -369,7 +369,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="text-slate-500">per Water</span>
+                <span className="text-muted-foreground">per Water</span>
                 <Input
                   className="h-8 w-16 text-xs"
                   type="number"
@@ -397,7 +397,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
 
             {row.mixType === "product" && (
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-slate-500">Product</span>
+                <span className="text-muted-foreground">Product</span>
                 <Select
                   value={row.mixProductId ?? "none"}
                   onValueChange={(v) => updateRow(i, { mixProductId: v === "none" ? null : v })}
@@ -412,7 +412,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="text-slate-500">Amount</span>
+                <span className="text-muted-foreground">Amount</span>
                 <Input
                   className="h-8 w-16 text-xs"
                   type="number"
@@ -435,7 +435,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="text-slate-500">per Total</span>
+                <span className="text-muted-foreground">per Total</span>
                 <Input
                   className="h-8 w-16 text-xs"
                   type="number"
@@ -465,7 +465,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           {(() => {
             const warning = mixConfigWarning(row, unitsById);
             return warning ? (
-              <p className="col-span-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+              <p className="col-span-2 flex items-start gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/40 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-300">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{warning}</span>
               </p>
@@ -473,7 +473,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           })()}
 
           {row.rateQty && row.productCost && (
-            <p className="col-span-2 text-xs text-slate-400">
+            <p className="col-span-2 text-xs text-slate-400 dark:text-neutral-500">
               {formatCurrency(Math.round(parseFloat(row.productCost) * 100 * parseFloat(row.rateQty || "0")))} for{" "}
               {row.rateQty} unit(s)
             </p>

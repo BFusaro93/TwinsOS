@@ -47,13 +47,13 @@ function PnlRow({
 }) {
   return (
     <div className={`flex items-start justify-between gap-2 py-0.5 ${bold ? "font-semibold" : ""}`}>
-      <span className="text-slate-600 leading-tight">{label}</span>
+      <span className="text-slate-600 dark:text-neutral-400 leading-tight">{label}</span>
       <div className="flex shrink-0 items-center gap-2">
-        <span className={`w-16 text-right tabular-nums ${negative && cents > 0 ? "text-red-500" : ""}`}>
+        <span className={`w-16 text-right tabular-nums ${negative && cents > 0 ? "text-red-500 dark:text-red-400" : ""}`}>
           {negative && cents > 0 ? "-" : ""}{formatCurrency(cents)}
         </span>
         {bps !== undefined && (
-          <span className="w-10 text-right tabular-nums text-slate-400 text-[10px]">
+          <span className="w-10 text-right tabular-nums text-slate-400 dark:text-neutral-500 text-[10px]">
             {bpsToPercent(bps)}
           </span>
         )}
@@ -63,7 +63,7 @@ function PnlRow({
 }
 
 function Divider() {
-  return <div className="my-1 border-t border-slate-200" />;
+  return <div className="my-1 border-t border-border" />;
 }
 
 function RateRow({
@@ -81,7 +81,7 @@ function RateRow({
 }) {
   return (
     <div className="flex items-center justify-between py-0.5">
-      <span className="text-slate-600">{label}</span>
+      <span className="text-slate-600 dark:text-neutral-400">{label}</span>
       <div className="flex items-center gap-1">
         <input
           type="number"
@@ -90,9 +90,9 @@ function RateRow({
           onBlur={onBlur}
           step="0.1"
           min="0"
-          className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none"
+          className="w-16 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none"
         />
-        <span className="text-xs text-slate-400">{suffix}</span>
+        <span className="text-xs text-slate-400 dark:text-neutral-500">{suffix}</span>
       </div>
     </div>
   );
@@ -233,8 +233,8 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     <div className="flex flex-col gap-3">
 
       {/* Financial settings */}
-      <div className="rounded-lg border bg-white p-4 text-xs shadow-sm">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className="rounded-lg border bg-card p-4 text-xs shadow-sm">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Financial Settings
         </p>
         <RateRow
@@ -250,7 +250,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
           onBlur={() => handleRecalc()}
         />
         {perTypeOverheadActive && (
-          <p className="mb-1 text-[10px] leading-tight text-slate-400">
+          <p className="mb-1 text-[10px] leading-tight text-slate-400 dark:text-neutral-500">
             Per-cost-type overhead is configured in Settings — this flat rate is ignored while that&apos;s active.
           </p>
         )}
@@ -269,7 +269,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
               type="button"
               onClick={clearDiscount}
               title="Remove discount"
-              className="rounded p-0.5 text-slate-400 hover:text-red-500"
+              className="rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -285,7 +285,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
                 <SelectValue placeholder="Apply a saved discount…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__" className="text-xs text-slate-400">
+                <SelectItem value="__none__" className="text-xs text-slate-400 dark:text-neutral-500">
                   — None —
                 </SelectItem>
                 {activeDiscounts.map((d) => (
@@ -300,16 +300,16 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
           </div>
         )}
         {recalcPending && (
-          <p className="mt-1 text-[10px] text-brand-500 text-right">Recalculating…</p>
+          <p className="mt-1 text-[10px] text-brand-500 dark:text-brand-400 text-right">Recalculating…</p>
         )}
       </div>
 
       {/* P&L block */}
-      <div className="rounded-lg border bg-white p-4 text-xs shadow-sm">
+      <div className="rounded-lg border bg-card p-4 text-xs shadow-sm">
         <PnlRow label="Revenue:" cents={rev} bold />
         <PnlRow label="Discounts:" cents={totalDiscountCents} bps={pct(totalDiscountCents)} negative />
         <Divider />
-        <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Costs
         </p>
         <PnlRow label="Labor / Line Items:" cents={costByType.labor}          bps={pct(costByType.labor)} />
@@ -325,7 +325,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
       </div>
 
       {/* Totals block */}
-      <div className="rounded-lg border bg-white p-4 text-xs shadow-sm">
+      <div className="rounded-lg border bg-card p-4 text-xs shadow-sm">
         <PnlRow label="Subtotal:" cents={estimate.subtotalCents} bold />
         <PnlRow label="Est Sales Tax:" cents={estimate.taxCents} />
         <Divider />
@@ -333,47 +333,47 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
       </div>
 
       {/* Aspire-style summary block */}
-      <div className="rounded-lg border bg-white p-4 text-xs shadow-sm">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className="rounded-lg border bg-card p-4 text-xs shadow-sm">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Estimate Summary
         </p>
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Net Price:</span>
+          <span className="text-slate-600 dark:text-neutral-400">Net Price:</span>
           <span className="tabular-nums font-semibold">${(rev / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
         </div>
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Overhead:</span>
+          <span className="text-slate-600 dark:text-neutral-400">Overhead:</span>
           <span className="tabular-nums">${(estimate.overheadCostCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
         </div>
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Break Even:</span>
+          <span className="text-slate-600 dark:text-neutral-400">Break Even:</span>
           <span className="tabular-nums">${((totalCostCents + estimate.overheadCostCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
         </div>
         <Divider />
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Net Profit:</span>
-          <span className={`tabular-nums font-semibold ${netBps >= 0 ? "text-green-600" : "text-red-500"}`}>
+          <span className="text-slate-600 dark:text-neutral-400">Net Profit:</span>
+          <span className={`tabular-nums font-semibold ${netBps >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
             {bpsToPercent(netBps)}
           </span>
         </div>
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Gross Margin:</span>
-          <span className={`tabular-nums font-semibold ${grossBps >= 0 ? "text-green-600" : "text-red-500"}`}>
+          <span className="text-slate-600 dark:text-neutral-400">Gross Margin:</span>
+          <span className={`tabular-nums font-semibold ${grossBps >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
             {bpsToPercent(grossBps)}
           </span>
         </div>
         <Divider />
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Total B. Hrs:</span>
+          <span className="text-slate-600 dark:text-neutral-400">Total B. Hrs:</span>
           <span className="tabular-nums">{estimate.totalBudgetedHours.toFixed(2)}</span>
         </div>
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Revenue / Man Hr:</span>
+          <span className="text-slate-600 dark:text-neutral-400">Revenue / Man Hr:</span>
           <span className="tabular-nums">${revenueManHr.toFixed(2)}</span>
         </div>
         <div className="flex justify-between py-0.5">
-          <span className="text-slate-600">Net Profit / Man Hr:</span>
-          <span className={`tabular-nums font-semibold ${netManHr >= 0 ? "text-green-600" : "text-red-500"}`}>
+          <span className="text-slate-600 dark:text-neutral-400">Net Profit / Man Hr:</span>
+          <span className={`tabular-nums font-semibold ${netManHr >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
             ${netManHr.toFixed(2)}
           </span>
         </div>

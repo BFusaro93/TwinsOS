@@ -40,13 +40,13 @@ function Section({
     <div className="border-b last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50"
+        className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
       >
         <div>
-          <span className="text-sm font-semibold text-slate-900">{title}</span>
-          {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
+          <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{title}</span>
+          {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
         </div>
-        {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+        {open ? <ChevronUp className="h-4 w-4 text-slate-400 dark:text-neutral-500" /> : <ChevronDown className="h-4 w-4 text-slate-400 dark:text-neutral-500" />}
       </button>
       {open && <div className="px-6 pb-4">{children}</div>}
     </div>
@@ -111,8 +111,8 @@ function GeneralChemicalSettings() {
 
       <label className="flex max-w-xs items-center justify-between gap-3 rounded-md border px-3 py-2.5">
         <div>
-          <p className="text-sm font-medium text-slate-800">Default Chemical Quantity</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">Default Chemical Quantity</p>
+          <p className="text-xs text-muted-foreground">
             Auto-calculate quantity to apply from a property&apos;s custom field and the product&apos;s
             application rate.
           </p>
@@ -122,11 +122,11 @@ function GeneralChemicalSettings() {
           aria-checked={settings?.autoCalcQuantity ?? false}
           onClick={() => handleAutoCalcChange(!(settings?.autoCalcQuantity ?? false))}
           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
-            settings?.autoCalcQuantity ? "bg-brand-500" : "bg-slate-200"
+            settings?.autoCalcQuantity ? "bg-brand-500" : "bg-slate-200 dark:bg-neutral-700"
           }`}
         >
           <span
-            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow transition-transform ${
               settings?.autoCalcQuantity ? "translate-x-4" : "translate-x-0"
             }`}
           />
@@ -147,7 +147,7 @@ function GeneralChemicalSettings() {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             The numeric property field (e.g. Turf Sq Ft) used to auto-calculate quantity from each
             product&apos;s application rate.
           </p>
@@ -348,21 +348,21 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
   return (
     <div className="divide-y">
       {items.length === 0 && !adding && (
-        <p className="py-3 text-xs text-slate-400">No items yet.</p>
+        <p className="py-3 text-xs text-slate-400 dark:text-neutral-500">No items yet.</p>
       )}
       {items.map((item) => (
         <div key={item.id} className="flex items-center gap-3 py-2.5">
-          <span className="flex-1 text-sm text-slate-800">{item.name}</span>
+          <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{item.name}</span>
           <button
             role="switch"
             aria-checked={item.isActive}
             onClick={() => update.mutate({ id: item.id, isActive: !item.isActive })}
             className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
-              item.isActive ? "bg-brand-500" : "bg-slate-200"
+              item.isActive ? "bg-brand-500" : "bg-slate-200 dark:bg-neutral-700"
             }`}
           >
             <span
-              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow transition-transform ${
                 item.isActive ? "translate-x-4" : "translate-x-0"
               }`}
             />
@@ -381,18 +381,18 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
               if (e.key === "Enter") commitAdd();
               if (e.key === "Escape") { setAdding(false); setNewName(""); }
             }}
-            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
           <button onClick={commitAdd} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">
             Add
           </button>
-          <button onClick={() => { setAdding(false); setNewName(""); }} className="rounded p-1 text-slate-400 hover:text-slate-600">
+          <button onClick={() => { setAdding(false); setNewName(""); }} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
             <X className="h-4 w-4" />
           </button>
         </div>
       ) : canCreate ? (
         <div className="py-3">
-          <button onClick={() => setAdding(true)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+          <button onClick={() => setAdding(true)} className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400">
             + Add item
           </button>
         </div>
@@ -405,8 +405,8 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
 
 function NoticeEmailTemplatesEditor() {
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
-      <p className="text-sm text-slate-600">
+    <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-4">
+      <p className="text-sm text-slate-600 dark:text-neutral-400">
         Build and edit client notice email templates in <span className="font-medium">Documents</span> — create a
         document with type &quot;Chemical&quot;, and it&apos;ll show up in the template picker when sending an
         application notice.
@@ -422,7 +422,7 @@ function NoticeEmailTemplatesEditor() {
 
 export function ChemicalTrackingTab() {
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <Section title="General Chemical Settings" defaultOpen>
         <GeneralChemicalSettings />
       </Section>

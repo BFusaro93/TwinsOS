@@ -94,12 +94,12 @@ const RECURRENCE_LABELS: Record<string, string> = {
 };
 
 const RECURRENCE_COLORS: Record<string, string> = {
-  daily:     "border-orange-200 bg-orange-50 text-orange-700",
-  weekly:    "border-blue-200 bg-blue-50 text-blue-700",
-  biweekly:  "border-cyan-200 bg-cyan-50 text-cyan-700",
-  monthly:   "border-violet-200 bg-violet-50 text-violet-700",
-  quarterly: "border-teal-200 bg-teal-50 text-teal-700",
-  yearly:    "border-slate-200 bg-slate-100 text-slate-600",
+  daily:     "border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400",
+  weekly:    "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
+  biweekly:  "border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-400",
+  monthly:   "border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400",
+  quarterly: "border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400",
+  yearly:    "border-border bg-muted text-slate-600 dark:text-neutral-400",
 };
 
 // ── Upcoming Maintenance Report ───────────────────────────────────────────────
@@ -111,7 +111,7 @@ function RecurrenceBadge({ frequency }: { frequency: string | null }) {
       variant="outline"
       className={cn(
         "inline-flex items-center gap-1 text-xs font-medium",
-        RECURRENCE_COLORS[frequency] ?? "border-slate-200 bg-slate-100 text-slate-600"
+        RECURRENCE_COLORS[frequency] ?? "border-border bg-muted text-slate-600 dark:text-neutral-400"
       )}
     >
       <RefreshCw className="h-2.5 w-2.5" />
@@ -135,9 +135,9 @@ function SectionHeader({
         colSpan={7}
         className={cn(
           "py-2 pl-4 text-xs font-semibold uppercase tracking-wide",
-          variant === "overdue"  && "bg-red-50 text-red-700",
-          variant === "complete" && "bg-green-50 text-green-700",
-          variant === "default"  && "bg-slate-50 text-slate-500"
+          variant === "overdue"  && "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
+          variant === "complete" && "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400",
+          variant === "default"  && "bg-slate-50 dark:bg-muted/40 text-muted-foreground"
         )}
       >
         {label}
@@ -193,28 +193,28 @@ function UpcomingMaintenanceView({
   function WORow({ wo, overdue: isOverdue }: { wo: WorkOrder; overdue?: boolean }) {
     return (
       <TableRow
-        className="cursor-pointer hover:bg-slate-50"
+        className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
         onClick={() => onRowClick(wo)}
       >
-        <TableCell className="font-mono text-xs text-slate-500">{wo.workOrderNumber}</TableCell>
+        <TableCell className="font-mono text-xs text-muted-foreground">{wo.workOrderNumber}</TableCell>
         <TableCell>
-          <p className="font-medium text-slate-900">{wo.title}</p>
-          {wo.category && <p className="text-xs text-slate-400">{wo.category}</p>}
+          <p className="font-medium text-slate-900 dark:text-neutral-100">{wo.title}</p>
+          {wo.category && <p className="text-xs text-slate-400 dark:text-neutral-500">{wo.category}</p>}
         </TableCell>
-        <TableCell className="text-sm text-slate-600">{wo.assetName ?? "—"}</TableCell>
+        <TableCell className="text-sm text-slate-600 dark:text-neutral-400">{wo.assetName ?? "—"}</TableCell>
         <TableCell>
           <RecurrenceBadge frequency={wo.recurrenceFrequency} />
         </TableCell>
         <TableCell>
           {wo.dueDate ? (
-            <span className={cn("text-sm font-medium", isOverdue ? "text-red-600" : "text-slate-700")}>
+            <span className={cn("text-sm font-medium", isOverdue ? "text-red-600 dark:text-red-400" : "text-slate-700 dark:text-neutral-300")}>
               {formatDate(wo.dueDate)}
             </span>
           ) : (
-            <span className="text-sm text-slate-400">No due date</span>
+            <span className="text-sm text-slate-400 dark:text-neutral-500">No due date</span>
           )}
         </TableCell>
-        <TableCell className="text-sm text-slate-600">
+        <TableCell className="text-sm text-slate-600 dark:text-neutral-400">
           {wo.assignedToNames.length > 0 ? wo.assignedToNames.join(", ") : (wo.assignedToName ?? "—")}
         </TableCell>
         <TableCell>
@@ -230,27 +230,27 @@ function UpcomingMaintenanceView({
   return (
     <div className="flex flex-col gap-4">
       {/* Summary bar */}
-      <div className="flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
-        <CalendarClock className="h-5 w-5 shrink-0 text-violet-600" />
+      <div className="flex items-center gap-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 px-4 py-3">
+        <CalendarClock className="h-5 w-5 shrink-0 text-violet-600 dark:text-violet-400" />
         <div>
-          <p className="text-sm font-semibold text-violet-900">
+          <p className="text-sm font-semibold text-violet-900 dark:text-violet-200">
             {totalActive} active recurring work order{totalActive !== 1 ? "s" : ""}
             {overdue.length > 0 && (
-              <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+              <span className="ml-2 rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-400">
                 {overdue.length} overdue
               </span>
             )}
           </p>
-          <p className="text-xs text-violet-700">
+          <p className="text-xs text-violet-700 dark:text-violet-400">
             These work orders auto-generate a new copy once marked done.
           </p>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <TableHead className="w-24">WO #</TableHead>
               <TableHead>Title</TableHead>
               <TableHead>Asset / Vehicle</TableHead>
@@ -321,7 +321,7 @@ function UpcomingMaintenanceView({
 
                 {recurring.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-12 text-center text-sm text-slate-400">
+                    <TableCell colSpan={7} className="py-12 text-center text-sm text-slate-400 dark:text-neutral-500">
                       No recurring work orders found
                     </TableCell>
                   </TableRow>
@@ -494,7 +494,7 @@ export function WorkOrderListPage() {
           size="sm"
           className={cn(
             "h-8 gap-1.5 text-xs whitespace-nowrap",
-            !showFuture && "border-slate-300 text-slate-600"
+            !showFuture && "border-slate-300 dark:border-neutral-700 text-slate-600 dark:text-neutral-400"
           )}
           onClick={() => setShowFuture((v) => !v)}
         >
@@ -536,10 +536,10 @@ export function WorkOrderListPage() {
           onVisibleKeysChange={setVisibleKeys}
         />
       </div>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <SortableTableHead label="WO #" sortKey="workOrderNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <SortableTableHead label="Title" sortKey="title" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("status")         && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -564,7 +564,7 @@ export function WorkOrderListPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No work orders found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No work orders found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -572,10 +572,10 @@ export function WorkOrderListPage() {
             {!isLoading && sorted.map((wo) => (
               <TableRow
                 key={wo.id}
-                className="cursor-pointer hover:bg-slate-50"
+                className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => setSheetWOId(wo.id)}
               >
-                <TableCell className="font-mono text-xs text-slate-500">{wo.workOrderNumber}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{wo.workOrderNumber}</TableCell>
                 <TableCell className="font-medium">{wo.title}</TableCell>
                 {col("status") && (
                   <TableCell>
@@ -594,7 +594,7 @@ export function WorkOrderListPage() {
                   </TableCell>
                 )}
                 {col("woType") && (
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-neutral-400">
                     {wo.woType === "reactive"
                       ? "Reactive"
                       : wo.woType === "preventive"
@@ -603,18 +603,18 @@ export function WorkOrderListPage() {
                   </TableCell>
                 )}
                 {col("assetName") && (
-                  <TableCell className="text-slate-600">{wo.assetName ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{wo.assetName ?? "—"}</TableCell>
                 )}
                 {col("assignedToName") && (
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-neutral-400">
                     {wo.assignedToNames.length > 0 ? wo.assignedToNames.join(", ") : (wo.assignedToName ?? "—")}
                   </TableCell>
                 )}
                 {col("category") && (
-                  <TableCell className="text-slate-600">{wo.category ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{wo.category ?? "—"}</TableCell>
                 )}
                 {col("dueDate") && (
-                  <TableCell className="text-slate-500">
+                  <TableCell className="text-muted-foreground">
                     {wo.dueDate ? formatDate(wo.dueDate) : "—"}
                   </TableCell>
                 )}
@@ -633,13 +633,13 @@ export function WorkOrderListPage() {
         action={
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {/* View toggles — scrolls inside its own box on a narrow phone */}
-            <div className="flex max-w-full items-center overflow-x-auto rounded-md border bg-white shadow-sm [&>*]:shrink-0">
+            <div className="flex max-w-full items-center overflow-x-auto rounded-md border bg-card shadow-sm [&>*]:shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
                 className={cn(
                   "rounded-r-none border-r px-3",
-                  viewMode === "list" && "bg-slate-100 font-semibold"
+                  viewMode === "list" && "bg-muted font-semibold"
                 )}
                 onClick={() => setViewMode("list")}
               >
@@ -651,7 +651,7 @@ export function WorkOrderListPage() {
                 size="sm"
                 className={cn(
                   "rounded-none border-r px-3",
-                  viewMode === "table" && "bg-slate-100 font-semibold"
+                  viewMode === "table" && "bg-muted font-semibold"
                 )}
                 onClick={() => setViewMode("table")}
               >
@@ -663,7 +663,7 @@ export function WorkOrderListPage() {
                 size="sm"
                 className={cn(
                   "rounded-none border-r px-3",
-                  viewMode === "upcoming" && "bg-violet-50 font-semibold text-violet-700"
+                  viewMode === "upcoming" && "bg-violet-50 dark:bg-violet-950/40 font-semibold text-violet-700 dark:text-violet-400"
                 )}
                 onClick={() => setViewMode("upcoming")}
               >
@@ -675,7 +675,7 @@ export function WorkOrderListPage() {
                 size="sm"
                 className={cn(
                   "rounded-l-none px-3",
-                  viewMode === "service" && "bg-amber-50 font-semibold text-amber-700"
+                  viewMode === "service" && "bg-amber-50 dark:bg-amber-950/40 font-semibold text-amber-700 dark:text-amber-400"
                 )}
                 onClick={() => setViewMode("service")}
               >

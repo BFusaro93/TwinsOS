@@ -25,10 +25,10 @@ function defaultDateRange(timeZone: string) {
 }
 
 function OverUnderCell({ cents }: { cents: number }) {
-  if (cents === 0) return <span className="text-slate-400">—</span>;
+  if (cents === 0) return <span className="text-slate-400 dark:text-neutral-500">—</span>;
   const positive = cents > 0;
   return (
-    <span className={cn("flex items-center justify-end gap-0.5 tabular-nums font-medium", positive ? "text-green-600" : "text-red-600")}>
+    <span className={cn("flex items-center justify-end gap-0.5 tabular-nums font-medium", positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
       {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
       {positive ? "+" : ""}{formatCurrency(cents)}
     </span>
@@ -37,10 +37,10 @@ function OverUnderCell({ cents }: { cents: number }) {
 
 function SummaryKPI({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: "green" | "red" }) {
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm flex-1">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">{label}</p>
-      <p className={cn("text-xl font-bold", color === "green" ? "text-green-600" : color === "red" ? "text-red-600" : "text-slate-800")}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+    <div className="rounded-lg border bg-card p-4 shadow-sm flex-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">{label}</p>
+      <p className={cn("text-xl font-bold", color === "green" ? "text-green-600 dark:text-green-400" : color === "red" ? "text-red-600 dark:text-red-400" : "text-slate-800 dark:text-neutral-100")}>{value}</p>
+      {sub && <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -152,8 +152,8 @@ export default function COGSReportPage() {
     <div className="flex flex-col gap-5 p-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Cost of Goods Sold — By Service</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Profitability of completed visits by service across a date range</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-neutral-100">Cost of Goods Sold — By Service</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Profitability of completed visits by service across a date range</p>
         </div>
         {rows.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => downloadCSV(rows)}>
@@ -166,11 +166,11 @@ export default function COGSReportPage() {
       {/* Filters */}
       <div className="flex gap-3 items-end flex-wrap">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">From</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">From</label>
           <Input type="date" value={from} onChange={(e) => { touchedDates.current = true; setFrom(e.target.value); }} className="h-8 text-sm w-36" />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">To</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">To</label>
           <Input type="date" value={to} onChange={(e) => { touchedDates.current = true; setTo(e.target.value); }} className="h-8 text-sm w-36" />
         </div>
       </div>
@@ -202,22 +202,22 @@ export default function COGSReportPage() {
       )}
 
       {/* Table */}
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
+          <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">Loading…</div>
         ) : error ? (
-          <div className="flex items-center justify-center py-16 text-sm text-red-600">
+          <div className="flex items-center justify-center py-16 text-sm text-red-600 dark:text-red-400">
             {error instanceof Error ? error.message : "Failed to load report"}
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-sm text-slate-400">
+          <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">
             No completed visits in this date range.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                <tr className="bg-slate-50 dark:bg-muted/40 border-b text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Service</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Visits</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Bgt Hrs</th>
@@ -237,86 +237,86 @@ export default function COGSReportPage() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.serviceId} className="border-b last:border-0 hover:bg-slate-50">
-                    <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{r.serviceName}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.visitCount}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                  <tr key={r.serviceId} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
+                    <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-neutral-100 whitespace-nowrap">{r.serviceName}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-neutral-400">{r.visitCount}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                       {r.budgetedHours > 0 ? r.budgetedHours.toFixed(1) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-800">{r.actualStaffHrs.toFixed(1)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-800 dark:text-neutral-100">{r.actualStaffHrs.toFixed(1)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {r.budgetedHours > 0 ? (
-                        <span className={r.hoursVariancePct <= 0 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                        <span className={r.hoursVariancePct <= 0 ? "text-green-600 dark:text-green-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
                           {r.hoursVariancePct > 0 ? "+" : ""}{r.hoursVariancePct.toFixed(1)}%
                         </span>
-                      ) : <span className="text-slate-300">—</span>}
+                      ) : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-neutral-300">
                       {r.grossSalesCents > 0 ? formatCurrency(r.grossSalesCents) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-neutral-300 whitespace-nowrap">
                       {formatCurrency(r.laborCostCents)}
                       {r.laborEstimatedVisitCount > 0 && (
                         <span
-                          className="ml-0.5 text-amber-600"
+                          className="ml-0.5 text-amber-600 dark:text-amber-400"
                           title={`${r.laborEstimatedVisitCount} of ${r.visitCount} visits have estimated labor (man-hours × crew burden)`}
                         >†</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                       {r.grossSalesCents > 0 ? `${r.laborPct.toFixed(1)}%` : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-neutral-400">
                       {r.materialsCostCents > 0 ? formatCurrency(r.materialsCostCents) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-700">{formatCurrency(r.directCostCents)}</td>
-                    <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", r.grossProfitCents >= 0 ? "text-green-700" : "text-red-700")}>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-neutral-300">{formatCurrency(r.directCostCents)}</td>
+                    <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", r.grossProfitCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
                       {r.grossSalesCents > 0 ? formatCurrency(r.grossProfitCents) : "—"}
                     </td>
                     <td className={cn("px-3 py-2 text-right tabular-nums font-semibold",
-                      r.marginPct >= 40 ? "text-green-600" : r.marginPct >= 20 ? "text-slate-700" : "text-red-600")}>
+                      r.marginPct >= 40 ? "text-green-600 dark:text-green-400" : r.marginPct >= 20 ? "text-slate-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400")}>
                       {r.grossSalesCents > 0 ? `${r.marginPct.toFixed(1)}%` : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-neutral-300">
                       {r.avgRevPerManHrCents > 0 ? formatCurrency(r.avgRevPerManHrCents) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                       {r.targetRateCents > 0 ? formatCurrency(r.targetRateCents) : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {r.targetRateCents > 0 && r.avgRevPerManHrCents > 0
                         ? <OverUnderCell cents={r.avgOverUnderCents} />
-                        : <span className="text-slate-300">—</span>}
+                        : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                     </td>
                   </tr>
                 ))}
               </tbody>
               {totals && rows.length > 1 && (
                 <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-xs">
-                    <td className="px-3 py-2.5 text-slate-600">Total</td>
-                    <td className="px-3 py-2.5 text-right text-slate-300">—</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{totals.budgetedHours.toFixed(1)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">{totals.actualStaffHrs.toFixed(1)}</td>
+                  <tr className="border-t-2 border-border bg-slate-50 dark:bg-muted/40 font-semibold text-xs">
+                    <td className="px-3 py-2.5 text-slate-600 dark:text-neutral-400">Total</td>
+                    <td className="px-3 py-2.5 text-right text-slate-300 dark:text-neutral-500">—</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">{totals.budgetedHours.toFixed(1)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800 dark:text-neutral-100">{totals.actualStaffHrs.toFixed(1)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {totals.budgetedHours > 0 ? (
-                        <span className={totals.hoursVariancePct <= 0 ? "text-green-600" : "text-red-600"}>
+                        <span className={totals.hoursVariancePct <= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                           {totals.hoursVariancePct > 0 ? "+" : ""}{totals.hoursVariancePct.toFixed(1)}%
                         </span>
-                      ) : <span className="text-slate-300">—</span>}
+                      ) : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(totals.grossSalesCents)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(totals.laborCostCents)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{totals.laborPct.toFixed(1)}%</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{formatCurrency(totals.materialsCostCents)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(totals.directCostCents)}</td>
-                    <td className={cn("px-3 py-2.5 text-right tabular-nums", totals.grossProfitCents >= 0 ? "text-green-700" : "text-red-700")}>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-neutral-300">{formatCurrency(totals.grossSalesCents)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-neutral-300">{formatCurrency(totals.laborCostCents)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{totals.laborPct.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">{formatCurrency(totals.materialsCostCents)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-neutral-300">{formatCurrency(totals.directCostCents)}</td>
+                    <td className={cn("px-3 py-2.5 text-right tabular-nums", totals.grossProfitCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
                       {formatCurrency(totals.grossProfitCents)}
                     </td>
-                    <td className={cn("px-3 py-2.5 text-right tabular-nums", totals.marginPct >= 40 ? "text-green-600" : totals.marginPct >= 20 ? "text-slate-700" : "text-red-600")}>
+                    <td className={cn("px-3 py-2.5 text-right tabular-nums", totals.marginPct >= 40 ? "text-green-600 dark:text-green-400" : totals.marginPct >= 20 ? "text-slate-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400")}>
                       {totals.marginPct.toFixed(1)}%
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-neutral-300">
                       {totals.revPerManHrCents > 0 ? formatCurrency(totals.revPerManHrCents) : "—"}
                     </td>
                     <td colSpan={2} />
@@ -329,7 +329,7 @@ export default function COGSReportPage() {
       </div>
 
       {rows.length > 0 && (
-        <div className="text-[11px] text-slate-400 leading-relaxed space-y-0.5">
+        <div className="text-[11px] text-slate-400 dark:text-neutral-500 leading-relaxed space-y-0.5">
           <p>
             Each visit completed in the window is split across its services by each service line&apos;s own price
             (qty × rate) — hours, labor and materials follow that same revenue share, so a $0 line never absorbs a
@@ -340,13 +340,13 @@ export default function COGSReportPage() {
           </p>
           {totals && totals.laborEstimatedVisitCount > 0 && (
             <p>
-              <span className="text-amber-600">†</span> Includes visits whose labor was estimated as man-hours × the crew&apos;s
+              <span className="text-amber-600 dark:text-amber-400">†</span> Includes visits whose labor was estimated as man-hours × the crew&apos;s
               average labor rate (member labor burden rate, or employee hourly rate grossed up by the org labor burden %,
               falling back to the org-wide average) because no crew clock-out recorded actual labor.
             </p>
           )}
           {totals && totals.laborMissingVisitCount > 0 && (
-            <p className="text-amber-700">
+            <p className="text-amber-700 dark:text-amber-400">
               No labor rate configured: {totals.laborMissingVisitCount} visit{totals.laborMissingVisitCount === 1 ? "" : "s"} in
               this window carry $0.00 labor because neither the crew members nor the org have a labor rate. Set labor
               burden rates on crew members (Settings → Crews) or hourly rates on employees — until then labor cost,

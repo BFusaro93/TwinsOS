@@ -36,10 +36,10 @@ export function ApprovalFlowIndicator({ currentStatus }: ApprovalFlowIndicatorPr
                   isCompleted &&
                     "border-brand-500 bg-brand-500 text-white",
                   isCurrent &&
-                    "border-brand-500 bg-white text-brand-600",
+                    "border-brand-500 bg-card text-brand-600 dark:text-brand-400",
                   !isCompleted &&
                     !isCurrent &&
-                    "border-slate-200 bg-white text-slate-400"
+                    "border-border bg-card text-slate-400 dark:text-neutral-500"
                 )}
               >
                 {isCompleted ? (
@@ -51,7 +51,7 @@ export function ApprovalFlowIndicator({ currentStatus }: ApprovalFlowIndicatorPr
               <span
                 className={cn(
                   "whitespace-nowrap text-[10px] font-medium",
-                  isCurrent ? "text-brand-600" : "text-slate-400"
+                  isCurrent ? "text-brand-600 dark:text-brand-400" : "text-slate-400 dark:text-neutral-500"
                 )}
               >
                 {step.label}
@@ -63,7 +63,7 @@ export function ApprovalFlowIndicator({ currentStatus }: ApprovalFlowIndicatorPr
               <div
                 className={cn(
                   "mb-4 h-0.5 flex-1",
-                  i < currentIndex ? "bg-brand-500" : "bg-slate-200"
+                  i < currentIndex ? "bg-brand-500" : "bg-slate-200 dark:bg-neutral-700"
                 )}
               />
             )}

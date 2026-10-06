@@ -43,8 +43,8 @@ export function MetersGuide() {
         description="Track hours, miles, gallons, and cycles on any asset — and let Equipt open the work order for you the moment a threshold is crossed."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -176,25 +176,25 @@ export function MetersGuide() {
             </TableHeadRow>
           </thead>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">
                 Pending Reset = false
               </td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 Armed. The automation is watching and will fire the next time a reading crosses the
                 threshold.
               </td>
-              <td className="px-3 py-2 text-[#4a4a46]">—</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">—</td>
             </tr>
             <tr>
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">
                 Pending Reset = true
               </td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 Already fired once for this threshold. Further readings that still cross it are
                 ignored — no duplicate work orders.
               </td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 The linked work order (or request) is marked Done. That&apos;s also the moment the
                 Service Interval, if set, advances the threshold.
               </td>
@@ -220,9 +220,9 @@ export function MetersGuide() {
           </thead>
           <tbody>
             {TRIGGER_TYPES.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -236,9 +236,9 @@ export function MetersGuide() {
           </thead>
           <tbody>
             {ACTION_TYPES.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -270,7 +270,7 @@ export function MetersGuide() {
             recurring date regardless of how much an asset has actually been used. See{" "}
             <GuideLink
               href="/settings/support/pm-schedules-guide"
-              className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
+              className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline"
             >
               the PM Schedules guide
             </GuideLink>{" "}
@@ -284,7 +284,7 @@ export function MetersGuide() {
             PM. See{" "}
             <GuideLink
               href="/settings/support/asset-performance-guide#pm-compliance"
-              className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
+              className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline"
             >
               how PM compliance is scored
             </GuideLink>
@@ -296,7 +296,7 @@ export function MetersGuide() {
             or affect the Pending Reset state of any automation configured here. See{" "}
             <GuideLink
               href="/settings/support/zapier-guide#meter-threshold"
-              className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
+              className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline"
             >
               Meter Threshold, in detail
             </GuideLink>{" "}

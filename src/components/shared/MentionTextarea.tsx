@@ -177,7 +177,7 @@ export function MentionTextarea({
               : { top: query.anchor.bottom + 4 }),
           }}
           className={`absolute z-20 w-64 overflow-hidden rounded-md border shadow-lg ${
-            dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-slate-200 bg-white"
+            dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-border bg-card"
           }`}
         >
           {matches.map((u, i) => {
@@ -190,9 +190,9 @@ export function MentionTextarea({
                 onMouseDown={(e) => { e.preventDefault(); pick(u); }}
                 className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm ${
                   i === highlighted
-                    ? dark ? "bg-[#3a3a3a]" : "bg-slate-100"
+                    ? dark ? "bg-[#3a3a3a]" : "bg-muted"
                     : ""
-                } ${dark ? "text-slate-100 hover:bg-[#3a3a3a]" : "text-slate-800 hover:bg-slate-50"}`}
+                } ${dark ? "text-slate-100 hover:bg-[#3a3a3a]" : "text-slate-800 dark:text-neutral-100 hover:bg-slate-50 dark:hover:bg-muted/40"}`}
               >
                 <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${color}`}>
                   {initials}

@@ -51,8 +51,8 @@ export function TicketsGuide() {
         description="Support and service tickets — where they come from, how they're worked, and how they connect to the rest of a client's record."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -112,10 +112,10 @@ export function TicketsGuide() {
           </thead>
           <tbody>
             {STATUSES.map(([label, value, desc]) => (
-              <tr key={value} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{label}</td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-[#4a4a46]">{value}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={value} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{label}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-[#4a4a46] dark:text-neutral-300">{value}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -136,9 +136,9 @@ export function TicketsGuide() {
             </thead>
             <tbody>
               {PRIORITIES.map(([label, desc]) => (
-                <tr key={label} className="border-b border-[#eceae3] last:border-0">
-                  <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{label}</td>
-                  <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+                <tr key={label} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                  <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{label}</td>
+                  <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
                 </tr>
               ))}
             </tbody>
@@ -152,9 +152,9 @@ export function TicketsGuide() {
             </thead>
             <tbody>
               {TYPES.map(([label, desc]) => (
-                <tr key={label} className="border-b border-[#eceae3] last:border-0">
-                  <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{label}</td>
-                  <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+                <tr key={label} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                  <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{label}</td>
+                  <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
                 </tr>
               ))}
             </tbody>
@@ -384,9 +384,9 @@ export function TicketsGuide() {
           </thead>
           <tbody>
             {AUTOMATION_EVENTS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -412,10 +412,10 @@ export function TicketsGuide() {
           </thead>
           <tbody>
             {NOTIFICATIONS.map(([name, keys, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-[#4a4a46]">{keys}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-[#4a4a46] dark:text-neutral-300">{keys}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>

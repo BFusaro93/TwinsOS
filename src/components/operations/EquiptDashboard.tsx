@@ -215,7 +215,7 @@ export function EquiptDashboard() {
 
       {/* Purchasing KPIs */}
       <section>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
           Purchasing
         </p>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -228,7 +228,7 @@ export function EquiptDashboard() {
 
       {/* Maintenance KPIs */}
       <section>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
           Maintenance
         </p>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -249,8 +249,8 @@ export function EquiptDashboard() {
       {/* Charts + Activity */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Monthly Spend */}
-        <div className="col-span-1 rounded-lg border bg-white p-5 shadow-sm lg:col-span-1">
-          <p className="mb-4 text-sm font-semibold text-slate-700">Monthly Spend</p>
+        <div className="col-span-1 rounded-lg border bg-card p-5 shadow-sm lg:col-span-1">
+          <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Monthly Spend</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthlySpend} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -278,8 +278,8 @@ export function EquiptDashboard() {
         </div>
 
         {/* WO Trend */}
-        <div className="col-span-1 rounded-lg border bg-white p-5 shadow-sm lg:col-span-1">
-          <p className="mb-4 text-sm font-semibold text-slate-700">Work Order Trend</p>
+        <div className="col-span-1 rounded-lg border bg-card p-5 shadow-sm lg:col-span-1">
+          <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Work Order Trend</p>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={woTrend} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -317,10 +317,10 @@ export function EquiptDashboard() {
         </div>
 
         {/* Activity Feed */}
-        <div className="col-span-1 rounded-lg border bg-white p-5 shadow-sm">
-          <p className="mb-4 text-sm font-semibold text-slate-700">Recent Activity</p>
+        <div className="col-span-1 rounded-lg border bg-card p-5 shadow-sm">
+          <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Recent Activity</p>
           {activityFeed.length === 0 ? (
-            <p className="text-sm text-slate-400">No recent activity.</p>
+            <p className="text-sm text-slate-400 dark:text-neutral-500">No recent activity.</p>
           ) : (
             <ul className="flex flex-col gap-3">
               {activityFeed.map((item) => (
@@ -331,8 +331,8 @@ export function EquiptDashboard() {
                     {getInitials(item.changedByName)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-slate-700 leading-snug">{item.description}</p>
-                    <p className="mt-0.5 text-[10px] text-slate-400">
+                    <p className="text-xs text-slate-700 dark:text-neutral-300 leading-snug">{item.description}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500">
                       {ACTIVITY_TYPE_LABELS[item.recordType] ?? item.recordType} ·{" "}
                       {relativeTime(item.createdAt)}
                     </p>

@@ -57,7 +57,7 @@ function ToolbarButton({
       title={title}
       onClick={onClick}
       className={`flex h-7 w-7 items-center justify-center rounded transition-colors
-        ${active ? "bg-slate-700 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"}`}
+        ${active ? "bg-slate-700 text-white" : "text-muted-foreground hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300"}`}
     >
       {children}
     </button>
@@ -147,9 +147,9 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
   if (!editor) return null;
 
   return (
-    <div className="rounded-md border border-slate-200 focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400 transition-shadow">
+    <div className="rounded-md border border-border focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400 transition-shadow">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-100 bg-slate-50 px-2 py-1.5">
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-2 py-1.5">
         <ToolbarButton
           active={editor.isActive("bold")}
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -172,7 +172,7 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
           <UnderlineIcon className="h-3.5 w-3.5" />
         </ToolbarButton>
 
-        <div className="mx-1.5 h-4 w-px bg-slate-200" />
+        <div className="mx-1.5 h-4 w-px bg-slate-200 dark:bg-neutral-700" />
 
         <ToolbarButton
           active={editor.isActive("bulletList")}
@@ -189,7 +189,7 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
           <ListOrdered className="h-3.5 w-3.5" />
         </ToolbarButton>
 
-        <div className="mx-1.5 h-4 w-px bg-slate-200" />
+        <div className="mx-1.5 h-4 w-px bg-slate-200 dark:bg-neutral-700" />
 
         <ToolbarButton
           active={editor.isActive({ textAlign: "left" })}
@@ -213,7 +213,7 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
           <AlignRight className="h-3.5 w-3.5" />
         </ToolbarButton>
 
-        <div className="mx-1.5 h-4 w-px bg-slate-200" />
+        <div className="mx-1.5 h-4 w-px bg-slate-200 dark:bg-neutral-700" />
 
         <ToolbarButton onClick={() => fileInputRef.current?.click()} title="Insert image">
           <ImageIcon className="h-3.5 w-3.5" />
@@ -228,9 +228,9 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
       </div>
 
       {/* Editor area */}
-      <div className="px-3 py-2 text-sm text-slate-800">
+      <div className="px-3 py-2 text-sm text-slate-800 dark:text-neutral-100">
         {!value && !editor.isFocused && (
-          <p className="pointer-events-none absolute text-slate-400 text-sm">{placeholder}</p>
+          <p className="pointer-events-none absolute text-slate-400 dark:text-neutral-500 text-sm">{placeholder}</p>
         )}
         <EditorContent editor={editor} />
       </div>

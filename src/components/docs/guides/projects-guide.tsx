@@ -42,8 +42,8 @@ export function ProjectsGuide() {
         description="One Projects table, two different screens to view it from, and a separate rate-calculator tool that feeds it — untangled."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -108,9 +108,9 @@ export function ProjectsGuide() {
           </thead>
           <tbody>
             {PROJECT_FIELDS.map(([field, note]) => (
-              <tr key={field} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{field}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{note}</td>
+              <tr key={field} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{field}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{note}</td>
               </tr>
             ))}
           </tbody>
@@ -344,10 +344,10 @@ export function ProjectsGuide() {
           </thead>
           <tbody>
             {PROJECT_TABS.map(([tab, where, desc]) => (
-              <tr key={tab} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{tab}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-[#4a4a46]">{where}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={tab} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{tab}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{where}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>

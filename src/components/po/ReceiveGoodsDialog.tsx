@@ -392,12 +392,12 @@ export function ReceiveGoodsDialog({
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-[480px]">
           <div className="flex flex-col items-center gap-4 py-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
+              <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Receipt Recorded</h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Receipt Recorded</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
                 {submittedFully
                   ? "All items have been received. The PO will be marked as completed."
                   : "Partial receipt recorded. The PO will be marked as partially fulfilled."}
@@ -415,7 +415,7 @@ export function ReceiveGoodsDialog({
       <DialogContent className="sm:max-w-[min(1000px,95vw)]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <PackageCheck className="h-5 w-5 text-slate-500" />
+            <PackageCheck className="h-5 w-5 text-muted-foreground" />
             Receive Goods — {po.poNumber}
           </DialogTitle>
           <DialogDescription>
@@ -429,13 +429,13 @@ export function ReceiveGoodsDialog({
             <div className="space-y-5 pb-4">
               {/* Line items table */}
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   Line Items
                 </p>
                 <div className="overflow-x-auto rounded-md border">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-slate-50 text-xs">
+                      <TableRow className="bg-slate-50 dark:bg-muted/40 text-xs">
                         <TableHead>Item</TableHead>
                         <TableHead>Part #</TableHead>
                         <TableHead className="text-right">Unit Cost</TableHead>
@@ -451,10 +451,10 @@ export function ReceiveGoodsDialog({
                           <TableCell className="font-medium">
                             {line.productItemName}
                           </TableCell>
-                          <TableCell className="font-mono text-xs text-slate-500">
+                          <TableCell className="font-mono text-xs text-muted-foreground">
                             {line.partNumber || "—"}
                           </TableCell>
-                          <TableCell className="text-right text-slate-600">
+                          <TableCell className="text-right text-slate-600 dark:text-neutral-400">
                             {formatCurrency(line.unitCost)}
                           </TableCell>
                           <TableCell className="text-right">
@@ -464,8 +464,8 @@ export function ReceiveGoodsDialog({
                             {(() => {
                               const already = alreadyReceivedMap.get(line.lineItemId) ?? 0;
                               return already > 0
-                                ? <span className="font-medium text-emerald-700">{already}</span>
-                                : <span className="text-slate-400">—</span>;
+                                ? <span className="font-medium text-emerald-700 dark:text-emerald-400">{already}</span>
+                                : <span className="text-slate-400 dark:text-neutral-500">—</span>;
                             })()}
                           </TableCell>
                           <TableCell className="text-right">
@@ -488,12 +488,12 @@ export function ReceiveGoodsDialog({
                             {line.isMaintPart ? (
                               <Badge
                                 variant="outline"
-                                className="border-purple-200 bg-purple-50 text-xs text-purple-700"
+                                className="border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-xs text-purple-700 dark:text-purple-400"
                               >
                                 Maint. Part
                               </Badge>
                             ) : (
-                              <span className="text-xs text-slate-400">Material</span>
+                              <span className="text-xs text-slate-400 dark:text-neutral-500">Material</span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -502,38 +502,38 @@ export function ReceiveGoodsDialog({
                   </Table>
                 </div>
                 {lines.some((l) => l.isMaintPart) && (
-                  <p className="mt-1.5 text-xs text-slate-500">
-                    Items marked as <span className="font-medium text-purple-700">Maint. Part</span> will
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Items marked as <span className="font-medium text-purple-700 dark:text-purple-400">Maint. Part</span> will
                     automatically update Parts Inventory quantities on receipt.
                   </p>
                 )}
               </div>
 
               {/* Totals */}
-              <div className="rounded-md bg-slate-50 p-3 text-sm">
-                <div className="flex justify-between py-0.5 text-slate-600">
+              <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm">
+                <div className="flex justify-between py-0.5 text-slate-600 dark:text-neutral-400">
                   <span>Subtotal (received)</span>
                   <span className="tabular-nums">{formatCurrency(subtotal)}</span>
                 </div>
                 {discountShown > 0 && (
-                  <div className="flex justify-between py-0.5 text-slate-600">
+                  <div className="flex justify-between py-0.5 text-slate-600 dark:text-neutral-400">
                     <span>Discount (prorated)</span>
                     <span className="tabular-nums">-{formatCurrency(discountShown)}</span>
                   </div>
                 )}
                 {po.taxRatePercent > 0 && (
-                  <div className="flex justify-between py-0.5 text-slate-600">
+                  <div className="flex justify-between py-0.5 text-slate-600 dark:text-neutral-400">
                     <span>Tax ({po.taxRatePercent}%)</span>
                     <span className="tabular-nums">{formatCurrency(salesTax)}</span>
                   </div>
                 )}
                 {shippingCost > 0 && (
-                  <div className="flex justify-between py-0.5 text-slate-600">
+                  <div className="flex justify-between py-0.5 text-slate-600 dark:text-neutral-400">
                     <span>Shipping / Other</span>
                     <span className="tabular-nums">{formatCurrency(shippingCost)}</span>
                   </div>
                 )}
-                <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
+                <div className="flex justify-between border-t pt-1 font-semibold text-slate-900 dark:text-neutral-100">
                   <span>Receipt Total</span>
                   <span className="tabular-nums">{formatCurrency(grandTotal)}</span>
                 </div>
@@ -543,7 +543,7 @@ export function ReceiveGoodsDialog({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="received-by">
-                    Received By <span className="text-red-500">*</span>
+                    Received By <span className="text-red-500 dark:text-red-400">*</span>
                   </Label>
                   <Select value={receivedById} onValueChange={setReceivedById}>
                     <SelectTrigger id="received-by">
@@ -572,7 +572,7 @@ export function ReceiveGoodsDialog({
               </div>
 
               {!allFullyReceived && someReceived && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3 text-sm text-amber-800 dark:text-amber-300">
                   <span className="font-medium">Partial receipt:</span> One or more items have a
                   received quantity less than ordered. The PO will be marked as{" "}
                   <span className="font-medium">Partially Fulfilled</span>.

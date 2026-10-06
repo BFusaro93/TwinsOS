@@ -44,16 +44,16 @@ function BreakdownTable({
   rows: Array<{ name: string; cents: number }>;
 }) {
   return (
-    <div className="rounded-xl border bg-white shadow-sm">
-      <p className="border-b px-5 py-3 text-sm font-semibold text-slate-800">{title}</p>
+    <div className="rounded-xl border bg-card shadow-sm">
+      <p className="border-b px-5 py-3 text-sm font-semibold text-slate-800 dark:text-neutral-100">{title}</p>
       <div className="divide-y max-h-96 overflow-auto">
         {rows.length === 0 ? (
-          <p className="px-5 py-6 text-center text-xs text-slate-400">No maintenance parts spend this month</p>
+          <p className="px-5 py-6 text-center text-xs text-slate-400 dark:text-neutral-500">No maintenance parts spend this month</p>
         ) : (
           rows.map((r) => (
             <div key={r.name} className="flex items-center justify-between px-5 py-2.5 text-sm">
-              <span className="text-slate-700 truncate pr-4">{r.name}</span>
-              <span className="shrink-0 font-medium tabular-nums text-slate-900">{formatCurrency(r.cents)}</span>
+              <span className="text-slate-700 dark:text-neutral-300 truncate pr-4">{r.name}</span>
+              <span className="shrink-0 font-medium tabular-nums text-slate-900 dark:text-neutral-100">{formatCurrency(r.cents)}</span>
             </div>
           ))
         )}
@@ -156,8 +156,8 @@ export default function PartsSpendReportPage() {
       />
       <div className="flex-1 p-6 space-y-6">
         {/* Monthly trend */}
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="mb-4 text-sm font-semibold text-slate-800">Monthly Spend — Last 12 Months</p>
+        <div className="rounded-xl border bg-card p-5 shadow-sm">
+          <p className="mb-4 text-sm font-semibold text-slate-800 dark:text-neutral-100">Monthly Spend — Last 12 Months</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart
               data={monthlyTrend}
@@ -183,18 +183,18 @@ export default function PartsSpendReportPage() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          <p className="mt-2 text-xs text-slate-400">Click a bar to see that month&rsquo;s vendor/part breakdown below.</p>
+          <p className="mt-2 text-xs text-slate-400 dark:text-neutral-500">Click a bar to see that month&rsquo;s vendor/part breakdown below.</p>
         </div>
 
         {/* Month selector + total */}
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-800">
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">
             {selectedLabel} breakdown — <span className="tabular-nums">{formatCurrency(breakdown.total)}</span>
           </h2>
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="rounded-md border border-slate-200 px-2 py-1.5 text-sm text-slate-700"
+            className="rounded-md border border-border px-2 py-1.5 text-sm text-slate-700 dark:text-neutral-300"
           >
             {monthlyTrend.map((m) => (
               <option key={m.key} value={m.key}>{m.month}</option>

@@ -47,10 +47,10 @@ export function BrandingTab() {
   }
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Branding</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Branding</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Logo and accent color used on printed purchase orders and both product sidebars
         </p>
       </div>
@@ -59,8 +59,8 @@ export function BrandingTab() {
         {/* Logo upload */}
         <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-900">Company Logo</p>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Company Logo</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Displayed in the sidebar and on printed POs. Recommended: PNG or SVG with transparent
               background.
             </p>
@@ -68,7 +68,7 @@ export function BrandingTab() {
           <div className="flex w-full flex-col gap-2 md:w-64 md:shrink-0">
             {logoDataUrl ? (
               <div className="flex items-center gap-3">
-                <div className="flex h-14 w-40 items-center justify-center rounded-md border bg-slate-50 p-2">
+                <div className="flex h-14 w-40 items-center justify-center rounded-md border bg-slate-50 dark:bg-muted/40 p-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={logoDataUrl}
@@ -88,7 +88,7 @@ export function BrandingTab() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 gap-1 text-xs text-red-500 hover:text-red-600"
+                    className="h-7 gap-1 text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"
                     onClick={() => { setLogoDataUrl(null); updateOrgSettings({ customizations: { logoDataUrl: null } }); }}
                   >
                     <Trash2 className="h-3 w-3" /> Remove
@@ -98,7 +98,7 @@ export function BrandingTab() {
             ) : (
               <button
                 onClick={() => logoInputRef.current?.click()}
-                className="flex h-20 w-full flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-slate-200 bg-slate-50 text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500"
+                className="flex h-20 w-full flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-border bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500 transition-colors hover:border-brand-400 hover:text-brand-500 dark:hover:text-brand-400"
               >
                 <Upload className="h-5 w-5" />
                 <span className="text-xs font-medium">Upload logo</span>

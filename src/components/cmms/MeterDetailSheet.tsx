@@ -37,11 +37,11 @@ interface MeterDetailSheetProps {
 
 function SourceBadge({ source }: { source: "samsara" | "manual" }) {
   return source === "samsara" ? (
-    <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+    <Badge variant="outline" className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400">
       Samsara
     </Badge>
   ) : (
-    <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
+    <Badge variant="outline" className="border-border bg-slate-50 dark:bg-muted/40 text-slate-600 dark:text-neutral-400">
       Manual
     </Badge>
   );
@@ -51,9 +51,9 @@ function SourceBadge({ source }: { source: "samsara" | "manual" }) {
 function ChartTooltip({ active, payload, label, unit }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-md">
-      <p className="mb-1 text-sm font-semibold text-slate-700">{label}</p>
-      <p className="text-sm font-medium text-brand-600">
+    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-md">
+      <p className="mb-1 text-sm font-semibold text-slate-700 dark:text-neutral-300">{label}</p>
+      <p className="text-sm font-medium text-brand-600 dark:text-brand-400">
         {payload[0].name} : {Number(payload[0].value).toLocaleString()} {unit}
       </p>
     </div>
@@ -94,17 +94,17 @@ function MeterContent({ meter }: { meter: Meter }) {
     <>
       {/* Current reading card */}
       <div className="p-6">
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <div className="rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Current Reading
           </p>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900">
+            <span className="text-3xl font-bold text-slate-900 dark:text-neutral-100">
               {meter.currentValue.toLocaleString()}
             </span>
-            <span className="text-sm text-slate-500">{meter.unit}</span>
+            <span className="text-sm text-muted-foreground">{meter.unit}</span>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
             Last updated {formatDate(meter.lastReadingAt)}
           </p>
         </div>
@@ -116,7 +116,7 @@ function MeterContent({ meter }: { meter: Meter }) {
       {chartData.length > 1 && (
         <>
           <div className="px-6 pt-6">
-            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Reading History (12 Months)
             </p>
             <ResponsiveContainer width="100%" height={200}>
@@ -156,27 +156,27 @@ function MeterContent({ meter }: { meter: Meter }) {
 
       {/* Reading history table */}
       <div className="p-6">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           All Readings
         </p>
         {sorted.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-400">No readings recorded yet.</p>
+          <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">No readings recorded yet.</p>
         ) : (
           <div className="overflow-hidden rounded-md border">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Reading</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Source</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Recorded By</th>
+                <tr className="bg-slate-50 dark:bg-muted/40">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Reading</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Source</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Recorded By</th>
                   <th className="px-3 py-2 w-8" />
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((r) => (
-                  <tr key={r.id} className="group border-t border-slate-100">
-                    <td className="px-3 py-2 text-slate-600">
+                  <tr key={r.id} className="group border-t border-slate-100 dark:border-neutral-800">
+                    <td className="px-3 py-2 text-slate-600 dark:text-neutral-400">
                       <span className="inline-flex items-center gap-1.5">
                         {formatDate(r.readingAt)}
                         {r.notes && (
@@ -186,20 +186,20 @@ function MeterContent({ meter }: { meter: Meter }) {
                         )}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right font-medium text-slate-900">
+                    <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                       {r.value.toLocaleString()}
-                      <span className="ml-1 text-xs font-normal text-slate-400">{meter.unit}</span>
+                      <span className="ml-1 text-xs font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
                     </td>
                     <td className="px-3 py-2">
                       <SourceBadge source={r.source} />
                     </td>
-                    <td className="px-3 py-2 text-slate-500">{r.recordedByName ?? "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.recordedByName ?? "—"}</td>
                     <td className="px-2 py-2 text-right">
                       {canWriteEquipt && (
                         <button
                           type="button"
                           onClick={() => setDeletingReadingId(r.id)}
-                          className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                          className="rounded p-1 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 group-hover:opacity-100"
                           title="Delete reading"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -294,7 +294,7 @@ export function MeterDetailSheet({ meter, open, onOpenChange }: MeterDetailSheet
           <h2 className="text-lg font-semibold text-foreground">{meter.name}</h2>
           <SourceBadge source={meter.source} />
         </div>
-        <p className="mt-0.5 text-sm text-slate-500">{meter.assetName}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{meter.assetName}</p>
 
         {/* Close button */}
         <button

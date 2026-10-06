@@ -45,8 +45,8 @@ export function ServicesPricingGuide() {
         description="The service catalog, bulk catalog price changes, and Price Adjustment runs — which prices seed new work and which ones actually bill."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -84,7 +84,7 @@ export function ServicesPricingGuide() {
           </thead>
           <tbody>
             {PRICE_LAYERS.map(([name, where, what]) => (
-              <tr key={name} className="border-t border-[#e6e6e0]">
+              <tr key={name} className="border-t border-[#e6e6e0] dark:border-border">
                 <td className="px-4 py-2 align-top font-semibold">{name}</td>
                 <td className="px-4 py-2 align-top">{where}</td>
                 <td className="px-4 py-2 align-top">{what}</td>
@@ -169,7 +169,7 @@ export function ServicesPricingGuide() {
           </li>
         </ol>
 
-        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642] dark:text-[#9ebfb7]">
           Leaving a customer out
         </h3>
         <p>

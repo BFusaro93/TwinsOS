@@ -64,8 +64,8 @@ export default function ServicesPage() {
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Services &amp; Pricing</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-neutral-100">Services &amp; Pricing</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           {tab === "catalog"
             ? "Manage your service catalog, pricing modes, production rates, and rate matrices."
             : "Re-price live client work in bulk. Preview every line before it is written, and undo a whole run afterwards."}
@@ -81,7 +81,7 @@ export default function ServicesPage() {
               className={`px-4 py-2 transition-colors ${
                 tab === t.key
                   ? "bg-brand-600 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50"
+                  : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               }`}
             >
               {t.label}

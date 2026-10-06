@@ -35,14 +35,14 @@ function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => 
       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={onEdit}
-          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400"
           title="Edit"
         >
           <Pencil className="h-3.5 w-3.5" />
         </button>
         <button
           onClick={onDelete}
-          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+          className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
           title="Remove"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -127,10 +127,10 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Package className="h-3.5 w-3.5 text-slate-400" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <Package className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Expected Parts
-            <span className="ml-1.5 font-normal normal-case text-slate-300">({items.length})</span>
+            <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({items.length})</span>
           </p>
         </div>
         {canWriteEquipt && (
@@ -141,26 +141,26 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
         )}
       </div>
 
-      <p className="text-xs text-slate-400">
-        Use this tab for parts that are <span className="font-medium text-slate-500">shared across all assets</span> in this schedule (e.g. a lubricant used on every machine). For parts that are unique to a specific asset, add them under the <span className="font-medium text-slate-500">Assets tab</span> by expanding that asset&apos;s row.
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
+        Use this tab for parts that are <span className="font-medium text-muted-foreground">shared across all assets</span> in this schedule (e.g. a lubricant used on every machine). For parts that are unique to a specific asset, add them under the <span className="font-medium text-muted-foreground">Assets tab</span> by expanding that asset&apos;s row.
       </p>
 
       {/* Table */}
       {items.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 rounded-md border border-dashed py-8 text-center">
-          <p className="text-sm text-slate-400">No shared parts added yet.</p>
-          <p className="text-xs text-slate-300">For asset-specific parts, use the Assets tab.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No shared parts added yet.</p>
+          <p className="text-xs text-slate-300 dark:text-neutral-500">For asset-specific parts, use the Assets tab.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Part</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Part #</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Subtotal</th>
+              <tr className="bg-slate-50 dark:bg-muted/40">
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Part</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Part #</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Qty</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Unit Cost</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Subtotal</th>
                 <th className="w-16 px-2 py-2" />
               </tr>
             </thead>
@@ -168,29 +168,29 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
               {items.map((p) => {
                 const fullPart = allParts.find((ap) => ap.id === p.partId);
                 return (
-                  <tr key={p.id} className="group border-t border-slate-100 hover:bg-slate-50">
+                  <tr key={p.id} className="group border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         {fullPart?.pictureUrl ? (
                           <img src={fullPart.pictureUrl} alt="" className="h-8 w-8 rounded object-cover" />
                         ) : (
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-slate-100">
-                            <Package className="h-4 w-4 text-slate-400" />
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-muted">
+                            <Package className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
                           </div>
                         )}
                         <button
                           type="button"
                           onClick={() => setSelectedPartId(p.partId)}
-                          className="text-left font-medium text-brand-600 hover:underline"
+                          className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                         >
                           {p.partName}
                         </button>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-slate-500">{p.partNumber || "—"}</td>
-                    <td className="px-3 py-2 text-right text-slate-700">{p.quantity}</td>
-                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(p.unitCost)}</td>
-                    <td className="px-3 py-2 text-right font-medium text-slate-900">
+                    <td className="px-3 py-2 text-muted-foreground">{p.partNumber || "—"}</td>
+                    <td className="px-3 py-2 text-right text-slate-700 dark:text-neutral-300">{p.quantity}</td>
+                    <td className="px-3 py-2 text-right text-slate-700 dark:text-neutral-300">{formatCurrency(p.unitCost)}</td>
+                    <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                       {formatCurrency(p.quantity * p.unitCost)}
                     </td>
                     <RowActions
@@ -202,11 +202,11 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t border-slate-200 bg-slate-50">
-                <td colSpan={4} className="px-3 py-2 text-right text-xs font-semibold text-slate-500">
+              <tr className="border-t border-border bg-slate-50 dark:bg-muted/40">
+                <td colSpan={4} className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">
                   Estimated Parts Cost
                 </td>
-                <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                <td className="px-3 py-2 text-right font-semibold text-slate-900 dark:text-neutral-100">
                   {formatCurrency(total)}
                 </td>
                 <td />
@@ -226,7 +226,7 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
             <Input
               placeholder="Search by name or part #…"
               value={search}
@@ -237,7 +237,7 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
           </div>
           <div className="max-h-72 overflow-y-auto">
             {available.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">
+              <p className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                 {search ? "No parts match your search." : "All parts are already added."}
               </p>
             ) : (
@@ -246,8 +246,8 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
                   <li key={part.id}>
                     <div className="flex items-center gap-3 px-1 py-2.5">
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-800">{part.name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{part.name}</p>
+                        <p className="text-xs text-muted-foreground">
                           {part.partNumber} · {formatCurrency(part.unitCost)} each
                         </p>
                       </div>
@@ -286,7 +286,7 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
           <div className="flex flex-col gap-3">
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Quantity</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Quantity</label>
                 <Input
                   type="number"
                   min={1}
@@ -296,7 +296,7 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
                 />
               </div>
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Unit Cost ($)</label>
                 <Input
                   type="number"
                   min={0}

@@ -93,7 +93,7 @@ function InlineNum({
       onFocus={onFocus}
       onBlur={onBlur}
       className={cn(
-        "w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none",
+        "w-full rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none",
         className
       )}
     />
@@ -103,10 +103,10 @@ function InlineNum({
 // ── status badge / selector ───────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<LineItemStatus, string> = {
-  quote:  "bg-blue-100 text-blue-700",
-  draft:  "bg-slate-100 text-slate-600",
-  won:    "bg-green-100 text-green-700",
-  lost:   "bg-red-100 text-red-600",
+  quote:  "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  draft:  "bg-muted text-slate-600 dark:text-neutral-400",
+  won:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  lost:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
 // ── sub-item rows ─────────────────────────────────────────────────────────────
@@ -124,43 +124,43 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
   return (
     <>
       {isLoading && (
-        <tr className="border-b border-slate-50 bg-slate-50/60">
-          <td colSpan={17} className="px-6 py-1.5 text-[10px] text-slate-400 italic">Loading…</td>
+        <tr className="border-b border-slate-50 dark:border-neutral-800 bg-slate-50/60 dark:bg-muted/40">
+          <td colSpan={17} className="px-6 py-1.5 text-[10px] text-slate-400 dark:text-neutral-500 italic">Loading…</td>
         </tr>
       )}
       {subitems.map((s) => (
-        <tr key={s.id} className="group border-b border-slate-50 bg-slate-50/60 text-[11px]">
+        <tr key={s.id} className="group border-b border-slate-50 dark:border-neutral-800 bg-slate-50/60 dark:bg-muted/40 text-[11px]">
           <td className="w-8 px-2 py-1" />
-          <td colSpan={2} className="border-l-2 border-brand-300 pl-6 py-1">
-            <span className="font-medium text-slate-700">{s.name}</span>
-            <span className="ml-2 rounded bg-slate-200 px-1 py-0.5 text-[10px] text-slate-500">
+          <td colSpan={2} className="border-l-2 border-brand-300 dark:border-brand-700 pl-6 py-1">
+            <span className="font-medium text-slate-700 dark:text-neutral-300">{s.name}</span>
+            <span className="ml-2 rounded bg-slate-200 dark:bg-neutral-700 px-1 py-0.5 text-[10px] text-muted-foreground">
               {s.type === "product" ? "Product" : "Subservice"}
             </span>
           </td>
-          <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600">{s.qty}</td>
+          <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400">{s.qty}</td>
           <td colSpan={5} />
-          <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-600">
+          <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400">
             ${(s.rateCents / 100).toFixed(2)}
           </td>
-          <td className="w-20 px-2 py-1 text-right tabular-nums font-medium text-slate-700">
+          <td className="w-20 px-2 py-1 text-right tabular-nums font-medium text-slate-700 dark:text-neutral-300">
             {centsToDisplay(s.totalCents)}
           </td>
           <td />
-          <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-500" title="Unit cost">
+          <td className="w-20 px-2 py-1 text-right tabular-nums text-muted-foreground" title="Unit cost">
             ${(s.costCents / 100).toFixed(2)}
           </td>
-          <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-500" title="Total cost = unit cost × qty">
+          <td className="w-20 px-2 py-1 text-right tabular-nums text-muted-foreground" title="Total cost = unit cost × qty">
             {centsToDisplay(s.costCents * s.qty)}
           </td>
           <td />
           <td className="px-2 py-1">
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
               <button onClick={() => setEditingSubitem(s)} title="Edit"
-                className="rounded p-0.5 text-slate-400 hover:text-slate-600">
+                className="rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <Pencil className="h-3 w-3" />
               </button>
               <button onClick={() => handleDelete(s)} title="Delete"
-                className="rounded p-0.5 text-red-400 hover:text-red-600">
+                className="rounded p-0.5 text-red-400 hover:text-red-600 dark:hover:text-red-400">
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
@@ -168,10 +168,10 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
           <td />
         </tr>
       ))}
-      <tr className="border-b border-slate-100 bg-slate-50/40">
+      <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/40 dark:bg-muted/40">
         <td colSpan={17} className="px-8 py-1">
           <button onClick={onAddClick}
-            className="text-[11px] text-brand-600 hover:text-brand-700 hover:underline">
+            className="text-[11px] text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline">
             + Add Product / Service
           </button>
         </td>
@@ -216,19 +216,19 @@ function SectionRow({
   }
 
   return (
-    <tr ref={setNodeRef} style={style} className={cn("bg-slate-100 border-b border-slate-200", isDragging && "relative z-10 opacity-70")}>
+    <tr ref={setNodeRef} style={style} className={cn("bg-muted border-b border-border", isDragging && "relative z-10 opacity-70")}>
       <td colSpan={tiersEnabled ? 18 : 17} className="px-3 py-1.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
             {...attributes}
             {...listeners}
-            className="shrink-0 cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+            className="shrink-0 cursor-grab touch-none text-slate-300 dark:text-neutral-500 hover:text-muted-foreground active:cursor-grabbing"
             title="Drag to reorder"
           >
             <GripVertical className="h-3.5 w-3.5" />
           </button>
-          <Heading2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <Heading2 className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500 shrink-0" />
           {editing ? (
             <input
               autoFocus
@@ -236,11 +236,11 @@ function SectionRow({
               onChange={(e) => setName(e.target.value)}
               onBlur={saveName}
               onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setEditing(false); }}
-              className="flex-1 bg-transparent text-xs font-semibold text-slate-700 outline-none border-b border-slate-400 max-w-xs"
+              className="flex-1 bg-transparent text-xs font-semibold text-slate-700 dark:text-neutral-300 outline-none border-b border-slate-400 dark:border-neutral-600 max-w-xs"
             />
           ) : (
             <span
-              className="text-xs font-semibold text-slate-700 cursor-pointer hover:text-slate-900"
+              className="text-xs font-semibold text-slate-700 dark:text-neutral-300 cursor-pointer hover:text-slate-900 dark:hover:text-neutral-100"
               onClick={() => setEditing(true)}
               title="Click to rename"
             >
@@ -249,7 +249,7 @@ function SectionRow({
           )}
           <button
             onClick={() => onDelete(item.id, estimateId)}
-            className="ml-auto rounded p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            className="ml-auto rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
             title="Delete section"
           >
             <Trash2 className="h-3 w-3" />
@@ -520,8 +520,8 @@ function LineItemRow({
         ref={setNodeRef}
         style={dragStyle}
         className={cn(
-          "group border-b border-slate-100 bg-white text-xs hover:bg-slate-50",
-          selected && "bg-brand-50",
+          "group border-b border-slate-100 dark:border-neutral-800 bg-card text-xs hover:bg-slate-50 dark:hover:bg-muted/40",
+          selected && "bg-brand-50 dark:bg-brand-900/30",
           isDragging && "relative z-10 opacity-70"
         )}
       >
@@ -532,7 +532,7 @@ function LineItemRow({
               type="button"
               {...attributes}
               {...listeners}
-              className="cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+              className="cursor-grab touch-none text-slate-300 dark:text-neutral-500 hover:text-muted-foreground active:cursor-grabbing"
               title="Drag to reorder"
             >
               <GripVertical className="h-3.5 w-3.5" />
@@ -541,7 +541,7 @@ function LineItemRow({
               type="checkbox"
               checked={selected}
               onChange={() => onToggleSelect(row.id)}
-              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500"
+              className="h-3.5 w-3.5 rounded border-slate-300 dark:border-neutral-700 text-brand-500 dark:text-brand-400"
             />
           </div>
         </td>
@@ -582,7 +582,7 @@ function LineItemRow({
                   toast.error("Failed to save tier");
                 }
               }}
-              className="w-full rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px] focus:outline-none"
+              className="w-full rounded border border-border bg-card px-1 py-0.5 text-[10px] focus:outline-none"
             >
               <option value="all">All</option>
               <option value="basic">Basic</option>
@@ -593,12 +593,12 @@ function LineItemRow({
         )}
 
         {/* Service name + expand chevron */}
-        <td className="min-w-[160px] px-2 py-1.5 font-semibold text-slate-900">
+        <td className="min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100">
           <div className="flex items-center gap-1">
             <button
               onClick={() => onToggleExpand(item.id)}
               title={expanded ? "Collapse sub-items" : "Expand sub-items"}
-              className="shrink-0 rounded p-0.5 text-slate-400 hover:text-slate-600"
+              className="shrink-0 rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
             >
               {expanded
                 ? <ChevronDown className="h-3.5 w-3.5" />
@@ -606,7 +606,7 @@ function LineItemRow({
               }
             </button>
             {subitems.length > 0 && !expanded && (
-              <span className="rounded-full bg-slate-200 px-1.5 text-[9px] text-slate-500 font-normal">
+              <span className="rounded-full bg-slate-200 dark:bg-neutral-700 px-1.5 text-[9px] text-muted-foreground font-normal">
                 {subitems.length}
               </span>
             )}
@@ -622,7 +622,7 @@ function LineItemRow({
                 onBlur={save}
                 placeholder="Line item name"
                 aria-label="Line item name"
-                className="w-full min-w-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs font-semibold focus:border-brand-400 focus:outline-none"
+                className="w-full min-w-0 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-semibold focus:border-brand-400 focus:outline-none"
               />
             )}
           </div>
@@ -653,7 +653,7 @@ function LineItemRow({
             value={row.unitType ?? ""}
             onChange={(e) => update("unitType", e.target.value || null)}
             onBlur={save}
-            className="w-full rounded border border-slate-200 bg-white px-1 py-0.5 text-xs focus:outline-none"
+            className="w-full rounded border border-border bg-card px-1 py-0.5 text-xs focus:outline-none"
           >
             <option value="">—</option>
             {UNIT_TYPES.map((u) => (
@@ -669,7 +669,7 @@ function LineItemRow({
         <td className="w-20 px-2 py-1.5">
           <div className="flex items-center justify-end gap-0.5">
             {isAutoHrs ? (
-              <span className="text-right text-blue-600 font-medium tabular-nums">{row.budgetedHours.toFixed(2)}</span>
+              <span className="text-right text-blue-600 dark:text-blue-400 font-medium tabular-nums">{row.budgetedHours.toFixed(2)}</span>
             ) : (
               <>
                 <InlineNum
@@ -695,7 +695,7 @@ function LineItemRow({
 
         {/* T.H. — total hours = B.Hr × complexity × Visits */}
         <td
-          className="w-14 px-2 py-1.5 text-right tabular-nums text-slate-500"
+          className="w-14 px-2 py-1.5 text-right tabular-nums text-muted-foreground"
           title={
             isComplexityAdjusted
               ? `${row.budgetedHours.toFixed(2)} base hrs × ${bpsToPercent(row.complexityBps)} complexity × ${row.visits} visit${row.visits === 1 ? "" : "s"}`
@@ -711,7 +711,7 @@ function LineItemRow({
             value={row.calcType}
             onChange={(e) => update("calcType", Number(e.target.value) as 0 | 1)}
             onBlur={save}
-            className="rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px] focus:outline-none"
+            className="rounded border border-border bg-card px-1 py-0.5 text-[10px] focus:outline-none"
           >
             <option value={1}>×</option>
             <option value={0}>$</option>
@@ -731,18 +731,18 @@ function LineItemRow({
         <td className="w-20 px-2 py-1.5 text-right tabular-nums">
           {row.discountCents > 0 ? (
             <div className="flex flex-col items-end leading-tight">
-              <span className="text-[10px] text-slate-300 line-through">{centsToDisplay(row.totalCents)}</span>
-              <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents - row.discountCents)}</span>
+              <span className="text-[10px] text-slate-300 dark:text-neutral-500 line-through">{centsToDisplay(row.totalCents)}</span>
+              <span className="font-medium text-slate-700 dark:text-neutral-300">{centsToDisplay(row.totalCents - row.discountCents)}</span>
             </div>
           ) : (
-            <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents)}</span>
+            <span className="font-medium text-slate-700 dark:text-neutral-300">{centsToDisplay(row.totalCents)}</span>
           )}
         </td>
 
         {/* GM% */}
         <td className={cn(
           "w-16 px-2 py-1.5 text-right tabular-nums",
-          row.marginBps >= 3000 ? "text-green-600" : row.marginBps >= 1000 ? "text-slate-500" : "text-red-500"
+          row.marginBps >= 3000 ? "text-green-600 dark:text-green-400" : row.marginBps >= 1000 ? "text-muted-foreground" : "text-red-500 dark:text-red-400"
         )}>
           {bpsToPercent(row.marginBps)}
         </td>
@@ -756,13 +756,13 @@ function LineItemRow({
             onChange={(v) => update("costCents", Math.round(v * 100))}
             onFocus={() => setCostFocused(true)}
             onBlur={() => { setCostFocused(false); save(); }}
-            className={isAutoCost ? "text-blue-600 font-medium" : undefined}
+            className={isAutoCost ? "text-blue-600 dark:text-blue-400 font-medium" : undefined}
             zeroAsEmpty={false}
           />
         </td>
 
         {/* T. Cost */}
-        <td className="w-24 px-2 py-1.5 text-right tabular-nums text-slate-500">
+        <td className="w-24 px-2 py-1.5 text-right tabular-nums text-muted-foreground">
           {centsToDisplay(row.totalCostCents)}
         </td>
 
@@ -805,14 +805,14 @@ function LineItemRow({
             <button
               onClick={() => onDuplicate(row)}
               title="Duplicate"
-              className="rounded p-0.5 text-slate-400 hover:text-slate-600"
+              className="rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
             >
               <Copy className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => onDelete(row.id)}
               title="Delete"
-              className="rounded p-0.5 text-slate-400 hover:text-red-500"
+              className="rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -822,11 +822,11 @@ function LineItemRow({
 
         {/* Save indicator */}
         <td className="w-6 px-1 py-1.5">
-          {isPending && <span className="text-[10px] text-slate-400">…</span>}
+          {isPending && <span className="text-[10px] text-slate-400 dark:text-neutral-500">…</span>}
           {dirty && !isPending && (
             <button
               onClick={save}
-              className="text-[10px] font-medium text-brand-500 hover:underline"
+              className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:underline"
             >
               save
             </button>
@@ -838,12 +838,12 @@ function LineItemRow({
       {/* The production rate is always sq ft per man-hour — label it that way
           regardless of the service unit (a "visit"-unit line never gets here). */}
       {isAutoHrs && row.qty > 0 && (
-        <tr className="border-b border-slate-50 bg-blue-50/40 text-[10px] text-blue-500">
+        <tr className="border-b border-slate-50 dark:border-neutral-800 bg-blue-50/40 dark:bg-blue-950/40 text-[10px] text-blue-500 dark:text-blue-400">
           <td colSpan={3} />
           <td colSpan={3} className="px-2 py-0.5 italic">
             {row.qty.toLocaleString()} sq ft ÷ {row.productionRateSqftPerHr!.toLocaleString()} sq ft/hr
           </td>
-          <td className="px-2 py-0.5 text-right text-blue-600 font-medium">
+          <td className="px-2 py-0.5 text-right text-blue-600 dark:text-blue-400 font-medium">
             = {row.budgetedHours.toFixed(2)} hrs/occ
           </td>
           <td colSpan={11} />
@@ -852,19 +852,19 @@ function LineItemRow({
 
       {/* ── sub-row: warnings / takeoff shortcut ───────────────────────────── */}
       {(unitWarning || noRateWarning || offerTakeoff) && (
-        <tr className="border-b border-slate-50 bg-amber-50/60 text-[10px] text-amber-800">
+        <tr className="border-b border-slate-50 dark:border-neutral-800 bg-amber-50/60 dark:bg-amber-950/40 text-[10px] text-amber-800 dark:text-amber-300">
           <td colSpan={18} className="px-3 py-1">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
               {unitWarning && (
                 <span className="inline-flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
                   Production-rate budgeting needs an area unit (sq ft) — set the service unit
                   {" "}or enter hours manually. Current unit: {unitLabel(row.unitType, "none")}.
                 </span>
               )}
               {noRateWarning && (
                 <span className="inline-flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
                   No rate set — this line totals $0.00.
                 </span>
               )}
@@ -872,7 +872,7 @@ function LineItemRow({
                 <button
                   type="button"
                   onClick={() => { update("qty", takeoffSqft); }}
-                  className="font-medium text-brand-600 hover:underline"
+                  className="font-medium text-brand-600 dark:text-brand-400 hover:underline"
                   title="Set Qty from the client's measured area"
                 >
                   Use client takeoff ({takeoffSqft.toLocaleString()} sq ft)
@@ -1250,7 +1250,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="h-8 text-xs">
           <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
-          <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
+          <ChevronDown className="ml-1 h-3 w-3 text-slate-400 dark:text-neutral-500" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
@@ -1266,19 +1266,19 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         <div className="max-h-72 overflow-y-auto py-1">
           {filteredServices.length > 0 && (
             <>
-              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Services</div>
+              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Services</div>
               {filteredServices.map((s) => (
                 <button
                   key={s.id}
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => {
                     addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents, estimateDesc: s.descriptionOnEstimate, invoiceDesc: s.invoiceDescription });
                     setAddOpen(false); setSearch("");
                   }}
                 >
-                  <span className="font-medium text-slate-900">{s.name}</span>
+                  <span className="font-medium text-slate-900 dark:text-neutral-100">{s.name}</span>
                   {s.productionRateSqftPerHr && (
-                    <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                    <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">
                       {s.productionRateSqftPerHr.toLocaleString()} sq ft/hr
                     </span>
                   )}
@@ -1288,19 +1288,19 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           )}
           {filteredProducts.length > 0 && (
             <>
-              <div className="mt-1 border-t px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Products / Materials</div>
+              <div className="mt-1 border-t px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Products / Materials</div>
               {filteredProducts.map((p) => (
                 <button
                   key={p.id}
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => {
                     addService({ name: p.name, unit: "each", rateCents: p.price });
                     setAddOpen(false); setSearch("");
                   }}
                 >
-                  <span className="font-medium text-slate-900">{p.name}</span>
+                  <span className="font-medium text-slate-900 dark:text-neutral-100">{p.name}</span>
                   {p.price > 0 && (
-                    <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                    <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">
                       ${(p.price / 100).toFixed(2)}
                     </span>
                   )}
@@ -1309,11 +1309,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             </>
           )}
           {filteredServices.length === 0 && filteredProducts.length === 0 && lc && (
-            <div className="px-3 py-3 text-xs text-slate-400">No results for &ldquo;{search}&rdquo;</div>
+            <div className="px-3 py-3 text-xs text-slate-400 dark:text-neutral-500">No results for &ldquo;{search}&rdquo;</div>
           )}
           <div className="mt-1 border-t">
             <button
-              className="flex w-full items-center px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+              className="flex w-full items-center px-3 py-1.5 text-xs text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
               onClick={() => { addService({ name: "Custom Item" }); setAddOpen(false); setSearch(""); }}
             >
               <Plus className="mr-1.5 h-3 w-3" /> Blank line item
@@ -1325,11 +1325,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   );
 
   return (
-    <div className="flex min-h-[250px] flex-col rounded-lg border bg-white shadow-sm">
+    <div className="flex min-h-[250px] flex-col rounded-lg border bg-card shadow-sm">
       {/* Add Item toolbar — always visible at the top */}
-      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 bg-slate-50">
+      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 bg-slate-50 dark:bg-muted/40">
         {addItemButton}
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500" onClick={addSection}>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={addSection}>
           <Heading2 className="mr-1 h-3.5 w-3.5" /> Add Section
         </Button>
       </div>
@@ -1342,7 +1342,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                   type="checkbox"
                   checked={items.length > 0 && selectedIds.length === items.length}
                   onChange={toggleSelectAll}
-                  className="h-3.5 w-3.5 rounded border-slate-300"
+                  className="h-3.5 w-3.5 rounded border-slate-300 dark:border-neutral-700"
                 />
               </th>
               <th className="px-2 py-2 text-left font-medium">Status</th>
@@ -1367,7 +1367,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={tiersEnabled ? 18 : 17} className="py-8 text-center text-slate-400 text-xs">
+                <td colSpan={tiersEnabled ? 18 : 17} className="py-8 text-center text-slate-400 dark:text-neutral-500 text-xs">
                   No line items yet — use Add Item above
                 </td>
               </tr>

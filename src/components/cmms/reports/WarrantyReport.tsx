@@ -33,10 +33,10 @@ const STATE_LABEL: Record<WarrantyState, string> = {
 };
 
 const STATE_CLASS: Record<WarrantyState, string> = {
-  active: "bg-green-50 text-green-700",
-  expiring: "bg-amber-50 text-amber-700",
-  expired: "bg-red-50 text-red-700",
-  none: "bg-slate-100 text-slate-500",
+  active: "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400",
+  expiring: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
+  expired: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
+  none: "bg-muted text-muted-foreground",
 };
 
 interface Row {
@@ -117,7 +117,7 @@ export function WarrantyReport() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[1, 2, 3, 4].map((i) => <ReportSkeletonCard key={i} />)}
         </div>
-        <div className="h-64 animate-pulse rounded-lg border bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-lg border bg-muted" />
       </div>
     );
   }
@@ -129,23 +129,23 @@ export function WarrantyReport() {
         <ReportStatCard
           label="Expiring ≤ 90 Days"
           value={counts.expiring}
-          valueClassName={counts.expiring > 0 ? "text-amber-600" : "text-slate-900"}
+          valueClassName={counts.expiring > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-neutral-100"}
           sub="Book warranty work before it lapses"
         />
         <ReportStatCard label="Expired" value={counts.expired} />
         <ReportStatCard label="No Warranty on File" value={counts.none} />
       </div>
 
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Warranty End Dates
-            <span className="ml-1.5 font-normal normal-case text-slate-300">({visible.length})</span>
+            <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({visible.length})</span>
           </p>
           <SegmentedControl ariaLabel="Warranty filter" size="sm" options={FILTERS} value={filter} onChange={setFilter} />
         </div>
         {visible.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-400">
+          <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-neutral-500">
             {filter === "none" ? "Every active asset has a warranty on file." : "Nothing matches this filter."}
           </p>
         ) : (
@@ -168,9 +168,9 @@ export function WarrantyReport() {
                     className="cursor-pointer"
                     onClick={() => openRecord(r.entityType, r.id)}
                   >
-                    <TableCell className="font-medium text-slate-900">{r.name}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-500">{r.assetTag}</TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="font-medium text-slate-900 dark:text-neutral-100">{r.name}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{r.assetTag}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-neutral-400">
                       {r.entityType === "vehicle" ? "Vehicle" : r.assetType.replace(/_/g, " ") || "Asset"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{r.warrantyEndDate ? formatDate(r.warrantyEndDate) : "—"}</TableCell>
@@ -179,10 +179,10 @@ export function WarrantyReport() {
                         {STATE_LABEL[r.state]}
                       </span>
                       {r.daysLeft !== null && (
-                        <span className="ml-2 text-xs text-slate-500">{formatWarrantyCountdown(r.daysLeft)}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{formatWarrantyCountdown(r.daysLeft)}</span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden max-w-xs truncate text-slate-500 md:table-cell">{r.warrantyNotes ?? ""}</TableCell>
+                    <TableCell className="hidden max-w-xs truncate text-muted-foreground md:table-cell">{r.warrantyNotes ?? ""}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

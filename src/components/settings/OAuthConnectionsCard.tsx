@@ -16,17 +16,17 @@ export function OAuthConnectionsCard() {
   const disconnect = useDisconnectOAuthConnection();
 
   return (
-    <div className="rounded-lg border bg-white">
+    <div className="rounded-lg border bg-card">
       <div className="border-b px-6 py-4">
-        <h3 className="text-sm font-semibold text-slate-900">Connected Apps</h3>
-        <p className="mt-1 text-sm text-slate-500">Apps signed in via OAuth (e.g. Claude.ai&apos;s connector) — separate from the API keys above.</p>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Connected Apps</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Apps signed in via OAuth (e.g. Claude.ai&apos;s connector) — separate from the API keys above.</p>
       </div>
 
       <div className="px-6 py-5">
-        {isLoading && <p className="text-sm text-slate-400">Loading…</p>}
+        {isLoading && <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>}
 
         {!isLoading && (connections ?? []).length === 0 && (
-          <p className="text-sm text-slate-400">No apps connected yet.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No apps connected yet.</p>
         )}
 
         {(connections ?? []).length > 0 && (
@@ -34,8 +34,8 @@ export function OAuthConnectionsCard() {
             {connections!.map((conn) => (
               <li key={conn.id} className="flex items-center justify-between py-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-900">{conn.clientName}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">{conn.clientName}</p>
+                  <p className="text-xs text-muted-foreground">
                     {conn.connectedByName ? `Connected by ${conn.connectedByName}` : "Connected"} ·{" "}
                     {conn.scopes.length} scope{conn.scopes.length === 1 ? "" : "s"} ·{" "}
                     {conn.lastUsedAt ? `last used ${new Date(conn.lastUsedAt).toLocaleDateString()}` : "never used"}
@@ -44,7 +44,7 @@ export function OAuthConnectionsCard() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="text-red-600 hover:bg-red-50"
+                  className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                   disabled={disconnect.isPending}
                   onClick={() => disconnect.mutate(conn.id)}
                 >

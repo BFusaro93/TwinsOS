@@ -230,7 +230,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
               </div>
             )}
 
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               After creating, you&apos;ll be able to fill in billing, custom fields, and more.
             </p>
           </div>

@@ -147,7 +147,7 @@ export function BudgetedHoursPopover({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-5 w-5 items-center justify-center rounded text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+          className="flex h-5 w-5 items-center justify-center rounded text-slate-300 dark:text-neutral-500 hover:bg-muted hover:text-muted-foreground"
           title="Man-hour rate calculator"
         >
           <Calculator className="h-3 w-3" />
@@ -156,7 +156,7 @@ export function BudgetedHoursPopover({
       <PopoverContent className="w-[320px] p-3" side="bottom" align="start">
         <div className="mb-3 grid grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] items-end gap-1 text-xs">
           <div>
-            <label className="mb-1 block text-[10px] text-slate-500">Men</label>
+            <label className="mb-1 block text-[10px] text-muted-foreground">Men</label>
             <Input
               type="number"
               min={0}
@@ -167,7 +167,7 @@ export function BudgetedHoursPopover({
           </div>
           <span className="pb-1.5">×</span>
           <div>
-            <label className="mb-1 block text-[10px] text-slate-500">Hrs</label>
+            <label className="mb-1 block text-[10px] text-muted-foreground">Hrs</label>
             <Input
               type="number"
               min={0}
@@ -178,7 +178,7 @@ export function BudgetedHoursPopover({
           </div>
           <span className="pb-1.5">:</span>
           <div>
-            <label className="mb-1 block text-[10px] text-slate-500">Min</label>
+            <label className="mb-1 block text-[10px] text-muted-foreground">Min</label>
             <Input
               type="number"
               min={0}
@@ -190,7 +190,7 @@ export function BudgetedHoursPopover({
           </div>
           <span className="pb-1.5">=</span>
           <div>
-            <label className="mb-1 block text-[10px] text-slate-500">B.Hrs</label>
+            <label className="mb-1 block text-[10px] text-muted-foreground">B.Hrs</label>
             <Input
               type="number"
               min={0}
@@ -202,11 +202,11 @@ export function BudgetedHoursPopover({
           </div>
         </div>
 
-        <div className="mb-3 rounded bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+        <div className="mb-3 rounded bg-slate-50 dark:bg-muted/40 px-2 py-1.5 text-[11px] text-slate-600 dark:text-neutral-400">
           Cost ({centsToDisplay(occCostCents)}) ÷ B.Hrs ({hoursDraft.toFixed(2)}) ={" "}
-          <span className="font-medium text-slate-800">{centsToDisplay(currentRateCentsPerHr)}/man-hr</span>
+          <span className="font-medium text-slate-800 dark:text-neutral-100">{centsToDisplay(currentRateCentsPerHr)}/man-hr</span>
           {isComplexityAdjusted && (
-            <span className="mt-1 block text-[10px] text-slate-400">
+            <span className="mt-1 block text-[10px] text-slate-400 dark:text-neutral-500">
               Before this line&apos;s {bpsToPercent(complexityBps)} complexity — it scales hours and cost
               together, so the rate per man-hour is unchanged.
             </span>
@@ -214,9 +214,9 @@ export function BudgetedHoursPopover({
         </div>
 
         <div className="mb-3">
-          <label className="mb-1 block text-[10px] text-slate-500">To achieve a man-hr rate of</label>
+          <label className="mb-1 block text-[10px] text-muted-foreground">To achieve a man-hr rate of</label>
           <div className="flex items-center gap-1">
-            <span className="text-xs text-slate-400">$</span>
+            <span className="text-xs text-slate-400 dark:text-neutral-500">$</span>
             <Input
               type="number"
               min={0}
@@ -227,10 +227,10 @@ export function BudgetedHoursPopover({
             />
           </div>
           <div className="mt-1.5 flex gap-3 text-[11px]">
-            <button type="button" onClick={handleAdjustCost} className="text-brand-600 underline hover:text-brand-700">
+            <button type="button" onClick={handleAdjustCost} className="text-brand-600 dark:text-brand-400 underline hover:text-brand-700 dark:hover:text-brand-400">
               Adjust Cost
             </button>
-            <button type="button" onClick={handleAdjustHours} className="text-brand-600 underline hover:text-brand-700">
+            <button type="button" onClick={handleAdjustHours} className="text-brand-600 dark:text-brand-400 underline hover:text-brand-700 dark:hover:text-brand-400">
               Adjust B.Hrs
             </button>
           </div>

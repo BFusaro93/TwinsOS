@@ -675,8 +675,8 @@ export function ReportsReferenceGuide() {
         description="What every report in the Report Center actually measures, its available filters, and the gotchas worth knowing before you trust the numbers — one level deeper than the catalog's one-line description."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -734,8 +734,8 @@ export function ReportsReferenceGuide() {
       </Callout>
 
       {SECTIONS.map((section) => (
-        <section key={section.id} id={section.id} className="scroll-mt-6 rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-          <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+        <section key={section.id} id={section.id} className="scroll-mt-6 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+          <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
             {section.label}
           </h2>
           <Table>
@@ -748,26 +748,26 @@ export function ReportsReferenceGuide() {
             </thead>
             <tbody>
               {section.reports.map((report) => (
-                <tr key={report.name} className="border-b border-[#eceae3] align-top last:border-0">
-                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-[#0a0a0a]">
+                <tr key={report.name} className="border-b border-[#eceae3] dark:border-border align-top last:border-0">
+                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-[#0a0a0a] dark:text-neutral-100">
                     {report.name}
                     {report.fullPage && (
-                      <span className="ml-2 inline-flex rounded-full bg-[#eef4e2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#396927]">
+                      <span className="ml-2 inline-flex rounded-full bg-[#eef4e2] dark:bg-muted/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#396927] dark:text-[#b4c6ad]">
                         Full page
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-[#4a4a46]">
+                  <td className="px-3 py-2.5 text-[#4a4a46] dark:text-neutral-300">
                     <p>{report.description}</p>
                     {report.notes && report.notes.length > 0 && (
-                      <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#6a6a66]">
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#6a6a66] dark:text-neutral-400">
                         {report.notes.map((note, i) => (
                           <li key={i}>{note}</li>
                         ))}
                       </ul>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-[#6a6a66]">{report.filters ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-xs text-[#6a6a66] dark:text-neutral-400">{report.filters ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

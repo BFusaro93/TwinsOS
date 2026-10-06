@@ -58,8 +58,8 @@ interface PODetailPanelProps {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -193,7 +193,7 @@ function DetailsTab({
   return (
     <div className="flex flex-col gap-5 p-6">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Status
         </p>
         <StatusFlowIndicator
@@ -223,7 +223,7 @@ function DetailsTab({
         {/* Approval chain */}
         {(status === "pending" || status === "approved" || status === "rejected") && (
           <div className="mt-4">
-            <p className="mb-2 text-xs font-medium text-slate-500">Approval Chain</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Approval Chain</p>
             <ApprovalChain
               entityId={po.id}
               // The hook writes the DB status; only update local state here
@@ -259,7 +259,7 @@ function DetailsTab({
               <button
                 type="button"
                 onClick={() => setVendorSheetOpen(true)}
-                className="text-left font-medium text-brand-600 hover:underline"
+                className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
               >
                 {po.vendorName}
               </button>
@@ -287,7 +287,7 @@ function DetailsTab({
       <Separator />
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Line Items
         </p>
         <LineItemsTable
@@ -319,29 +319,29 @@ function DetailsTab({
         />
       </div>
 
-      <div className="rounded-md bg-slate-50 p-3 text-sm">
-        <div className="flex justify-between py-1 text-slate-600">
+      <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm">
+        <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
         {po.discountCost > 0 && (
-          <div className="flex justify-between py-1 text-slate-600">
+          <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
             <span>Discount</span>
             <span>-{formatCurrency(po.discountCost)}</span>
           </div>
         )}
-        <div className="flex justify-between py-1 text-slate-600">
+        <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
           <span>{taxLabel}</span>
           <span>{formatCurrency(salesTax)}</span>
         </div>
         {po.shippingCost > 0 && (
-          <div className="flex justify-between py-1 text-slate-600">
+          <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
             <span>Shipping / Other</span>
             <span>{formatCurrency(po.shippingCost)}</span>
           </div>
         )}
         <Separator className="my-1" />
-        <div className="flex justify-between py-1 font-semibold text-slate-900">
+        <div className="flex justify-between py-1 font-semibold text-slate-900 dark:text-neutral-100">
           <span>Grand Total</span>
           <span>{formatCurrency(grandTotal)}</span>
         </div>
@@ -412,7 +412,7 @@ function HistoryTab({ po }: { po: PurchaseOrder }) {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Comments
         </p>
         <CommentsSection recordType="po" recordId={po.id} />
@@ -420,7 +420,7 @@ function HistoryTab({ po }: { po: PurchaseOrder }) {
 
       <Separator className="mb-6" />
 
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
         Audit Trail
       </p>
       <AuditTrailTab recordType="po" recordId={po.id} />
@@ -467,8 +467,8 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">{po.poNumber}</h2>
-          <p className="text-sm text-slate-500">{po.vendorName}</p>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{po.poNumber}</h2>
+          <p className="text-sm text-muted-foreground">{po.vendorName}</p>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge variant={status} label={PO_STATUS_LABELS[status]} />
@@ -484,7 +484,7 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
             onClick={() => setDeleteConfirmOpen(true)}
           >
             <Trash2 className="h-4 w-4" />

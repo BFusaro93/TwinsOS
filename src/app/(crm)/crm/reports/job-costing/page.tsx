@@ -31,10 +31,10 @@ function defaultDateRange(timeZone: string) {
 }
 
 function OverUnderCell({ cents }: { cents: number | null }) {
-  if (cents == null || cents === 0) return <span className="text-slate-400">—</span>;
+  if (cents == null || cents === 0) return <span className="text-slate-400 dark:text-neutral-500">—</span>;
   const positive = cents > 0;
   return (
-    <span className={cn("flex items-center justify-end gap-0.5 tabular-nums font-medium", positive ? "text-green-600" : "text-red-600")}>
+    <span className={cn("flex items-center justify-end gap-0.5 tabular-nums font-medium", positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
       {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
       {positive ? "+" : ""}{formatCurrency(cents)}
     </span>
@@ -43,10 +43,10 @@ function OverUnderCell({ cents }: { cents: number | null }) {
 
 function SummaryKPI({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: "green" | "red" }) {
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm flex-1">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">{label}</p>
-      <p className={cn("text-xl font-bold", color === "green" ? "text-green-600" : color === "red" ? "text-red-600" : "text-slate-800")}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+    <div className="rounded-lg border bg-card p-4 shadow-sm flex-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">{label}</p>
+      <p className={cn("text-xl font-bold", color === "green" ? "text-green-600 dark:text-green-400" : color === "red" ? "text-red-600 dark:text-red-400" : "text-slate-800 dark:text-neutral-100")}>{value}</p>
+      {sub && <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -182,8 +182,8 @@ export default function JobCostingReportPage() {
     <div className="flex flex-col gap-5 p-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Job Costing Report</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Budgeted vs. actual performance per completed visit</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-neutral-100">Job Costing Report</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Budgeted vs. actual performance per completed visit</p>
         </div>
         {rows.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => downloadCSV(rows)}>
@@ -196,15 +196,15 @@ export default function JobCostingReportPage() {
       {/* Filters */}
       <div className="flex gap-3 items-end flex-wrap">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">From</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">From</label>
           <Input type="date" value={from} onChange={(e) => { touchedDates.current = true; setFrom(e.target.value); }} className="h-8 text-sm w-36" />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">To</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">To</label>
           <Input type="date" value={to} onChange={(e) => { touchedDates.current = true; setTo(e.target.value); }} className="h-8 text-sm w-36" />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">Service</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Service</label>
           <Select value={serviceId} onValueChange={setServiceId}>
             <SelectTrigger className="h-8 text-sm w-48">
               <SelectValue placeholder="All services" />
@@ -249,22 +249,22 @@ export default function JobCostingReportPage() {
       )}
 
       {/* Table */}
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
+          <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">Loading…</div>
         ) : error ? (
-          <div className="flex items-center justify-center py-16 text-sm text-red-600">
+          <div className="flex items-center justify-center py-16 text-sm text-red-600 dark:text-red-400">
             {error instanceof Error ? error.message : "Failed to load report"}
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-sm text-slate-400">
+          <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">
             No completed visits in this date range.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                <tr className="bg-slate-50 dark:bg-muted/40 border-b text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Date</th>
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Client</th>
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Services</th>
@@ -288,56 +288,56 @@ export default function JobCostingReportPage() {
                   const hrsPositive = (r.hoursVariance ?? 0) <= 0;
                   const marginGood = r.marginPct >= 40;
                   return (
-                    <tr key={r.visitId} className="border-b last:border-0 hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                    <tr key={r.visitId} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                         {r.workedDate ? fmtYmd(r.workedDate) : "—"}
                       </td>
-                      <td className="px-3 py-2 font-medium text-slate-800 max-w-[140px] truncate" title={r.clientName}>
+                      <td className="px-3 py-2 font-medium text-slate-800 dark:text-neutral-100 max-w-[140px] truncate" title={r.clientName}>
                         {r.clientName}
                       </td>
-                      <td className="px-3 py-2 text-slate-600 max-w-[160px] truncate" title={r.serviceNames}>
+                      <td className="px-3 py-2 text-slate-600 dark:text-neutral-400 max-w-[160px] truncate" title={r.serviceNames}>
                         {r.serviceNames}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.menCount}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-neutral-400">{r.menCount}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                         {r.budgetedHours > 0 ? fmtHrs(r.budgetedHours) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{r.hasActuals ? fmtHrs(r.actualManHours) : "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-800 dark:text-neutral-100">{r.hasActuals ? fmtHrs(r.actualManHours) : "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {r.hoursVariance != null && r.budgetedHours > 0 ? (
-                          <span className={hrsPositive ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                          <span className={hrsPositive ? "text-green-600 dark:text-green-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
                             {r.hoursVariance > 0 ? "+" : ""}{fmtHrs(r.hoursVariance)}
                           </span>
-                        ) : <span className="text-slate-300">—</span>}
+                        ) : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                         {r.budgetedRateCents > 0 ? formatCurrency(r.budgetedRateCents) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-800 dark:text-neutral-100">
                         {r.revPerManHrCents != null && r.revPerManHrCents > 0 ? formatCurrency(r.revPerManHrCents) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                         {r.targetRateCents > 0 ? formatCurrency(r.targetRateCents) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <OverUnderCell cents={r.overUnderCents} />
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-neutral-300 whitespace-nowrap">
                         {formatCurrency(r.laborCostCents)}
                         {r.laborEstimated && (
-                          <span className="ml-0.5 text-amber-600" title="Estimated: man-hours × crew labor burden (no crew clock-out recorded)">†</span>
+                          <span className="ml-0.5 text-amber-600 dark:text-amber-400" title="Estimated: man-hours × crew labor burden (no crew clock-out recorded)">†</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-neutral-300">
                         {r.revenueCents > 0 ? formatCurrency(r.revenueCents) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-neutral-400">
                         {r.materialsCostCents > 0 ? formatCurrency(r.materialsCostCents) : "—"}
                       </td>
-                      <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", r.grossProfitCents >= 0 ? "text-green-700" : "text-red-700")}>
+                      <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", r.grossProfitCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
                         {r.revenueCents > 0 ? formatCurrency(r.grossProfitCents) : "—"}
                       </td>
-                      <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", marginGood ? "text-green-600" : r.marginPct >= 20 ? "text-slate-700" : "text-red-600")}>
+                      <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", marginGood ? "text-green-600 dark:text-green-400" : r.marginPct >= 20 ? "text-slate-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400")}>
                         {r.revenueCents > 0 ? `${r.marginPct.toFixed(1)}%` : "—"}
                       </td>
                     </tr>
@@ -346,31 +346,31 @@ export default function JobCostingReportPage() {
               </tbody>
               {rows.length > 1 && summary && (
                 <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
-                    <td colSpan={4} className="px-3 py-2.5 text-xs text-slate-600">{rows.length} visits</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{fmtHrs(summary.totalBudgetedHours)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">{fmtHrs(summary.totalManHours)}</td>
+                  <tr className="border-t-2 border-border bg-slate-50 dark:bg-muted/40 font-semibold">
+                    <td colSpan={4} className="px-3 py-2.5 text-xs text-slate-600 dark:text-neutral-400">{rows.length} visits</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">{fmtHrs(summary.totalBudgetedHours)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800 dark:text-neutral-100">{fmtHrs(summary.totalManHours)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {summary.totalBudgetedHours > 0 ? (
-                        <span className={summary.hoursVariance <= 0 ? "text-green-600" : "text-red-600"}>
+                        <span className={summary.hoursVariance <= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                           {summary.hoursVariance > 0 ? "+" : ""}{fmtHrs(summary.hoursVariance)}
                         </span>
-                      ) : <span className="text-slate-300">—</span>}
+                      ) : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                       {summary.budgetedRateCents > 0 ? formatCurrency(summary.budgetedRateCents) : "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800 dark:text-neutral-100">
                       {summary.revPerManHrCents > 0 ? formatCurrency(summary.revPerManHrCents) : "—"}
                     </td>
                     <td colSpan={2} />
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(summary.totalLabor)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(summary.totalRevenue)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{formatCurrency(summary.totalMaterials)}</td>
-                    <td className={cn("px-3 py-2.5 text-right tabular-nums", summary.totalProfit >= 0 ? "text-green-700" : "text-red-700")}>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-neutral-300">{formatCurrency(summary.totalLabor)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-neutral-300">{formatCurrency(summary.totalRevenue)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">{formatCurrency(summary.totalMaterials)}</td>
+                    <td className={cn("px-3 py-2.5 text-right tabular-nums", summary.totalProfit >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
                       {formatCurrency(summary.totalProfit)}
                     </td>
-                    <td className={cn("px-3 py-2.5 text-right tabular-nums", summary.marginPct >= 40 ? "text-green-600" : summary.marginPct >= 20 ? "text-slate-700" : "text-red-600")}>
+                    <td className={cn("px-3 py-2.5 text-right tabular-nums", summary.marginPct >= 40 ? "text-green-600 dark:text-green-400" : summary.marginPct >= 20 ? "text-slate-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400")}>
                       {summary.marginPct.toFixed(1)}%
                     </td>
                   </tr>
@@ -382,7 +382,7 @@ export default function JobCostingReportPage() {
       </div>
 
       {rows.length > 0 && (
-        <div className="text-[11px] text-slate-400 leading-relaxed space-y-0.5">
+        <div className="text-[11px] text-slate-400 dark:text-neutral-500 leading-relaxed space-y-0.5">
           <p>
             One row per visit completed in the window, dated by the worked date (completion date in Eastern time, or the
             scheduled date when no completion time was recorded — the same basis as the Job Cost Summary report).
@@ -392,13 +392,13 @@ export default function JobCostingReportPage() {
           </p>
           {summary && summary.laborEstimatedCount > 0 && (
             <p>
-              <span className="text-amber-600">†</span> Labor estimated as man-hours × the crew&apos;s average labor rate
+              <span className="text-amber-600 dark:text-amber-400">†</span> Labor estimated as man-hours × the crew&apos;s average labor rate
               (each member&apos;s labor burden rate, or their employee hourly rate grossed up by the org labor burden %,
               falling back to the org-wide average) because no crew clock-out recorded actual labor for that visit.
             </p>
           )}
           {summary && summary.laborMissingCount > 0 && (
-            <p className="text-amber-700">
+            <p className="text-amber-700 dark:text-amber-400">
               No labor rate configured: {summary.laborMissingCount} of {rows.length} visits show $0.00 labor because
               neither the crew members nor the org have a labor rate. Set labor burden rates on crew members
               (Settings → Crews) or hourly rates on employees — until then labor cost, gross profit and margin on those

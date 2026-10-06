@@ -133,7 +133,7 @@ export function VendorCombobox({
           <div className="border-t p-1">
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-blue-600 hover:bg-slate-100"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-muted"
               onMouseDown={(e) => {
                 e.preventDefault();
                 setOpen(false);

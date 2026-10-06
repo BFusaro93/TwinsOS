@@ -41,9 +41,9 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "bg-purple-100 text-purple-700 border-purple-200",
-  manager: "bg-blue-100 text-blue-700 border-blue-200",
-  purchaser: "bg-amber-100 text-amber-700 border-amber-200",
+  admin: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+  manager: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  purchaser: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
 };
 
 function formatThreshold(cents: number) {
@@ -120,13 +120,13 @@ function EditStepForm({
   }
 
   return (
-    <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-600">
+    <div className="rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">
         {step.id ? "Edit Step" : "New Step"}
       </p>
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">Label</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Label</label>
           <Input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
@@ -135,7 +135,7 @@ function EditStepForm({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">Required Role</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Required Role</label>
           <Select value={role} onValueChange={handleRoleChange}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue />
@@ -152,7 +152,7 @@ function EditStepForm({
           </Select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">Assign To</label>
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Assign To</label>
           <Select value={assignedUserId} onValueChange={setAssignedUserId}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue />
@@ -168,7 +168,7 @@ function EditStepForm({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
             {assignedUserId === "anyone"
               ? usersWithRole.length > 1
                 ? `All ${usersWithRole.length} people with the ${roleLabel} role will be notified. The first to approve or reject resolves this step.`
@@ -180,11 +180,11 @@ function EditStepForm({
         </div>
 
         <div className="col-span-2 flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-600">
+          <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">
             Dollar Threshold ($) — enter 0 to always require this step
           </label>
           <div className="relative w-48">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 dark:text-neutral-500">$</span>
             <Input
               type="number"
               min={0}
@@ -194,7 +194,7 @@ function EditStepForm({
               className="h-8 pl-6 text-sm"
             />
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
             {thresholdCents === 0
               ? "This step will always be required."
               : `This step will only trigger for requests totaling $${(thresholdCents / 100).toLocaleString()} or more.`}
@@ -260,7 +260,7 @@ function SortableStepRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 md:gap-3 ${
+      className={`flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-3 md:gap-3 ${
         isDragging ? "z-10 opacity-90 shadow-md" : ""
       }`}
     >
@@ -268,7 +268,7 @@ function SortableStepRow({
         type="button"
         {...attributes}
         {...listeners}
-        className="hidden shrink-0 cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing md:block"
+        className="hidden shrink-0 cursor-grab touch-none text-slate-300 dark:text-neutral-500 hover:text-muted-foreground active:cursor-grabbing md:block"
       >
         <GripVertical className="h-4 w-4" />
       </button>
@@ -281,12 +281,12 @@ function SortableStepRow({
       {/* Info */}
       <div className="flex flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-slate-900">{step.label}</span>
+          <span className="text-sm font-medium text-slate-900 dark:text-neutral-100">{step.label}</span>
           <Badge variant="outline" className={`text-[10px] ${roleColorClass}`}>
             {roleLabel}
           </Badge>
         </div>
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-slate-400 dark:text-neutral-500">
           {assignedName
             ? `Assigned to ${assignedName}`
             : `Any ${roleLabel} (${peopleCount} on team)`}
@@ -302,7 +302,7 @@ function SortableStepRow({
           variant="ghost"
           aria-label="Move step up"
           disabled={index === 0}
-          className="h-7 w-7 text-slate-400 hover:text-slate-700 max-md:h-10 max-md:w-10 md:hidden"
+          className="h-7 w-7 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 max-md:h-10 max-md:w-10 md:hidden"
           onClick={() => onMove(-1)}
         >
           <ChevronUp className="h-4 w-4" />
@@ -312,7 +312,7 @@ function SortableStepRow({
           variant="ghost"
           aria-label="Move step down"
           disabled={isLast}
-          className="h-7 w-7 text-slate-400 hover:text-slate-700 max-md:h-10 max-md:w-10 md:hidden"
+          className="h-7 w-7 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 max-md:h-10 max-md:w-10 md:hidden"
           onClick={() => onMove(1)}
         >
           <ChevronDown className="h-4 w-4" />
@@ -320,7 +320,7 @@ function SortableStepRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 text-slate-400 hover:text-slate-700 max-md:h-10 max-md:w-10"
+          className="h-7 w-7 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 max-md:h-10 max-md:w-10"
           onClick={onEdit}
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -328,7 +328,7 @@ function SortableStepRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 text-slate-400 hover:text-red-500 max-md:h-10 max-md:w-10"
+          className="h-7 w-7 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 max-md:h-10 max-md:w-10"
           onClick={onDelete}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -451,11 +451,11 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
   }
 
   return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm">
+    <div className="rounded-xl border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">{flow.name}</h3>
-          <p className="mt-0.5 text-xs text-slate-400 capitalize">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{flow.name}</h3>
+          <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500 capitalize">
             Applies to: {flow.entityType.replace("_", " ")}s
           </p>
         </div>
@@ -478,7 +478,7 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
       </div>
 
       {saveError && (
-        <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+        <p className="mb-2 rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-600 dark:text-red-400">
           Failed to save approval flow. Please try again.
         </p>
       )}
@@ -517,7 +517,7 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
                 {/* Connector arrow */}
                 {i < steps.length - 1 && !addingNew && (
                   <div className="flex justify-center py-1">
-                    <div className="h-4 w-0.5 bg-slate-200" />
+                    <div className="h-4 w-0.5 bg-slate-200 dark:bg-neutral-700" />
                   </div>
                 )}
               </div>
@@ -587,8 +587,8 @@ export function ApprovalFlowsPage({ entityTypes = ALL_ENTITY_TYPES }: ApprovalFl
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Approval Flows</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Approval Flows</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Configure the approval chain for {scopeLabel}. Each step
           specifies which role must approve and an optional dollar threshold above which
           the step activates.
@@ -600,13 +600,13 @@ export function ApprovalFlowsPage({ entityTypes = ALL_ENTITY_TYPES }: ApprovalFl
       {isLoading ? (
         <div className="flex flex-col gap-4">
           {[1, 2].map((i) => (
-            <div key={i} className="h-48 animate-pulse rounded-xl bg-slate-100" />
+            <div key={i} className="h-48 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
       ) : displayFlows.length === 0 ? (
-        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
-          <p className="text-sm font-medium text-slate-700">No approval flows configured</p>
-          <p className="max-w-sm text-xs text-slate-500">
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-border bg-slate-50 dark:bg-muted/40 py-12 text-center">
+          <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">No approval flows configured</p>
+          <p className="max-w-sm text-xs text-muted-foreground">
             Click below to create the default {scopeLabel} approval flow{relevantDefaults.length > 1 ? "s" : ""},
             then add approval steps to each one.
           </p>
@@ -622,8 +622,8 @@ export function ApprovalFlowsPage({ entityTypes = ALL_ENTITY_TYPES }: ApprovalFl
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-xs text-slate-500">
-        <p className="font-medium text-slate-700">How thresholds work</p>
+      <div className="rounded-lg border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-4 text-xs text-muted-foreground">
+        <p className="font-medium text-slate-700 dark:text-neutral-300">How thresholds work</p>
         <ul className="mt-1 list-disc space-y-1 pl-4">
           <li>A step with a <strong>$0 threshold</strong> is always required, regardless of amount.</li>
           <li>A step with a <strong>dollar threshold</strong> (e.g. $2,500) only activates when the request total meets or exceeds that amount. Otherwise it is automatically skipped.</li>

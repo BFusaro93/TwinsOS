@@ -48,8 +48,8 @@ export function NotificationPreferencesGuide() {
         description="How email and in-app notifications are configured, where the defaults come from, and how the bell keeps read state in sync."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -119,43 +119,43 @@ export function NotificationPreferencesGuide() {
           </thead>
           <tbody>
             {PAIRED_EVENTS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0 align-top">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0 align-top">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">
                   {name}
-                  <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76]">{desc}</div>
+                  <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76] dark:text-neutral-400">{desc}</div>
                 </td>
-                <td className="px-3 py-2 text-[#4a4a46]">Yes</td>
-                <td className="px-3 py-2 text-[#4a4a46]">Yes</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Yes</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Yes</td>
               </tr>
             ))}
             <tr>
-              <td colSpan={3} className="bg-[#f4f6f0] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[#5a5a56]">
+              <td colSpan={3} className="bg-[#f4f6f0] dark:bg-muted/50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[#5a5a56] dark:text-neutral-300">
                 Estimate change-request — in-app only
               </td>
             </tr>
-            <tr className="border-b border-[#eceae3] align-top">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">
+            <tr className="border-b border-[#eceae3] dark:border-border align-top">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">
                 Estimate change-request
-                <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76]">
+                <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76] dark:text-neutral-400">
                   A client (or internal reviewer) requests changes to an estimate before deciding.
                 </div>
               </td>
-              <td className="px-3 py-2 text-[#7a7a76]">No email variant</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Yes</td>
+              <td className="px-3 py-2 text-[#7a7a76] dark:text-neutral-400">No email variant</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Yes</td>
             </tr>
             <tr>
-              <td colSpan={3} className="bg-[#f4f6f0] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[#5a5a56]">
+              <td colSpan={3} className="bg-[#f4f6f0] dark:bg-muted/50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[#5a5a56] dark:text-neutral-300">
                 Email only — no in-app counterpart
               </td>
             </tr>
             {EMAIL_ONLY_EVENTS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0 align-top">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0 align-top">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">
                   {name}
-                  <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76]">{desc}</div>
+                  <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76] dark:text-neutral-400">{desc}</div>
                 </td>
-                <td className="px-3 py-2 text-[#4a4a46]">Yes</td>
-                <td className="px-3 py-2 text-[#7a7a76]">Not shown in bell</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Yes</td>
+                <td className="px-3 py-2 text-[#7a7a76] dark:text-neutral-400">Not shown in bell</td>
               </tr>
             ))}
           </tbody>

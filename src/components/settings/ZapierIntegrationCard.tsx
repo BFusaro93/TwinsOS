@@ -47,7 +47,7 @@ export function ZapierIntegrationCard() {
   const displayKey = newKey ?? (zapier?.apiKeyPrefix ? `${zapier.apiKeyPrefix}${"•".repeat(24)}` : null);
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm">
+    <div className="rounded-xl border bg-card shadow-sm">
       <div className="flex items-center gap-3 border-b px-6 py-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/10">
           <svg viewBox="0 0 24 24" className="h-5 w-5 fill-orange-500">
@@ -55,23 +55,23 @@ export function ZapierIntegrationCard() {
           </svg>
         </div>
         <div>
-          <p className="text-sm font-semibold text-slate-900">Zapier</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Zapier</p>
+          <p className="text-xs text-muted-foreground">
             Connect Equipt/Landscapt to 9,000+ apps — trigger Zaps on new clients, tickets, and
             paid invoices, or create clients and tickets from a Zap.
           </p>
         </div>
         {zapier?.enabled && hasKey && (
-          <span className="ml-auto rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+          <span className="ml-auto rounded-full bg-green-100 dark:bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
             Connected
           </span>
         )}
       </div>
 
-      <div className="border-b bg-slate-50 px-6 py-3">
+      <div className="border-b bg-slate-50 dark:bg-muted/40 px-6 py-3">
         <GuideLink
           href="/settings/support/zapier-guide"
-          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
         >
           View the full Zapier guide — every trigger and action, explained
           <ArrowRight className="h-3 w-3" />
@@ -95,7 +95,7 @@ export function ZapierIntegrationCard() {
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
                 >
                   {showKey ? "Hide" : "Show"}
                 </button>
@@ -106,7 +106,7 @@ export function ZapierIntegrationCard() {
             </Button>
           </div>
           {newKey && (
-            <p className="text-xs text-amber-600">
+            <p className="text-xs text-amber-600 dark:text-amber-400">
               This key will not be shown again. Copy it now and paste it into the Zapier app&apos;s API Key field. Regenerating
               replaces it, so any Zaps using the old key will need to be reconnected.
             </p>
@@ -121,9 +121,9 @@ export function ZapierIntegrationCard() {
               Copy key
             </Button>
           )}
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           {!newKey && (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               Keys are stored hashed and can&apos;t be viewed again. Regenerate to get a new key; this
               invalidates the previous one.
             </p>

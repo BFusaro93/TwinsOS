@@ -193,8 +193,8 @@ export function BarcodeScanModal({
         {/* ── Success state ── */}
         {detected ? (
           <div className="flex flex-col items-center gap-3 py-8">
-            <CheckCircle2 className="h-12 w-12 text-green-500" />
-            <p className="text-sm font-medium text-slate-700">
+            <CheckCircle2 className="h-12 w-12 text-green-500 dark:text-green-400" />
+            <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
               Code detected — looking up record…
             </p>
           </div>
@@ -260,7 +260,7 @@ export function BarcodeScanModal({
           /* ── Manual entry state ── */
           <div className="flex flex-col gap-4">
             {cameraError && (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <p className="rounded-md bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
                 {cameraError}
               </p>
             )}

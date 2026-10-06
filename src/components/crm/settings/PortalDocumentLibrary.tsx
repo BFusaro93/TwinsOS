@@ -68,11 +68,11 @@ export function PortalDocumentLibrary() {
   const categories = Array.from(new Set((documents ?? []).map((d) => d.category)));
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white">
+    <section className="rounded-xl border border-border bg-card">
       <div className="border-b px-4 py-3 flex items-center gap-2">
-        <FolderOpen className="h-4 w-4 text-slate-400" />
-        <h2 className="text-sm font-semibold text-slate-800">Document Library</h2>
-        <span className="ml-auto text-xs text-slate-400">
+        <FolderOpen className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Document Library</h2>
+        <span className="ml-auto text-xs text-slate-400 dark:text-neutral-500">
           Shared with every client — not client-specific
         </span>
       </div>
@@ -119,24 +119,24 @@ export function PortalDocumentLibrary() {
 
         {/* Document list */}
         {isLoading ? (
-          <div className="flex items-center gap-2 py-4 text-slate-400">
+          <div className="flex items-center gap-2 py-4 text-slate-400 dark:text-neutral-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Loading documents…</span>
           </div>
         ) : (documents ?? []).length === 0 ? (
-          <p className="text-sm text-slate-400 py-2">No documents uploaded yet.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500 py-2">No documents uploaded yet.</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             {documents!.map((doc) => (
               <div
                 key={doc.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                  <FileText className="h-4 w-4 text-slate-400 dark:text-neutral-500 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
-                    <p className="text-xs text-slate-400 truncate">
+                    <p className="text-sm font-medium text-slate-800 dark:text-neutral-100 truncate">{doc.title}</p>
+                    <p className="text-xs text-slate-400 dark:text-neutral-500 truncate">
                       {doc.category} · {doc.fileName}
                       {doc.sizeBytes ? ` · ${formatSize(doc.sizeBytes)}` : ""}
                     </p>
@@ -145,7 +145,7 @@ export function PortalDocumentLibrary() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 gap-1 text-xs text-red-500 hover:text-red-600 shrink-0"
+                  className="h-7 gap-1 text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400 shrink-0"
                   onClick={() => void handleDelete(doc.id, doc.storagePath, doc.title)}
                 >
                   <Trash2 className="h-3 w-3" /> Remove

@@ -33,13 +33,13 @@ export function BeforeAfterSlider({ before, after }: BeforeAfterSliderProps) {
             }
             style={{ height: "400px", width: "100%", backgroundColor: "#27272a" }}
           />
-          <div className="mt-2 flex justify-between px-1 text-xs text-slate-500">
+          <div className="mt-2 flex justify-between px-1 text-xs text-muted-foreground">
             <span className="font-medium text-amber-400">← Before</span>
             <span className="font-medium text-brand-400">After →</span>
           </div>
         </div>
       ) : (
-        <div className="flex h-40 items-center justify-center rounded-lg bg-slate-800 text-slate-500 text-sm">
+        <div className="flex h-40 items-center justify-center rounded-lg bg-slate-800 text-muted-foreground text-sm">
           Loading images…
         </div>
       )}

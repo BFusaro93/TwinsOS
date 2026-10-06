@@ -385,7 +385,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
               {/* Title */}
               <div className="grid gap-1.5">
                 <Label htmlFor="wo-title">
-                  Work Order Title <span className="text-red-500">*</span>
+                  Work Order Title <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Input
                   id="wo-title"
@@ -447,7 +447,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
                     <PopoverContent className="w-56 p-2 z-[9999]" align="start">
                       <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
                         {enabledCategories.map((c) => (
-                          <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
+                          <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer">
                             <Checkbox
                               checked={categoryIds.includes(c.id) || categoryIds.includes(c.label)}
                               onCheckedChange={(checked) => {
@@ -492,8 +492,8 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
 
               {/* Multi-asset info banner */}
               {!isEditing && !isAddingSub && entityKeys.length > 1 && (
-                <div className="flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm text-brand-700">
-                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+                <div className="flex items-start gap-2 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-3 py-2.5 text-sm text-brand-700 dark:text-brand-400">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500 dark:text-brand-400" />
                   <span>
                     A <strong>parent work order</strong> will be created with{" "}
                     <strong>{entityKeys.length} sub work orders</strong>, one per selected asset / vehicle.
@@ -501,8 +501,8 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
                 </div>
               )}
               {isAddingSub && entityKeys.length > 1 && (
-                <div className="flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm text-brand-700">
-                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+                <div className="flex items-start gap-2 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-3 py-2.5 text-sm text-brand-700 dark:text-brand-400">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500 dark:text-brand-400" />
                   <span>
                     <strong>{entityKeys.length} sub work orders</strong> will be added under{" "}
                     <strong>{parentWorkOrder?.workOrderNumber}</strong>, one per selected asset / vehicle.
@@ -515,10 +515,10 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
                 <div className="grid gap-1.5">
                   <Label htmlFor="wo-entity-status">
                     Update {statusChangeEntity.type === "vehicle" ? "Vehicle" : "Asset"} Status
-                    <span className="ml-1.5 text-xs font-normal text-slate-400">(optional)</span>
+                    <span className="ml-1.5 text-xs font-normal text-slate-400 dark:text-neutral-500">(optional)</span>
                   </Label>
                   <Select value={newEntityStatus} onValueChange={setNewEntityStatus}>
-                    <SelectTrigger id="wo-entity-status" className="border-slate-200 bg-slate-50">
+                    <SelectTrigger id="wo-entity-status" className="border-border bg-slate-50 dark:bg-muted/40">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -537,7 +537,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
               <div className="grid gap-1.5">
                 <Label htmlFor="wo-start-date">
                   Scheduled Date
-                  <span className="ml-1.5 text-xs font-normal text-slate-400">(optional — hides WO until this date)</span>
+                  <span className="ml-1.5 text-xs font-normal text-slate-400 dark:text-neutral-500">(optional — hides WO until this date)</span>
                 </Label>
                 <Input
                   id="wo-start-date"
@@ -563,7 +563,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
                       <PopoverContent className="w-56 p-2 z-[9999]" align="start">
                         <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
                           {(users ?? []).map((u) => (
-                            <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
+                            <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer">
                               <Checkbox
                                 checked={assignedToIds.includes(u.id)}
                                 onCheckedChange={(checked) => {
@@ -624,7 +624,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
                   </SelectContent>
                 </Select>
                 {recurrenceFrequency !== "none" && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     When this work order is marked done, the next one is created automatically, due one interval after this one&rsquo;s due date.
                   </p>
                 )}
@@ -634,12 +634,12 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
           </div>
 
           {!isValid && missingFields.length > 0 && (
-            <p className="mt-2 text-right text-xs text-red-500">
+            <p className="mt-2 text-right text-xs text-red-500 dark:text-red-400">
               Missing required field{missingFields.length > 1 ? "s" : ""}: {missingFields.join(", ")}
             </p>
           )}
           {dateOrderError && (
-            <p className="mt-2 text-right text-xs text-red-500">{dateOrderError}</p>
+            <p className="mt-2 text-right text-xs text-red-500 dark:text-red-400">{dateOrderError}</p>
           )}
           <DialogFooter className="mt-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose}>

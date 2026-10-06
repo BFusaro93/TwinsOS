@@ -276,15 +276,15 @@ export function VehicleBulkImportDialog({
         {/* ── Step 1: folder picker ── */}
         {groups.length === 0 && (
           <div
-            className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-slate-200 px-6 py-10 text-center transition-colors hover:border-slate-300 hover:bg-slate-50"
+            className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border px-6 py-10 text-center transition-colors hover:border-slate-300 dark:hover:border-neutral-700 hover:bg-slate-50 dark:hover:bg-muted/40"
             onClick={() => folderInputRef.current?.click()}
           >
-            <FolderOpen className="h-8 w-8 text-slate-300" />
+            <FolderOpen className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
             <div>
-              <p className="text-sm font-medium text-slate-700">
+              <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                 Click to choose your vehicles folder
               </p>
-              <p className="mt-0.5 text-xs text-slate-400">
+              <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">
                 Select the parent folder that contains one subfolder per vehicle
               </p>
             </div>
@@ -312,18 +312,18 @@ export function VehicleBulkImportDialog({
             {groups.map((group) => (
               <div
                 key={group.folderName}
-                className="flex items-center gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2.5"
+                className="flex items-center gap-3 rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-3 py-2.5"
               >
                 {/* Status icon */}
                 <div className="shrink-0">
                   {group.status === "uploading" && (
-                    <Loader2 className="h-4 w-4 animate-spin text-brand-500" />
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-500 dark:text-brand-400" />
                   )}
                   {group.status === "done" && (
-                    <Check className="h-4 w-4 text-green-500" />
+                    <Check className="h-4 w-4 text-green-500 dark:text-green-400" />
                   )}
                   {group.status === "error" && (
-                    <X className="h-4 w-4 text-red-500" />
+                    <X className="h-4 w-4 text-red-500 dark:text-red-400" />
                   )}
                   {group.status === "pending" && (
                     <FolderOpen className="h-4 w-4 text-amber-400" />
@@ -332,10 +332,10 @@ export function VehicleBulkImportDialog({
 
                 {/* Folder name + file count */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">
+                  <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">
                     {group.folderName}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">
                     {group.status === "done"
                       ? `${group.succeeded} uploaded${group.failed > 0 ? `, ${group.failed} failed` : ""}`
                       : group.status === "error"
@@ -344,7 +344,7 @@ export function VehicleBulkImportDialog({
                   </p>
                 </div>
 
-                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-neutral-500" />
 
                 {/* Vehicle selector */}
                 <Select
@@ -365,7 +365,7 @@ export function VehicleBulkImportDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__unassigned__">
-                      <span className="text-slate-400">Skip this folder</span>
+                      <span className="text-slate-400 dark:text-neutral-500">Skip this folder</span>
                     </SelectItem>
                     {vehicles.map((v) => (
                       <SelectItem key={v.id} value={v.id}>
@@ -386,7 +386,7 @@ export function VehicleBulkImportDialog({
               <>
                 <button
                   type="button"
-                  className="text-xs text-slate-400 hover:text-slate-600"
+                  className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
                   onClick={() => {
                     setGroups([]);
                     folderInputRef.current?.click();
@@ -416,7 +416,7 @@ export function VehicleBulkImportDialog({
               </>
             ) : (
               <>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-muted-foreground">
                   {anyUploaded
                     ? `Done — files are now visible on each vehicle's Files tab.`
                     : "No files were uploaded."}

@@ -42,7 +42,7 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
     >
       <CardHeader className="flex flex-row items-center gap-2 pb-2 pt-3 px-3 space-y-0">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-800 truncate">{sequence.name}</p>
+          <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100 truncate">{sequence.name}</p>
         </div>
         <Switch
           checked={sequence.isActive}
@@ -78,7 +78,7 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
 
       <CardContent className="flex flex-col gap-2 px-3 pb-3">
         {(events ?? []).length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
+          <div className="rounded-md border border-dashed border-border py-6 text-center text-xs text-slate-400 dark:text-neutral-500">
             No events yet.
             <br />
             Click an event type on the left to add one.

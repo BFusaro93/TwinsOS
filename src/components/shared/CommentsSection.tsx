@@ -14,12 +14,12 @@ import type { CommentRecordType } from "@/types";
 function CommentBody({ body, dark }: { body: string; dark: boolean }) {
   const segments = parseMentionSegments(body);
   return (
-    <p className={`mt-0.5 whitespace-pre-wrap text-sm ${dark ? "text-slate-300" : "text-slate-700"}`}>
+    <p className={`mt-0.5 whitespace-pre-wrap text-sm ${dark ? "text-slate-300 dm-fixed-dark" : "text-slate-700 dark:text-neutral-300"}`}>
       {segments.map((seg, i) =>
         seg.type === "mention" ? (
           <span
             key={i}
-            className={`rounded px-1 font-medium ${dark ? "bg-brand-500/20 text-brand-300" : "bg-brand-50 text-brand-700"}`}
+            className={`rounded px-1 font-medium ${dark ? "bg-brand-500/20 text-brand-300" : "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"}`}
           >
             @{seg.content}
           </span>
@@ -69,7 +69,7 @@ export function CommentsSection({ recordType, recordId, dark = false, canWrite }
     <div className="flex flex-col gap-4">
       {/* Comment list */}
       {isLoading ? (
-        <p className="text-sm text-slate-400">Loading comments…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading comments…</p>
       ) : comments && comments.length > 0 ? (
         <ul className="flex flex-col gap-4">
           {comments.map((comment) => {
@@ -84,10 +84,10 @@ export function CommentsSection({ recordType, recordId, dark = false, canWrite }
                 </div>
                 <div className="flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className={`text-sm font-medium ${dark ? "text-slate-100" : "text-slate-900"}`}>
+                    <span className={`text-sm font-medium ${dark ? "text-slate-100" : "text-slate-900 dark:text-neutral-100"}`}>
                       {comment.authorName}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 dark:text-neutral-500">
                       {formatDateTime(comment.createdAt)}
                     </span>
                   </div>
@@ -98,19 +98,19 @@ export function CommentsSection({ recordType, recordId, dark = false, canWrite }
           })}
         </ul>
       ) : (
-        <p className="text-sm text-slate-400">No comments yet.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">No comments yet.</p>
       )}
 
       {/* New comment input */}
       {showInput && (
-      <div className={`flex gap-2 rounded-md border p-2 ${dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-slate-200 bg-white"}`}>
+      <div className={`flex gap-2 rounded-md border p-2 ${dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-border bg-card"}`}>
         <MentionTextarea
           value={draft}
           onChange={setDraft}
           placeholder="Add a comment… (@ to mention someone)"
           rows={2}
           dark={dark}
-          className={`w-full resize-none bg-transparent text-sm placeholder:text-slate-500 focus:outline-none ${dark ? "text-white" : "text-slate-900 placeholder:text-slate-400"}`}
+          className={`w-full resize-none bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none ${dark ? "text-white" : "text-slate-900 dark:text-neutral-100 placeholder:text-slate-400 dark:placeholder:text-neutral-500"}`}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey)) {
               e.preventDefault();

@@ -33,12 +33,12 @@ export function getDisplayInvoiceStatus(
 /** Pill colors for a (display) invoice status — same palette as the
  *  Invoices list and detail sheet. */
 export const INVOICE_STATUS_COLOR: Record<InvoiceStatus, string> = {
-  draft:   "bg-slate-100 text-slate-600",
-  printed: "bg-indigo-100 text-indigo-700",
-  sent:    "bg-blue-100 text-blue-700",
-  viewed:  "bg-purple-100 text-purple-700",
-  partial: "bg-yellow-100 text-yellow-700",
-  paid:    "bg-green-100 text-green-700",
-  overdue: "bg-red-100 text-red-600",
-  void:    "bg-slate-200 text-slate-500",
+  draft:   "bg-muted text-slate-600 dark:text-neutral-400",
+  printed: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400",
+  sent:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  viewed:  "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
+  partial: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  paid:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  overdue: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  void:    "bg-slate-200 dark:bg-neutral-700 text-muted-foreground",
 };

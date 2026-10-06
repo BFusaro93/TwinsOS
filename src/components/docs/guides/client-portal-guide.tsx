@@ -39,8 +39,8 @@ export function ClientPortalGuide() {
         description="A branded, self-serve site where Landscapt clients view their account, pay invoices, and act on estimates — entirely separate from staff login."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -167,10 +167,10 @@ export function ClientPortalGuide() {
           </thead>
           <tbody>
             {NAV_TABS.map(([label, route, desc]) => (
-              <tr key={label} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{label}</td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-[#4a4a46]">{route}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={label} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{label}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-[#4a4a46] dark:text-neutral-300">{route}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -283,9 +283,9 @@ export function ClientPortalGuide() {
         <Table>
           <tbody>
             {SETTINGS_ROWS.map(([label, desc]) => (
-              <tr key={label} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a]">{label}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={label} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">{label}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>

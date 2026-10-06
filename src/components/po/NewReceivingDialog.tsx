@@ -116,7 +116,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
             <div className="overflow-hidden rounded-md border">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-slate-50 text-xs">
+                  <TableRow className="bg-slate-50 dark:bg-muted/40 text-xs">
                     <TableHead>Item</TableHead>
                     <TableHead>Part #</TableHead>
                     <TableHead className="text-right">Unit Cost</TableHead>
@@ -128,10 +128,10 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
                   {lines.map((line) => (
                     <TableRow key={line.id} className="text-sm">
                       <TableCell className="font-medium">{line.productItemName}</TableCell>
-                      <TableCell className="font-mono text-xs text-slate-500">
+                      <TableCell className="font-mono text-xs text-muted-foreground">
                         {line.partNumber || "—"}
                       </TableCell>
-                      <TableCell className="text-right text-slate-600">
+                      <TableCell className="text-right text-slate-600 dark:text-neutral-400">
                         {formatCurrency(line.unitCost)}
                       </TableCell>
                       <TableCell className="text-right">{line.quantityOrdered}</TableCell>

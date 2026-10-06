@@ -118,7 +118,7 @@ export function EntityCombobox({
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{a.name}</p>
                           {(a.make || a.model || a.assetTag) && (
-                            <p className="truncate text-xs text-slate-400">
+                            <p className="truncate text-xs text-slate-400 dark:text-neutral-500">
                               {[a.make, a.model, a.assetTag].filter(Boolean).join(" · ")}
                             </p>
                           )}
@@ -147,7 +147,7 @@ export function EntityCombobox({
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{v.name}</p>
                           {(v.year || v.make || v.model) && (
-                            <p className="truncate text-xs text-slate-400">
+                            <p className="truncate text-xs text-slate-400 dark:text-neutral-500">
                               {[v.year, v.make, v.model, v.licensePlate].filter(Boolean).join(" · ")}
                             </p>
                           )}

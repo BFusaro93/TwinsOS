@@ -272,7 +272,7 @@ export function SalesMeetingDialog({
                 </Select>
               )}
             />
-            {errors.salesRepId && <p className="text-xs text-red-500">{errors.salesRepId.message}</p>}
+            {errors.salesRepId && <p className="text-xs text-red-500 dark:text-red-400">{errors.salesRepId.message}</p>}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -301,19 +301,19 @@ export function SalesMeetingDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Title *</Label>
             <Input {...register("title")} placeholder="e.g. Estimate walkthrough" />
-            {errors.title && <p className="text-xs text-red-500">{errors.title.message}</p>}
+            {errors.title && <p className="text-xs text-red-500 dark:text-red-400">{errors.title.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Date *</Label>
               <Input type="date" {...register("scheduledDate")} />
-              {errors.scheduledDate && <p className="text-xs text-red-500">{errors.scheduledDate.message}</p>}
+              {errors.scheduledDate && <p className="text-xs text-red-500 dark:text-red-400">{errors.scheduledDate.message}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Time *</Label>
               <Input type="time" {...register("scheduledTime")} />
-              {errors.scheduledTime && <p className="text-xs text-red-500">{errors.scheduledTime.message}</p>}
+              {errors.scheduledTime && <p className="text-xs text-red-500 dark:text-red-400">{errors.scheduledTime.message}</p>}
             </div>
           </div>
 
@@ -321,7 +321,7 @@ export function SalesMeetingDialog({
             <div className="flex flex-col gap-1.5">
               <Label>Duration (min) *</Label>
               <Input type="number" step={5} min={5} {...register("durationMinutes")} />
-              {errors.durationMinutes && <p className="text-xs text-red-500">{errors.durationMinutes.message}</p>}
+              {errors.durationMinutes && <p className="text-xs text-red-500 dark:text-red-400">{errors.durationMinutes.message}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Type</Label>
@@ -403,7 +403,7 @@ export function SalesMeetingDialog({
               <Button
                 type="button"
                 variant="ghost"
-                className="text-red-600 hover:text-red-700"
+                className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400"
                 onClick={handleDelete}
               >
                 Cancel Meeting

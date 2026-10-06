@@ -120,15 +120,15 @@ function TemplateItemRow({
   const grossCents = Math.round(row.qty * row.rateCents * row.visits);
 
   return (
-    <tr className="group border-b border-slate-100 text-xs hover:bg-slate-50">
-      <td className="px-3 py-1.5 font-medium text-slate-800">{row.serviceName}</td>
+    <tr className="group border-b border-slate-100 dark:border-neutral-800 text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
+      <td className="px-3 py-1.5 font-medium text-slate-800 dark:text-neutral-100">{row.serviceName}</td>
       <td className="px-3 py-1.5">
         <input
           type="number"
           value={row.visits}
           onChange={(e) => update("visits", Number(e.target.value))}
           onBlur={save}
-          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+          className="w-14 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
       </td>
       <td className="px-3 py-1.5">
@@ -137,7 +137,7 @@ function TemplateItemRow({
           value={row.qty}
           onChange={(e) => update("qty", Number(e.target.value))}
           onBlur={save}
-          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+          className="w-14 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
       </td>
       <td className="px-3 py-1.5">
@@ -147,7 +147,7 @@ function TemplateItemRow({
           onChange={(e) => update("unitType", e.target.value || null)}
           onBlur={save}
           placeholder="—"
-          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-center text-xs focus:outline-none"
+          className="w-14 rounded border border-border bg-card px-1.5 py-0.5 text-center text-xs focus:outline-none"
         />
       </td>
       <td className="px-3 py-1.5">
@@ -155,7 +155,7 @@ function TemplateItemRow({
           value={row.calcType}
           onChange={(e) => update("calcType", Number(e.target.value) as 0 | 1)}
           onBlur={save}
-          className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs focus:outline-none"
+          className="rounded border border-border bg-card px-1 py-0.5 text-xs focus:outline-none"
         >
           <option value={1}>1</option>
           <option value={0}>0</option>
@@ -167,10 +167,10 @@ function TemplateItemRow({
           value={row.rateCents / 100}
           onChange={(e) => update("rateCents", Math.round((Number(e.target.value) || 0) * 100))}
           onBlur={save}
-          className="w-20 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+          className="w-20 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
       </td>
-      <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
+      <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
         {centsToDisplay(grossCents - row.discountCents)}
       </td>
       <td className="px-3 py-1.5">
@@ -179,7 +179,7 @@ function TemplateItemRow({
           value={row.budgetedHours}
           onChange={(e) => update("budgetedHours", Number(e.target.value))}
           onBlur={save}
-          className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+          className="w-16 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
       </td>
       <td className="px-3 py-1.5">
@@ -196,7 +196,7 @@ function TemplateItemRow({
       <td className="px-3 py-1.5">
         <button
           onClick={() => remove(row.id)}
-          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+          className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -278,7 +278,7 @@ function EditTemplateDialog({
 
         <div className="flex flex-col gap-3 py-2">
           <div className="flex flex-col gap-1.5 text-sm">
-            <Label className="text-slate-500">Show when creating</Label>
+            <Label className="text-muted-foreground">Show when creating</Label>
             <Select
               value={template.showWhen}
               onValueChange={(v) => {
@@ -297,7 +297,7 @@ function EditTemplateDialog({
               </SelectContent>
             </Select>
             {template.showWhen !== "estimates" && (
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 dark:text-neutral-500">
                 On a job, a line item&apos;s visit count and discount aren&apos;t carried over
                 — job services have no such fields, and how often the work runs comes
                 from the job&apos;s own schedule.
@@ -346,7 +346,7 @@ function EditTemplateDialog({
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 w-fit text-xs">
                 <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
-                <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
+                <ChevronDown className="ml-1 h-3 w-3 text-slate-400 dark:text-neutral-500" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-80 p-0">
@@ -362,16 +362,16 @@ function EditTemplateDialog({
               <div className="max-h-72 overflow-y-auto py-1">
                 {filteredServices.length > 0 && (
                   <>
-                    <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Services</div>
+                    <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Services</div>
                     {filteredServices.map((s) => (
                       <button
                         key={s.id}
-                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                         onClick={() => addItem({ id: s.id, name: s.name, unit: s.unit ?? undefined, rateCents: s.defaultRateCents, budgetMethod: s.budgetMethod, productionRateSqftPerHr: s.productionRateSqftPerHr })}
                       >
-                        <span className="font-medium text-slate-900">{s.name}</span>
+                        <span className="font-medium text-slate-900 dark:text-neutral-100">{s.name}</span>
                         {s.productionRateSqftPerHr && (
-                          <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                          <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">
                             {s.productionRateSqftPerHr.toLocaleString()} {s.unit}/hr
                           </span>
                         )}
@@ -381,16 +381,16 @@ function EditTemplateDialog({
                 )}
                 {filteredProducts.length > 0 && (
                   <>
-                    <div className="mt-1 border-t px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Products / Materials</div>
+                    <div className="mt-1 border-t px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Products / Materials</div>
                     {filteredProducts.map((p) => (
                       <button
                         key={p.id}
-                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                         onClick={() => addItem({ name: p.name, unit: "each", rateCents: p.price })}
                       >
-                        <span className="font-medium text-slate-900">{p.name}</span>
+                        <span className="font-medium text-slate-900 dark:text-neutral-100">{p.name}</span>
                         {p.price > 0 && (
-                          <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                          <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">
                             ${(p.price / 100).toFixed(2)}
                           </span>
                         )}
@@ -399,11 +399,11 @@ function EditTemplateDialog({
                   </>
                 )}
                 {filteredServices.length === 0 && filteredProducts.length === 0 && lc && (
-                  <div className="px-3 py-3 text-xs text-slate-400">No results for &ldquo;{search}&rdquo;</div>
+                  <div className="px-3 py-3 text-xs text-slate-400 dark:text-neutral-500">No results for &ldquo;{search}&rdquo;</div>
                 )}
                 <div className="mt-1 border-t">
                   <button
-                    className="flex w-full items-center px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+                    className="flex w-full items-center px-3 py-1.5 text-xs text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
                     onClick={() => addItem({ name: "Custom Item" })}
                   >
                     <Plus className="mr-1.5 h-3 w-3" /> Blank line item
@@ -451,7 +451,7 @@ export function EstimateTemplatesList() {
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             {isLoading ? "…" : `${(templates ?? []).length} bundle${(templates ?? []).length !== 1 ? "s" : ""}`}
           </p>
         </div>
@@ -463,7 +463,7 @@ export function EstimateTemplatesList() {
 
       {/* New bundle inline */}
       {showNew && (
-        <div className="flex items-center gap-2 rounded-lg border bg-white p-3 shadow-sm">
+        <div className="flex items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -482,10 +482,10 @@ export function EstimateTemplatesList() {
       )}
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
+      <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50">
-            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-4 py-3" />
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Shows In</th>
@@ -506,17 +506,17 @@ export function EstimateTemplatesList() {
               ))
             ) : (templates ?? []).length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={5} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   No service bundles yet — create one to pre-populate estimates
                 </td>
               </tr>
             ) : (
               (templates ?? []).map((t) => (
-                <tr key={t.id} className="group border-b hover:bg-slate-50">
+                <tr key={t.id} className="group border-b hover:bg-slate-50 dark:hover:bg-muted/40">
                   <td className="px-4 py-3">
                     <button
                       onClick={() => setEditTargetId(t.id)}
-                      className="text-slate-400 hover:text-slate-700"
+                      className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -524,15 +524,15 @@ export function EstimateTemplatesList() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => setEditTargetId(t.id)}
-                      className="font-medium text-brand-600 hover:underline"
+                      className="font-medium text-brand-600 dark:text-brand-400 hover:underline"
                     >
                       {t.name}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-slate-500 capitalize">
+                  <td className="px-4 py-3 text-muted-foreground capitalize">
                     {showWhenLabel(t.showWhen)}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
+                  <td className="px-4 py-3 text-xs text-slate-400 dark:text-neutral-500">
                     {new Date(t.createdAt).toLocaleDateString("en-US", {
                       month: "2-digit", day: "2-digit", year: "numeric",
                     })}
@@ -549,7 +549,7 @@ export function EstimateTemplatesList() {
                           }
                         }
                       }}
-                      className="text-slate-300 opacity-0 group-hover:opacity-100 hover:text-red-500"
+                      className="text-slate-300 dark:text-neutral-500 opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

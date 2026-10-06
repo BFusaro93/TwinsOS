@@ -19,7 +19,7 @@ export function SegmentedControl<T extends string | number>({
   size = "md",
 }: SegmentedControlProps<T>) {
   return (
-    <div className="inline-flex w-fit max-w-full flex-wrap rounded-md border border-slate-200 bg-slate-50 p-0.5" role="radiogroup" aria-label={ariaLabel}>
+    <div className="inline-flex w-fit max-w-full flex-wrap rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-0.5" role="radiogroup" aria-label={ariaLabel}>
       {options.map((o) => (
         <button
           key={String(o.value)}
@@ -30,7 +30,7 @@ export function SegmentedControl<T extends string | number>({
           className={cn(
             "rounded font-medium transition-colors",
             size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
-            value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            value === o.value ? "bg-card text-slate-900 dark:text-neutral-100 shadow-sm" : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
           )}
         >
           {o.label}

@@ -183,7 +183,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
 
           {/* Name */}
           <div className="space-y-1.5">
-            <Label htmlFor="subitem-name">Name <span className="text-red-500">*</span></Label>
+            <Label htmlFor="subitem-name">Name <span className="text-red-500 dark:text-red-400">*</span></Label>
             <Input
               id="subitem-name"
               value={form.name}
@@ -231,9 +231,9 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
           </div>
 
           {/* Total read-only */}
-          <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <span className="text-slate-500">Total</span>
-            <span className="font-semibold text-slate-900">
+          <div className="flex items-center justify-between rounded-md bg-slate-50 dark:bg-muted/40 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-semibold text-slate-900 dark:text-neutral-100">
               ${(totalCents / 100).toFixed(2)}
             </span>
           </div>

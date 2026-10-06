@@ -56,10 +56,10 @@ function RecipientsPicker({
   }
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="border-b px-5 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{title}</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
       <div className="px-5 py-4">
         <label className="mb-3 flex items-center gap-2 text-sm">
@@ -69,12 +69,12 @@ function RecipientsPicker({
         {!usingDefault && (
           <div className="ml-6 flex flex-col gap-2 border-l pl-4">
             {staff.length === 0 && (
-              <p className="text-xs text-slate-400">No admins or managers found.</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">No admins or managers found.</p>
             )}
             {staff.map((u) => (
-              <label key={u.id} className="flex items-center gap-2 text-sm text-slate-700">
+              <label key={u.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                 <Checkbox checked={selectedIds.has(u.id)} onCheckedChange={() => toggleUser(u.id)} />
-                {u.name} <span className="text-xs text-slate-400">({u.role})</span>
+                {u.name} <span className="text-xs text-slate-400 dark:text-neutral-500">({u.role})</span>
               </label>
             ))}
           </div>
@@ -100,9 +100,9 @@ function SettingRow({
   return (
     <div className="flex items-center justify-between gap-8 py-4">
       <div className="flex-1">
-        <p className="text-sm font-medium text-slate-900">{label}</p>
+        <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">{label}</p>
         {description && (
-          <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
         )}
       </div>
       <div className="shrink-0">{children}</div>
@@ -181,7 +181,7 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
           description={scope === "crm" ? "Configure your estimate notification preferences" : "Configure your notification preferences"}
           action={
             saved ? (
-              <span className="flex items-center gap-1.5 text-xs text-green-600">
+              <span className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
                 <Check className="h-3.5 w-3.5" /> Saved
               </span>
             ) : undefined
@@ -210,15 +210,15 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
       )}
 
       {/* Email Notifications */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="border-b px-5 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
             Email Notifications
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Configure which events trigger an email to your inbox
           </p>
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-slate-400 dark:text-neutral-500">
             You won&apos;t get an email for actions you performed yourself (e.g. assigning a work order to yourself) — only for changes made by someone else.
           </p>
         </div>
@@ -273,7 +273,7 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
                   {isAdmin && (
                     <>
                       <div className="pb-1 pt-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin — All Work Orders</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Admin — All Work Orders</p>
                       </div>
                       <SettingRow label="Any WO Created" description="When any work order is created in the org">
                         <Switch checked={prefs.emailAdminWoCreated} onCheckedChange={() => toggle("emailAdminWoCreated")} />
@@ -320,7 +320,7 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
                 <Switch checked={prefs.emailEstimateExpiring} onCheckedChange={() => toggle("emailEstimateExpiring")} />
               </SettingRow>
               <div className="pb-1 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tickets</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Tickets</p>
               </div>
               <SettingRow label="New Ticket" description="When a new ticket is created">
                 <Switch checked={prefs.emailNewTicket} onCheckedChange={() => toggle("emailNewTicket")} />
@@ -332,13 +332,13 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
                 <Switch checked={prefs.emailTicketComment} onCheckedChange={() => toggle("emailTicketComment")} />
               </SettingRow>
               <div className="pb-1 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contracts</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Contracts</p>
               </div>
               <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
                 <Switch checked={prefs.emailContractExpiring} onCheckedChange={() => toggle("emailContractExpiring")} />
               </SettingRow>
               <div className="pb-1 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales Meetings</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Sales Meetings</p>
               </div>
               <SettingRow label="Meeting Reminder" description="When a sales meeting you're booked for is coming up soon">
                 <Switch checked={prefs.emailMeetingReminder} onCheckedChange={() => toggle("emailMeetingReminder")} />
@@ -349,12 +349,12 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
       </div>
 
       {/* In-App Notifications */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="border-b px-5 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
             In-App Notifications
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Configure which events show a notification badge in the app
           </p>
         </div>
@@ -434,7 +434,7 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
                 <Switch checked={prefs.inAppEstimateChangeRequest} onCheckedChange={() => toggle("inAppEstimateChangeRequest")} />
               </SettingRow>
               <div className="pb-1 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tickets</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Tickets</p>
               </div>
               <SettingRow label="New Ticket" description="When a new ticket is created">
                 <Switch checked={prefs.inAppNewTicket} onCheckedChange={() => toggle("inAppNewTicket")} />
@@ -446,13 +446,13 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
                 <Switch checked={prefs.inAppTicketComment} onCheckedChange={() => toggle("inAppTicketComment")} />
               </SettingRow>
               <div className="pb-1 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contracts</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Contracts</p>
               </div>
               <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
                 <Switch checked={prefs.inAppContractExpiring} onCheckedChange={() => toggle("inAppContractExpiring")} />
               </SettingRow>
               <div className="pb-1 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales Meetings</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Sales Meetings</p>
               </div>
               <SettingRow label="Meeting Reminder" description="When a sales meeting you're booked for is coming up soon">
                 <Switch checked={prefs.inAppMeetingReminder} onCheckedChange={() => toggle("inAppMeetingReminder")} />

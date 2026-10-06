@@ -27,7 +27,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
 
   if (!template) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 text-slate-400">
+      <div className="flex h-full flex-col items-center justify-center gap-4 text-slate-400 dark:text-neutral-500">
         <p>Document not found.</p>
         <Button variant="outline" size="sm" onClick={() => router.push("/crm/settings/documents")}>
           <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />

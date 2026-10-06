@@ -45,10 +45,10 @@ function startOfMonthGrid(date: Date): Date {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  scheduled: "bg-brand-50 border-brand-300 text-brand-800",
-  completed: "bg-emerald-50 border-emerald-300 text-emerald-800",
-  canceled: "bg-slate-100 border-slate-300 text-slate-500 line-through",
-  no_show: "bg-red-50 border-red-300 text-red-700",
+  scheduled: "bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-800 dark:text-brand-300",
+  completed: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300",
+  canceled: "bg-muted border-slate-300 dark:border-neutral-700 text-muted-foreground line-through",
+  no_show: "bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-700 text-red-700 dark:text-red-400",
 };
 
 const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
@@ -153,7 +153,7 @@ export function SalesMeetingsCalendar() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <WeekStrip selectedDate={selectedDate} onDateChange={setSelectedDate} />
-          <div className="flex rounded-lg border bg-white p-0.5 shadow-sm">
+          <div className="flex rounded-lg border bg-card p-0.5 shadow-sm">
             {VIEW_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -161,7 +161,7 @@ export function SalesMeetingsCalendar() {
                 onClick={() => setViewMode(opt.value)}
                 className={cn(
                   "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                  viewMode === opt.value ? "bg-brand-500 text-white" : "text-slate-600 hover:bg-slate-100"
+                  viewMode === opt.value ? "bg-brand-500 text-white" : "text-slate-600 dark:text-neutral-400 hover:bg-muted"
                 )}
               >
                 {opt.label}
@@ -178,9 +178,9 @@ export function SalesMeetingsCalendar() {
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-sm text-slate-400">Loading calendar…</div>
+        <div className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">Loading calendar…</div>
       ) : noReps ? (
-        <div className="rounded-lg border bg-white py-16 text-center text-sm text-slate-500">
+        <div className="rounded-lg border bg-card py-16 text-center text-sm text-muted-foreground">
           No sales reps configured. Mark an employee as a sales rep in{" "}
           <span className="font-medium">Team → Employees</span> to see them here.
         </div>
@@ -257,12 +257,12 @@ function DayView({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
       <div className="flex min-w-[720px]">
-        <div className="w-16 shrink-0 border-r bg-slate-50">
+        <div className="w-16 shrink-0 border-r bg-slate-50 dark:bg-muted/40">
           <div className="h-10 border-b" />
           {hours.map((h) => (
-            <div key={h} style={{ height: PX_PER_HOUR }} className="border-b px-2 pt-0.5 text-right text-[11px] text-slate-400">
+            <div key={h} style={{ height: PX_PER_HOUR }} className="border-b px-2 pt-0.5 text-right text-[11px] text-slate-400 dark:text-neutral-500">
               {h % 12 === 0 ? 12 : h % 12}{h < 12 ? "am" : "pm"}
             </div>
           ))}
@@ -270,7 +270,7 @@ function DayView({
 
         {reps.map((rep) => (
           <div key={rep.id} className="relative flex-1 min-w-[180px] border-r last:border-r-0">
-            <div className="flex h-10 items-center gap-1.5 border-b px-2 text-xs font-semibold text-slate-700">
+            <div className="flex h-10 items-center gap-1.5 border-b px-2 text-xs font-semibold text-slate-700 dark:text-neutral-300">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: rep.mapIconColor ?? "#94a3b8" }} />
               {rep.name}
             </div>
@@ -281,7 +281,7 @@ function DayView({
                   type="button"
                   onClick={() => onSlotClick(rep.id, h)}
                   style={{ height: PX_PER_HOUR }}
-                  className="block w-full border-b border-dashed border-slate-100 hover:bg-brand-50/40"
+                  className="block w-full border-b border-dashed border-slate-100 dark:border-neutral-800 hover:bg-brand-50/40 dark:hover:bg-brand-900/30"
                 />
               ))}
 
@@ -354,9 +354,9 @@ function WeekView({
   }, [meetings]);
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
       <div className="grid min-w-[900px]" style={{ gridTemplateColumns: `140px repeat(7, 1fr)` }}>
-        <div className="border-b border-r bg-slate-50" />
+        <div className="border-b border-r bg-slate-50 dark:bg-muted/40" />
         {days.map((d, i) => {
           const ds = toLocalDateString(d);
           return (
@@ -364,7 +364,7 @@ function WeekView({
               key={i}
               className={cn(
                 "border-b border-r px-2 py-2 text-center text-xs font-semibold last:border-r-0",
-                ds === today ? "bg-brand-50 text-brand-700" : "text-slate-700"
+                ds === today ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "text-slate-700 dark:text-neutral-300"
               )}
             >
               {DAY_LETTERS[i]} {d.getDate()}
@@ -374,7 +374,7 @@ function WeekView({
 
         {reps.map((rep) => (
           <FragmentRow key={rep.id}>
-            <div className="flex items-center gap-1.5 border-b border-r bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-700">
+            <div className="flex items-center gap-1.5 border-b border-r bg-slate-50 dark:bg-muted/40 px-2 py-2 text-xs font-semibold text-slate-700 dark:text-neutral-300">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: rep.mapIconColor ?? "#94a3b8" }} />
               {rep.name}
             </div>
@@ -386,7 +386,7 @@ function WeekView({
                   key={i}
                   type="button"
                   onClick={() => onSlotClick(rep.id, ds)}
-                  className="flex min-h-[72px] flex-col gap-1 border-b border-r p-1.5 text-left last:border-r-0 hover:bg-brand-50/30"
+                  className="flex min-h-[72px] flex-col gap-1 border-b border-r p-1.5 text-left last:border-r-0 hover:bg-brand-50/30 dark:hover:bg-brand-900/30"
                 >
                   {cellMeetings.map((m) => (
                     <span
@@ -463,10 +463,10 @@ function MonthView({
   const MAX_VISIBLE = 3;
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
-      <div className="grid grid-cols-7 border-b bg-slate-50">
+    <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+      <div className="grid grid-cols-7 border-b bg-slate-50 dark:bg-muted/40">
         {DAY_LETTERS.map((label) => (
-          <div key={label} className="px-2 py-2 text-center text-xs font-semibold text-slate-500">{label}</div>
+          <div key={label} className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground">{label}</div>
         ))}
       </div>
       <div className="grid grid-cols-7">
@@ -483,7 +483,7 @@ function MonthView({
               onClick={() => onDayClick(ds)}
               className={cn(
                 "flex min-h-[100px] flex-col gap-1 border-b border-r p-1.5 text-left last:border-r-0",
-                inMonth ? "bg-white hover:bg-brand-50/30" : "bg-slate-50/60 text-slate-400 hover:bg-slate-100/60",
+                inMonth ? "bg-card hover:bg-brand-50/30 dark:hover:bg-brand-900/30" : "bg-slate-50/60 dark:bg-muted/40 text-slate-400 dark:text-neutral-500 hover:bg-muted/60",
                 (i + 1) % 7 === 0 && "border-r-0"
               )}
             >
@@ -505,7 +505,7 @@ function MonthView({
                 </span>
               ))}
               {overflow > 0 && (
-                <span className="text-[10px] font-medium text-slate-400">+{overflow} more</span>
+                <span className="text-[10px] font-medium text-slate-400 dark:text-neutral-500">+{overflow} more</span>
               )}
             </button>
           );

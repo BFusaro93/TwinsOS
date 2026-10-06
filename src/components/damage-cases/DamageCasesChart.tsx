@@ -61,7 +61,7 @@ export function DamageCasesChart() {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-white border rounded-lg shadow-lg p-3 text-sm space-y-1">
+      <div className="bg-card border rounded-lg shadow-lg p-3 text-sm space-y-1">
         <p className="font-semibold">{label}</p>
         {payload.map((entry: { name: string; value: number; payload: { damageCount: number; warrantyCount: number } }) => (
           <div key={entry.name} className="flex items-center gap-2">
@@ -80,28 +80,28 @@ export function DamageCasesChart() {
     <div className="space-y-4">
       {/* YTD summary cards */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-lg border bg-white p-4">
+        <div className="rounded-lg border bg-card p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">YTD Total</p>
           <p className="text-2xl font-bold mt-1">{formatCurrency(ytdTotal)}</p>
         </div>
-        <div className="rounded-lg border bg-red-50 p-4">
-          <p className="text-xs text-red-600 uppercase tracking-wide">Damage</p>
-          <p className="text-2xl font-bold mt-1 text-red-700">{formatCurrency(ytdDamage)}</p>
-          <p className="text-xs text-red-500 mt-0.5">
+        <div className="rounded-lg border bg-red-50 dark:bg-red-950/40 p-4">
+          <p className="text-xs text-red-600 dark:text-red-400 uppercase tracking-wide">Damage</p>
+          <p className="text-2xl font-bold mt-1 text-red-700 dark:text-red-400">{formatCurrency(ytdDamage)}</p>
+          <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
             {cases.filter((c) => c.caseType === "damage" && parseLocalDate(c.dateOfIncident).getFullYear() === currentYear).length} cases
           </p>
         </div>
-        <div className="rounded-lg border bg-purple-50 p-4">
-          <p className="text-xs text-purple-600 uppercase tracking-wide">Warranty</p>
-          <p className="text-2xl font-bold mt-1 text-purple-700">{formatCurrency(ytdWarranty)}</p>
-          <p className="text-xs text-purple-500 mt-0.5">
+        <div className="rounded-lg border bg-purple-50 dark:bg-purple-950/40 p-4">
+          <p className="text-xs text-purple-600 dark:text-purple-400 uppercase tracking-wide">Warranty</p>
+          <p className="text-2xl font-bold mt-1 text-purple-700 dark:text-purple-400">{formatCurrency(ytdWarranty)}</p>
+          <p className="text-xs text-purple-500 dark:text-purple-400 mt-0.5">
             {cases.filter((c) => c.caseType === "warranty" && parseLocalDate(c.dateOfIncident).getFullYear() === currentYear).length} cases
           </p>
         </div>
       </div>
 
       {/* Chart */}
-      <div className="rounded-lg border bg-white p-4">
+      <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-sm">YTD by Month — {currentYear}</h3>
           <div className="flex gap-1">

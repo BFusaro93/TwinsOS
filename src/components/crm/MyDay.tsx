@@ -20,23 +20,23 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { hourInZone, todayInZone } from "@/lib/time/zone";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
-  draft:    "bg-slate-100 text-slate-600",
-  quote:    "bg-blue-100 text-blue-700",
-  sent:     "bg-yellow-100 text-yellow-700",
-  accepted: "bg-green-100 text-green-700",
-  lost:     "bg-red-100 text-red-600",
-  invoiced: "bg-teal-100 text-teal-700",
+  draft:    "bg-muted text-slate-600 dark:text-neutral-400",
+  quote:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  sent:     "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  accepted: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  lost:     "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  invoiced: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",
 };
 
 const INVOICE_STATUS_COLOR: Record<InvoiceStatus, string> = {
-  draft:   "bg-slate-100 text-slate-600",
-  printed: "bg-indigo-100 text-indigo-700",
-  sent:    "bg-blue-100 text-blue-700",
-  viewed:  "bg-purple-100 text-purple-700",
-  partial: "bg-yellow-100 text-yellow-700",
-  paid:    "bg-green-100 text-green-700",
-  overdue: "bg-red-100 text-red-600",
-  void:    "bg-slate-100 text-slate-400",
+  draft:   "bg-muted text-slate-600 dark:text-neutral-400",
+  printed: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400",
+  sent:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  viewed:  "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
+  partial: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  paid:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  overdue: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  void:    "bg-muted text-slate-400 dark:text-neutral-500",
 };
 
 function getGreeting(timeZone: string): string {
@@ -59,13 +59,13 @@ function getTodayLong(timeZone: string): string {
 // Each KPI card opens the list it counts, pre-filtered to the same records —
 // same convention as the Equipt dashboard's StatCards.
 const KPI_CARD_CLASS =
-  "block rounded-lg border bg-white p-4 shadow-sm transition-shadow hover:shadow-md hover:border-slate-300";
+  "block rounded-lg border bg-card p-4 shadow-sm transition-shadow hover:shadow-md hover:border-slate-300 dark:hover:border-neutral-700";
 
 function SectionHeader({ title, href }: { title: string; href: string }) {
   return (
     <div className="flex items-center justify-between pb-2 border-b">
-      <span className="text-sm font-semibold text-slate-700">{title}</span>
-      <Link href={href} className="text-xs text-brand-500 hover:text-brand-600">
+      <span className="text-sm font-semibold text-slate-700 dark:text-neutral-300">{title}</span>
+      <Link href={href} className="text-xs text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-400">
         View all →
       </Link>
     </div>
@@ -135,17 +135,17 @@ export function MyDay() {
   return (
     <div className="flex flex-col gap-4 p-6 min-h-full">
       {/* Greeting bar */}
-      <div className="flex items-center justify-between rounded-lg border bg-white px-5 py-4 shadow-sm">
+      <div className="flex items-center justify-between rounded-lg border bg-card px-5 py-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">
             {greetingBar ? `${greetingBar.greeting}, ${firstName}` : `Hi, ${firstName}`}
           </h1>
-          <p className="text-sm text-slate-400 mt-0.5 min-h-5">{greetingBar?.date ?? ""}</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500 mt-0.5 min-h-5">{greetingBar?.date ?? ""}</p>
         </div>
         <PermissionGate permission="tickets_view_modify">
           <Link
             href="/crm/tickets"
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Ticket
@@ -159,15 +159,15 @@ export function MyDay() {
         {allow("tickets_view_modify") && (
           <Link href="/crm/tickets?status=open" className={KPI_CARD_CLASS}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xs font-medium text-slate-500">Open Tickets</span>
+              <span className="text-xs font-medium text-muted-foreground">Open Tickets</span>
               <Ticket className="h-4 w-4 text-orange-400" />
             </div>
             {ticketsLoading ? (
               <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              <p className="text-3xl font-bold text-slate-900">{(openTickets ?? []).length}</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-neutral-100">{(openTickets ?? []).length}</p>
             )}
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-xs text-slate-400 dark:text-neutral-500 mt-1">
               {ticketsLoading ? <Skeleton className="h-3 w-20" /> : `${overdueCount} overdue`}
             </div>
           </Link>
@@ -177,15 +177,15 @@ export function MyDay() {
         {allow("estimate_list") && (
           <Link href="/crm/estimates?stage=draft,quote,sent" className={KPI_CARD_CLASS}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xs font-medium text-slate-500">Pending Estimates</span>
+              <span className="text-xs font-medium text-muted-foreground">Pending Estimates</span>
               <ClipboardSignature className="h-4 w-4 text-blue-400" />
             </div>
             {estimatesLoading ? (
               <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              <p className="text-3xl font-bold text-slate-900">{pendingEstimates.length}</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-neutral-100">{pendingEstimates.length}</p>
             )}
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-xs text-slate-400 dark:text-neutral-500 mt-1">
               {estimatesLoading ? (
                 <Skeleton className="h-3 w-24" />
               ) : (
@@ -199,15 +199,15 @@ export function MyDay() {
         {allow("acct_view_invoice_list") && (
           <Link href="/crm/accounting/invoices?filter=open" className={KPI_CARD_CLASS}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xs font-medium text-slate-500">Outstanding Invoices</span>
+              <span className="text-xs font-medium text-muted-foreground">Outstanding Invoices</span>
               <Receipt className="h-4 w-4 text-red-400" />
             </div>
             {invoicesLoading ? (
               <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              <p className="text-3xl font-bold text-slate-900">{outstandingInvoices.length}</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-neutral-100">{outstandingInvoices.length}</p>
             )}
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-xs text-slate-400 dark:text-neutral-500 mt-1">
               {invoicesLoading ? (
                 <Skeleton className="h-3 w-24" />
               ) : (
@@ -221,15 +221,15 @@ export function MyDay() {
         {allow("client_list") && (
           <Link href="/crm/clients?status=active" className={KPI_CARD_CLASS}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xs font-medium text-slate-500">Active Clients</span>
+              <span className="text-xs font-medium text-muted-foreground">Active Clients</span>
               <UserRound className="h-4 w-4 text-green-400" />
             </div>
             {clientsLoading ? (
               <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              <p className="text-3xl font-bold text-slate-900">{activeClients.length}</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-neutral-100">{activeClients.length}</p>
             )}
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-xs text-slate-400 dark:text-neutral-500 mt-1">
               {clientsLoading ? (
                 <Skeleton className="h-3 w-24" />
               ) : (
@@ -251,7 +251,7 @@ export function MyDay() {
         <div className="flex min-w-0 flex-col gap-4">
           {/* Open Tickets */}
           {allow("tickets_view_modify") && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <SectionHeader title="Open Tickets" href="/crm/tickets?status=open" />
               <div className="mt-3">
                 {ticketsLoading ? (
@@ -261,7 +261,7 @@ export function MyDay() {
                     </div>
                   ))
                 ) : recentTickets.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-400">
+                  <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
                     No open tickets — you&apos;re all caught up!
                   </p>
                 ) : (
@@ -269,31 +269,31 @@ export function MyDay() {
                     <Link
                       key={t.id}
                       href={`/crm/tickets?open=${t.id}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 -mx-4 px-4 transition-colors"
                     >
-                      <span className="font-mono text-[11px] text-slate-400 shrink-0">
+                      <span className="font-mono text-[11px] text-slate-400 dark:text-neutral-500 shrink-0">
                         #{t.ticketNumber}
                       </span>
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-600 shrink-0">
+                      <span className="rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-600 dark:text-red-400 shrink-0">
                         Open
                       </span>
-                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
+                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700 dark:text-neutral-300">
                         {t.subject ?? "(no subject)"}
                       </span>
                       {t.clientName && (
-                        <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
+                        <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
                           {t.clientName}
                         </span>
                       )}
                       {t.category && (
-                        <span className="max-w-[140px] max-sm:max-w-[72px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 shrink-0">
+                        <span className="max-w-[140px] max-sm:max-w-[72px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0">
                           {t.category}
                         </span>
                       )}
                       {t.dueDate && (
                         <span className={cn(
                           "text-[11px] shrink-0",
-                          t.dueDate < today ? "text-red-500 font-medium" : "text-slate-400"
+                          t.dueDate < today ? "text-red-500 dark:text-red-400 font-medium" : "text-slate-400 dark:text-neutral-500"
                         )}>
                           {formatDate(t.dueDate)}
                         </span>
@@ -307,7 +307,7 @@ export function MyDay() {
 
           {/* Recent Estimates */}
           {allow("estimate_list") && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <SectionHeader title="Recent Estimates" href="/crm/estimates" />
               <div className="mt-3">
                 {estimatesLoading ? (
@@ -317,15 +317,15 @@ export function MyDay() {
                     </div>
                   ))
                 ) : recentEstimates.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-400">No estimates yet</p>
+                  <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">No estimates yet</p>
                 ) : (
                   recentEstimates.map((e) => (
                     <Link
                       key={e.id}
                       href={`/crm/estimates/${e.id}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 -mx-4 px-4 transition-colors"
                     >
-                      <span className="font-mono text-[11px] text-slate-400 shrink-0">
+                      <span className="font-mono text-[11px] text-slate-400 dark:text-neutral-500 shrink-0">
                         #{e.estimateNumber}
                       </span>
                       <span className={cn(
@@ -334,18 +334,18 @@ export function MyDay() {
                       )}>
                         {e.stage}
                       </span>
-                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
+                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700 dark:text-neutral-300">
                         {e.description || "(no description)"}
                       </span>
                       {e.clientName && (
-                        <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
+                        <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
                           {e.clientName}
                         </span>
                       )}
-                      <span className="text-sm font-medium text-slate-700 shrink-0">
+                      <span className="text-sm font-medium text-slate-700 dark:text-neutral-300 shrink-0">
                         {e.totalCents > 0 ? formatCurrency(e.totalCents) : "—"}
                       </span>
-                      <span className="text-[11px] text-slate-400 shrink-0">
+                      <span className="text-[11px] text-slate-400 dark:text-neutral-500 shrink-0">
                         {formatDate(e.estimateDate)}
                       </span>
                     </Link>
@@ -357,7 +357,7 @@ export function MyDay() {
 
           {/* Automations Pending Approval */}
           {allow("automation_view") && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <SectionHeader title="Automations Pending Approval" href="/crm/communication/automations" />
               <div className="mt-3">
                 {approvalsLoading ? (
@@ -367,7 +367,7 @@ export function MyDay() {
                     </div>
                   ))
                 ) : (pendingApprovals ?? []).length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-400">
+                  <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
                     Nothing waiting on approval.
                   </p>
                 ) : (
@@ -375,18 +375,18 @@ export function MyDay() {
                     <Link
                       key={a.id}
                       href="/crm/communication/automations"
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 -mx-4 px-4 transition-colors"
                     >
-                      <Inbox className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700">
+                      <Inbox className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
+                      <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700 dark:text-neutral-300">
                         {a.subject}
                       </span>
                       {a.clientName && (
-                        <span className="text-xs text-blue-600 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
+                        <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
                           {a.clientName}
                         </span>
                       )}
-                      <span className="text-[11px] text-slate-400 shrink-0">
+                      <span className="text-[11px] text-slate-400 dark:text-neutral-500 shrink-0">
                         {formatDate(a.createdAt)}
                       </span>
                     </Link>
@@ -401,7 +401,7 @@ export function MyDay() {
         <div className="flex min-w-0 flex-col gap-4">
           {/* Outstanding Invoices */}
           {allow("acct_view_invoice_list") && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices?filter=open" />
               <div className="mt-3">
                 {invoicesLoading ? (
@@ -411,16 +411,16 @@ export function MyDay() {
                     </div>
                   ))
                 ) : topOutstandingInvoices.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-400">No outstanding invoices</p>
+                  <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">No outstanding invoices</p>
                 ) : (
                   topOutstandingInvoices.map((inv) => (
                     <Link
                       key={inv.id}
                       href={`/crm/accounting/invoices/${inv.id}`}
-                      className="flex flex-col gap-0.5 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                      className="flex flex-col gap-0.5 border-b py-2.5 last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 -mx-4 px-4 transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[11px] text-slate-400">
+                        <span className="font-mono text-[11px] text-slate-400 dark:text-neutral-500">
                           #{inv.invoiceNumber}
                         </span>
                         <span className={cn(
@@ -431,19 +431,19 @@ export function MyDay() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-slate-700 truncate">
+                        <span className="text-sm text-slate-700 dark:text-neutral-300 truncate">
                           {inv.clientName ?? "—"}
                         </span>
-                        <span className="text-sm font-semibold text-red-500 shrink-0">
+                        <span className="text-sm font-semibold text-red-500 dark:text-red-400 shrink-0">
                           {formatCurrency(inv.balanceCents)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-slate-400">
+                        <span className="text-[11px] text-slate-400 dark:text-neutral-500">
                           Total: {formatCurrency(inv.totalCents)}
                         </span>
                         {inv.dueDate && (
-                          <span className="text-[11px] text-slate-400">
+                          <span className="text-[11px] text-slate-400 dark:text-neutral-500">
                             Due {formatDate(inv.dueDate)}
                           </span>
                         )}
@@ -456,42 +456,42 @@ export function MyDay() {
           )}
 
           {/* Quick Actions */}
-          <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-700 pb-2 border-b mb-3">Quick Actions</p>
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <p className="text-sm font-semibold text-slate-700 dark:text-neutral-300 pb-2 border-b mb-3">Quick Actions</p>
             <div className="grid grid-cols-2 gap-2">
               <PermissionGate permission="client_add">
                 <Link
                   href="/crm/clients"
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
-                  <UserRound className="h-4 w-4 text-green-500" />
+                  <UserRound className="h-4 w-4 text-green-500 dark:text-green-400" />
                   New Client
                 </Link>
               </PermissionGate>
               <PermissionGate permission="estimate_add">
                 <Link
                   href="/crm/estimates"
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
-                  <ClipboardSignature className="h-4 w-4 text-blue-500" />
+                  <ClipboardSignature className="h-4 w-4 text-blue-500 dark:text-blue-400" />
                   New Estimate
                 </Link>
               </PermissionGate>
               <PermissionGate permission="tickets_view_modify">
                 <Link
                   href="/crm/tickets"
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
-                  <Ticket className="h-4 w-4 text-orange-500" />
+                  <Ticket className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                   New Ticket
                 </Link>
               </PermissionGate>
               <PermissionGate permission="acct_view_invoice_list">
                 <Link
                   href="/crm/accounting/invoices"
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
-                  <Receipt className="h-4 w-4 text-red-500" />
+                  <Receipt className="h-4 w-4 text-red-500 dark:text-red-400" />
                   New Invoice
                 </Link>
               </PermissionGate>

@@ -176,7 +176,7 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
         </div>
-        <div className="h-64 animate-pulse rounded-lg border bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-lg border bg-muted" />
       </div>
     );
   }
@@ -186,11 +186,11 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-400">Excludes canceled and rejected POs</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">Excludes canceled and rejected POs</p>
         <select
           value={range}
           onChange={(e) => setRange(e.target.value as SpendRange)}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+          className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-slate-700 dark:text-neutral-300"
           aria-label="Date range"
         >
           {SPEND_RANGE_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -206,8 +206,8 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
       <SpendDetailDialog detail={detail} onClose={() => setDetailKind(null)} />
 
       {/* Monthly spend trend */}
-      <div className="rounded-lg border bg-white shadow-sm p-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
+      <div className="rounded-lg border bg-card shadow-sm p-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-4">
           Parts Spend Trend ({rangeLabel})
         </p>
         <ResponsiveContainer width="100%" height={240}>
@@ -245,8 +245,8 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
       </div>
 
       {/* Spend by vendor */}
-      <div className="rounded-lg border bg-white shadow-sm p-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
+      <div className="rounded-lg border bg-card shadow-sm p-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-4">
           Top 5 Vendors by Parts Spend ({rangeLabel})
         </p>
         <ResponsiveContainer width="100%" height={240}>
@@ -345,7 +345,7 @@ function MaintenanceTab({ workOrders, isLoading }: { workOrders: WorkOrder[]; is
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
         </div>
-        <div className="h-64 animate-pulse rounded-lg border bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-lg border bg-muted" />
       </div>
     );
   }
@@ -369,8 +369,8 @@ function MaintenanceTab({ workOrders, isLoading }: { workOrders: WorkOrder[]; is
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* WO by status — donut */}
-        <div className="rounded-lg border bg-white shadow-sm p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
+        <div className="rounded-lg border bg-card shadow-sm p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-4">
             Work Orders by Status
           </p>
           <ResponsiveContainer width="100%" height={240}>
@@ -404,8 +404,8 @@ function MaintenanceTab({ workOrders, isLoading }: { workOrders: WorkOrder[]; is
         </div>
 
         {/* WO by category */}
-        <div className="rounded-lg border bg-white shadow-sm p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
+        <div className="rounded-lg border bg-card shadow-sm p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-4">
             Work Orders by Category
           </p>
           <ResponsiveContainer width="100%" height={240}>
@@ -465,7 +465,7 @@ function InventoryTab({ parts, isLoading }: { parts: Part[]; isLoading: boolean 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
         </div>
-        <div className="h-80 animate-pulse rounded-lg border bg-slate-100" />
+        <div className="h-80 animate-pulse rounded-lg border bg-muted" />
       </div>
     );
   }
@@ -484,8 +484,8 @@ function InventoryTab({ parts, isLoading }: { parts: Part[]; isLoading: boolean 
       </div>
 
       {/* Parts stock status */}
-      <div className="rounded-lg border bg-white shadow-sm p-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
+      <div className="rounded-lg border bg-card shadow-sm p-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-4">
           Parts Stock Levels (Top 10)
         </p>
         <ResponsiveContainer width="100%" height={320}>
@@ -524,7 +524,7 @@ function InventoryTab({ parts, isLoading }: { parts: Part[]; isLoading: boolean 
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        <p className="mt-3 text-xs text-slate-400">
+        <p className="mt-3 text-xs text-slate-400 dark:text-neutral-500">
           <span className="inline-block h-2 w-2 rounded-full bg-red-500 mr-1" />
           Red = below minimum stock &nbsp;
           <span className="inline-block h-2 w-2 rounded-full bg-green-500 mr-1" />

@@ -141,7 +141,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                 "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                 fileType === f.value
                   ? "bg-[#2a2a2a] text-white"
-                  : "border border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700",
+                  : "border border-border text-muted-foreground hover:border-slate-300 dark:hover:border-neutral-700 hover:text-slate-700 dark:hover:text-neutral-300",
               )}
             >
               {f.label}
@@ -149,7 +149,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           ))}
         </div>
         {/* Before/After tabs */}
-        <div className="flex items-center rounded-md border border-slate-200 bg-slate-100 p-0.5">
+        <div className="flex items-center rounded-md border border-border bg-muted p-0.5">
           {TABS.map((t) => (
             <button
               key={t.value}
@@ -158,7 +158,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                 "rounded px-3 py-1.5 text-xs font-medium transition-colors",
                 tab === t.value
                   ? "bg-[#2a2a2a] text-white"
-                  : "text-slate-500 hover:text-slate-700",
+                  : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300",
               )}
             >
               {t.label}
@@ -173,7 +173,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               size="sm"
               className={cn(
                 "gap-1.5 text-xs",
-                showBeforeAfter ? "border-[#2a2a2a] bg-[#2a2a2a] text-white" : "border-slate-200 text-slate-600",
+                showBeforeAfter ? "border-[#2a2a2a] bg-[#2a2a2a] text-white" : "border-border text-slate-600 dark:text-neutral-400",
               )}
               onClick={() => { setShowBeforeAfter((v) => !v); setOpenComparisonId(null); }}
             >
@@ -215,8 +215,8 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
 
       {/* Bulk action bar */}
       {selectMode && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
-          <span className="text-xs font-medium text-slate-500">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-slate-50 dark:bg-muted/40 px-4 py-2.5">
+          <span className="text-xs font-medium text-muted-foreground">
             {selected.size === 0 ? "Select 2 photos to pair, or more to tag" : `${selected.size} selected`}
           </span>
           <div className="flex items-center gap-1.5">
@@ -236,7 +236,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                 {flag === "none" ? "Clear tag" : flag.charAt(0).toUpperCase() + flag.slice(1)}
               </button>
             ))}
-            <span className="mx-1 h-4 w-px bg-slate-300" />
+            <span className="mx-1 h-4 w-px bg-slate-300 dark:bg-neutral-600" />
             <button
               disabled={!canPair}
               onClick={openPairDialog}
@@ -248,7 +248,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             </button>
           </div>
           {selected.size > 0 && (
-            <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-slate-400 hover:text-slate-600">
+            <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
@@ -257,19 +257,19 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
 
       {/* Before/After comparisons */}
       {showBeforeAfter && hasComparisons && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-xl border border-border bg-slate-50 dark:bg-muted/40 p-4">
           {openComparison && openComparison.beforePhoto && openComparison.afterPhoto ? (
             <>
               <div className="mb-3 flex items-center gap-2">
                 <button
                   onClick={() => setOpenComparisonId(null)}
-                  className="flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600"
+                  className="flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   All Comparisons
                 </button>
-                <span className="text-xs text-slate-300">/</span>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-xs text-slate-300 dark:text-neutral-500">/</span>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {openComparison.label || "Comparison"}
                 </p>
               </div>
@@ -277,17 +277,17 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             </>
           ) : (
             <>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Before / After Comparisons
               </p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {comparisons.map((c) => (
                   <div
                     key={c.id}
-                    className="group relative overflow-hidden rounded-lg border border-slate-200 bg-white"
+                    className="group relative overflow-hidden rounded-lg border border-border bg-card"
                   >
                     <button
-                      className="grid aspect-[2/1] w-full grid-cols-2 gap-px overflow-hidden bg-slate-100"
+                      className="grid aspect-[2/1] w-full grid-cols-2 gap-px overflow-hidden bg-muted"
                       onClick={() => setOpenComparisonId(c.id)}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -304,12 +304,12 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                       />
                     </button>
                     <div className="flex items-center justify-between px-2 py-1.5">
-                      <span className="truncate text-xs font-medium text-slate-700">
+                      <span className="truncate text-xs font-medium text-slate-700 dark:text-neutral-300">
                         {c.label || "Comparison"}
                       </span>
                       <button
                         onClick={() => deleteComparison(c.id, { onError: () => toast.error("Failed to delete comparison") })}
-                        className="shrink-0 text-slate-300 hover:text-red-500"
+                        className="shrink-0 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                         title="Delete comparison"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -345,7 +345,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                     </div>
                     <p className={cn(
                       "text-center text-xs font-semibold uppercase",
-                      i === 0 ? "text-amber-500" : "text-emerald-600",
+                      i === 0 ? "text-amber-500 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
                     )}>
                       {i === 0 ? "Before" : "After"}
                     </p>
@@ -392,23 +392,23 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           ))}
         </div>
       ) : photos.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 py-16 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
           {fileType === "videos" ? (
-            <Film className="h-10 w-10 text-slate-300" />
+            <Film className="h-10 w-10 text-slate-300 dark:text-neutral-500" />
           ) : fileType === "documents" ? (
-            <FileText className="h-10 w-10 text-slate-300" />
+            <FileText className="h-10 w-10 text-slate-300 dark:text-neutral-500" />
           ) : (
-            <Images className="h-10 w-10 text-slate-300" />
+            <Images className="h-10 w-10 text-slate-300 dark:text-neutral-500" />
           )}
           <div>
-            <p className="text-sm font-medium text-slate-500">
+            <p className="text-sm font-medium text-muted-foreground">
               {fileType === "videos"
                 ? "No videos yet"
                 : fileType === "documents"
                 ? "No documents yet"
                 : "No photos yet"}
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               {tab === "all" && fileType === "all"
                 ? "Upload the first photo for this job"
                 : tab !== "all"
@@ -485,8 +485,8 @@ function PhotoThumbnail({
 
   return (
     <div className={cn(
-      "group relative aspect-square overflow-hidden rounded-lg border bg-slate-100 transition-all",
-      isSelected ? "border-brand-500 ring-2 ring-brand-500" : "border-slate-200",
+      "group relative aspect-square overflow-hidden rounded-lg border bg-muted transition-all",
+      isSelected ? "border-brand-500 ring-2 ring-brand-500" : "border-border",
     )}>
       {/* Select mode checkbox */}
       {selectMode && (
@@ -515,7 +515,7 @@ function PhotoThumbnail({
               if (parent && !parent.querySelector("[data-img-error]")) {
                 const fb = document.createElement("div");
                 fb.setAttribute("data-img-error", "1");
-                fb.className = "flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-200 px-2 text-center";
+                fb.className = "flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-200 dark:bg-neutral-700 px-2 text-center";
                 const label = isHeicMimeType(photo.mimeType)
                   ? "Preview not available for HEIC in this browser"
                   : "Failed to load";
@@ -525,14 +525,14 @@ function PhotoThumbnail({
             }}
           />
         ) : isVideo ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100">
-            <Film className="h-10 w-10 text-slate-400" />
-            <span className="text-[10px] font-medium text-slate-400">{ext}</span>
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted">
+            <Film className="h-10 w-10 text-slate-400 dark:text-neutral-500" />
+            <span className="text-[10px] font-medium text-slate-400 dark:text-neutral-500">{ext}</span>
           </div>
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100">
-            <FileText className="h-10 w-10 text-slate-400" />
-            <span className="text-[10px] font-medium text-slate-400">{ext}</span>
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted">
+            <FileText className="h-10 w-10 text-slate-400 dark:text-neutral-500" />
+            <span className="text-[10px] font-medium text-slate-400 dark:text-neutral-500">{ext}</span>
           </div>
         )}
       </button>
@@ -558,13 +558,13 @@ function PhotoThumbnail({
                 {photo.beforeAfter}
               </span>
             )}
-            <span className="text-[10px] text-slate-300">
+            <span className="text-[10px] text-slate-300 dark:text-neutral-500">
               {formatDate(photo.createdAt)}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             {photo.notes && (
-              <MessageSquare className="h-5 w-5 shrink-0 text-brand-500" />
+              <MessageSquare className="h-5 w-5 shrink-0 text-brand-500 dark:text-brand-400" />
             )}
             {photo.hasAnnotations && (
               <Pencil className="h-3 w-3 shrink-0 text-brand-400" />

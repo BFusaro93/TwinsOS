@@ -54,9 +54,9 @@ const ARCHIVE_FILTER_LABELS: Record<ArchiveFilter, string> = {
 };
 
 const STATUS_COLORS: Record<PhotoJobStatus, string> = {
-  active:   "bg-brand-100 text-brand-700",
-  complete: "bg-slate-100 text-slate-600",
-  pending:  "bg-purple-100 text-purple-700",
+  active:   "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400",
+  complete: "bg-muted text-slate-600 dark:text-neutral-400",
+  pending:  "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
 };
 
 const STATUS_OPTIONS: { value: PhotoJobStatus; label: string }[] = [
@@ -173,9 +173,9 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
   if (isLoading) {
     return (
       <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
-        <div className="h-6 w-2/3 animate-pulse rounded bg-slate-100" />
-        <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100" />
-        <div className="h-24 animate-pulse rounded-xl bg-slate-100" />
+        <div className="h-6 w-2/3 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+        <div className="h-24 animate-pulse rounded-xl bg-muted" />
       </div>
     );
   }
@@ -188,14 +188,14 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold text-slate-900" title={job.name}>{job.name}</h2>
-            {job.customerName && <p className="truncate text-sm text-slate-500">{job.customerName}</p>}
+            <h2 className="truncate text-base font-semibold text-slate-900 dark:text-neutral-100" title={job.name}>{job.name}</h2>
+            {job.customerName && <p className="truncate text-sm text-muted-foreground">{job.customerName}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize", STATUS_COLORS[job.status])}>
               {job.status.replace("_", " ")}
             </span>
-            {job.isArchived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>}
+            {job.isArchived && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Archived</span>}
           </div>
         </div>
 
@@ -212,7 +212,7 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
               <Button size="sm" variant="outline" onClick={() => changeStatus("active")} disabled={saving}>Reopen</Button>
             )}
             {job.status !== "pending" && (
-              <Button size="sm" variant="outline" className="text-purple-600 border-purple-200 hover:bg-purple-50" onClick={() => changeStatus("pending")} disabled={saving}>
+              <Button size="sm" variant="outline" className="text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40" onClick={() => changeStatus("pending")} disabled={saving}>
                 Mark Pending
               </Button>
             )}
@@ -227,7 +227,7 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
             </Button>
             <Button
               size="sm" variant="outline"
-              className={cn("gap-1.5 text-xs", job.isArchived ? "border-brand-400 text-brand-600" : "border-slate-300 text-slate-500")}
+              className={cn("gap-1.5 text-xs", job.isArchived ? "border-brand-400 text-brand-600 dark:text-brand-400" : "border-slate-300 dark:border-neutral-700 text-muted-foreground")}
               disabled={archiving}
               onClick={() => archiveJob({ id: job.id, archived: !job.isArchived }, { onSuccess: () => toast.success(job.isArchived ? "Job unarchived" : "Job archived"), onError: () => toast.error("Failed to update job") })}
             >
@@ -235,7 +235,7 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
             </Button>
             <Button
               size="sm" variant="outline"
-              className="gap-1.5 text-xs border-red-200 text-red-500 hover:bg-red-50"
+              className="gap-1.5 text-xs border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
               disabled={deleting}
               onClick={async () => {
                 if (await confirmDelete(confirm, job.name)) {
@@ -245,7 +245,7 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
             >
               <Trash2 className="h-3.5 w-3.5" /> Delete
             </Button>
-            <Button size="sm" variant="ghost" className="ml-auto gap-1.5 text-xs text-slate-500" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
+            <Button size="sm" variant="ghost" className="ml-auto gap-1.5 text-xs text-muted-foreground" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
               Open Full Page
             </Button>
           </div>
@@ -253,10 +253,10 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
 
         {/* Edit form */}
         {editing && (
-          <div className="rounded-xl border border-brand-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-brand-200 dark:border-brand-800 bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-900">Edit Job</p>
-              <button onClick={() => setEditing(false)} className="hidden sm:inline-flex"><X className="h-4 w-4 text-slate-400" /></button>
+              <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Edit Job</p>
+              <button onClick={() => setEditing(false)} className="hidden sm:inline-flex"><X className="h-4 w-4 text-slate-400 dark:text-neutral-500" /></button>
             </div>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div className="sm:col-span-2">
@@ -269,7 +269,7 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
               </div>
               <div>
                 <Label className="text-xs">Status</Label>
-                <select className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as PhotoJobStatus }))}>
+                <select className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as PhotoJobStatus }))}>
                   {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
@@ -305,50 +305,50 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
 
         {/* Info card */}
         {!editing && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+          <div className="rounded-xl border border-border bg-slate-50 dark:bg-muted/40 p-3 text-sm">
             <div className="space-y-2">
               {fullAddress && (
-                <div className="flex items-start gap-2 text-slate-600">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <div className="flex items-start gap-2 text-slate-600 dark:text-neutral-400">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
                   <span>{fullAddress}</span>
                 </div>
               )}
               {job.notes && (
-                <div className="flex items-start gap-2 text-slate-600">
-                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <div className="flex items-start gap-2 text-slate-600 dark:text-neutral-400">
+                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
                   <p className="whitespace-pre-wrap leading-relaxed">{job.notes}</p>
                 </div>
               )}
               {/* Project link */}
-              <div className="border-t border-slate-200 pt-2">
+              <div className="border-t border-border pt-2">
                 {editingLink ? (
                   <div className="flex items-center gap-2">
-                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <select className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
+                    <select className="flex-1 rounded-md border border-border px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
                       <option value="">— No project link —</option>
                       {pickerProjects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
                     </select>
-                    <button onClick={saveLink} disabled={saving} className="rounded-md p-1 text-brand-600 hover:bg-brand-50 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setEditingLink(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-3.5 w-3.5" /></button>
+                    <button onClick={saveLink} disabled={saving} className="rounded-md p-1 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setEditingLink(false)} className="rounded-md p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted"><X className="h-3.5 w-3.5" /></button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
                     {linkedProject ? (
                       <div className="flex items-center gap-1.5">
-                        <button onClick={() => setProjectSheetOpen(true)} className="text-xs font-medium text-brand-600 hover:underline">{linkedProject.name}</button>
+                        <button onClick={() => setProjectSheetOpen(true)} className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">{linkedProject.name}</button>
                         <StatusBadge variant={linkedProject.status === "on_hold" ? "on_hold_project" : linkedProject.status} label={PROJECT_STATUS_LABELS[linkedProject.status]} />
                         {linkedProject.isArchived && (
-                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             Archived
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400">No project linked</span>
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">No project linked</span>
                     )}
                     {(!isCrewRole || canAnnotate) && (
-                      <button onClick={() => { setSelectedProjectId(job.projectId ?? ""); setEditingLink(true); }} className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-100">
+                      <button onClick={() => { setSelectedProjectId(job.projectId ?? ""); setEditingLink(true); }} className="ml-auto rounded-md p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted">
                         <Pencil className="h-3 w-3" />
                       </button>
                     )}
@@ -356,54 +356,54 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
                 )}
               </div>
               {/* Client link */}
-              <div className="border-t border-slate-200 pt-2">
+              <div className="border-t border-border pt-2">
                 {editingClientLink ? (
                   <div className="flex items-center gap-2">
-                    <User className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <select className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)}>
+                    <User className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
+                    <select className="flex-1 rounded-md border border-border px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)}>
                       <option value="">— No client linked, matched by name only —</option>
                       {clients.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
                     </select>
-                    <button onClick={saveClientLink} disabled={saving} className="rounded-md p-1 text-brand-600 hover:bg-brand-50 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setEditingClientLink(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-3.5 w-3.5" /></button>
+                    <button onClick={saveClientLink} disabled={saving} className="rounded-md p-1 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setEditingClientLink(false)} className="rounded-md p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted"><X className="h-3.5 w-3.5" /></button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <User className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <User className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
                     {linkedClient ? (
-                      <span className="text-xs font-medium text-slate-700">{linkedClient.displayName}</span>
+                      <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">{linkedClient.displayName}</span>
                     ) : (
-                      <span className="text-xs text-slate-400">No client linked — matched by customer name only</span>
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">No client linked — matched by customer name only</span>
                     )}
                     {(!isCrewRole || canAnnotate) && (
-                      <button onClick={() => { setSelectedClientId(job.clientId ?? ""); setEditingClientLink(true); }} className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-100">
+                      <button onClick={() => { setSelectedClientId(job.clientId ?? ""); setEditingClientLink(true); }} className="ml-auto rounded-md p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted">
                         <Pencil className="h-3 w-3" />
                       </button>
                     )}
                   </div>
                 )}
               </div>
-              <p className="text-xs text-slate-400">Created {formatDate(job.createdAt)}</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">Created {formatDate(job.createdAt)}</p>
             </div>
           </div>
         )}
       </div>
 
       {/* Full photo gallery */}
-      <div className="border-t border-slate-200 px-5 py-4">
+      <div className="border-t border-border px-5 py-4">
         <PhotoGallery projectId={jobId} />
       </div>
 
       {/* Comments + Audit Trail tabs */}
-      <div className="border-t border-slate-200">
+      <div className="border-t border-border">
         <Tabs defaultValue="comments">
-          <div className="shrink-0 overflow-x-auto border-b border-slate-200 px-5">
+          <div className="shrink-0 overflow-x-auto border-b border-border px-5">
             <TabsList className="h-10 bg-transparent p-0">
-              <TabsTrigger value="comments" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+              <TabsTrigger value="comments" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none">
                 Comments
               </TabsTrigger>
               {!isCrewRole && (
-                <TabsTrigger value="audit" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+                <TabsTrigger value="audit" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none">
                   Audit Trail
                 </TabsTrigger>
               )}
@@ -484,16 +484,16 @@ export function JobPhotosPage() {
         {isLoading ? (
           <div className="space-y-1 p-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100" />
+              <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
-            <Images className="h-8 w-8 text-slate-300" />
-            <p className="text-sm text-slate-400">{jobs.length === 0 ? "No jobs yet" : "No jobs match"}</p>
+            <Images className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+            <p className="text-sm text-slate-400 dark:text-neutral-500">{jobs.length === 0 ? "No jobs yet" : "No jobs match"}</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-neutral-800">
             {filtered.map((job) => {
               const isSelected = job.id === selectedJobId;
               const fullAddr = formatAddress(job.address, job.city, job.state, job.zip);
@@ -502,8 +502,8 @@ export function JobPhotosPage() {
                   key={job.id}
                   onClick={() => setSelectedJobId(job.id)}
                   className={cn(
-                    "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50",
-                    isSelected ? "border-l-2 border-brand-500 bg-brand-50/60 hover:bg-brand-50/60" : "border-l-2 border-transparent",
+                    "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40",
+                    isSelected ? "border-l-2 border-brand-500 bg-brand-50/60 dark:bg-brand-900/30 hover:bg-brand-50/60 dark:hover:bg-brand-900/30" : "border-l-2 border-transparent",
                   )}
                 >
                   <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white", getAvatarColor(job.customerName || job.name))}>
@@ -511,13 +511,13 @@ export function JobPhotosPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium text-slate-900">{job.name}</p>
+                      <p className="truncate text-sm font-medium text-slate-900 dark:text-neutral-100">{job.name}</p>
                       <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize", STATUS_COLORS[job.status])}>
                         {job.status.replace("_", " ")}
                       </span>
                     </div>
-                    {job.customerName && <p className="truncate text-xs text-slate-500">{job.customerName}</p>}
-                    {fullAddr && <p className="truncate text-xs text-slate-400">{fullAddr}</p>}
+                    {job.customerName && <p className="truncate text-xs text-muted-foreground">{job.customerName}</p>}
+                    {fullAddr && <p className="truncate text-xs text-slate-400 dark:text-neutral-500">{fullAddr}</p>}
                   </div>
                 </button>
               );
@@ -538,11 +538,11 @@ export function JobPhotosPage() {
           action={
             <>
               {/* View mode toggle */}
-              <div className="flex items-center rounded-md border bg-white shadow-sm">
+              <div className="flex items-center rounded-md border bg-card shadow-sm">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")}
+                  className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-muted font-semibold")}
                   onClick={() => setViewMode("list")}
                 >
                   <Minimize2 className="mr-1.5 h-3.5 w-3.5" />List
@@ -550,7 +550,7 @@ export function JobPhotosPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")}
+                  className={cn("rounded-l-none px-3", viewMode === "table" && "bg-muted font-semibold")}
                   onClick={() => setViewMode("table")}
                 >
                   <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
@@ -567,10 +567,10 @@ export function JobPhotosPage() {
 
         {/* New job form */}
         {showNew && (
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
-              <p className="font-medium text-slate-900">New Photo Job</p>
-              <button onClick={() => setShowNew(false)}><X className="h-4 w-4 text-slate-400" /></button>
+              <p className="font-medium text-slate-900 dark:text-neutral-100">New Photo Job</p>
+              <button onClick={() => setShowNew(false)}><X className="h-4 w-4 text-slate-400 dark:text-neutral-500" /></button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
@@ -605,14 +605,14 @@ export function JobPhotosPage() {
               </div>
               <div className="sm:col-span-2">
                 <Label className="text-xs">Link to Project (optional)</Label>
-                <select className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}>
+                <select className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-slate-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}>
                   <option value="">— No project link —</option>
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
                 </select>
               </div>
               <div className="sm:col-span-2">
                 <Label className="text-xs">Link to Client (optional)</Label>
-                <select className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}>
+                <select className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-slate-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}>
                   <option value="">— No client linked, matched by name only —</option>
                   {clients.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
                 </select>
@@ -634,24 +634,24 @@ export function JobPhotosPage() {
             className="w-full max-w-xs"
           />
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Status</span>
             <div className="flex flex-wrap gap-1.5">
               {STATUS_FILTERS.map((f) => (
                 <button key={f.value} onClick={() => setStatusFilter(f.value)}
-                  className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                  className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-border bg-card text-slate-600 dark:text-neutral-400 hover:border-slate-300 dark:hover:border-neutral-700")}>
                   {f.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="h-8 w-px bg-slate-200" />
+          <div className="h-8 w-px bg-slate-200 dark:bg-neutral-700" />
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">View</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">View</span>
             <div className="flex gap-1.5">
               {(["current", "archived"] as ArchiveFilter[]).map((f) => (
                 <button key={f} onClick={() => setArchiveFilter(f)}
                   className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                    archiveFilter === f ? "bg-[#2a2a2a] text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                    archiveFilter === f ? "bg-[#2a2a2a] text-white" : "border border-border bg-card text-slate-600 dark:text-neutral-400 hover:border-slate-300 dark:hover:border-neutral-700")}>
                   {ARCHIVE_FILTER_LABELS[f]}
                 </button>
               ))}
@@ -668,7 +668,7 @@ export function JobPhotosPage() {
             emptyState={
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
                 <Images className="h-10 w-10 text-slate-200" />
-                <p className="text-sm text-slate-400">Select a job to view details</p>
+                <p className="text-sm text-slate-400 dark:text-neutral-500">Select a job to view details</p>
               </div>
             }
             hasSelection={!!selectedJobId}
@@ -677,34 +677,34 @@ export function JobPhotosPage() {
         ) : (
           /* Table / card view */
           isLoading ? (
-            <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}</div>
+            <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-muted" />)}</div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 py-16 text-center">
-              <Images className="h-10 w-10 text-slate-300" />
-              <p className="text-sm text-slate-400">{jobs.length === 0 ? "No jobs yet — create one above" : "No jobs match"}</p>
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
+              <Images className="h-10 w-10 text-slate-300 dark:text-neutral-500" />
+              <p className="text-sm text-slate-400 dark:text-neutral-500">{jobs.length === 0 ? "No jobs yet — create one above" : "No jobs match"}</p>
             </div>
           ) : (
             <div className="space-y-2">
               {filtered.map((job) => {
                 const fullAddr = formatAddress(job.address, job.city, job.state, job.zip);
                 return (
-                  <div key={job.id} className="group flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+                  <div key={job.id} className="group flex w-full items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
                     <button className="flex flex-1 items-center gap-4 text-left min-w-0" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate font-medium text-slate-900">{job.name}</p>
+                          <p className="truncate font-medium text-slate-900 dark:text-neutral-100">{job.name}</p>
                           <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize", STATUS_COLORS[job.status])}>{job.status.replace("_", " ")}</span>
-                          {job.isArchived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>}
-                          {job.projectId && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">Project linked</span>}
+                          {job.isArchived && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Archived</span>}
+                          {job.projectId && <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">Project linked</span>}
                         </div>
-                        {job.customerName && <p className="truncate text-sm text-slate-500">{job.customerName}</p>}
-                        {fullAddr && <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-400"><MapPin className="h-3 w-3" /><span className="truncate">{fullAddr}</span></div>}
+                        {job.customerName && <p className="truncate text-sm text-muted-foreground">{job.customerName}</p>}
+                        {fullAddr && <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-400 dark:text-neutral-500"><MapPin className="h-3 w-3" /><span className="truncate">{fullAddr}</span></div>}
                       </div>
-                      <p className="shrink-0 text-xs text-slate-400">{formatDate(job.createdAt)}</p>
+                      <p className="shrink-0 text-xs text-slate-400 dark:text-neutral-500">{formatDate(job.createdAt)}</p>
                     </button>
                     {canDelete && (
                       <button
-                        className="shrink-0 rounded-md p-1.5 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                        className="shrink-0 rounded-md p-1.5 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 group-hover:opacity-100"
                         title="Delete job"
                         onClick={async (e) => { e.stopPropagation(); if (await confirmDelete(confirm, job.name)) deleteJob(job.id, { onSuccess: () => toast.success("Job deleted"), onError: () => toast.error("Failed to delete job") }); }}
                       >

@@ -26,17 +26,17 @@ export function EstimateDisplaySettingsPanel({
   description?: string;
 }) {
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="border-b px-4 py-3">
-        <p className="text-sm font-medium text-slate-700">{title}</p>
-        <p className="text-xs text-slate-400">{description}</p>
+        <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">{title}</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">{description}</p>
       </div>
       <div className="divide-y">
         {DISPLAY_TOGGLES.map((t) => (
           <div key={t.key} className="flex items-center justify-between gap-3 px-4 py-3">
             <div>
-              <p className="text-sm text-slate-700">{t.label}</p>
-              <p className="text-xs text-slate-400">{t.description}</p>
+              <p className="text-sm text-slate-700 dark:text-neutral-300">{t.label}</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">{t.description}</p>
             </div>
             <Switch
               checked={settings[t.key]}

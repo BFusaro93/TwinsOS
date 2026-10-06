@@ -99,9 +99,9 @@ function bubbleClass(status: ApprovalRequestStatus) {
   switch (status) {
     case "approved":   return "border-emerald-500 bg-emerald-500 text-white";
     case "rejected":   return "border-red-400 bg-red-400 text-white";
-    case "skipped":    return "border-slate-200 bg-slate-100 text-slate-400";
-    case "superseded": return "border-slate-200 bg-white text-slate-300";
-    default:           return "border-amber-400 bg-amber-50 text-amber-600";
+    case "skipped":    return "border-border bg-muted text-slate-400 dark:text-neutral-500";
+    case "superseded": return "border-border bg-card text-slate-300 dark:text-neutral-500";
+    default:           return "border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400";
   }
 }
 
@@ -117,11 +117,11 @@ function statusText(status: ApprovalRequestStatus) {
 
 function statusTextClass(status: ApprovalRequestStatus) {
   switch (status) {
-    case "approved":   return "text-emerald-600";
-    case "rejected":   return "text-red-500";
-    case "superseded": return "text-slate-300";
-    case "skipped":    return "text-slate-400";
-    default:           return "text-amber-600";
+    case "approved":   return "text-emerald-600 dark:text-emerald-400";
+    case "rejected":   return "text-red-500 dark:text-red-400";
+    case "superseded": return "text-slate-300 dark:text-neutral-500";
+    case "skipped":    return "text-slate-400 dark:text-neutral-500";
+    default:           return "text-amber-600 dark:text-amber-400";
   }
 }
 
@@ -154,7 +154,7 @@ function ApproverRow({
     <div
       className={cn(
         "flex items-start gap-3 rounded-md px-3 py-2.5",
-        canAct ? "bg-amber-50 ring-1 ring-amber-200" : "bg-white"
+        canAct ? "bg-amber-50 dark:bg-amber-950/40 ring-1 ring-amber-200 dark:ring-amber-800" : "bg-card"
       )}
     >
       {/* Status bubble */}
@@ -173,7 +173,7 @@ function ApproverRow({
           <span
             className={cn(
               "text-sm font-medium",
-              request.status === "superseded" ? "text-slate-400 line-through" : "text-slate-900"
+              request.status === "superseded" ? "text-slate-400 dark:text-neutral-500 line-through" : "text-slate-900 dark:text-neutral-100"
             )}
           >
             {request.approverName}
@@ -183,13 +183,13 @@ function ApproverRow({
               {statusText(request.status)}
             </span>
             {request.decidedAt && request.status !== "skipped" && request.status !== "superseded" && (
-              <span className="text-xs text-slate-400">{formatDate(request.decidedAt)}</span>
+              <span className="text-xs text-slate-400 dark:text-neutral-500">{formatDate(request.decidedAt)}</span>
             )}
           </div>
         </div>
 
         {request.comment && request.status !== "superseded" && (
-          <p className="text-xs italic text-slate-500">&quot;{request.comment}&quot;</p>
+          <p className="text-xs italic text-muted-foreground">&quot;{request.comment}&quot;</p>
         )}
 
         {/* Action area */}
@@ -216,7 +216,7 @@ function ApproverRow({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 border-red-200 text-xs text-red-600 hover:border-red-300 hover:text-red-700"
+                    className="h-7 border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 hover:border-red-300 dark:hover:border-red-700 hover:text-red-700 dark:hover:text-red-400"
                     disabled={deciding}
                     onClick={() => onDecide("rejected", comment)}
                   >
@@ -226,7 +226,7 @@ function ApproverRow({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="ml-auto h-7 text-xs text-slate-400"
+                    className="ml-auto h-7 text-xs text-slate-400 dark:text-neutral-500"
                     onClick={() => setExpanded(false)}
                   >
                     <ChevronUp className="h-3 w-3" />
@@ -240,8 +240,8 @@ function ApproverRow({
                 className={cn(
                   "h-7 gap-1 text-xs",
                   isOverride
-                    ? "border-amber-300 text-amber-700 hover:border-amber-400 hover:bg-amber-50"
-                    : "border-amber-200 text-amber-700 hover:border-amber-300 hover:bg-amber-50"
+                    ? "border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                    : "border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40"
                 )}
                 onClick={() => setExpanded(true)}
               >
@@ -262,7 +262,7 @@ function ApproverRow({
         )}
 
         {isActiveStep && !isCurrentUser && !canOverride && request.status === "pending" && (
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">
             Waiting for {request.approverName} to review
           </p>
         )}
@@ -314,9 +314,9 @@ function StepGroupCard({
             "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold",
             overall === "approved" && "border-emerald-500 bg-emerald-500 text-white",
             overall === "rejected" && "border-red-400 bg-red-400 text-white",
-            overall === "skipped" && "border-slate-200 bg-slate-100 text-slate-400",
-            overall === "pending" && isActive && "border-amber-400 bg-amber-50 text-amber-700",
-            overall === "pending" && !isActive && "border-slate-200 bg-white text-slate-400"
+            overall === "skipped" && "border-border bg-muted text-slate-400 dark:text-neutral-500",
+            overall === "pending" && isActive && "border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
+            overall === "pending" && !isActive && "border-border bg-card text-slate-400 dark:text-neutral-500"
           )}
         >
           {overall === "approved" ? <Check className="h-3.5 w-3.5" /> :
@@ -328,7 +328,7 @@ function StepGroupCard({
           <div
             className={cn(
               "mt-1 w-0.5 flex-1",
-              overall === "approved" ? "bg-emerald-300" : "bg-slate-200"
+              overall === "approved" ? "bg-emerald-300 dark:bg-emerald-700/50" : "bg-slate-200 dark:bg-neutral-700"
             )}
           />
         )}
@@ -338,15 +338,15 @@ function StepGroupCard({
       <div className="mb-4 flex flex-1 flex-col gap-1.5">
         {/* Step header */}
         <div className="flex items-center gap-2 pb-0.5">
-          <span className="text-xs font-semibold text-slate-700">{stepLabel}</span>
+          <span className="text-xs font-semibold text-slate-700 dark:text-neutral-300">{stepLabel}</span>
           {isMultiApprover && overall === "pending" && (
-            <span className="flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+            <span className="flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
               <Users className="h-2.5 w-2.5" />
               Any one can approve
             </span>
           )}
           {overall === "skipped" && (
-            <span className="text-[10px] text-slate-400">Not required for this amount</span>
+            <span className="text-[10px] text-slate-400 dark:text-neutral-500">Not required for this amount</span>
           )}
         </div>
 
@@ -354,12 +354,12 @@ function StepGroupCard({
         <div
           className={cn(
             "overflow-hidden rounded-lg border",
-            isActive && overall === "pending" ? "border-amber-200" : "border-slate-100"
+            isActive && overall === "pending" ? "border-amber-200 dark:border-amber-800" : "border-slate-100 dark:border-neutral-800"
           )}
         >
           {group.requests.map((request, i) => (
             <div key={request.id}>
-              {i > 0 && <div className="h-px bg-slate-100" />}
+              {i > 0 && <div className="h-px bg-muted" />}
               <ApproverRow
                 request={request}
                 isActiveStep={isActive}
@@ -395,7 +395,7 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
     return (
       <div className="flex flex-col gap-3">
         {[1, 2].map((i) => (
-          <div key={i} className="h-16 animate-pulse rounded-lg bg-slate-100" />
+          <div key={i} className="h-16 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
     );
@@ -403,7 +403,7 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
 
   if (requests.length === 0) {
     return (
-      <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+      <p className="rounded-md bg-slate-50 dark:bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         No approval flow is configured for this type. An admin can manually advance the status.
       </p>
     );
@@ -450,7 +450,7 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
   return (
     <div className="flex flex-col gap-3">
       {decideError && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+        <p className="rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-600 dark:text-red-400">
           Failed to save your decision. You may not have permission to approve this item, or a connection error occurred. Please try again.
         </p>
       )}

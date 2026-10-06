@@ -127,23 +127,23 @@ function AccordionSection({
     <div className="border-b last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50"
+        className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
       >
         <div>
-          <span className="text-sm font-semibold text-slate-900">{title}</span>
+          <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{title}</span>
           {typeof count === "number" && (
-            <span className="ml-2 text-xs text-slate-400">
+            <span className="ml-2 text-xs text-slate-400 dark:text-neutral-500">
               {count} item{count !== 1 ? "s" : ""}
             </span>
           )}
           {description && (
-            <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           )}
         </div>
         {open ? (
-          <ChevronUp className="h-4 w-4 text-slate-400" />
+          <ChevronUp className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-slate-400" />
+          <ChevronDown className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
         )}
       </button>
       {open && <div className="px-6 pb-4">{children}</div>}
@@ -160,11 +160,11 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
       aria-checked={enabled}
       onClick={onToggle}
       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
-        enabled ? "bg-brand-500" : "bg-slate-200"
+        enabled ? "bg-brand-500" : "bg-slate-200 dark:bg-neutral-700"
       }`}
     >
       <span
-        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow transition-transform ${
           enabled ? "translate-x-4" : "translate-x-0"
         }`}
       />
@@ -215,14 +215,14 @@ function GeneralTab() {
   }
 
   if (isLoading) {
-    return <div className="rounded-lg border bg-white shadow-sm p-6 text-sm text-slate-400">Loading…</div>;
+    return <div className="rounded-lg border bg-card shadow-sm p-6 text-sm text-slate-400 dark:text-neutral-500">Loading…</div>;
   }
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Company Info</h2>
-        <p className="mt-0.5 text-xs text-slate-500">General information about your organization</p>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Company Info</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">General information about your organization</p>
       </div>
       <div className="border-t px-6 py-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -325,14 +325,14 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
     catch { toast.error("Failed to remove"); }
   }
 
-  if (isLoading) return <p className="text-sm text-slate-400 py-2">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-slate-400 dark:text-neutral-500 py-2">Loading…</p>;
 
   return (
     <div className="divide-y">
       {items.map((item: import("@/lib/hooks/use-org-lists").OrgListOption) => (
         <div key={item.id} className="flex items-center gap-3 py-3">
-          <span className="flex-1 text-sm text-slate-800">{item.value}</span>
-          <button onClick={() => handleDelete(item.id)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Remove">
+          <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{item.value}</span>
+          <button onClick={() => handleDelete(item.id)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title="Remove">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -345,14 +345,14 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); if (e.key === "Escape") { setAdding(false); setNewValue(""); } }}
-            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
           <button onClick={() => void handleAdd()} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">Add</button>
-          <button onClick={() => { setAdding(false); setNewValue(""); }} className="rounded p-1 text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+          <button onClick={() => { setAdding(false); setNewValue(""); }} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"><X className="h-4 w-4" /></button>
         </div>
       ) : (
         <div className="py-3">
-          <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700">
+          <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400">
             <Plus className="h-4 w-4" /> Add Item
           </button>
         </div>
@@ -425,7 +425,7 @@ function DiscountsEditor() {
     setEditingId(null);
   }
 
-  if (isLoading) return <p className="text-sm text-slate-400 py-2">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-slate-400 dark:text-neutral-500 py-2">Loading…</p>;
 
   return (
     <div className="divide-y">
@@ -435,7 +435,7 @@ function DiscountsEditor() {
             {editingId === d.id ? (
               <input
                 autoFocus
-                className="rounded-md border border-brand-400 px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                className="rounded-md border border-brand-400 px-2 py-1 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onBlur={() => commitRename(d.id)}
@@ -446,14 +446,14 @@ function DiscountsEditor() {
               />
             ) : (
               <button
-                className="text-left text-sm font-medium text-slate-800 hover:text-brand-600"
+                className="text-left text-sm font-medium text-slate-800 dark:text-neutral-100 hover:text-brand-600 dark:hover:text-brand-400"
                 onClick={() => { setEditingId(d.id); setEditName(d.name); }}
                 title="Click to rename"
               >
                 {d.name}
               </button>
             )}
-            <p className="mt-0.5 text-xs text-slate-400">{amountLabel(d.discountType, d.percentBps, d.flatCents)} off</p>
+            <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">{amountLabel(d.discountType, d.percentBps, d.flatCents)} off</p>
           </div>
 
           <Toggle
@@ -463,7 +463,7 @@ function DiscountsEditor() {
 
           <button
             onClick={() => handleRemove(d.id)}
-            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
             title="Remove"
           >
             <X className="h-4 w-4" />
@@ -472,7 +472,7 @@ function DiscountsEditor() {
       ))}
 
       {discounts.length === 0 && !adding && (
-        <p className="py-3 text-sm text-slate-400">No discounts yet.</p>
+        <p className="py-3 text-sm text-slate-400 dark:text-neutral-500">No discounts yet.</p>
       )}
 
       {adding ? (
@@ -482,7 +482,7 @@ function DiscountsEditor() {
             placeholder="e.g. Senior discount"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
           <UISelect value={newType} onValueChange={(v) => setNewType(v as DiscountType)}>
             <UISelectTrigger className="h-8 w-16 text-sm"><UISelectValue /></UISelectTrigger>
@@ -502,19 +502,19 @@ function DiscountsEditor() {
               if (e.key === "Enter") void handleAdd();
               if (e.key === "Escape") { setAdding(false); setNewName(""); setNewAmount(""); }
             }}
-            className="w-24 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="w-24 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
           <button onClick={() => void handleAdd()} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">Add</button>
           <button
             onClick={() => { setAdding(false); setNewName(""); setNewAmount(""); }}
-            className="rounded p-1 text-slate-400 hover:text-slate-600"
+            className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       ) : (
         <div className="py-3">
-          <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700">
+          <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400">
             <Plus className="h-4 w-4" /> Add Discount
           </button>
         </div>
@@ -587,8 +587,8 @@ function ClientDefaultsSection() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm font-medium text-slate-800">Starting Account Number</p>
-        <p className="text-xs text-slate-400">Auto-assigned to every new client. Next client will be: <span className="font-mono text-slate-600">{preview}</span></p>
+        <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">Starting Account Number</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">Auto-assigned to every new client. Next client will be: <span className="font-mono text-slate-600 dark:text-neutral-400">{preview}</span></p>
         <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="flex flex-col gap-1.5">
             <Label>Prefix</Label>
@@ -645,7 +645,7 @@ function ClientDefaultsSection() {
           </UISelect>
         </div>
       </div>
-      <p className="text-xs text-slate-400">These apply to new clients only — existing clients keep their current settings.</p>
+      <p className="text-xs text-slate-400 dark:text-neutral-500">These apply to new clients only — existing clients keep their current settings.</p>
 
       <div>
         <Button size="sm" onClick={handleSave} disabled={saving}>
@@ -665,7 +665,7 @@ function CRMTab() {
   const { data: customFieldDefs = [] } = useCustomFieldDefs();
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <AccordionSection
         title="Client Defaults"
         defaultOpen
@@ -701,8 +701,8 @@ function CRMTab() {
         <CustomFieldDefsEditor />
       </AccordionSection>
       <AccordionSection title="Email Templates" defaultOpen={false} description="Templates used when emailing clients now live in Documents, alongside every other template type.">
-        <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
-          <p className="text-sm text-slate-600">
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-4">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             Build and edit client email templates in <span className="font-medium">Documents</span> — create a
             document with type &quot;Client&quot;, and it&apos;ll show up in the template picker for the Dispatch
             Board / Waiting List &quot;Email Selected Clients&quot; bulk action.
@@ -820,18 +820,18 @@ function CustomFieldDefsEditor() {
     }
   }
 
-  if (isLoading) return <p className="text-sm text-slate-400 py-2">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-slate-400 dark:text-neutral-500 py-2">Loading…</p>;
 
   return (
     <div className="divide-y">
       {/* Built-in read-only list */}
       <div className="pb-3">
-        <p className="text-xs text-slate-400 mb-2">Built-in takeoffs (always available, stored on the client record)</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500 mb-2">Built-in takeoffs (always available, stored on the client record)</p>
         {["Turf Sq. Ft.", "Mulch Bed Sq. Ft.", "Gross Sq. Ft.", "Linear Ft. Perimeter", "Linear Ft. Edging", "Yards of Mulch", "Parking Lot Sq. Ft."].map((f) => (
-          <div key={f} className="flex items-center gap-2 py-1.5 text-sm text-slate-600">
+          <div key={f} className="flex items-center gap-2 py-1.5 text-sm text-slate-600 dark:text-neutral-400">
             <GripVertical className="h-3.5 w-3.5 text-slate-200" />
             <span className="flex-1">{f}</span>
-            <span className="text-xs text-slate-300">Built-in</span>
+            <span className="text-xs text-slate-300 dark:text-neutral-500">Built-in</span>
           </div>
         ))}
       </div>
@@ -841,22 +841,22 @@ function CustomFieldDefsEditor() {
         editingId === def.id ? (
           <div key={def.id} className="flex items-end gap-2 py-3 flex-wrap">
             <div className="flex flex-col gap-1 flex-1 min-w-36">
-              <label className="text-xs text-slate-500">Field Name</label>
+              <label className="text-xs text-muted-foreground">Field Name</label>
               <input
                 autoFocus
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") void handleSaveEdit(); if (e.key === "Escape") setEditingId(null); }}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                className="rounded-md border border-slate-300 dark:border-neutral-700 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
               />
             </div>
             <div className="flex flex-col gap-1 w-28">
-              <label className="text-xs text-slate-500">Unit (optional)</label>
+              <label className="text-xs text-muted-foreground">Unit (optional)</label>
               <input
                 value={editUnit}
                 onChange={(e) => setEditUnit(e.target.value)}
                 placeholder="sq ft"
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                className="rounded-md border border-slate-300 dark:border-neutral-700 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
               />
             </div>
             <button
@@ -866,29 +866,29 @@ function CustomFieldDefsEditor() {
             >
               {saving ? "Saving…" : "Save"}
             </button>
-            <button onClick={() => setEditingId(null)} className="text-xs text-slate-400 hover:text-slate-700 px-1">
+            <button onClick={() => setEditingId(null)} className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 px-1">
               Cancel
             </button>
           </div>
         ) : (
           <div key={def.id} className="flex items-center gap-3 py-3">
             <div className="flex-1">
-              <p className="text-sm font-medium text-slate-800">{def.name}</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{def.name}</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
                 {def.fieldType === "number" ? "Number" : "Text"}
                 {def.unit ? ` · ${def.unit}` : ""}
               </p>
             </div>
             <button
               onClick={() => startEdit(def)}
-              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300"
               title="Edit"
             >
               <Pencil className="h-4 w-4" />
             </button>
             <button
               onClick={() => handleDelete(def.id, def.name)}
-              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+              className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
               title="Delete"
             >
               <X className="h-4 w-4" />
@@ -902,18 +902,18 @@ function CustomFieldDefsEditor() {
         <div className="pt-3 space-y-2">
           <div className="flex items-end gap-2 flex-wrap">
             <div className="flex flex-col gap-1 flex-1 min-w-36">
-              <label className="text-xs text-slate-500">Field Name</label>
+              <label className="text-xs text-muted-foreground">Field Name</label>
               <input
                 autoFocus
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="e.g. Fence Linear Ft."
                 onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); if (e.key === "Escape") setAdding(false); }}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                className="rounded-md border border-slate-300 dark:border-neutral-700 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
               />
             </div>
             <div className="flex flex-col gap-1 w-28">
-              <label className="text-xs text-slate-500">Type</label>
+              <label className="text-xs text-muted-foreground">Type</label>
               <UISelect value={newType} onValueChange={(v) => setNewType(v as "text" | "number")}>
                 <UISelectTrigger className="h-9 text-sm"><UISelectValue /></UISelectTrigger>
                 <UISelectContent>
@@ -923,12 +923,12 @@ function CustomFieldDefsEditor() {
               </UISelect>
             </div>
             <div className="flex flex-col gap-1 w-28">
-              <label className="text-xs text-slate-500">Unit (optional)</label>
+              <label className="text-xs text-muted-foreground">Unit (optional)</label>
               <input
                 value={newUnit}
                 onChange={(e) => setNewUnit(e.target.value)}
                 placeholder="sq ft"
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                className="rounded-md border border-slate-300 dark:border-neutral-700 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
               />
             </div>
           </div>
@@ -940,7 +940,7 @@ function CustomFieldDefsEditor() {
             >
               {creating ? "Adding…" : "Add Field"}
             </button>
-            <button onClick={() => setAdding(false)} className="text-xs text-slate-400 hover:text-slate-700">
+            <button onClick={() => setAdding(false)} className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300">
               Cancel
             </button>
           </div>
@@ -949,7 +949,7 @@ function CustomFieldDefsEditor() {
         <div className="pt-3">
           <button
             onClick={() => setAdding(true)}
-            className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+            className="flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
           >
             <Plus className="h-4 w-4" />
             Add Custom Field
@@ -972,7 +972,7 @@ function EstimatesTab() {
   const estimateApprovalSteps = approvalFlows.find((f) => f.entityType === "crm_estimate")?.steps.length ?? 0;
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <AccordionSection title="Estimate Stages" count={estimateStages.length} defaultOpen>
         <EstimateStagesEditor />
       </AccordionSection>
@@ -1004,10 +1004,10 @@ function EstimatesTab() {
         <OverheadSettingsEditor />
       </AccordionSection>
       <AccordionSection title="Service Bundles" count={estimateTemplates.length}>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           <Link
             href="/crm/settings/estimates"
-            className="font-medium text-brand-600 hover:text-brand-700 hover:underline"
+            className="font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline"
           >
             Manage service bundles →
           </Link>
@@ -1137,17 +1137,17 @@ function ServiceRow({
 
   return (
     <div className="flex items-center gap-3 py-2">
-      <span className="flex-1 text-sm text-slate-800">{service.name}</span>
+      <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{service.name}</span>
       {service.code && (
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-600">{service.code}</span>
+        <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-slate-600 dark:text-neutral-400">{service.code}</span>
       )}
       {service.defaultRateCents != null && (
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-muted-foreground">
           ${(service.defaultRateCents / 100).toFixed(2)}/hr
         </span>
       )}
       {service.productionRateSqftPerHr != null && (
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-slate-400 dark:text-neutral-500">
           {service.productionRateSqftPerHr} sq ft/man-hr
         </span>
       )}
@@ -1157,7 +1157,7 @@ function ServiceRow({
       <Button
         size="sm"
         variant="ghost"
-        className="h-7 px-2 text-xs text-red-500 hover:text-red-600"
+        className="h-7 px-2 text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"
         onClick={handleDelete}
         disabled={deleting}
       >
@@ -1259,7 +1259,7 @@ function ServicesTab() {
   const { data: serviceCategoryItems = [] } = useOrgList("service_categories");
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <AccordionSection
         title="Services"
         count={services.length}
@@ -1271,7 +1271,7 @@ function ServicesTab() {
             <ServiceRow key={svc.id} service={svc} onSaved={refetch} />
           ))}
           {services.length === 0 && (
-            <p className="py-3 text-sm text-slate-400">No services yet. Add one below.</p>
+            <p className="py-3 text-sm text-slate-400 dark:text-neutral-500">No services yet. Add one below.</p>
           )}
           <AddServiceForm onAdded={refetch} />
         </div>
@@ -1312,18 +1312,18 @@ function ConnectAccountSection() {
   }
 
   if (isLoading) {
-    return <p className="p-4 text-sm text-slate-400">Loading…</p>;
+    return <p className="p-4 text-sm text-slate-400 dark:text-neutral-500">Loading…</p>;
   }
 
   const status = connectStatus?.status ?? "not_started";
   const statusColor =
     status === "active"
-      ? "bg-emerald-100 text-emerald-700"
+      ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"
       : status === "restricted"
-        ? "bg-red-100 text-red-700"
+        ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400"
         : status === "pending"
-          ? "bg-amber-100 text-amber-700"
-          : "bg-slate-100 text-slate-600";
+          ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+          : "bg-muted text-slate-600 dark:text-neutral-400";
 
   return (
     <div className="space-y-4 p-4">
@@ -1333,14 +1333,14 @@ function ConnectAccountSection() {
         </span>
         {connectStatus?.livemode === false && (
           <span
-            className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700"
+            className="rounded-full bg-violet-100 dark:bg-violet-900/40 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-400"
             title="This Stripe account is in test mode — charges don't move real money."
           >
             Test mode
           </span>
         )}
       </div>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-slate-600 dark:text-neutral-400">
         Connect a Stripe account to accept client card payments on invoices. Client payments go
         directly to your own bank account via Stripe payouts &mdash; Landscapt never holds your funds.
       </p>
@@ -1362,12 +1362,12 @@ function QuickBooksConnectSection() {
   const { mutateAsync: disconnect, isPending: disconnecting } = useDisconnectQuickBooks();
 
   if (isLoading) {
-    return <p className="p-4 text-sm text-slate-400">Loading…</p>;
+    return <p className="p-4 text-sm text-slate-400 dark:text-neutral-500">Loading…</p>;
   }
 
   if (!status?.configured) {
     return (
-      <p className="p-4 text-sm text-slate-400">
+      <p className="p-4 text-sm text-slate-400 dark:text-neutral-500">
         QuickBooks sync is coming soon — this environment isn&apos;t configured yet.
       </p>
     );
@@ -1387,13 +1387,13 @@ function QuickBooksConnectSection() {
       <div className="flex items-center gap-2">
         <span
           className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            status.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+            status.connected ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" : "bg-muted text-slate-600 dark:text-neutral-400"
           }`}
         >
           {status.connected ? `Connected — ${status.companyName}` : "Not connected"}
         </span>
       </div>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-slate-600 dark:text-neutral-400">
         Connect QuickBooks Online to push invoices and payments over automatically. This is a one-way sync — nothing
         is ever pulled back from QuickBooks or written from it into Landscapt.
       </p>
@@ -1444,26 +1444,26 @@ function QuickBooksSyncStatusSection() {
   }
 
   return (
-    <div className="space-y-4 border-t border-slate-100 p-4">
+    <div className="space-y-4 border-t border-slate-100 dark:border-neutral-800 p-4">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-slate-700">Sync Status</h4>
+        <h4 className="text-sm font-medium text-slate-700 dark:text-neutral-300">Sync Status</h4>
         {data.lastSyncAt && (
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-400 dark:text-neutral-500">
             Last activity {new Date(data.lastSyncAt).toLocaleString()}
           </span>
         )}
       </div>
       {!hasFailures ? (
-        <p className="text-sm text-slate-400">No failed pushes — everything that&apos;s been sent is synced.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">No failed pushes — everything that&apos;s been sent is synced.</p>
       ) : (
         <div className="space-y-3">
           {data.failedInvoices.map((inv) => (
-            <div key={inv.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-100 bg-red-50 p-3">
+            <div key={inv.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800">
+                <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">
                   Invoice #{inv.invoiceNumber ?? "—"} {inv.clientName ? `— ${inv.clientName}` : ""}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-red-700">{inv.error}</p>
+                <p className="mt-0.5 truncate text-xs text-red-700 dark:text-red-400">{inv.error}</p>
               </div>
               {canResync && (
                 <Button
@@ -1478,14 +1478,14 @@ function QuickBooksSyncStatusSection() {
             </div>
           ))}
           {data.failedPayments.map((pmt) => (
-            <div key={pmt.allocationId} className="flex items-start justify-between gap-3 rounded-lg border border-red-100 bg-red-50 p-3">
+            <div key={pmt.allocationId} className="flex items-start justify-between gap-3 rounded-lg border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800">
+                <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">
                   Payment {formatCurrency(pmt.amountCents)}
                   {pmt.invoiceNumber ? ` for Invoice #${pmt.invoiceNumber}` : ""}
                   {pmt.clientName ? ` — ${pmt.clientName}` : ""}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-red-700">{pmt.error}</p>
+                <p className="mt-0.5 truncate text-xs text-red-700 dark:text-red-400">{pmt.error}</p>
               </div>
               {canResync && (
                 <Button
@@ -1580,7 +1580,7 @@ function AccountingTab() {
   }
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <AccordionSection title="Sales Tax" defaultOpen description="Org-wide default tax rate applied to new invoices. Can be overridden per client.">
         <div className="space-y-4 p-4">
           <div className="flex items-end gap-3">
@@ -1604,7 +1604,7 @@ function AccountingTab() {
               {taxSaving ? "Saving…" : "Save"}
             </Button>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
             This rate is used as the default for new invoices. Each client can have their own tax rate set on their profile — that takes priority over this org default.
           </p>
         </div>
@@ -1626,7 +1626,7 @@ function AccountingTab() {
             Enable ACH / bank transfer payments
           </Label>
         </div>
-        <p className="px-4 pb-4 text-xs text-slate-400">
+        <p className="px-4 pb-4 text-xs text-slate-400 dark:text-neutral-500">
           When off, staff and clients only see the Card option — the Bank Account choice is hidden everywhere
           (client detail, invoices, portal). This is Landscapt&apos;s own switch, separate from any payment-method
           toggle in your Stripe dashboard.
@@ -1684,7 +1684,7 @@ function AccountingTab() {
               {feeSaving ? "Saving…" : "Save"}
             </Button>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
             Staff can waive the fee, or override it with a custom amount, on an individual invoice when charging a card from the invoice detail view.
           </p>
         </div>
@@ -1709,8 +1709,8 @@ function AccountingTab() {
         title="Invoice Email Templates"
         description="Email templates used when sending an invoice now live in Documents, alongside every other template type."
       >
-        <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
-          <p className="text-sm text-slate-600">
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-4">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             Build and edit invoice email templates in <span className="font-medium">Documents</span> — create a
             document with type &quot;Invoice Email&quot;, and it&apos;ll show up in the template picker when
             emailing an invoice.
@@ -1740,18 +1740,18 @@ function IntegrationCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="flex items-start justify-between px-6 py-4 border-b">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-          <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{title}</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
         </div>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
           status === "connected"
-            ? "bg-green-100 text-green-700"
+            ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400"
             : status === "coming_soon"
-            ? "bg-slate-100 text-slate-500"
-            : "bg-yellow-100 text-yellow-700"
+            ? "bg-muted text-muted-foreground"
+            : "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400"
         }`}>
           {status === "connected" ? "Connected" : status === "coming_soon" ? "Coming Soon" : "Not Connected"}
         </span>
@@ -1835,7 +1835,7 @@ function GoogleMapsCard() {
       status={isConfigured ? "connected" : "not_connected"}
     >
       <div className="space-y-4">
-        <div className="rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-xs text-blue-800">
+        <div className="rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-4 py-3 text-xs text-blue-800 dark:text-blue-300">
           <p className="font-semibold mb-1">Setup instructions</p>
           <ol className="list-decimal ml-4 space-y-0.5">
             <li>Go to <span className="font-mono">console.cloud.google.com</span> → APIs &amp; Services</li>
@@ -1857,7 +1857,7 @@ function GoogleMapsCard() {
             />
             <button
               type="button"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
               onClick={() => setShowKey((s) => !s)}
             >
               {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -1884,13 +1884,13 @@ function GoogleMapsCard() {
             {testing ? "Testing…" : "Test Connection"}
           </Button>
           {isDirty && apiKey.trim() && (
-            <span className="text-xs text-amber-600">Unsaved — click Save Key to connect</span>
+            <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved — click Save Key to connect</span>
           )}
           {isConfigured && (
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 text-xs text-red-500 hover:text-red-700"
+              className="h-8 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400"
               onClick={handleRemove}
               disabled={updateOrg.isPending}
             >
@@ -1946,7 +1946,7 @@ function IntegrationsTab() {
       <GoogleMapsCard />
 
       {/* SMS / Text Messaging — per-org Twilio number + A2P 10DLC campaign */}
-      <div className="rounded-lg border bg-white">
+      <div className="rounded-lg border bg-card">
         <SmsOnboardingSettings />
       </div>
 
@@ -2039,7 +2039,7 @@ function ImportTile({
     <>
       <button
         onClick={() => fileRef.current?.click()}
-        className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+        className="flex flex-col items-center gap-2 rounded-lg border border-border p-5 text-muted-foreground transition-colors hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400"
       >
         {icon}
         <span className="text-sm">{label}</span>
@@ -2057,14 +2057,14 @@ function ImportTile({
             <div className="flex flex-col gap-3">
               {templateColumns.map((field) => (
                 <div key={field} className="grid grid-cols-2 items-center gap-3">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                     {fieldLabel(field)}
-                    {requiredColumns.includes(field) && <span className="text-red-500"> *</span>}
+                    {requiredColumns.includes(field) && <span className="text-red-500 dark:text-red-400"> *</span>}
                   </label>
                   <UISelect value={columnMapping[field] || "__skip__"} onValueChange={(v) => setColumnMapping((prev) => ({ ...prev, [field]: v === "__skip__" ? "" : v }))}>
                     <UISelectTrigger className="h-9 text-sm"><UISelectValue placeholder="Skip" /></UISelectTrigger>
                     <UISelectContent>
-                      <UISelectItem value="__skip__"><span className="text-slate-400">— Skip —</span></UISelectItem>
+                      <UISelectItem value="__skip__"><span className="text-slate-400 dark:text-neutral-500">— Skip —</span></UISelectItem>
                       {csvColumns.map((col) => (<UISelectItem key={col} value={col}>{col}</UISelectItem>))}
                     </UISelectContent>
                   </UISelect>
@@ -2089,16 +2089,16 @@ function ImportTile({
           {!importError && parsedRows.length > 0 && (
             <div className="max-h-64 overflow-auto rounded-md border text-xs">
               <table className="w-full">
-                <thead className="sticky top-0 bg-slate-50">
-                  <tr>{Object.keys(parsedRows[0]).map((col) => (<th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600">{fieldLabel(col)}</th>))}</tr>
+                <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+                  <tr>{Object.keys(parsedRows[0]).map((col) => (<th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600 dark:text-neutral-400">{fieldLabel(col)}</th>))}</tr>
                 </thead>
                 <tbody>
-                  {parsedRows.slice(0, 5).map((row, i) => (<tr key={i} className="border-b last:border-0">{Object.keys(parsedRows[0]).map((col) => (<td key={col} className="px-3 py-1.5 text-slate-700">{row[col] || "—"}</td>))}</tr>))}
+                  {parsedRows.slice(0, 5).map((row, i) => (<tr key={i} className="border-b last:border-0">{Object.keys(parsedRows[0]).map((col) => (<td key={col} className="px-3 py-1.5 text-slate-700 dark:text-neutral-300">{row[col] || "—"}</td>))}</tr>))}
                 </tbody>
               </table>
             </div>
           )}
-          {importError && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{importError}</div>}
+          {importError && <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">{importError}</div>}
           <DialogFooter>
             <Button variant="outline" onClick={resetAll}>Cancel</Button>
             {!importError && <Button onClick={handleConfirm} disabled={importing}>{importing ? "Importing..." : `Import ${parsedRows.length} Rows`}</Button>}
@@ -2215,8 +2215,8 @@ function ImportExportTab() {
       {importStatus && (
         <div className={`rounded-md border px-4 py-3 text-sm ${
           importStatus.type === "success"
-            ? "border-green-200 bg-green-50 text-green-700"
-            : "border-red-200 bg-red-50 text-red-700"
+            ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400"
+            : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400"
         }`}>
           {importStatus.message}
           <button className="ml-2 font-medium underline" onClick={() => setImportStatus(null)}>
@@ -2226,10 +2226,10 @@ function ImportExportTab() {
       )}
 
       {/* Export */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Export Data</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Download your data as a CSV file</p>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Export Data</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">Download your data as a CSV file</p>
         </div>
         <Separator />
         <div className="p-6">
@@ -2238,7 +2238,7 @@ function ImportExportTab() {
               <button
                 key={label}
                 onClick={() => handleExport(label)}
-                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+                className="flex flex-col items-center gap-2 rounded-lg border border-border p-5 text-muted-foreground transition-colors hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400"
               >
                 {icon}
                 <span className="text-sm">{label}</span>
@@ -2249,10 +2249,10 @@ function ImportExportTab() {
       </div>
 
       {/* Import */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Import Data</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Upload a CSV to bulk-import records</p>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Import Data</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">Upload a CSV to bulk-import records</p>
         </div>
         <Separator />
         <div className="p-6">
@@ -2313,25 +2313,25 @@ function CRMRequiredFieldsTab() {
       {CRM_ENTITY_DISPLAY.map(({ key, name }) => {
         const fields = requiredFields[key] ?? [];
         return (
-          <div key={key} className="rounded-lg border bg-white shadow-sm">
+          <div key={key} className="rounded-lg border bg-card shadow-sm">
             <div className="px-6 py-4">
-              <h2 className="text-sm font-semibold text-slate-900">{name}</h2>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{name}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Set which fields are required, optional, or hidden when creating a {name.toLowerCase().replace(/s$/, "")}
               </p>
             </div>
             <Separator />
             <table className="w-full">
               <thead>
-                <tr className="border-b bg-slate-50">
-                  <th className="px-6 py-2 text-left text-xs font-medium text-slate-500">Field</th>
-                  <th className="px-6 py-2 text-right text-xs font-medium text-slate-500">Requirement</th>
+                <tr className="border-b bg-slate-50 dark:bg-muted/40">
+                  <th className="px-6 py-2 text-left text-xs font-medium text-muted-foreground">Field</th>
+                  <th className="px-6 py-2 text-right text-xs font-medium text-muted-foreground">Requirement</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {fields.map((f) => (
                   <tr key={f.field}>
-                    <td className="px-6 py-3 text-sm text-slate-800">{f.label}</td>
+                    <td className="px-6 py-3 text-sm text-slate-800 dark:text-neutral-100">{f.label}</td>
                     <td className="px-6 py-3 text-right">
                       <UISelect
                         value={f.requirement}
@@ -2473,8 +2473,8 @@ export function LandscaptSettingsTabs() {
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
-        <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">Manage your CRM configuration</p>
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Manage your CRM configuration</p>
       </div>
       <Tabs
         value={activeTab && visibleTabs.includes(activeTab) ? activeTab : visibleTabs[0]}
@@ -2492,7 +2492,7 @@ export function LandscaptSettingsTabs() {
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-slate-600 md:px-4 md:py-3 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                className="rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-slate-600 dark:text-neutral-400 md:px-4 md:py-3 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
               >
                 {tabLabel(tab)}
               </TabsTrigger>

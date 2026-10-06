@@ -212,7 +212,7 @@ export function LineItemsTable({
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50 text-xs">
+            <TableRow className="bg-slate-50 dark:bg-muted/40 text-xs">
               <TableHead>Item</TableHead>
               <TableHead>Part #</TableHead>
               {receivedQtyByLineItemId ? (
@@ -249,8 +249,8 @@ export function LineItemsTable({
                     {thumbUrl ? (
                       <img src={thumbUrl} alt="" className="h-8 w-8 rounded object-cover" />
                     ) : (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-slate-100">
-                        <Package className="h-4 w-4 text-slate-400" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-muted">
+                        <Package className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
                       </div>
                     )}
                     <div className="flex flex-col gap-0.5">
@@ -261,7 +261,7 @@ export function LineItemsTable({
                       <button
                         type="button"
                         onClick={() => onPartClick((li.partId ?? linkedPart!.id)!)}
-                        className="text-left font-medium text-brand-600 hover:underline"
+                        className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                       >
                         {product?.name ?? li.productItemName}
                       </button>
@@ -269,7 +269,7 @@ export function LineItemsTable({
                       <button
                         type="button"
                         onClick={() => onProductClick(li.productItemId!)}
-                        className="text-left font-medium text-brand-600 hover:underline"
+                        className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                       >
                         {product?.name ?? li.productItemName}
                       </button>
@@ -277,7 +277,7 @@ export function LineItemsTable({
                       <span className="font-medium">{product?.name ?? li.productItemName}</span>
                     )}
                     {li.taxable === false && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400">
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400 dark:text-neutral-500">
                         <Ban className="h-2.5 w-2.5" />
                         Non-taxable
                       </span>
@@ -285,7 +285,7 @@ export function LineItemsTable({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="font-mono text-xs text-slate-500">
+                <TableCell className="font-mono text-xs text-muted-foreground">
                   {li.partNumber ?? "—"}
                 </TableCell>
                 {receivedQtyByLineItemId ? (() => {
@@ -293,9 +293,9 @@ export function LineItemsTable({
                   const pending = Math.max(0, li.quantity - received);
                   return (
                     <>
-                      <TableCell className="text-right text-slate-700">{li.quantity}</TableCell>
-                      <TableCell className="text-right font-medium text-emerald-700">{received}</TableCell>
-                      <TableCell className={cn("text-right font-medium", pending > 0 ? "text-amber-600" : "text-slate-400")}>
+                      <TableCell className="text-right text-slate-700 dark:text-neutral-300">{li.quantity}</TableCell>
+                      <TableCell className="text-right font-medium text-emerald-700 dark:text-emerald-400">{received}</TableCell>
+                      <TableCell className={cn("text-right font-medium", pending > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-neutral-500")}>
                         {pending > 0 ? pending : "—"}
                       </TableCell>
                     </>
@@ -308,13 +308,13 @@ export function LineItemsTable({
                   {formatCurrency(li.quantity * li.unitCost)}
                 </TableCell>
                 {showProject && (
-                  <TableCell className="text-slate-500">
+                  <TableCell className="text-muted-foreground">
                     {li.projectId ? (
                       onProjectClick ? (
                         <button
                           type="button"
                           onClick={() => onProjectClick(li.projectId!)}
-                          className="text-sm text-brand-600 hover:underline"
+                          className="text-sm text-brand-600 dark:text-brand-400 hover:underline"
                         >
                           {allProjects.find((p) => p.id === li.projectId)?.name ?? li.projectId}
                         </button>
@@ -329,14 +329,14 @@ export function LineItemsTable({
                     <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         onClick={() => openEdit(li)}
-                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400"
                         title="Edit"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => deleteItem(li.id)}
-                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                        className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
                         title="Delete"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -349,18 +349,18 @@ export function LineItemsTable({
             })}
           </TableBody>
         </Table>
-        <div className="flex items-center justify-between border-t bg-slate-50 px-4 py-2">
+        <div className="flex items-center justify-between border-t bg-slate-50 dark:bg-muted/40 px-4 py-2">
           {editable && !hideAddButton ? (
             <button
               type="button"
               onClick={openAdd}
-              className="flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+              className="flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-400 transition-colors"
             >
               <Plus className="h-3 w-3" />
               Add Line Item
             </button>
           ) : <span />}
-          <span className="text-sm font-semibold text-slate-900">
+          <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
             Total: {formatCurrency(grandTotal)}
           </span>
         </div>
@@ -379,7 +379,7 @@ export function LineItemsTable({
             <div className="flex flex-col gap-3">
               <div className="flex gap-3">
                 <div className="flex flex-1 flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Quantity</label>
+                  <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Quantity</label>
                   <DecimalInput
                     min={0.001}
                     value={editForm.quantity}
@@ -389,7 +389,7 @@ export function LineItemsTable({
                   />
                 </div>
                 <div className="flex flex-1 flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
+                  <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Unit Cost ($)</label>
                   <DecimalInput
                     value={editForm.unitCost}
                     onCommit={(n) => setEditForm((f) => ({ ...f, unitCost: n }))}
@@ -399,10 +399,10 @@ export function LineItemsTable({
               </div>
               {showProject && projects.length > 0 && (
                 editingItemIsMaintPart ? (
-                  <p className="text-xs text-slate-400">Maintenance parts can&apos;t be assigned to a project.</p>
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">Maintenance parts can&apos;t be assigned to a project.</p>
                 ) : (
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-slate-600">Project</label>
+                    <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Project</label>
                     <Select
                       value={editForm.projectId}
                       onValueChange={(val) => setEditForm((f) => ({ ...f, projectId: val }))}
@@ -420,7 +420,7 @@ export function LineItemsTable({
                   </div>
                 )
               )}
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   className="h-4 w-4 cursor-pointer accent-brand-600"
@@ -445,7 +445,7 @@ export function LineItemsTable({
             </DialogHeader>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Product / Part</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Product / Part</label>
                 <Popover open={productComboOpen} onOpenChange={setProductComboOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -489,7 +489,7 @@ export function LineItemsTable({
                                 <div className="min-w-0">
                                   <p className="truncate text-sm font-medium">{c.name}</p>
                                   {c.partNumber && (
-                                    <p className="font-mono text-xs text-slate-400">{c.partNumber}</p>
+                                    <p className="font-mono text-xs text-slate-400 dark:text-neutral-500">{c.partNumber}</p>
                                   )}
                                 </div>
                               </CommandItem>
@@ -503,7 +503,7 @@ export function LineItemsTable({
               </div>
               <div className="flex gap-3">
                 <div className="flex flex-1 flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Quantity</label>
+                  <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Quantity</label>
                   <DecimalInput
                     min={0.001}
                     value={addForm.quantity}
@@ -512,7 +512,7 @@ export function LineItemsTable({
                   />
                 </div>
                 <div className="flex flex-1 flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
+                  <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Unit Cost ($)</label>
                   <DecimalInput
                     value={addForm.unitCost}
                     onCommit={(n) => setAddForm((f) => ({ ...f, unitCost: n }))}
@@ -522,10 +522,10 @@ export function LineItemsTable({
               </div>
               {showProject && projects.length > 0 && (
                 selectedCatalogItem?.isMaintPart ? (
-                  <p className="text-xs text-slate-400">Maintenance parts can&apos;t be assigned to a project.</p>
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">Maintenance parts can&apos;t be assigned to a project.</p>
                 ) : (
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-slate-600">Project</label>
+                    <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Project</label>
                     <Select
                       value={addForm.projectId}
                       onValueChange={(val) => setAddForm((f) => ({ ...f, projectId: val }))}
@@ -543,7 +543,7 @@ export function LineItemsTable({
                   </div>
                 )
               )}
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   className="h-4 w-4 cursor-pointer accent-brand-600"

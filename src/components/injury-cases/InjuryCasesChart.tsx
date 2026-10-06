@@ -60,7 +60,7 @@ export function InjuryCasesChart() {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="space-y-1 rounded-lg border bg-white p-3 text-sm shadow-lg">
+      <div className="space-y-1 rounded-lg border bg-card p-3 text-sm shadow-lg">
         <p className="font-semibold">{label}</p>
         {payload.map((entry: { name: string; value: number }) => (
           <div key={entry.name} className="flex items-center gap-2">
@@ -83,28 +83,28 @@ export function InjuryCasesChart() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="rounded-lg border bg-red-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-red-600">Injuries</p>
-          <p className="mt-1 text-2xl font-bold text-red-700">{injuries.length}</p>
-          <p className="mt-0.5 text-xs text-red-500">{recordable} recordable · {daysAway} days away</p>
+        <div className="rounded-lg border bg-red-50 dark:bg-red-950/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-red-600 dark:text-red-400">Injuries</p>
+          <p className="mt-1 text-2xl font-bold text-red-700 dark:text-red-400">{injuries.length}</p>
+          <p className="mt-0.5 text-xs text-red-500 dark:text-red-400">{recordable} recordable · {daysAway} days away</p>
         </div>
-        <div className="rounded-lg border bg-purple-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-purple-600">Illnesses</p>
-          <p className="mt-1 text-2xl font-bold text-purple-700">{illnesses.length}</p>
+        <div className="rounded-lg border bg-purple-50 dark:bg-purple-950/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-400">Illnesses</p>
+          <p className="mt-1 text-2xl font-bold text-purple-700 dark:text-purple-400">{illnesses.length}</p>
         </div>
-        <div className="rounded-lg border bg-sky-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-sky-600">Near misses</p>
-          <p className="mt-1 text-2xl font-bold text-sky-700">{nearMisses.length}</p>
-          <p className="mt-0.5 text-xs text-sky-500">Reporting these is a good sign</p>
+        <div className="rounded-lg border bg-sky-50 dark:bg-sky-950/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-sky-600 dark:text-sky-400">Near misses</p>
+          <p className="mt-1 text-2xl font-bold text-sky-700 dark:text-sky-400">{nearMisses.length}</p>
+          <p className="mt-0.5 text-xs text-sky-500 dark:text-sky-400">Reporting these is a good sign</p>
         </div>
-        <div className="rounded-lg border bg-white p-4">
+        <div className="rounded-lg border bg-card p-4">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Company-paid cost</p>
           <p className="mt-1 text-2xl font-bold">{formatCurrency(totalCost)}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(selfPayCost)} on self-pay cases</p>
         </div>
       </div>
 
-      <div className="rounded-lg border bg-white p-4">
+      <div className="rounded-lg border bg-card p-4">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold">By month — {year}</h3>
           <div className="flex gap-1">

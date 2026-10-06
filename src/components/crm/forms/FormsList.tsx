@@ -131,8 +131,8 @@ function FormRowMenu({ form }: { form: CRMForm }) {
     <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex h-7 w-7 items-center justify-center rounded hover:bg-slate-100">
-          <MoreHorizontal className="h-4 w-4 text-slate-400" />
+        <button className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted">
+          <MoreHorizontal className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -155,7 +155,7 @@ function FormRowMenu({ form }: { form: CRMForm }) {
               {toggleStatus === "published" ? "Publish" : "Unpublish"}
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-red-600"
+              className="text-red-600 dark:text-red-400"
               onSelect={async () => {
                 if (await confirm({ title: `Delete "${form.name}"?`, confirmLabel: "Delete Form", destructive: true })) {
                   deleteForm.mutate(form.id, { onError: () => toast.error("Failed to delete form") });
@@ -249,21 +249,21 @@ export function FormsList() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Total Forms",  value: stats.total,     color: "text-slate-900" },
-          { label: "Published",    value: stats.published,  color: "text-green-600" },
-          { label: "Draft",        value: stats.draft,      color: "text-yellow-600" },
-          { label: "Responses",    value: stats.responses,  color: "text-sky-600" },
+          { label: "Total Forms",  value: stats.total,     color: "text-slate-900 dark:text-neutral-100" },
+          { label: "Published",    value: stats.published,  color: "text-green-600 dark:text-green-400" },
+          { label: "Draft",        value: stats.draft,      color: "text-yellow-600 dark:text-yellow-400" },
+          { label: "Responses",    value: stats.responses,  color: "text-sky-600 dark:text-sky-400" },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+          <div key={s.label} className="rounded-lg border bg-card p-4 shadow-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{s.label}</p>
             <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* White column filter bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
-        <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
+      <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
+        <span className="shrink-0 text-xs font-medium text-muted-foreground mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {COL_FILTERS.map(({ key, label }) => (
             <button
@@ -275,8 +275,8 @@ export function FormsList() {
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
                 activeColFilter === key
-                  ? "bg-brand-100 text-brand-700 font-medium"
-                  : "hover:bg-slate-100 text-slate-600"
+                  ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+                  : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
             >
               {label}
@@ -305,7 +305,7 @@ export function FormsList() {
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveColFilter(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setActiveColFilter(null); setColFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>
@@ -346,14 +346,14 @@ export function FormsList() {
                 onClick={() => setQuickFilter(key)}
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
-                  quickFilter === key ? "bg-white text-slate-800" : "text-slate-300 hover:text-white"
+                  quickFilter === key ? "bg-card text-slate-800 dark:text-neutral-100" : "text-slate-300 hover:text-white"
                 )}
               >
                 {label}
                 {quickCounts[key] > 0 && (
                   <span className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                    quickFilter === key ? "bg-slate-200 text-slate-700" : "bg-white/20 text-white"
+                    quickFilter === key ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-white/20 text-white"
                   )}>
                     {quickCounts[key]}
                   </span>
@@ -373,10 +373,10 @@ export function FormsList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Form Name</th>
               <th className="px-4 py-3">Date Created</th>
@@ -396,7 +396,7 @@ export function FormsList() {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={6} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {forms.length === 0 ? "No forms yet — click Add Form to get started" : "No forms match your filter"}
                 </td>
               </tr>
@@ -404,26 +404,26 @@ export function FormsList() {
               filtered.map((form) => (
                 <tr
                   key={form.id}
-                  className="border-b hover:bg-slate-50 cursor-pointer"
+                  className="border-b hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
                   onClick={() => router.push(`/crm/communication/forms/${form.id}`)}
                 >
                   <td className="px-4 py-3">
                     <span className={cn(
                       "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide border",
                       form.status === "published"
-                        ? "bg-green-50 text-green-700 border-green-300"
-                        : "bg-slate-100 text-slate-500 border-slate-300"
+                        ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700"
+                        : "bg-muted text-muted-foreground border-slate-300 dark:border-neutral-700"
                     )}>
                       {form.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-brand-600 hover:underline">
+                  <td className="px-4 py-3 font-medium text-brand-600 dark:text-brand-400 hover:underline">
                     {form.name}
                   </td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{fmtDate(form.createdAt)}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{fmtDate(form.updatedAt)}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(form.createdAt)}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(form.updatedAt)}</td>
                   <td className="px-4 py-3 text-right">
-                    <span className={cn("font-medium tabular-nums", form.responseCount > 0 ? "text-brand-600" : "text-slate-400")}>
+                    <span className={cn("font-medium tabular-nums", form.responseCount > 0 ? "text-brand-600 dark:text-brand-400" : "text-slate-400 dark:text-neutral-500")}>
                       {form.responseCount}
                     </span>
                   </td>

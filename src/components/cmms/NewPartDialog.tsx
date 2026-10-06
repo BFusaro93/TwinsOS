@@ -194,13 +194,13 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
         <div className="max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto px-1">
           <form id="new-part-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Basic Info */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Basic Info
             </p>
 
             <div className="grid gap-1.5">
               <Label htmlFor="part-name">
-                Name <span className="text-red-500">*</span>
+                Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="part-name"
@@ -213,7 +213,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="part-number">
-                  Part Number <span className="text-red-500">*</span>
+                  Part Number <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Input
                   id="part-number"
@@ -300,7 +300,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
             </div>
 
             {/* Inventory */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Inventory
             </p>
 
@@ -371,7 +371,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
             </div>
 
             {/* Vendor */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Vendor
             </p>
 
@@ -387,7 +387,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
             </div>
 
             {/* Details */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Details
             </p>
 
@@ -403,7 +403,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
             </div>
 
             {/* Sub-Part Relationship */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Interchangeability
             </p>
 
@@ -419,13 +419,13 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
                       {p.partNumber && (
-                        <span className="ml-1.5 text-xs text-slate-400">#{p.partNumber}</span>
+                        <span className="ml-1.5 text-xs text-slate-400 dark:text-neutral-500">#{p.partNumber}</span>
                       )}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
                 Link this part as a generic or interchangeable alternative to an OEM part.
               </p>
             </div>

@@ -153,10 +153,10 @@ export function ProjectListPage() {
           onVisibleKeysChange={setVisibleKeys}
         />
       </div>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <SortableTableHead label="Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <SortableTableHead label="Customer" sortKey="customerName" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("status") && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -178,7 +178,7 @@ export function ProjectListPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No projects found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No projects found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -186,18 +186,18 @@ export function ProjectListPage() {
             {!isLoading && sorted.map((project) => (
               <TableRow
                 key={project.id}
-                className="cursor-pointer hover:bg-slate-50"
+                className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => setSheetProjectId(project.id)}
               >
                 <TableCell className="font-medium">
                   <div className="flex items-center gap-2">
                     {project.name}
                     {project.isArchived && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Archived</span>
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="text-slate-600">{project.customerName}</TableCell>
+                <TableCell className="text-slate-600 dark:text-neutral-400">{project.customerName}</TableCell>
                 {col("status") && (
                   <TableCell>
                     <StatusBadge
@@ -207,10 +207,10 @@ export function ProjectListPage() {
                   </TableCell>
                 )}
                 {col("startDate") && (
-                  <TableCell className="text-slate-500">{formatDate(project.startDate)}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(project.startDate)}</TableCell>
                 )}
                 {col("endDate") && (
-                  <TableCell className="text-slate-500">{project.endDate ? formatDate(project.endDate) : "TBD"}</TableCell>
+                  <TableCell className="text-muted-foreground">{project.endDate ? formatDate(project.endDate) : "TBD"}</TableCell>
                 )}
                 {col("contractPrice") && (
                   <TableCell className="text-right font-medium">
@@ -231,11 +231,11 @@ export function ProjectListPage() {
         title="Projects"
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center rounded-md border bg-white shadow-sm">
+            <div className="flex items-center rounded-md border bg-card shadow-sm">
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")}
+                className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-muted font-semibold")}
                 onClick={() => setViewMode("list")}
               >
                 <Minimize2 className="mr-1.5 h-3.5 w-3.5" />List
@@ -243,7 +243,7 @@ export function ProjectListPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")}
+                className={cn("rounded-l-none px-3", viewMode === "table" && "bg-muted font-semibold")}
                 onClick={() => setViewMode("table")}
               >
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table

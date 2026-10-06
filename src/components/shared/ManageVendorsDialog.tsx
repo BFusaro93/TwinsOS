@@ -103,14 +103,14 @@ export function ManageVendorsDialog({
               {allAssociated.map((v) => (
                 <div
                   key={v.vendorId}
-                  className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2"
+                  className="flex items-center justify-between rounded-md border border-border px-3 py-2"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-700">{v.vendorName}</span>
+                    <span className="text-sm text-slate-700 dark:text-neutral-300">{v.vendorName}</span>
                     {v.isPrimary && (
                       <Badge
                         variant="outline"
-                        className="border-brand-200 bg-brand-50 text-brand-700 text-xs"
+                        className="border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 text-xs"
                       >
                         Primary
                       </Badge>
@@ -119,7 +119,7 @@ export function ManageVendorsDialog({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-slate-400 hover:text-red-500"
+                    className="h-7 w-7 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                     onClick={() => handleRemove(v.vendorId)}
                   >
                     <X className="h-3.5 w-3.5" />
@@ -128,13 +128,13 @@ export function ManageVendorsDialog({
               ))}
             </div>
           ) : (
-            <p className="py-4 text-center text-sm text-slate-400">No vendors assigned</p>
+            <p className="py-4 text-center text-sm text-slate-400 dark:text-neutral-500">No vendors assigned</p>
           )}
 
           {/* Add vendor */}
           {availableVendors.length > 0 && (
             <div>
-              <p className="mb-1.5 text-xs font-medium text-slate-500">Add Vendor</p>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Add Vendor</p>
               <VendorCombobox
                 vendors={availableVendors}
                 value=""

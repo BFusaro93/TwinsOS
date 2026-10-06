@@ -175,11 +175,11 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
       <div className="fixed right-0 top-0 bottom-0 z-50 flex shadow-2xl max-w-[100vw]" style={{ width }}>
         {/* Drag handle + close */}
         <div
-          className={`flex w-8 flex-col items-center bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0 border-r border-slate-200 ${canResize ? "cursor-ew-resize" : ""}`}
+          className={`flex w-8 flex-col items-center bg-muted hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors flex-shrink-0 border-r border-border ${canResize ? "cursor-ew-resize" : ""}`}
           onMouseDown={canResize ? startDrag : undefined}
         >
           <button
-            className="mt-3 rounded p-1 text-slate-400 hover:bg-slate-300 hover:text-slate-700 transition-colors cursor-pointer"
+            className="mt-3 rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-slate-300 dark:hover:bg-neutral-600 hover:text-slate-700 dark:hover:text-neutral-300 transition-colors cursor-pointer"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={handleClose}
             title="Close"
@@ -188,12 +188,12 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
           </button>
           {canResize && (
             <div className="flex flex-1 items-center">
-              <GripVertical className="h-4 w-4 text-slate-300" />
+              <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
             </div>
           )}
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden bg-white">
+        <div className="flex flex-1 flex-col overflow-hidden bg-card">
           {invoiceId ? (
             // Full InvoiceDetail — same UI as opening any existing invoice.
             // onSaved marks the draft as kept; onDiscard soft-deletes it if closed unsaved.
@@ -206,16 +206,16 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
           ) : (
             /* Client picker — shown when no defaultClientId */
             <div className="flex flex-col h-full">
-              <div className="flex items-center gap-3 border-b bg-slate-50 px-6 py-4">
+              <div className="flex items-center gap-3 border-b bg-slate-50 dark:bg-muted/40 px-6 py-4">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-800">New Invoice</h2>
-                  <p className="text-xs text-slate-400">Select a client to get started</p>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-neutral-100">New Invoice</h2>
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">Select a client to get started</p>
                 </div>
               </div>
 
               <div className="px-8 py-6 grid grid-cols-2 gap-5">
-                <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bill To</p>
+                <div className="rounded-lg border bg-card p-4 shadow-sm space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Bill To</p>
                   <ClientCombobox
                     value=""
                     onValueChange={handleSelectClient}
@@ -224,12 +224,12 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
                     disabled={creating}
                   />
                   {creating && (
-                    <p className="text-xs text-slate-400 animate-pulse">Creating invoice…</p>
+                    <p className="text-xs text-slate-400 dark:text-neutral-500 animate-pulse">Creating invoice…</p>
                   )}
                 </div>
 
-                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 flex items-center justify-center">
-                  <p className="text-xs text-slate-300">Invoice details will appear after selecting a client</p>
+                <div className="rounded-lg border border-dashed border-border bg-slate-50 dark:bg-muted/40 p-4 flex items-center justify-center">
+                  <p className="text-xs text-slate-300 dark:text-neutral-500">Invoice details will appear after selecting a client</p>
                 </div>
               </div>
             </div>

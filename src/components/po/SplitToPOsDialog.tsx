@@ -234,7 +234,7 @@ export function SplitToPOsDialog({
         <div className="max-h-[60dvh] sm:max-h-[60vh] overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-xs text-slate-500">
+              <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="pb-2 pr-3 font-medium">Item</th>
                 <th className="w-16 pb-2 pr-3 font-medium text-right">Qty</th>
                 <th className="w-24 pb-2 pr-3 font-medium text-right">Unit Cost</th>
@@ -245,11 +245,11 @@ export function SplitToPOsDialog({
               {assignments.map((a) => (
                 <tr key={a.lineItem.id} className="border-b">
                   <td className="py-2 pr-3 align-top">
-                    <p className="font-medium text-slate-900">
+                    <p className="font-medium text-slate-900 dark:text-neutral-100">
                       {a.lineItem.productItemName}
                     </p>
                     {a.lineItem.partNumber && (
-                      <p className="text-xs text-slate-400">#{a.lineItem.partNumber}</p>
+                      <p className="text-xs text-slate-400 dark:text-neutral-500">#{a.lineItem.partNumber}</p>
                     )}
                   </td>
                   <td className="py-2 pr-3 text-right align-top tabular-nums">
@@ -273,8 +273,8 @@ export function SplitToPOsDialog({
         </div>
 
         {/* PO preview */}
-        <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-          <p className="mb-2 text-xs font-semibold text-slate-500">
+        <div className="rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-3">
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">
             Will create {poCount} Purchase Order{poCount !== 1 ? "s" : ""}:
           </p>
           <div className="flex flex-wrap gap-2">
@@ -290,7 +290,7 @@ export function SplitToPOsDialog({
             ))}
           </div>
           {hasUnassigned && (
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600">
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
               <AlertCircle className="h-3.5 w-3.5" />
               Unassigned items will create a PO with no vendor — assign vendors to avoid this.
             </div>

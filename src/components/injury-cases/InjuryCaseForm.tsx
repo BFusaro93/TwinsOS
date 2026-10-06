@@ -40,7 +40,7 @@ function YesNo({ value, onChange }: { value: boolean | null; onChange: (v: boole
           onClick={() => onChange(value === v ? null : v)}
           className={cn(
             "px-4 py-1.5 text-sm transition-colors",
-            value === v ? "bg-brand-500 text-white" : "bg-white text-slate-600 hover:bg-slate-50",
+            value === v ? "bg-brand-500 text-white" : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40",
           )}
         >
           {label}
@@ -53,7 +53,7 @@ function YesNo({ value, onChange }: { value: boolean | null; onChange: (v: boole
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset className="space-y-4 rounded-lg border p-4">
-      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</legend>
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</legend>
       {children}
     </fieldset>
   );
@@ -150,7 +150,7 @@ export function InjuryCaseForm({ initial, office = false, submitLabel, pendingLa
               onClick={() => setIncidentType(value)}
               className={cn(
                 "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
-                incidentType === value ? "border-brand-500 bg-brand-50 text-brand-700" : "bg-white text-slate-600 hover:bg-slate-50",
+                incidentType === value ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40",
               )}
             >
               {label}

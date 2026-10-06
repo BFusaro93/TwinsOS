@@ -69,14 +69,14 @@ import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
 // ── constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<InvoiceStatus, string> = {
-  draft:   "bg-slate-100 text-slate-600",
-  printed: "bg-indigo-100 text-indigo-700",
-  sent:    "bg-blue-100 text-blue-700",
-  viewed:  "bg-purple-100 text-purple-700",
-  partial: "bg-yellow-100 text-yellow-700",
-  paid:    "bg-green-100 text-green-700",
-  overdue: "bg-red-100 text-red-600",
-  void:    "bg-slate-200 text-slate-500",
+  draft:   "bg-muted text-slate-600 dark:text-neutral-400",
+  printed: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400",
+  sent:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  viewed:  "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
+  partial: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  paid:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  overdue: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  void:    "bg-slate-200 dark:bg-neutral-700 text-muted-foreground",
 };
 
 const STATUSES: InvoiceStatus[] = ["draft","printed","sent","viewed","partial","paid","overdue","void"];
@@ -144,7 +144,7 @@ function InlineEdit({
   // "Save Invoice" and every other locked-state control on this page.
   if (disabled) {
     return (
-      <span className={cn("block px-1 py-0.5 text-left", !value && "text-slate-400 italic", className)}>
+      <span className={cn("block px-1 py-0.5 text-left", !value && "text-slate-400 dark:text-neutral-500 italic", className)}>
         {type === "date" ? (value ? fmtDate(value) : (placeholder ?? "—")) : (value || (placeholder ?? "—"))}
       </span>
     );
@@ -156,8 +156,8 @@ function InlineEdit({
         type="button"
         onClick={() => setEditing(true)}
         className={cn(
-          "rounded px-1 py-0.5 text-left hover:bg-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-400 cursor-text",
-          !value && "text-slate-400 italic",
+          "rounded px-1 py-0.5 text-left hover:bg-muted focus:outline-none focus:ring-1 focus:ring-brand-400 cursor-text",
+          !value && "text-slate-400 dark:text-neutral-500 italic",
           className
         )}
       >
@@ -179,7 +179,7 @@ function InlineEdit({
         if (e.key === "Escape") { setEditing(false); setLocal(value); }
       }}
       className={cn(
-        "rounded border border-brand-400 bg-white px-1 py-0.5 text-xs focus:outline-none",
+        "rounded border border-brand-400 bg-card px-1 py-0.5 text-xs focus:outline-none",
         className
       )}
     />
@@ -299,10 +299,10 @@ function LineItemRow({
   }
 
   return (
-    <tr className="group border-b text-xs hover:bg-slate-50">
+    <tr className="group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
       {/* Service name */}
-      <td className="w-36 px-3 py-2 font-medium text-slate-700 align-middle">
-        {row.name ?? <span className="italic text-slate-300">—</span>}
+      <td className="w-36 px-3 py-2 font-medium text-slate-700 dark:text-neutral-300 align-middle">
+        {row.name ?? <span className="italic text-slate-300 dark:text-neutral-500">—</span>}
       </td>
       {/* Description */}
       <td className="px-3 py-2">
@@ -312,7 +312,7 @@ function LineItemRow({
           onBlur={save}
           placeholder="Description…"
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 dark:text-neutral-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Service date */}
@@ -327,7 +327,7 @@ function LineItemRow({
           }}
           onBlur={save}
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-500 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Taxable */}
@@ -340,8 +340,8 @@ function LineItemRow({
           className={cn(
             "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
             row.isTaxable
-              ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-              : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+              ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800/50"
+              : "bg-muted text-slate-400 dark:text-neutral-500 hover:bg-slate-200 dark:hover:bg-neutral-700"
           )}
         >
           {row.isTaxable ? "Tax" : "Non"}
@@ -362,7 +362,7 @@ function LineItemRow({
           }}
           onBlur={save}
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 dark:text-neutral-400 placeholder-slate-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Men */}
@@ -379,7 +379,7 @@ function LineItemRow({
           }}
           onBlur={save}
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 dark:text-neutral-400 placeholder-slate-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Qty */}
@@ -395,7 +395,7 @@ function LineItemRow({
           }}
           onBlur={save}
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Rate */}
@@ -420,18 +420,18 @@ function LineItemRow({
             saveRow(updated);
           }}
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Total */}
       <td className="w-24 px-2 py-2 text-right tabular-nums align-middle">
         {row.discountCents > 0 ? (
           <div className="flex flex-col items-end leading-tight">
-            <span className="text-[10px] text-slate-300 line-through">{formatCurrency(row.totalCents)}</span>
-            <span className="font-medium text-slate-700">{formatCurrency(row.totalCents - row.discountCents)}</span>
+            <span className="text-[10px] text-slate-300 dark:text-neutral-500 line-through">{formatCurrency(row.totalCents)}</span>
+            <span className="font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(row.totalCents - row.discountCents)}</span>
           </div>
         ) : (
-          <span className="font-medium text-slate-700">{formatCurrency(row.totalCents)}</span>
+          <span className="font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(row.totalCents)}</span>
         )}
       </td>
       {/* Discount / Delete / save indicator */}
@@ -448,21 +448,21 @@ function LineItemRow({
             disabled={locked}
           />
           {removing ? (
-            <span className="text-[10px] text-slate-400">…</span>
+            <span className="text-[10px] text-slate-400 dark:text-neutral-500">…</span>
           ) : (
             <button
               type="button"
               onClick={handleDelete}
               disabled={locked}
-              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+              className="text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
-        {isPending && !removing && <span className="text-[10px] text-slate-400">…</span>}
+        {isPending && !removing && <span className="text-[10px] text-slate-400 dark:text-neutral-500">…</span>}
         {dirty && !isPending && !locked && (
-          <button type="button" onClick={save} className="text-[10px] text-brand-500 hover:underline">save</button>
+          <button type="button" onClick={save} className="text-[10px] text-brand-500 dark:text-brand-400 hover:underline">save</button>
         )}
       </td>
     </tr>
@@ -522,11 +522,11 @@ function RecordPaymentDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Amount</Label>
             <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 dark:text-neutral-500">$</span>
               <Input value={amount} inputMode="decimal" onChange={(e) => setAmount(e.target.value)} className="pl-6" />
             </div>
             {overageCents > 0 && (
-              <p className={cn("text-xs", isWriteOff ? "text-red-600" : "text-amber-600")}>
+              <p className={cn("text-xs", isWriteOff ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400")}>
                 {isWriteOff
                   ? `Exceeds the invoice balance of ${formatCurrency(balanceCents)}.`
                   : `${formatCurrency(appliedCents)} will be applied to this invoice; ${formatCurrency(overageCents)} stays as unused credit on the client's account.`}
@@ -573,11 +573,11 @@ function PaymentDetailDialog({ payment, open, onOpenChange }: {
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Payment Detail</DialogTitle></DialogHeader>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm py-2">
-          <dt className="text-slate-400">Amount</dt><dd className="font-semibold text-green-600">{formatCurrency(payment.amountCents)}</dd>
-          <dt className="text-slate-400">Date</dt><dd>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</dd>
-          <dt className="text-slate-400">Method</dt><dd className="capitalize">{payment.method}</dd>
-          <dt className="text-slate-400">Reference</dt><dd>{payment.reference ?? "—"}</dd>
-          {payment.memo && <><dt className="text-slate-400">Memo</dt><dd>{payment.memo}</dd></>}
+          <dt className="text-slate-400 dark:text-neutral-500">Amount</dt><dd className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(payment.amountCents)}</dd>
+          <dt className="text-slate-400 dark:text-neutral-500">Date</dt><dd>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</dd>
+          <dt className="text-slate-400 dark:text-neutral-500">Method</dt><dd className="capitalize">{payment.method}</dd>
+          <dt className="text-slate-400 dark:text-neutral-500">Reference</dt><dd>{payment.reference ?? "—"}</dd>
+          {payment.memo && <><dt className="text-slate-400 dark:text-neutral-500">Memo</dt><dd>{payment.memo}</dd></>}
         </dl>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
@@ -700,7 +700,7 @@ export function InvoiceDetail({
     </div>
   );
   if (!invoice) return (
-    <div className="p-8 text-sm text-slate-500">
+    <div className="p-8 text-sm text-muted-foreground">
       {invoiceError ? `Error: ${(invoiceError as Error).message}` : "Invoice not found."}
     </div>
   );
@@ -922,31 +922,31 @@ export function InvoiceDetail({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Top action bar */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b bg-white px-4 py-3 shadow-sm md:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b bg-card px-4 py-3 shadow-sm md:px-8">
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <h1 className="text-base font-semibold text-slate-900">
+            <h1 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
               {invoice.invoiceNumber != null ? `Invoice #${invoice.invoiceNumber}` : "Draft Invoice"}
             </h1>
-            <p className="text-xs text-slate-400">{invoice.clientName}</p>
+            <p className="text-xs text-slate-400 dark:text-neutral-500">{invoice.clientName}</p>
           </div>
           <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
             {getDisplayInvoiceStatus(invoice)}
           </Badge>
           {invoice.invoiceNumber == null && (
-            <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-700">
+            <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
               Unsaved — click Save to assign invoice #
             </span>
           )}
           {invoice.locked && (
-            <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+            <span className="flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
               <Lock className="h-3 w-3" /> Locked
             </span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {onDiscard && invoice.invoiceNumber == null && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-red-600"
+            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400"
               onClick={handleDiscard}>
               Discard
             </Button>
@@ -955,30 +955,30 @@ export function InvoiceDetail({
             onClick={handleToggleLock}
             title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
             {invoice.locked
-              ? <><Unlock className="mr-1 h-3.5 w-3.5 text-amber-500" /> Unlock</>
-              : <><Lock className="mr-1 h-3.5 w-3.5 text-slate-400" /> Lock</>
+              ? <><Unlock className="mr-1 h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Unlock</>
+              : <><Lock className="mr-1 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" /> Lock</>
             }
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setPaymentOpen(true)}
             disabled={invoice.status === "void" || invoice.balanceCents <= 0}>
-            <DollarSign className="mr-1 h-3.5 w-3.5 text-green-500" /> Enter Payment
+            <DollarSign className="mr-1 h-3.5 w-3.5 text-green-500 dark:text-green-400" /> Enter Payment
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setChargeCardOpen(true)}
             disabled={invoice.status === "void" || invoice.balanceCents <= 0 || !cardPaymentsReady}
             title={cardPaymentsReady ? undefined : "Connect your Stripe account in Settings > Accounting to accept card payments"}>
-            <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500" /> Collect Payment
+            <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500 dark:text-brand-400" /> Collect Payment
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handlePrint}>
-            <Printer className="mr-1 h-3.5 w-3.5 text-slate-500" /> Print
+            <Printer className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Print
           </Button>
           {can("acct_send_invoices") && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => setEmailDialogOpen(true)}
               disabled={invoice.status === "void"}>
-              <Mail className="mr-1 h-3.5 w-3.5 text-blue-500" /> Email
+              <Mail className="mr-1 h-3.5 w-3.5 text-blue-500 dark:text-blue-400" /> Email
             </Button>
           )}
           <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving || invoice.locked}>
@@ -987,12 +987,12 @@ export function InvoiceDetail({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" className="h-8 w-8">
-                <MoreVertical className="h-3.5 w-3.5 text-slate-500" />
+                <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={handleDownloadPDF}>
-                <Printer className="mr-2 h-3.5 w-3.5 text-slate-500" /> Download PDF
+                <Printer className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Download PDF
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {invoice.status !== "void" && (
@@ -1004,12 +1004,12 @@ export function InvoiceDetail({
                     setConfirmVoidOpen(true);
                   }}
                 >
-                  <Ban className="mr-2 h-3.5 w-3.5 text-slate-500" /> Void Invoice
+                  <Ban className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Void Invoice
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-red-600 focus:text-red-600"
+                className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                 disabled={voidBlocked !== null}
                 title={voidBlocked !== null ? "Invoices with payments applied can't be deleted — refund or unapply the payments first" : undefined}
                 onSelect={() => setConfirmDeleteOpen(true)}
@@ -1027,13 +1027,13 @@ export function InvoiceDetail({
           <DialogHeader>
             <DialogTitle>Void Invoice?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             {invoice.invoiceNumber != null
               ? `Invoice #${invoice.invoiceNumber} will be marked void and its balance removed from the client's account.`
               : "This draft invoice will be marked void."}
             {" "}The record stays intact for your audit trail.
             {voidBlocked && (
-              <span className="mt-2 block font-medium text-red-600">{voidBlocked}</span>
+              <span className="mt-2 block font-medium text-red-600 dark:text-red-400">{voidBlocked}</span>
             )}
           </p>
           <DialogFooter>
@@ -1051,7 +1051,7 @@ export function InvoiceDetail({
           <DialogHeader>
             <DialogTitle>Delete Invoice?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             {invoice.invoiceNumber != null
               ? `This will delete Invoice #${invoice.invoiceNumber}.`
               : "This will delete this draft invoice."}
@@ -1066,7 +1066,7 @@ export function InvoiceDetail({
       </Dialog>
 
       {/* Tabs */}
-      <div className="flex overflow-x-auto border-b bg-white px-4 md:px-8">
+      <div className="flex overflow-x-auto border-b bg-card px-4 md:px-8">
         {(["invoice", "photos", "audit"] as const).map((tab) => (
           <button
             key={tab}
@@ -1074,8 +1074,8 @@ export function InvoiceDetail({
             className={cn(
               "shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-medium capitalize transition-colors",
               activeTab === tab
-                ? "border-brand-500 text-brand-700"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-brand-500 text-brand-700 dark:text-brand-400"
+                : "border-transparent text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
             )}
           >
             {tab === "audit" ? "Audit Trail" : tab === "photos" ? "Photos" : "Invoice"}
@@ -1084,15 +1084,15 @@ export function InvoiceDetail({
       </div>
 
       {activeTab === "photos" ? (
-        <div className="flex-1 overflow-auto bg-white px-4 py-5 md:px-8">
+        <div className="flex-1 overflow-auto bg-card px-4 py-5 md:px-8">
           <InvoicePhotosPanel invoiceId={invoice.id} canEdit={can("acct_add_modify_invoices") || can("acct_send_invoices")} />
         </div>
       ) : activeTab === "audit" ? (
-        <div className="flex-1 overflow-auto bg-white">
+        <div className="flex-1 overflow-auto bg-card">
           <AuditTrailTab recordType="invoice" recordId={invoice.id} />
         </div>
       ) : (
-        <div className="flex-1 overflow-auto bg-slate-50">
+        <div className="flex-1 overflow-auto bg-slate-50 dark:bg-muted/40">
           {/* Green title bar */}
           <div className="bg-brand-500 px-4 py-3 md:px-8 flex items-center gap-3">
             <span className="text-white text-sm font-semibold">
@@ -1133,20 +1133,20 @@ export function InvoiceDetail({
           {/* Header — two-column boxed layout */}
           <div className="px-4 py-5 md:px-8 grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Left: Bill To + Service Address */}
-            <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bill To</p>
+            <div className="rounded-lg border bg-card p-4 shadow-sm space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Bill To</p>
               {invoice.clientName && (
-                <p className="font-semibold text-slate-800 text-sm">{invoice.clientName}</p>
+                <p className="font-semibold text-slate-800 dark:text-neutral-100 text-sm">{invoice.clientName}</p>
               )}
               {displayAddress && (
-                <p className="text-xs text-slate-500 whitespace-pre-line leading-relaxed">{displayAddress}</p>
+                <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">{displayAddress}</p>
               )}
               <div className="pt-1 border-t">
-                <p className="text-[10px] font-medium text-slate-400 mb-1">Service Address Override</p>
+                <p className="text-[10px] font-medium text-slate-400 dark:text-neutral-500 mb-1">Service Address Override</p>
                 <InlineEdit
                   value={invoice.serviceAddress ?? ""}
                   onSave={(v) => updateHeader({ id: invoice.id, patch: { service_address: v || null } })}
-                  className="text-xs text-slate-600 w-full"
+                  className="text-xs text-slate-600 dark:text-neutral-400 w-full"
                   placeholder="Click to set a different service address…"
                   disabled={invoice.locked}
                 />
@@ -1154,13 +1154,13 @@ export function InvoiceDetail({
             </div>
 
             {/* Right: Invoice Details */}
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">Invoice Details</p>
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-3">Invoice Details</p>
               <table className="w-full text-xs">
                 <tbody>
-                  <tr className="border-b border-slate-50">
-                    <td className="py-2 pr-4 text-slate-400 w-32 font-medium">Invoice #</td>
-                    <td className="py-2 text-slate-700">
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 w-32 font-medium">Invoice #</td>
+                    <td className="py-2 text-slate-700 dark:text-neutral-300">
                       <InlineEdit
                         value={invoiceNumber === "" ? (invoice.invoiceNumber != null ? String(invoice.invoiceNumber) : "") : String(invoiceNumber)}
                         onSave={(v) => setInvoiceNumber(Number(v) || invoice.invoiceNumber)}
@@ -1170,17 +1170,17 @@ export function InvoiceDetail({
                       />
                     </td>
                   </tr>
-                  <tr className="border-b border-slate-50">
-                    <td className="py-2 pr-4 text-slate-400 font-medium">Invoice Date</td>
-                    <td className="py-2 text-slate-700">
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Invoice Date</td>
+                    <td className="py-2 text-slate-700 dark:text-neutral-300">
                       <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
-                  <tr className="border-b border-slate-50">
-                    <td className="py-2 pr-4 text-slate-400 font-medium">Terms</td>
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Terms</td>
                     <td className="py-2">
                       <Select value={terms} onValueChange={handleTermsChange} disabled={invoice.locked}>
-                        <SelectTrigger className="h-7 text-xs w-40 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
+                        <SelectTrigger className="h-7 text-xs w-40 border border-border shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1191,14 +1191,14 @@ export function InvoiceDetail({
                       </Select>
                     </td>
                   </tr>
-                  <tr className="border-b border-slate-50">
-                    <td className="py-2 pr-4 text-slate-400 font-medium">Due Date</td>
-                    <td className="py-2 text-slate-700">
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Due Date</td>
+                    <td className="py-2 text-slate-700 dark:text-neutral-300">
                       <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2 pr-4 text-slate-400 font-medium">Tax Rate</td>
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Tax Rate</td>
                     <td className="py-2">
                       <div className="flex items-center gap-3">
                         <button
@@ -1212,11 +1212,11 @@ export function InvoiceDetail({
                           }}
                           className={cn(
                             "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed",
-                            hasTax ? "bg-amber-500" : "bg-slate-200"
+                            hasTax ? "bg-amber-500" : "bg-slate-200 dark:bg-neutral-700"
                           )}
                         >
                           <span className={cn(
-                            "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform",
+                            "inline-block h-3.5 w-3.5 transform rounded-full bg-card shadow transition-transform",
                             hasTax ? "translate-x-4" : "translate-x-0.5"
                           )} />
                         </button>
@@ -1234,22 +1234,22 @@ export function InvoiceDetail({
                               disabled={invoice.locked}
                               aria-label="Tax rate percent"
                             />
-                            <span className="text-slate-500 font-medium">%</span>
+                            <span className="text-muted-foreground font-medium">%</span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-xs">No tax</span>
+                          <span className="text-slate-400 dark:text-neutral-500 text-xs">No tax</span>
                         )}
                       </div>
                     </td>
                   </tr>
-                  <tr className="border-b border-slate-50">
-                    <td className="py-2 pr-4 text-slate-400 font-medium align-top">Discount</td>
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium align-top">Discount</td>
                     <td className="py-2">
                       {/* Wraps, and the saved-discount picker is capped to the
                           cell: side by side these two overflow the details card
                           on a narrow screen. */}
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-slate-500 font-medium">$</span>
+                        <span className="text-muted-foreground font-medium">$</span>
                         <Input
                           type="number" step="0.01" min="0"
                           value={discountStr}
@@ -1286,9 +1286,9 @@ export function InvoiceDetail({
                       </div>
                     </td>
                   </tr>
-                  <tr className="border-b border-slate-50">
-                    <td className="py-2 pr-4 text-slate-400 font-medium">PO #</td>
-                    <td className="py-2 text-slate-700">
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">PO #</td>
+                    <td className="py-2 text-slate-700 dark:text-neutral-300">
                       <InlineEdit
                         value={invoice.poNumber ?? ""}
                         onSave={(v) => updateHeader({ id: invoice.id, patch: { po_number: v || null } })}
@@ -1298,15 +1298,15 @@ export function InvoiceDetail({
                       />
                     </td>
                   </tr>
-                  <tr className="border-b border-slate-50">
-                    <td className="py-2 pr-4 text-slate-400 font-medium">Sales Rep</td>
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Sales Rep</td>
                     <td className="py-2">
                       <Select
                         value={invoice.salesRepId ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { sales_rep_id: v || null } })}
                         disabled={invoice.locked}
                       >
-                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
+                        <SelectTrigger className="h-7 text-xs w-44 border border-border shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Assign sales rep…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1325,14 +1325,14 @@ export function InvoiceDetail({
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2 pr-4 text-slate-400 font-medium">Payment Method</td>
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Payment Method</td>
                     <td className="py-2">
                       <Select
                         value={invoice.preferredPaymentMethod ?? invoice.clientDefaultPaymentMethod ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { preferred_payment_method: v || null } })}
                         disabled={invoice.locked}
                       >
-                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
+                        <SelectTrigger className="h-7 text-xs w-44 border border-border shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Select method…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1347,8 +1347,8 @@ export function InvoiceDetail({
           </div>
 
           {/* Notes — shown on the invoice PDF/email below the line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-white p-4 shadow-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Notes</p>
+          <div className="mx-8 mb-5 rounded-lg border bg-card p-4 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-2">Notes</p>
             <Textarea
               value={notesDraft}
               onChange={(e) => setNotesDraft(e.target.value)}
@@ -1363,7 +1363,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-x-auto">
+          <div className="mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-brand-500 text-white">
                 <tr>
@@ -1385,7 +1385,7 @@ export function InvoiceDetail({
                 ))}
                 {lineItems.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
+                    <td colSpan={10} className="py-8 text-center text-slate-400 dark:text-neutral-500 text-xs">
                       No line items yet — add one below
                     </td>
                   </tr>
@@ -1394,7 +1394,7 @@ export function InvoiceDetail({
             </table>
 
             {/* Add item + totals */}
-            <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50">
+            <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50 dark:bg-muted/40">
               <Popover
                 open={lineItemPickerOpen && !invoice.locked}
                 onOpenChange={(o) => {
@@ -1407,19 +1407,19 @@ export function InvoiceDetail({
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 text-xs" disabled={invoice.locked}>
                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Line Item
-                    <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
+                    <ChevronDown className="ml-1 h-3 w-3 text-slate-400 dark:text-neutral-500" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-72 p-0">
                   {/* Search input */}
                   <div className="flex items-center gap-2 border-b px-3 py-2">
-                    <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <Search className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
                     <input
                       ref={lineItemSearchRef}
                       value={lineItemSearch}
                       onChange={(e) => setLineItemSearch(e.target.value)}
                       placeholder="Search services…"
-                      className="flex-1 bg-transparent text-xs outline-none placeholder:text-slate-400"
+                      className="flex-1 bg-transparent text-xs outline-none placeholder:text-slate-400 dark:placeholder:text-neutral-500"
                     />
                   </div>
                   {/* Results */}
@@ -1432,7 +1432,7 @@ export function InvoiceDetail({
                       .map((svc) => (
                         <button
                           key={svc.id}
-                          className="flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-slate-50 text-left"
+                          className="flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-muted/40 text-left"
                           onClick={() => {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             addLineItem(svc.name, svc.name, svc.defaultRateCents ?? 0, (svc as any).isTaxable ?? false);
@@ -1440,14 +1440,14 @@ export function InvoiceDetail({
                             setLineItemSearch("");
                           }}
                         >
-                          <span className="font-medium text-slate-800">{svc.name}</span>
+                          <span className="font-medium text-slate-800 dark:text-neutral-100">{svc.name}</span>
                           <div className="flex items-center gap-2 ml-2 shrink-0">
                             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                             {(svc as any).isTaxable && (
-                              <span className="text-[10px] text-amber-600 bg-amber-50 rounded px-1">Tax</span>
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 rounded px-1">Tax</span>
                             )}
                             {(svc.defaultRateCents ?? 0) > 0 && (
-                              <span className="text-slate-400">${((svc.defaultRateCents ?? 0) / 100).toFixed(2)}</span>
+                              <span className="text-slate-400 dark:text-neutral-500">${((svc.defaultRateCents ?? 0) / 100).toFixed(2)}</span>
                             )}
                           </div>
                         </button>
@@ -1455,11 +1455,11 @@ export function InvoiceDetail({
                     {(savedServices ?? []).filter((svc) =>
                       !lineItemSearch || svc.name.toLowerCase().includes(lineItemSearch.toLowerCase())
                     ).length === 0 && lineItemSearch && (
-                      <p className="px-3 py-2 text-xs text-slate-400">No services match &ldquo;{lineItemSearch}&rdquo;</p>
+                      <p className="px-3 py-2 text-xs text-slate-400 dark:text-neutral-500">No services match &ldquo;{lineItemSearch}&rdquo;</p>
                     )}
                     <div className="border-t mt-1 pt-1">
                       <button
-                        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50"
+                        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
                         onClick={() => {
                           addLineItem(undefined, "");
                           setLineItemPickerOpen(false);
@@ -1476,19 +1476,19 @@ export function InvoiceDetail({
               {/* Totals */}
               <div className="text-xs text-right space-y-1 min-w-[220px]">
                 <div className="flex justify-between gap-8">
-                  <span className="text-slate-400">Subtotal</span>
+                  <span className="text-slate-400 dark:text-neutral-500">Subtotal</span>
                   <span className="tabular-nums font-medium">{formatCurrency(subtotal)}</span>
                 </div>
                 {appliedDiscountCents > 0 && (
                   <div className="flex justify-between gap-8">
-                    <span className="text-slate-400">Discount</span>
-                    <span className="tabular-nums text-red-500">−{formatCurrency(appliedDiscountCents)}</span>
+                    <span className="text-slate-400 dark:text-neutral-500">Discount</span>
+                    <span className="tabular-nums text-red-500 dark:text-red-400">−{formatCurrency(appliedDiscountCents)}</span>
                   </div>
                 )}
                 {hasTax && (
                   <div className="flex justify-between gap-8">
-                    <span className="text-amber-600">Tax ({(taxRateBps/100).toFixed(2)}%)</span>
-                    <span className="tabular-nums text-amber-600">{formatCurrency(previewTax)}</span>
+                    <span className="text-amber-600 dark:text-amber-400">Tax ({(taxRateBps/100).toFixed(2)}%)</span>
+                    <span className="tabular-nums text-amber-600 dark:text-amber-400">{formatCurrency(previewTax)}</span>
                   </div>
                 )}
                 <div className="flex justify-between gap-8 border-t pt-1 font-bold text-sm">
@@ -1497,11 +1497,11 @@ export function InvoiceDetail({
                 </div>
                 {invoice.amountPaidCents > 0 && (
                   <div className="flex justify-between gap-8">
-                    <span className="text-green-600">Paid</span>
-                    <span className="tabular-nums text-green-600">−{formatCurrency(invoice.amountPaidCents)}</span>
+                    <span className="text-green-600 dark:text-green-400">Paid</span>
+                    <span className="tabular-nums text-green-600 dark:text-green-400">−{formatCurrency(invoice.amountPaidCents)}</span>
                   </div>
                 )}
-                <div className={cn("flex justify-between gap-8 font-semibold", previewBalance > 0 ? "text-red-600" : "text-slate-500")}>
+                <div className={cn("flex justify-between gap-8 font-semibold", previewBalance > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
                   <span>Balance Due</span>
                   <span className="tabular-nums">{formatCurrency(previewBalance)}</span>
                 </div>
@@ -1515,9 +1515,9 @@ export function InvoiceDetail({
               invoiced its full amount and the client is asked for money they
               have already paid. */}
           {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
-            <div className="mx-8 mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+            <div className="mx-8 mb-5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-blue-900">
+                <div className="text-sm text-blue-900 dark:text-blue-200">
                   <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
                   {unappliedPayments.length === 1 ? "payment" : "payments"} on this client
                   {unappliedPayments.some((p) => p.isPrepayment) && " (including a deposit)"} —{" "}
@@ -1558,13 +1558,13 @@ export function InvoiceDetail({
 
           {/* Payment history */}
           {payments.length > 0 && (
-            <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-x-auto">
-              <div className="border-b bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className="mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
+              <div className="border-b bg-slate-50 dark:bg-muted/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Payment History
               </div>
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b text-left text-[10px] font-semibold uppercase text-slate-400 bg-slate-50">
+                  <tr className="border-b text-left text-[10px] font-semibold uppercase text-slate-400 dark:text-neutral-500 bg-slate-50 dark:bg-muted/40">
                     <th className="px-4 py-2">Date</th>
                     <th className="px-4 py-2">Method</th>
                     <th className="px-4 py-2">Reference</th>
@@ -1580,34 +1580,34 @@ export function InvoiceDetail({
                     const fullyRefunded = p.refundedAmountCents > 0 && p.refundedAmountCents >= p.amountCents;
                     const partiallyRefunded = p.refundedAmountCents > 0 && !fullyRefunded;
                     return (
-                      <tr key={p.id} className="border-b hover:bg-brand-50 cursor-pointer" onClick={() => setSelectedPayment(p)}>
-                        <td className="px-4 py-2.5 text-brand-700 hover:underline font-medium">{fmtDate(p.paymentDate)}</td>
+                      <tr key={p.id} className="border-b hover:bg-brand-50 dark:hover:bg-brand-900/30 cursor-pointer" onClick={() => setSelectedPayment(p)}>
+                        <td className="px-4 py-2.5 text-brand-700 dark:text-brand-400 hover:underline font-medium">{fmtDate(p.paymentDate)}</td>
                         <td className="px-4 py-2.5 capitalize">
                           {p.method}
-                          {p.isSplitAllocation && <span className="ml-1 text-slate-400">(split)</span>}
+                          {p.isSplitAllocation && <span className="ml-1 text-slate-400 dark:text-neutral-500">(split)</span>}
                           {/* Payment recorded against a parent client_id (e.g. one
                               check from a property manager covering several
                               sub-accounts) but allocated to THIS invoice, whose
                               own client is a child — make that origin explicit
                               rather than implying the child paid directly. */}
                           {p.clientId !== invoice.clientId && (
-                            <span className="ml-1 text-slate-400 normal-case">
+                            <span className="ml-1 text-slate-400 dark:text-neutral-500 normal-case">
                               (via {p.clientName ?? "parent account"})
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-slate-500">{p.reference ?? "—"}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{p.reference ?? "—"}</td>
                         <td className="px-4 py-2.5 text-right font-medium">
                           <div className="flex items-center justify-end gap-1.5">
                             {(fullyRefunded || partiallyRefunded) && (
                               <span className={cn(
                                 "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
-                                fullyRefunded ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                                fullyRefunded ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400" : "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
                               )}>
                                 {fullyRefunded ? "Refunded" : "Partially Refunded"}
                               </span>
                             )}
-                            <span className={cn(fullyRefunded ? "text-slate-400 line-through" : "text-green-600")}>
+                            <span className={cn(fullyRefunded ? "text-slate-400 dark:text-neutral-500 line-through" : "text-green-600 dark:text-green-400")}>
                               {formatCurrency(displayAmount)}
                             </span>
                           </div>

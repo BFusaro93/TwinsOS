@@ -126,12 +126,12 @@ export function ConditionListEditor({
         </Button>
       </div>
 
-      {conditions.length === 0 && <p className="text-sm text-slate-400 italic">{emptyLabel}</p>}
+      {conditions.length === 0 && <p className="text-sm text-slate-400 dark:text-neutral-500 italic">{emptyLabel}</p>}
 
       {conditions.map((c, i) => (
         <div key={i} className="flex items-start gap-2">
           {i > 0 && (
-            <span className="mt-2 text-[10px] font-semibold text-slate-400 w-8 shrink-0 text-center">{joinLabel}</span>
+            <span className="mt-2 text-[10px] font-semibold text-slate-400 dark:text-neutral-500 w-8 shrink-0 text-center">{joinLabel}</span>
           )}
           {i === 0 && <div className="w-8 shrink-0" />}
 
@@ -167,7 +167,7 @@ export function ConditionListEditor({
           </Select>
 
           {BOOLEAN_CONDITION_FIELDS.has(c.field) ? (
-            <p className="flex-1 min-w-0 self-center text-xs text-slate-400 italic">No value needed — selecting this field is the whole condition.</p>
+            <p className="flex-1 min-w-0 self-center text-xs text-slate-400 dark:text-neutral-500 italic">No value needed — selecting this field is the whole condition.</p>
           ) : c.operator !== "is_set" && c.operator !== "is_not_set" && (
             (() => {
               const cfg = multiSelectConfigFor(c.field);
@@ -198,7 +198,7 @@ export function ConditionListEditor({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600"
+            className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-400"
             onClick={() => removeCondition(i)}
           >
             <Trash2 className="h-3.5 w-3.5" />

@@ -30,7 +30,7 @@ export function PhotoModuleGuard({ children }: PhotoModuleGuardProps) {
   if (!currentUserLoaded) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
       </div>
     );
   }
@@ -38,7 +38,7 @@ export function PhotoModuleGuard({ children }: PhotoModuleGuardProps) {
   if (!canAccess) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-slate-400">Checking access…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Checking access…</p>
       </div>
     );
   }

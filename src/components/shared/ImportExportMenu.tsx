@@ -346,7 +346,7 @@ export function ImportExportMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuLabel className="text-xs text-slate-500">
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
             {entityLabel}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -403,9 +403,9 @@ export function ImportExportMenu({
                 const isReq = requiredColumns?.includes(field);
                 return (
                   <div key={field} className="grid grid-cols-2 items-center gap-3">
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                       {fieldLabel(field)}
-                      {isReq && <span className="text-red-500"> *</span>}
+                      {isReq && <span className="text-red-500 dark:text-red-400"> *</span>}
                     </label>
                     <Select
                       value={columnMapping[field] || "__skip__"}
@@ -416,7 +416,7 @@ export function ImportExportMenu({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__skip__">
-                          <span className="text-slate-400">— Skip —</span>
+                          <span className="text-slate-400 dark:text-neutral-500">— Skip —</span>
                         </SelectItem>
                         {csvColumns.map((col) => (
                           <SelectItem key={col} value={col}>
@@ -432,7 +432,7 @@ export function ImportExportMenu({
           </div>
 
           {requiredTotal > 0 && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               {requiredMapped}/{requiredTotal} required field{requiredTotal !== 1 ? "s" : ""} mapped
             </p>
           )}
@@ -466,10 +466,10 @@ export function ImportExportMenu({
           {!parseError && previewRows.length > 0 && (
             <div className="max-h-64 overflow-auto rounded-md border text-xs">
               <table className="w-full">
-                <thead className="sticky top-0 bg-slate-50">
+                <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
                   <tr>
                     {previewCols.map((col) => (
-                      <th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600">
+                      <th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600 dark:text-neutral-400">
                         {fieldLabel(col)}
                       </th>
                     ))}
@@ -479,8 +479,8 @@ export function ImportExportMenu({
                   {previewRows.map((row, i) => (
                     <tr key={i} className="border-b last:border-0">
                       {previewCols.map((col) => (
-                        <td key={col} className="px-3 py-1.5 text-slate-700">
-                          {row[col] || <span className="text-slate-300">—</span>}
+                        <td key={col} className="px-3 py-1.5 text-slate-700 dark:text-neutral-300">
+                          {row[col] || <span className="text-slate-300 dark:text-neutral-500">—</span>}
                         </td>
                       ))}
                     </tr>
@@ -491,7 +491,7 @@ export function ImportExportMenu({
           )}
 
           {importError && (
-            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">
               {importError}
             </div>
           )}
@@ -500,8 +500,8 @@ export function ImportExportMenu({
             <div
               className={`rounded-md border px-4 py-3 text-sm ${
                 importSummary.failed.length > 0
-                  ? "border-amber-200 bg-amber-50 text-amber-800"
-                  : "border-green-200 bg-green-50 text-green-700"
+                  ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300"
+                  : "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400"
               }`}
             >
               <p className="font-medium">
@@ -518,9 +518,9 @@ export function ImportExportMenu({
                     {showFailedRows ? "Hide details" : "Show details"}
                   </button>
                   {showFailedRows && (
-                    <ul className="mt-2 max-h-40 overflow-y-auto rounded border border-amber-200 bg-white text-xs">
+                    <ul className="mt-2 max-h-40 overflow-y-auto rounded border border-amber-200 dark:border-amber-800 bg-card text-xs">
                       {importSummary.failed.map((f, i) => (
-                        <li key={i} className="border-b border-amber-100 px-2 py-1 last:border-0">
+                        <li key={i} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0">
                           <span className="font-medium">Row {f.row}:</span> {f.error}
                         </li>
                       ))}

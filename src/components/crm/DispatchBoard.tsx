@@ -2233,7 +2233,7 @@ function TeamAssignDialog({
                       );
                     })}
                     {members.length === 0 && (
-                      <p className="text-[10px] text-slate-300 dark:text-neutral-600 italic">
+                      <p className="text-[10px] text-slate-300 dark:text-neutral-500 italic">
                         {held?.kind === "member" ? "Tap to place here" : "No members"}
                       </p>
                     )}
@@ -2505,7 +2505,7 @@ function EditJobTimeRow({
       <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
         onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
       {overnight && <span className="shrink-0 text-[10px] text-muted-foreground" title="Ends the next day">+1 day</span>}
-      <button onClick={onDelete} className="shrink-0 text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400" title="Remove">
+      <button onClick={onDelete} className="shrink-0 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400" title="Remove">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -3070,7 +3070,7 @@ function VisitRow({
           be mistaken by the browser for starting a drag on the row. */}
       <td className="w-10 px-1 py-2 text-center font-mono">
         <div className="flex items-center justify-center gap-0.5">
-          <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 dark:text-neutral-600 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
+          <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 dark:text-neutral-500 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
           {onReorder && manualRouteMode ? (
             <input
               type="number"
@@ -3159,7 +3159,7 @@ function VisitRow({
       {/* Assigned */}
       {isVisible("assigned") && (
         <td className="min-w-[90px] px-2 py-2 text-slate-600 dark:text-neutral-400 font-medium">
-          {effectiveCrew ?? <span className="text-slate-300 dark:text-neutral-600 italic">—</span>}
+          {effectiveCrew ?? <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
         </td>
       )}
 
@@ -3216,7 +3216,7 @@ function VisitRow({
                   onClick={() => setEditingStart(true)}
                   className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 dark:text-neutral-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
                 >
-                  {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 dark:text-neutral-600 italic">—</span>}
+                  {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
                 </button>
               )}
               {/* A real crew-app punch exists that Start doesn't reflect yet —
@@ -3271,7 +3271,7 @@ function VisitRow({
                   onClick={() => setEditingEnd(true)}
                   className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 dark:text-neutral-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
                 >
-                  {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 dark:text-neutral-600 italic">—</span>}
+                  {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
                 </button>
               )}
               {/* Only way to correct per-crew-member times, or to split a single
@@ -3282,7 +3282,7 @@ function VisitRow({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onEditTimes(visit); }}
                 title="Edit job times"
-                className="shrink-0 text-slate-300 dark:text-neutral-600 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                className="shrink-0 text-slate-300 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
               >
                 <Clock className="h-3 w-3" />
               </button>
@@ -3334,7 +3334,7 @@ function VisitRow({
               {actualHours > budgetedHours ? "+" : ""}{(actualHours - budgetedHours).toFixed(2)}
             </span>
           ) : (
-            <span className="text-slate-300 dark:text-neutral-600">—</span>
+            <span className="text-slate-300 dark:text-neutral-500">—</span>
           )}
         </td>
       )}
@@ -3401,7 +3401,7 @@ function VisitRow({
                   href={`tel:${visit.clientPhone}`}
                   onClick={(e) => e.stopPropagation()}
                   title={`Call ahead: ${visit.job.clientPhone}`}
-                  className="text-slate-300 dark:text-neutral-600 hover:text-green-600 dark:hover:text-green-400 transition-colors shrink-0"
+                  className="text-slate-300 dark:text-neutral-500 hover:text-green-600 dark:hover:text-green-400 transition-colors shrink-0"
                 >
                   <Phone className="h-3 w-3" />
                 </a>
@@ -4780,7 +4780,7 @@ export function DispatchBoard() {
                 {cnt > 0 && (
                   <span className={cn(
                     "ml-1 rounded-full px-1 text-[9px]",
-                    statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300"
+                    statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300 dm-fixed-dark"
                   )}>
                     {cnt}
                   </span>

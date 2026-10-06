@@ -86,18 +86,18 @@ function CategoryPicker({
         return (
           <span
             key={catId}
-            className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+            className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-neutral-300"
           >
             {cat?.label ?? catId}
           </span>
         );
       })}
-      {!canEditWorkOrders ? (selected.length === 0 && <span className="text-sm text-slate-400">—</span>) : (
+      {!canEditWorkOrders ? (selected.length === 0 && <span className="text-sm text-slate-400 dark:text-neutral-500">—</span>) : (
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 text-[11px] text-slate-500 hover:bg-slate-50"
+            className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 dark:border-neutral-700 px-2 text-[11px] text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
           >
             {selected.length === 0 ? "Add" : "Edit"}
             <ChevronDown className="h-3 w-3 opacity-50" />
@@ -137,8 +137,8 @@ function CategoryPicker({
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -170,13 +170,13 @@ function WOLinkCard({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-slate-100"
+      className="flex w-full items-center justify-between rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-left transition-colors hover:bg-muted"
     >
       <div className="min-w-0">
-        <p className="text-xs font-semibold text-slate-500">{wo.workOrderNumber}</p>
-        <p className="truncate text-sm font-medium text-slate-800">{wo.assetName ?? wo.title}</p>
+        <p className="text-xs font-semibold text-muted-foreground">{wo.workOrderNumber}</p>
+        <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">{wo.assetName ?? wo.title}</p>
         {(wo.assignedToNames.length > 0 || wo.assignedToName) && (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
             {wo.assignedToNames.length > 0 ? wo.assignedToNames.join(", ") : wo.assignedToName}
           </p>
         )}
@@ -203,7 +203,7 @@ function SubWorkOrdersSection({
       <Separator />
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             <GitBranch className="h-3.5 w-3.5" />
             Sub Work Orders
           </p>
@@ -221,7 +221,7 @@ function SubWorkOrdersSection({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-400">No sub work orders yet.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No sub work orders yet.</p>
         )}
       </div>
     </>
@@ -239,7 +239,7 @@ function ParentWorkOrderSection({
     <>
       <Separator />
       <div>
-        <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           <GitBranch className="h-3.5 w-3.5" />
           Parent Work Order
         </p>
@@ -345,7 +345,7 @@ function DetailsTab({
   return (
     <div className="flex flex-col gap-5 p-6">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Status
         </p>
         <StatusFlowIndicator
@@ -355,22 +355,22 @@ function DetailsTab({
 
         {/* Inline completion card */}
         {completing && (
-          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="mt-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-4">
             <div className="mb-3 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <span className="text-sm font-medium text-emerald-800">Mark Work Order Complete</span>
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Mark Work Order Complete</span>
             </div>
             {hasLinkedEntity && (
               <div className="mb-3">
-                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-neutral-400">
                   Update {entityLabel} Status
-                  <span className="ml-1.5 font-normal text-slate-400">(optional)</span>
+                  <span className="ml-1.5 font-normal text-slate-400 dark:text-neutral-500">(optional)</span>
                 </label>
                 <Select
                   value={newEntityStatus}
                   onValueChange={(v) => setNewEntityStatus(v as AssetStatus | "no_change")}
                 >
-                  <SelectTrigger className="h-8 bg-white text-xs">
+                  <SelectTrigger className="h-8 bg-card text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -402,7 +402,7 @@ function DetailsTab({
               <Button size="sm" onClick={() => onStatusChange("in_progress")}>Start Work</Button>
               <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
               {isSubWO && (
-                <Button size="sm" variant="outline" className="text-slate-500" onClick={() => onStatusChange("skipped")}>
+                <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => onStatusChange("skipped")}>
                   Skip
                 </Button>
               )}
@@ -418,7 +418,7 @@ function DetailsTab({
               </Button>
               <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
               {isSubWO && (
-                <Button size="sm" variant="outline" className="text-slate-500" onClick={() => onStatusChange("skipped")}>
+                <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => onStatusChange("skipped")}>
                   Skip
                 </Button>
               )}
@@ -435,7 +435,7 @@ function DetailsTab({
                 Mark Complete
               </Button>
               {isSubWO && (
-                <Button size="sm" variant="outline" className="text-slate-500" onClick={() => onStatusChange("skipped")}>
+                <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => onStatusChange("skipped")}>
                   Skip
                 </Button>
               )}
@@ -447,7 +447,7 @@ function DetailsTab({
               <Button size="sm" variant="outline" onClick={() => onStatusChange("open")}>Reopen</Button>
             )}
             {isParentWO && !allSubsDoneOrSkipped && (
-              <div className="mt-2 flex w-full items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <div className="mt-2 flex w-full items-start gap-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                 <span className="mt-0.5 shrink-0">⚠</span>
                 <span>
                   <strong>{subWorkOrders.filter((s) => s.status !== "done" && s.status !== "skipped").length} sub-work order(s) still open</strong> — this work order cannot be marked complete until all sub-work orders are done or skipped.
@@ -488,7 +488,7 @@ function DetailsTab({
               <button
                 type="button"
                 onClick={clickHandler}
-                className="text-left font-medium text-brand-600 hover:underline"
+                className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
               >
                 {workOrder.assetName}
               </button>
@@ -501,7 +501,7 @@ function DetailsTab({
           <MetaRow
             label={`${entityLabel} Status`}
             value={!canWriteEquipt ? (
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ASSET_STATUS_COLORS[entityStatus] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ASSET_STATUS_COLORS[entityStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400 border-border"}`}>
                 {ASSET_STATUS_LABELS[entityStatus] ?? entityStatus}
               </span>
             ) : (
@@ -509,7 +509,7 @@ function DetailsTab({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80 ${ASSET_STATUS_COLORS[entityStatus] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80 ${ASSET_STATUS_COLORS[entityStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400 border-border"}`}
                   >
                     {ASSET_STATUS_LABELS[entityStatus] ?? entityStatus}
                     <ChevronDown className="h-3 w-3 opacity-50" />
@@ -559,7 +559,7 @@ function DetailsTab({
                 {displayNames.map((name, i) => (
                   <span
                     key={selectedIds[i] ?? i}
-                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-neutral-300"
                   >
                     <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-[9px] font-bold text-white">
                       {getInitials(name)}
@@ -567,12 +567,12 @@ function DetailsTab({
                     {name}
                   </span>
                 ))}
-                {!canEditWorkOrders ? (displayNames.length === 0 && <span className="text-sm text-slate-400">—</span>) : (
+                {!canEditWorkOrders ? (displayNames.length === 0 && <span className="text-sm text-slate-400 dark:text-neutral-500">—</span>) : (
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 text-[11px] text-slate-500 hover:bg-slate-50"
+                      className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 dark:border-neutral-700 px-2 text-[11px] text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
                     >
                       {displayNames.length === 0 ? "Assign" : "Edit"}
                       <ChevronDown className="h-3 w-3 opacity-50" />
@@ -647,7 +647,7 @@ function DetailsTab({
           <MetaRow
             label="Recurrence"
             value={
-              <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+              <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-400">
                 {{
                   daily: "Daily",
                   weekly: "Weekly",
@@ -676,10 +676,10 @@ function DetailsTab({
         <>
           <Separator />
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Description
             </p>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{workOrder.description}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-neutral-300">{workOrder.description}</p>
           </div>
         </>
       )}
@@ -705,13 +705,13 @@ function HistoryTab({ workOrder }: { workOrder: WorkOrder }) {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Comments
         </p>
         <CommentsSection recordType="work_order" recordId={workOrder.id} />
       </div>
       <Separator className="mb-6" />
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
         Audit Trail
       </p>
       <AuditTrailTab recordType="work_order" recordId={workOrder.id} />
@@ -780,10 +780,10 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
             {workOrder.workOrderNumber}
           </h2>
-          <p className="text-sm text-slate-500">{workOrder.title}</p>
+          <p className="text-sm text-muted-foreground">{workOrder.title}</p>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge
@@ -799,7 +799,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
             onClick={() => setDeleteConfirmOpen(true)}
           >
             <Trash2 className="h-4 w-4" />

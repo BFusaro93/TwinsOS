@@ -116,8 +116,8 @@ const PROJECT_STATUS_INDEX: Record<ProjectStatus, number> = {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -466,7 +466,7 @@ function MaterialsTab({ project }: { project: Project }) {
   return (
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Materials</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Materials</p>
         <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="h-7 gap-1 text-xs">
           <Plus className="h-3 w-3" />
           Add Material
@@ -474,13 +474,13 @@ function MaterialsTab({ project }: { project: Project }) {
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-slate-400">No line items linked to this project yet.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">No line items linked to this project yet.</p>
       ) : (
         <>
           <div className="overflow-hidden rounded-md border">
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50 text-xs">
+                <TableRow className="bg-slate-50 dark:bg-muted/40 text-xs">
                   <TableHead>Item</TableHead>
                   <TableHead>Part #</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
@@ -502,7 +502,7 @@ function MaterialsTab({ project }: { project: Project }) {
                             if (linkedPart) setSelectedPartId(linkedPart.id);
                             else setSelectedProductId(li.productItemId);
                           }}
-                          className="text-left font-medium text-brand-600 hover:underline"
+                          className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                         >
                           {li.productItemName}
                         </button>
@@ -510,9 +510,9 @@ function MaterialsTab({ project }: { project: Project }) {
                         li.productItemName
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-500">{li.partNumber}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{li.partNumber}</TableCell>
                     <TableCell className="text-right">{li.quantity}</TableCell>
-                    <TableCell className="text-right text-slate-600">{formatCurrency(li.unitCost)}</TableCell>
+                    <TableCell className="text-right text-slate-600 dark:text-neutral-400">{formatCurrency(li.unitCost)}</TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(li.quantity * li.unitCost)}</TableCell>
                     <TableCell>
                       {li.sourceType !== "direct" && li.sourceId ? (
@@ -521,8 +521,8 @@ function MaterialsTab({ project }: { project: Project }) {
                             variant="outline"
                             className={`cursor-pointer hover:opacity-80 ${
                               li.sourceType === "po"
-                                ? "border-blue-200 bg-blue-50 text-blue-700"
-                                : "border-slate-200 bg-slate-50 text-slate-600"
+                                ? "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400"
+                                : "border-border bg-slate-50 dark:bg-muted/40 text-slate-600 dark:text-neutral-400"
                             }`}
                           >
                             <ExternalLink className="mr-1 inline h-3 w-3" />
@@ -532,7 +532,7 @@ function MaterialsTab({ project }: { project: Project }) {
                       ) : (
                         <Badge
                           variant="outline"
-                          className="border-green-200 bg-green-50 text-green-700"
+                          className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400"
                         >
                           {li.sourceNumber}
                         </Badge>
@@ -540,10 +540,10 @@ function MaterialsTab({ project }: { project: Project }) {
                     </TableCell>
                     <TableCell className="px-2 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button onClick={() => openEdit(li)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Edit">
+                        <button onClick={() => openEdit(li)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400" title="Edit">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => deleteItem(li)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title={li.sourceType !== "direct" ? "Remove from view only (edit via source document)" : "Delete"} disabled={li.sourceType !== "direct"}>
+                        <button onClick={() => deleteItem(li)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title={li.sourceType !== "direct" ? "Remove from view only (edit via source document)" : "Delete"} disabled={li.sourceType !== "direct"}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -554,30 +554,30 @@ function MaterialsTab({ project }: { project: Project }) {
             </Table>
           </div>
 
-          <div className="rounded-md bg-slate-50 p-3 text-sm">
-            <div className="flex justify-between py-1 text-slate-600">
+          <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm">
+            <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
               <span>Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
             </div>
             {allocatedDiscount > 0 && (
-              <div className="flex justify-between py-1 text-slate-600">
+              <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Discount (from POs)</span>
                 <span>-{formatCurrency(allocatedDiscount)}</span>
               </div>
             )}
             {totalTax > 0 && (
-              <div className="flex justify-between py-1 text-slate-600">
+              <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Sales Tax</span>
                 <span>{formatCurrency(totalTax)}</span>
               </div>
             )}
             {allocatedShipping > 0 && (
-              <div className="flex justify-between py-1 text-slate-600">
+              <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Shipping (from POs)</span>
                 <span>{formatCurrency(allocatedShipping)}</span>
               </div>
             )}
-            <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
+            <div className="flex justify-between border-t pt-1 font-semibold text-slate-900 dark:text-neutral-100">
               <span>Materials Total</span>
               <span>{formatCurrency(total)}</span>
             </div>
@@ -647,11 +647,11 @@ function MaterialsTab({ project }: { project: Project }) {
           <div className="flex flex-col gap-3">
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Quantity</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Quantity</label>
                 <Input type="number" min={0.01} step="any" value={editForm.quantity} onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))} autoFocus />
               </div>
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Unit Cost ($)</label>
                 <Input type="number" step="any" value={editForm.unitCost} onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))} />
               </div>
             </div>
@@ -671,10 +671,10 @@ const COST_TYPE_LABELS: Record<SubcontractCostType, string> = {
 };
 
 const COST_TYPE_COLORS: Record<SubcontractCostType, string> = {
-  materials: "border-orange-200 bg-orange-50 text-orange-700",
-  labor: "border-blue-200 bg-blue-50 text-blue-700",
-  subcontractor: "border-purple-200 bg-purple-50 text-purple-700",
-  other: "border-slate-200 bg-slate-50 text-slate-600",
+  materials: "border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400",
+  labor: "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
+  subcontractor: "border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400",
+  other: "border-border bg-slate-50 dark:bg-muted/40 text-slate-600 dark:text-neutral-400",
 };
 
 const BLANK_FORM = {
@@ -759,7 +759,7 @@ function SubcontractsTab({ project }: { project: Project }) {
   return (
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Other Costs</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Other Costs</p>
         <Button size="sm" variant="outline" onClick={openAdd} className="h-7 gap-1 text-xs">
           <Plus className="h-3 w-3" />
           Add Cost
@@ -767,11 +767,11 @@ function SubcontractsTab({ project }: { project: Project }) {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
       ) : costs.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-10 text-center">
-          <Building2 className="h-8 w-8 text-slate-300" />
-          <p className="text-sm text-slate-400">No other costs yet.</p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-10 text-center">
+          <Building2 className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No other costs yet.</p>
           <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
             <Plus className="h-3 w-3" /> Add First Cost
           </Button>
@@ -781,7 +781,7 @@ function SubcontractsTab({ project }: { project: Project }) {
           <div className="overflow-hidden rounded-md border">
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50 text-xs">
+                <TableRow className="bg-slate-50 dark:bg-muted/40 text-xs">
                   <TableHead>Vendor</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Type</TableHead>
@@ -794,22 +794,22 @@ function SubcontractsTab({ project }: { project: Project }) {
                 {costs.map((cost) => (
                   <TableRow key={cost.id} className="group text-sm">
                     <TableCell className="font-medium">{cost.vendorName}</TableCell>
-                    <TableCell className="text-slate-600">{cost.description}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-neutral-400">{cost.description}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={`text-xs ${COST_TYPE_COLORS[cost.costType]}`}>
                         {COST_TYPE_LABELS[cost.costType]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-slate-500 text-xs">
+                    <TableCell className="text-muted-foreground text-xs">
                       {cost.costDate ? formatDate(cost.costDate) : "—"}
                     </TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(cost.amount)}</TableCell>
                     <TableCell className="px-2 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button onClick={() => openEdit(cost)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Edit">
+                        <button onClick={() => openEdit(cost)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400" title="Edit">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => setDeleteConfirmId(cost.id)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Delete">
+                        <button onClick={() => setDeleteConfirmId(cost.id)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title="Delete">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -820,28 +820,28 @@ function SubcontractsTab({ project }: { project: Project }) {
             </Table>
           </div>
 
-          <div className="rounded-md bg-slate-50 p-3 text-sm">
+          <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm">
             {materialTotal > 0 && (
-              <div className="flex justify-between py-1 text-slate-600">
+              <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Materials</span><span>{formatCurrency(materialTotal)}</span>
               </div>
             )}
             {laborTotal > 0 && (
-              <div className="flex justify-between py-1 text-slate-600">
+              <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Labor</span><span>{formatCurrency(laborTotal)}</span>
               </div>
             )}
             {subcontractorTotal > 0 && (
-              <div className="flex justify-between py-1 text-slate-600">
+              <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Subcontractor</span><span>{formatCurrency(subcontractorTotal)}</span>
               </div>
             )}
             {otherTotal > 0 && (
-              <div className="flex justify-between py-1 text-slate-600">
+              <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Other</span><span>{formatCurrency(otherTotal)}</span>
               </div>
             )}
-            <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
+            <div className="flex justify-between border-t pt-1 font-semibold text-slate-900 dark:text-neutral-100">
               <span>Other Costs Total</span><span>{formatCurrency(grandTotal)}</span>
             </div>
           </div>
@@ -858,7 +858,7 @@ function SubcontractsTab({ project }: { project: Project }) {
           <div className="flex flex-col gap-3">
             {/* Vendor */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Vendor</label>
+              <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Vendor</label>
               <VendorCombobox
                 vendors={vendors}
                 value={form.vendorId || "none"}
@@ -876,7 +876,7 @@ function SubcontractsTab({ project }: { project: Project }) {
 
             {/* Description */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Description</label>
+              <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Description</label>
               <Input
                 placeholder="e.g. Irrigation install, Mulch delivery"
                 value={form.description}
@@ -887,7 +887,7 @@ function SubcontractsTab({ project }: { project: Project }) {
             {/* Cost type + Amount */}
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Cost Type</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Cost Type</label>
                 <select
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   value={form.costType}
@@ -900,7 +900,7 @@ function SubcontractsTab({ project }: { project: Project }) {
                 </select>
               </div>
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Amount ($)</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Amount ($)</label>
                 <Input
                   type="number"
                   min={0}
@@ -914,7 +914,7 @@ function SubcontractsTab({ project }: { project: Project }) {
 
             {/* Date */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Date (optional)</label>
+              <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Date (optional)</label>
               <Input
                 type="date"
                 value={form.costDate}
@@ -924,7 +924,7 @@ function SubcontractsTab({ project }: { project: Project }) {
 
             {/* Notes */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Notes (optional)</label>
+              <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Notes (optional)</label>
               <Input
                 placeholder="Invoice #, PO reference, etc."
                 value={form.notes}
@@ -1001,9 +1001,9 @@ function HoursField({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
-          className="w-20 rounded border border-slate-300 px-2 py-0.5 text-sm text-right focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="w-20 rounded border border-slate-300 dark:border-neutral-700 px-2 py-0.5 text-sm text-right focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
-        <span className="text-xs text-slate-400">hrs</span>
+        <span className="text-xs text-slate-400 dark:text-neutral-500">hrs</span>
       </div>
     );
   }
@@ -1012,11 +1012,11 @@ function HoursField({
     <button
       type="button"
       onClick={startEdit}
-      className="group flex items-center gap-1 rounded px-1 text-sm font-medium text-slate-900 hover:bg-slate-100"
+      className="group flex items-center gap-1 rounded px-1 text-sm font-medium text-slate-900 dark:text-neutral-100 hover:bg-muted"
       title={`Click to edit ${label}`}
     >
-      {value != null ? `${value} hrs` : <span className="italic text-slate-400">— click to add</span>}
-      <Pencil className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+      {value != null ? `${value} hrs` : <span className="italic text-slate-400 dark:text-neutral-500">— click to add</span>}
+      <Pencil className="h-3 w-3 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   );
 }
@@ -1050,7 +1050,7 @@ function RateField({
   if (editing) {
     return (
       <div className="flex items-center gap-1">
-        <span className="text-xs text-slate-400">$</span>
+        <span className="text-xs text-slate-400 dark:text-neutral-500">$</span>
         <input
           type="number"
           min={0}
@@ -1060,9 +1060,9 @@ function RateField({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
-          className="w-20 rounded border border-slate-300 px-2 py-0.5 text-sm text-right focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="w-20 rounded border border-slate-300 dark:border-neutral-700 px-2 py-0.5 text-sm text-right focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
-        <span className="text-xs text-slate-400">/hr</span>
+        <span className="text-xs text-slate-400 dark:text-neutral-500">/hr</span>
       </div>
     );
   }
@@ -1070,11 +1070,11 @@ function RateField({
   if (locked) {
     return (
       <span
-        className="flex items-center gap-1 px-1 text-sm font-medium text-slate-900"
+        className="flex items-center gap-1 px-1 text-sm font-medium text-slate-900 dark:text-neutral-100"
         title={`${label} is locked because this project is complete. Reopen the project to change it.`}
       >
         {formatCurrency(valueCents)}/hr
-        <Lock className="h-3 w-3 text-slate-300" />
+        <Lock className="h-3 w-3 text-slate-300 dark:text-neutral-500" />
       </span>
     );
   }
@@ -1083,11 +1083,11 @@ function RateField({
     <button
       type="button"
       onClick={startEdit}
-      className="group flex items-center gap-1 rounded px-1 text-sm font-medium text-slate-900 hover:bg-slate-100"
+      className="group flex items-center gap-1 rounded px-1 text-sm font-medium text-slate-900 dark:text-neutral-100 hover:bg-muted"
       title={`Click to edit ${label}`}
     >
       {formatCurrency(valueCents)}/hr
-      <Pencil className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+      <Pencil className="h-3 w-3 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   );
 }
@@ -1133,7 +1133,7 @@ function DetailsTab({
     <div className="flex flex-col gap-5 p-6">
       {/* Status flow */}
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Status
         </p>
         <StatusFlowIndicator
@@ -1192,7 +1192,7 @@ function DetailsTab({
               <button
                 type="button"
                 onClick={() => router.push(`/photos/jobs/${linkedPhotoJob.id}`)}
-                className="inline-flex items-center gap-1 text-brand-600 hover:underline"
+                className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline"
               >
                 <Camera className="h-3.5 w-3.5" />
                 {linkedPhotoJob.name}
@@ -1207,15 +1207,15 @@ function DetailsTab({
 
       {/* Hours + Rates — inline editable */}
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Hours &amp; Labor Rates</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Hours &amp; Labor Rates</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          <div className="text-slate-500">Budget Hours</div>
+          <div className="text-muted-foreground">Budget Hours</div>
           <HoursField
             label="Budget Hours"
             value={project.budgetHours ?? null}
             onSave={(v) => onUpdateHours(project.laborHours ?? null, v)}
           />
-          <div className="text-slate-500">Actual Hours</div>
+          <div className="text-muted-foreground">Actual Hours</div>
           <HoursField
             label="Actual Hours"
             value={project.laborHours ?? null}
@@ -1223,19 +1223,19 @@ function DetailsTab({
           />
           {hoursVariance != null && (
             <>
-              <div className="text-slate-500 pt-1 border-t border-slate-100">Variance</div>
-              <div className={`pt-1 border-t border-slate-100 font-medium ${hoursVariance > 0 ? "text-red-600" : hoursVariance < 0 ? "text-green-600" : "text-slate-500"}`}>
+              <div className="text-muted-foreground pt-1 border-t border-slate-100 dark:border-neutral-800">Variance</div>
+              <div className={`pt-1 border-t border-slate-100 dark:border-neutral-800 font-medium ${hoursVariance > 0 ? "text-red-600 dark:text-red-400" : hoursVariance < 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
                 {hoursVariance > 0 ? "+" : ""}{hoursVariance.toFixed(2)} hrs
                 {hasBudget && project.budgetHours! > 0 && (
-                  <span className="ml-1 text-xs font-normal text-slate-400">
+                  <span className="ml-1 text-xs font-normal text-slate-400 dark:text-neutral-500">
                     ({Math.round((hoursVariance / project.budgetHours!) * 100)}%)
                   </span>
                 )}
               </div>
             </>
           )}
-          <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500">Break-Even Rate</div>
-          <div className="mt-2 pt-2 border-t border-slate-100">
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800 text-muted-foreground">Break-Even Rate</div>
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
             <RateField
               label="Break-Even Rate"
               valueCents={effectiveFullRate}
@@ -1243,7 +1243,7 @@ function DetailsTab({
               locked={status === "complete"}
             />
           </div>
-          <div className="text-slate-500">Loaded Labor Rate (LLR)</div>
+          <div className="text-muted-foreground">Loaded Labor Rate (LLR)</div>
           <RateField
             label="Loaded Labor Rate (LLR)"
             valueCents={effectiveBurdenedRate}
@@ -1256,37 +1256,37 @@ function DetailsTab({
       <Separator />
 
       {/* Financials */}
-      <div className="rounded-md border bg-slate-50 p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Project Financials</p>
+      <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Project Financials</p>
         <div className="space-y-1.5 text-sm">
           <div className="flex justify-between">
-            <span className="text-slate-500">Contract Price</span>
-            <span className="font-medium text-slate-900">
-              {project.contractPrice > 0 ? formatCurrency(project.contractPrice) : <span className="text-slate-400 italic">Not set</span>}
+            <span className="text-muted-foreground">Contract Price</span>
+            <span className="font-medium text-slate-900 dark:text-neutral-100">
+              {project.contractPrice > 0 ? formatCurrency(project.contractPrice) : <span className="text-slate-400 dark:text-neutral-500 italic">Not set</span>}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Material & Other Costs</span>
-            <span className="font-medium text-slate-900">{formatCurrency(computedTotalCost)}</span>
+            <span className="text-muted-foreground">Material & Other Costs</span>
+            <span className="font-medium text-slate-900 dark:text-neutral-100">{formatCurrency(computedTotalCost)}</span>
           </div>
           {laborCostFull != null && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Break-Even Rate ({project.laborHours}h × {formatCurrency(effectiveFullRate)})</span>
-              <span className="font-medium text-slate-900">{formatCurrency(laborCostFull)}</span>
+              <span className="text-muted-foreground">Labor — Break-Even Rate ({project.laborHours}h × {formatCurrency(effectiveFullRate)})</span>
+              <span className="font-medium text-slate-900 dark:text-neutral-100">{formatCurrency(laborCostFull)}</span>
             </div>
           )}
           {laborCostBurdened != null && laborCostBurdened !== laborCostFull && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Loaded Labor Rate (LLR) ({project.laborHours}h × {formatCurrency(effectiveBurdenedRate)})</span>
-              <span className="font-medium text-slate-900">{formatCurrency(laborCostBurdened)}</span>
+              <span className="text-muted-foreground">Labor — Loaded Labor Rate (LLR) ({project.laborHours}h × {formatCurrency(effectiveBurdenedRate)})</span>
+              <span className="font-medium text-slate-900 dark:text-neutral-100">{formatCurrency(laborCostBurdened)}</span>
             </div>
           )}
 
           {/* Net profit rows */}
           {netFull != null && (
-            <div className="flex justify-between border-t border-slate-200 pt-1.5">
-              <span className="font-semibold text-slate-700">Net Profit (Break-Even)</span>
-              <span className={`font-semibold ${netFull >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <div className="flex justify-between border-t border-border pt-1.5">
+              <span className="font-semibold text-slate-700 dark:text-neutral-300">Net Profit (Break-Even)</span>
+              <span className={`font-semibold ${netFull >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                 {netFull < 0 ? "-" : ""}{formatCurrency(Math.abs(netFull))}
                 {netFullPct != null && ` (${netFull < 0 ? "-" : ""}${Math.abs(netFullPct)}%)`}
               </span>
@@ -1294,8 +1294,8 @@ function DetailsTab({
           )}
           {netBurdened != null && netBurdened !== netFull && (
             <div className="flex justify-between pt-0.5">
-              <span className="text-slate-500">Net Profit (LLR Only)</span>
-              <span className={`font-medium ${netBurdened >= 0 ? "text-green-600" : "text-red-600"}`}>
+              <span className="text-muted-foreground">Net Profit (LLR Only)</span>
+              <span className={`font-medium ${netBurdened >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                 {netBurdened < 0 ? "-" : ""}{formatCurrency(Math.abs(netBurdened))}
                 {netBurdenedPct != null && ` (${netBurdened < 0 ? "-" : ""}${Math.abs(netBurdenedPct)}%)`}
               </span>
@@ -1305,9 +1305,9 @@ function DetailsTab({
             const margin = project.contractPrice - computedTotalCost;
             const marginPct = Math.round((margin / project.contractPrice) * 100);
             return (
-              <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                <span className="font-semibold text-slate-700">Margin (excl. labor)</span>
-                <span className={`font-semibold ${margin >= 0 ? "text-green-600" : "text-red-600"}`}>
+              <div className="flex justify-between border-t border-border pt-1.5">
+                <span className="font-semibold text-slate-700 dark:text-neutral-300">Margin (excl. labor)</span>
+                <span className={`font-semibold ${margin >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                   {margin < 0 ? "-" : ""}{formatCurrency(Math.abs(margin))} ({margin < 0 ? "-" : ""}{Math.abs(marginPct)}%)
                 </span>
               </div>
@@ -1315,7 +1315,7 @@ function DetailsTab({
           })()}
         </div>
         {project.laborHours == null && (
-          <p className="mt-2 text-xs text-slate-400">Add actual hours above to see net profit after labor costs.</p>
+          <p className="mt-2 text-xs text-slate-400 dark:text-neutral-500">Add actual hours above to see net profit after labor costs.</p>
         )}
       </div>
     </div>
@@ -1323,10 +1323,10 @@ function DetailsTab({
 }
 
 const TICKET_STATUS_CLASS: Record<string, string> = {
-  open: "border border-red-400 text-red-600",
-  on_hold: "border border-orange-400 text-orange-600",
-  pending: "bg-yellow-100 text-yellow-700",
-  closed: "bg-green-100 text-green-700",
+  open: "border border-red-400 text-red-600 dark:text-red-400",
+  on_hold: "border border-orange-400 text-orange-600 dark:text-orange-400",
+  pending: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  closed: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
 };
 
 function TicketsTab({ project }: { project: Project }) {
@@ -1336,20 +1336,20 @@ function TicketsTab({ project }: { project: Project }) {
 
   return (
     <div className="flex flex-col gap-4 p-6">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tickets</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Tickets</p>
       {isLoading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
       ) : tickets.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-10 text-center">
-          <TicketIcon className="h-8 w-8 text-slate-300" />
-          <p className="text-sm text-slate-400">No tickets linked to this project yet.</p>
-          <p className="text-xs text-slate-400">Link a ticket to this project from the ticket&apos;s detail view.</p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-10 text-center">
+          <TicketIcon className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No tickets linked to this project yet.</p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500">Link a ticket to this project from the ticket&apos;s detail view.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 text-xs">
+              <TableRow className="bg-slate-50 dark:bg-muted/40 text-xs">
                 <TableHead>#</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Status</TableHead>
@@ -1361,18 +1361,18 @@ function TicketsTab({ project }: { project: Project }) {
               {tickets.map((t) => (
                 <TableRow
                   key={t.id}
-                  className="cursor-pointer text-sm hover:bg-slate-50"
+                  className="cursor-pointer text-sm hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => setOpenTicketId(t.id)}
                 >
-                  <TableCell className="font-mono text-xs text-slate-500">#{t.ticketNumber}</TableCell>
-                  <TableCell className="font-medium text-brand-600">{t.subject || "(no subject)"}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">#{t.ticketNumber}</TableCell>
+                  <TableCell className="font-medium text-brand-600 dark:text-brand-400">{t.subject || "(no subject)"}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`text-xs capitalize ${TICKET_STATUS_CLASS[t.status] ?? ""}`}>
                       {t.status.replace("_", " ")}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs capitalize text-slate-600">{t.priority}</TableCell>
-                  <TableCell className="text-xs text-slate-500">{t.dueDate ? formatDate(t.dueDate) : "—"}</TableCell>
+                  <TableCell className="text-xs capitalize text-slate-600 dark:text-neutral-400">{t.priority}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{t.dueDate ? formatDate(t.dueDate) : "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1389,13 +1389,13 @@ function HistoryTab({ project }: { project: Project }) {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Comments
         </p>
         <CommentsSection recordType="project" recordId={project.id} />
       </div>
       <Separator className="mb-6" />
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
         Audit Trail
       </p>
       <AuditTrailTab recordType="project" recordId={project.id} />
@@ -1502,16 +1502,16 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
         <div className="flex items-start justify-between pr-10">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-slate-900">{project.name}</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{project.name}</h2>
               {project.isArchived && (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">Archived</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">Archived</span>
               )}
               <StatusBadge
                 variant={status === "on_hold" ? "on_hold_project" : status}
                 label={PROJECT_STATUS_LABELS[status]}
               />
             </div>
-            <p className="text-sm text-slate-500">{project.customerName}</p>
+            <p className="text-sm text-muted-foreground">{project.customerName}</p>
           </div>
         </div>
         {/* Action buttons row — wraps on mobile so nothing overflows */}
@@ -1526,7 +1526,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
           <Button
             variant="outline"
             size="sm"
-            className={cn("gap-1.5", project.isArchived ? "border-brand-400 text-brand-600" : "border-slate-300 text-slate-500")}
+            className={cn("gap-1.5", project.isArchived ? "border-brand-400 text-brand-600 dark:text-brand-400" : "border-slate-300 dark:border-neutral-700 text-muted-foreground")}
             disabled={archiving}
             onClick={() => archiveProject(
               { id: project.id, archived: !project.isArchived },
@@ -1539,7 +1539,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
             onClick={() => setDeleteConfirmOpen(true)}
           >
             <Trash2 className="h-4 w-4" />

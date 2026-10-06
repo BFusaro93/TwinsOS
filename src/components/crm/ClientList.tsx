@@ -14,11 +14,11 @@ import { cn, formatCurrency } from "@/lib/utils";
 import type { Client } from "@/types/crm";
 
 const STATUS_COLOR: Record<string, string> = {
-  active:    "bg-green-100 text-green-700",
-  inactive:  "bg-slate-100 text-slate-500",
-  lead:      "bg-yellow-100 text-yellow-700",
-  cancelled: "bg-red-100 text-red-600",
-  lost:      "bg-orange-100 text-orange-700",
+  active:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  inactive:  "bg-muted text-muted-foreground",
+  lead:      "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  cancelled: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  lost:      "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
 };
 
 interface Props {
@@ -91,14 +91,14 @@ export function ClientList({ selectedId, onSelect, initialFilterRows }: Props) {
                 </Badge>
               );
             })}
-            <button onClick={() => setFilterRows([])} className="text-xs text-slate-400 hover:text-slate-600 underline">Clear</button>
+            <button onClick={() => setFilterRows([])} className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 underline">Clear</button>
           </div>
         )}
       </div>
 
       {/* Count */}
       <div className="border-b px-3 py-2">
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-muted-foreground">
           {isLoading ? "Loading…" : `${filtered.length} client${filtered.length !== 1 ? "s" : ""}`}
         </span>
       </div>
@@ -110,7 +110,7 @@ export function ClientList({ selectedId, onSelect, initialFilterRows }: Props) {
             {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex h-32 items-center justify-center text-sm text-slate-400">No clients found</div>
+          <div className="flex h-32 items-center justify-center text-sm text-slate-400 dark:text-neutral-500">No clients found</div>
         ) : (
           <div className="divide-y">
             {filtered.map((client) => {
@@ -123,40 +123,40 @@ export function ClientList({ selectedId, onSelect, initialFilterRows }: Props) {
                   className={cn(
                     "group relative flex w-full flex-col gap-0.5 px-4 py-3 text-left transition-colors cursor-pointer",
                     isSelected
-                      ? "bg-brand-50 border-l-2 border-l-brand-500"
-                      : "hover:bg-slate-50 border-l-2 border-l-transparent"
+                      ? "bg-brand-50 dark:bg-brand-900/30 border-l-2 border-l-brand-500"
+                      : "hover:bg-slate-50 dark:hover:bg-muted/40 border-l-2 border-l-transparent"
                   )}
                   onClick={() => onSelect(client)}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
                       {client.accountType === "commercial"
-                        ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                        : <Home className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
-                      <span className="truncate text-sm font-medium text-slate-900">{client.displayName}</span>
+                        ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
+                        : <Home className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />}
+                      <span className="truncate text-sm font-medium text-slate-900 dark:text-neutral-100">{client.displayName}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       {hasBalance && (
-                        <span className="shrink-0 text-xs font-semibold text-red-600">
+                        <span className="shrink-0 text-xs font-semibold text-red-600 dark:text-red-400">
                           {formatCurrency(client.balanceOutstandingCents)}
                         </span>
                       )}
                       <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/crm/clients/${client.id}`); }}
-                        className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-slate-200 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-slate-200 dark:hover:bg-neutral-700 transition-opacity"
                         title="Open full screen"
                       >
-                        <Maximize2 className="h-3 w-3 text-slate-400" />
+                        <Maximize2 className="h-3 w-3 text-slate-400 dark:text-neutral-500" />
                       </button>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs text-slate-500">
+                    <span className="truncate text-xs text-muted-foreground">
                       {[client.serviceAddress, client.serviceCity, client.serviceState].filter(Boolean).join(", ") ||
                         client.primaryPhone || client.primaryEmail || "—"}
                     </span>
-                    <Badge variant="outline" className={cn("shrink-0 rounded-full px-1.5 py-0 text-[10px] capitalize border-transparent", STATUS_COLOR[client.status] ?? "bg-slate-100 text-slate-500")}>
+                    <Badge variant="outline" className={cn("shrink-0 rounded-full px-1.5 py-0 text-[10px] capitalize border-transparent", STATUS_COLOR[client.status] ?? "bg-muted text-muted-foreground")}>
                       {client.status}
                     </Badge>
                   </div>

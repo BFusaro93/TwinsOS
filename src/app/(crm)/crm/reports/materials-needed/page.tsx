@@ -117,37 +117,37 @@ export default function MaterialsNeededReportPage() {
     <div className="flex flex-col gap-5 p-6 max-w-[1200px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Materials Needed</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-neutral-100">Materials Needed</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             What every outstanding scheduled or waiting-list job still needs, vs. what&apos;s on hand and on order.
           </p>
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
           <Checkbox checked={onlyShortfalls} onCheckedChange={(v) => setOnlyShortfalls(!!v)} />
           Only show shortfalls
         </label>
       </div>
 
       {data?.notes && data.notes.length > 0 && (
-        <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+        <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
           {data.notes.join(" · ")}
         </div>
       )}
 
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
+          <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">Loading…</div>
         ) : error ? (
-          <div className="flex items-center justify-center py-16 text-sm text-red-500">Failed to load report.</div>
+          <div className="flex items-center justify-center py-16 text-sm text-red-500 dark:text-red-400">Failed to load report.</div>
         ) : rows.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-sm text-slate-400">
+          <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">
             {onlyShortfalls ? "No shortfalls — everything needed is on hand or on order." : "No outstanding material demand."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                <tr className="bg-slate-50 dark:bg-muted/40 border-b text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   <th className="w-8 px-3 py-2.5" />
                   <th className="w-8 px-3 py-2.5" />
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Product</th>
@@ -166,7 +166,7 @@ export default function MaterialsNeededReportPage() {
                   const isOpen = expanded.has(r.productId);
                   return (
                     <Fragment key={r.productId}>
-                      <tr className="border-b border-slate-100 hover:bg-slate-50">
+                      <tr className="border-b border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                         <td className="px-3 py-2 text-center">
                           <Checkbox
                             checked={selected.has(r.productId)}
@@ -175,17 +175,17 @@ export default function MaterialsNeededReportPage() {
                           />
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <button onClick={() => toggleExpanded(r.productId)} className="text-slate-400 hover:text-slate-700">
+                          <button onClick={() => toggleExpanded(r.productId)} className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300">
                             {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                           </button>
                         </td>
-                        <td className="px-3 py-2 font-medium text-slate-800">{r.productName}</td>
-                        <td className="px-3 py-2 text-slate-500">{CATEGORY_LABELS[r.category] ?? r.category}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800 dark:text-neutral-100">{r.productName}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[r.category] ?? r.category}</td>
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
                           {fmtQtyWithUnit(r.neededQty, r.neededUnitName)}
                           {r.unestimatedJobs > 0 && (
                             <span
-                              className="block text-[10px] font-normal text-amber-700"
+                              className="block text-[10px] font-normal text-amber-700 dark:text-amber-400"
                               title="These jobs have no usable application rate or no measured area, so their demand isn't included."
                             >
                               +{r.unestimatedJobs} job{r.unestimatedJobs !== 1 ? "s" : ""} not estimated
@@ -195,13 +195,13 @@ export default function MaterialsNeededReportPage() {
                         <td className="px-3 py-2 text-right tabular-nums">{fmtQty(r.onHand)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtQty(r.onOrder)}</td>
                         {r.shortfall != null ? (
-                          <td className={cn("px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap", isShort ? "text-red-600" : "text-green-600")}>
+                          <td className={cn("px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap", isShort ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400")}>
                             {fmtQtyWithUnit(r.shortfall, r.neededUnitName)}
                           </td>
                         ) : (
                           <td className="px-3 py-2 text-right">
                             <span
-                              className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+                              className="inline-flex items-center gap-1 rounded bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300"
                               title="This product's demand is stated in a unit that can't be converted to the unit it's stocked in, so it can't be differenced against stock. Fix the units on its application rate."
                             >
                               <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -209,19 +209,19 @@ export default function MaterialsNeededReportPage() {
                             </span>
                           </td>
                         )}
-                        <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(r.nextNeededBy)}</td>
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{fmtDate(r.nextNeededBy)}</td>
                       </tr>
                       {isOpen && (
-                        <tr className="bg-slate-50/60 border-b border-slate-100">
+                        <tr className="bg-slate-50/60 dark:bg-muted/40 border-b border-slate-100 dark:border-neutral-800">
                           <td />
                           <td />
                           <td colSpan={7} className="px-3 py-2">
                             <div className="flex flex-col gap-1">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                                 Jobs driving this demand
                               </p>
                               {r.jobsAffected.map((j) => (
-                                <div key={j.jobId} className="flex items-center justify-between text-xs text-slate-600">
+                                <div key={j.jobId} className="flex items-center justify-between text-xs text-slate-600 dark:text-neutral-400">
                                   <span>{j.jobName}</span>
                                   <span className="tabular-nums">
                                     {fmtQtyWithUnit(j.qty, r.neededUnitName)} · {fmtDate(j.neededBy)}
@@ -242,8 +242,8 @@ export default function MaterialsNeededReportPage() {
       </div>
 
       {selectedRows.length > 0 && (
-        <div className="sticky bottom-4 flex items-center justify-between rounded-lg border bg-white shadow-lg px-4 py-3">
-          <p className="text-sm text-slate-600">
+        <div className="sticky bottom-4 flex items-center justify-between rounded-lg border bg-card shadow-lg px-4 py-3">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             {selectedRows.length} product{selectedRows.length !== 1 ? "s" : ""} selected
           </p>
           <div className="flex gap-2">

@@ -74,7 +74,7 @@ export function WonLostReasonDialog({ stage, open, tierOptions = [], onConfirm, 
         <div className="space-y-3 py-2">
           {needsTier && (
             <div className="space-y-1.5">
-              <Label htmlFor="tier-select">Tier the client accepted <span className="text-red-500">*</span></Label>
+              <Label htmlFor="tier-select">Tier the client accepted <span className="text-red-500 dark:text-red-400">*</span></Label>
               <Select value={tier} onValueChange={(v) => setTier(v as EstimateTier)}>
                 <SelectTrigger id="tier-select">
                   <SelectValue placeholder="Select a tier…" />
@@ -85,11 +85,11 @@ export function WonLostReasonDialog({ stage, open, tierOptions = [], onConfirm, 
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-slate-500">The other tiers&apos; lines are marked lost.</p>
+              <p className="text-xs text-muted-foreground">The other tiers&apos; lines are marked lost.</p>
             </div>
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="reason-select">Reason <span className="text-red-500">*</span></Label>
+            <Label htmlFor="reason-select">Reason <span className="text-red-500 dark:text-red-400">*</span></Label>
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger id="reason-select">
                 <SelectValue placeholder="Select a reason…" />
@@ -101,9 +101,9 @@ export function WonLostReasonDialog({ stage, open, tierOptions = [], onConfirm, 
               </SelectContent>
             </Select>
             {configured.length === 0 && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Showing default reasons.{" "}
-                <a href="/crm/settings?tab=estimates" className="text-brand-600 underline">
+                <a href="/crm/settings?tab=estimates" className="text-brand-600 dark:text-brand-400 underline">
                   Customize in Settings
                 </a>
               </p>

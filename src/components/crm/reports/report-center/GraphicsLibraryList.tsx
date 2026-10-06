@@ -75,8 +75,8 @@ const VISUAL_TYPE_ICONS: Record<VisualType, typeof BarChart3> = {
 function VisualTypeThumbnail({ type }: { type: VisualType }) {
   const Icon = VISUAL_TYPE_ICONS[type];
   return (
-    <div className="flex h-20 w-full items-center justify-center rounded-md border border-slate-100 bg-slate-50">
-      <Icon className="h-8 w-8 text-slate-400" />
+    <div className="flex h-20 w-full items-center justify-center rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
+      <Icon className="h-8 w-8 text-slate-400 dark:text-neutral-500" />
     </div>
   );
 }
@@ -108,7 +108,7 @@ export function GraphicsLibraryList() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-muted-foreground">
         Pre-made graphics ready to drop into any dashboard, plus any graphics
         you&apos;ve saved from your own dashboard panels.
       </p>
@@ -143,9 +143,9 @@ export function GraphicsLibraryList() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-white py-16 text-center">
-          <ImageIcon className="h-8 w-8 text-slate-300" />
-          <p className="text-sm font-medium text-slate-700">No graphics match</p>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-card py-16 text-center">
+          <ImageIcon className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+          <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">No graphics match</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -162,7 +162,7 @@ export function GraphicsLibraryList() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-red-600"
+                        className="h-6 w-6 text-red-600 dark:text-red-400"
                         aria-label="Delete graphic"
                         onClick={() => setDeleteTarget(item)}
                       >
@@ -180,7 +180,7 @@ export function GraphicsLibraryList() {
                   <span>{item.category}</span>
                 </div>
                 {item.description && (
-                  <p className="text-xs text-slate-500">{item.description}</p>
+                  <p className="text-xs text-muted-foreground">{item.description}</p>
                 )}
                 {canManage && (
                   <Button size="sm" variant="outline" onClick={() => setAddTarget(item)}>
@@ -284,7 +284,7 @@ function AddToDashboardDialog({
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-slate-600">Dashboard</span>
+              <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Dashboard</span>
               <Select value={dashboardId} onValueChange={handleDashboardChange}>
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Choose a dashboard…" />
@@ -300,7 +300,7 @@ function AddToDashboardDialog({
             </div>
             {tabs.length > 1 && (
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-slate-600">Tab</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Tab</span>
                 <Select value={tabId} onValueChange={setTabId}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue placeholder="Choose a tab…" />
@@ -315,7 +315,7 @@ function AddToDashboardDialog({
                 </Select>
               </div>
             )}
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
             <Button
               size="sm"
               onClick={() => void handleAdd()}

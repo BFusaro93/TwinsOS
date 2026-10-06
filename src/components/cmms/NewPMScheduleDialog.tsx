@@ -206,7 +206,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
             {/* Schedule Title */}
             <div className="grid gap-1.5">
               <Label htmlFor="pm-title">
-                Schedule Title <span className="text-red-500">*</span>
+                Schedule Title <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="pm-title"
@@ -219,7 +219,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
             {/* Multi-Asset Selector */}
             <div className="grid gap-1.5">
               <Label>
-                Assets / Vehicles <span className="text-red-500">*</span>
+                Assets / Vehicles <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
 
               {/* Selected asset badges */}
@@ -234,7 +234,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
                       {a.name}
                       <button
                         type="button"
-                        className="ml-0.5 rounded hover:bg-slate-300"
+                        className="ml-0.5 rounded hover:bg-slate-300 dark:hover:bg-neutral-600"
                         onClick={() => handleRemoveAsset(a.id)}
                       >
                         <X className="h-3 w-3" />
@@ -258,7 +258,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
                 noneLabel={selectedAssets.length > 0 ? "Add another asset…" : "Select asset or vehicle"}
               />
               {selectedAssets.length === 0 && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   Select one or more assets. Each gets its own sub-work order when WOs are generated.
                 </p>
               )}
@@ -268,7 +268,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="pm-frequency">
-                  Frequency <span className="text-red-500">*</span>
+                  Frequency <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Select value={frequency} onValueChange={setFrequency}>
                   <SelectTrigger id="pm-frequency">
@@ -286,7 +286,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
 
               <div className="grid gap-1.5">
                 <Label htmlFor="pm-next-due">
-                  Next Due Date <span className="text-red-500">*</span>
+                  Next Due Date <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Input
                   id="pm-next-due"
@@ -313,7 +313,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
                 This person is automatically assigned to every work order generated from this schedule.
               </p>
             </div>

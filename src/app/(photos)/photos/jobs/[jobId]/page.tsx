@@ -24,10 +24,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
 const STATUS_COLORS: Record<string, string> = {
-  active:   "bg-brand-100 text-brand-700",
-  complete: "bg-slate-100 text-slate-600",
+  active:   "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400",
+  complete: "bg-muted text-slate-600 dark:text-neutral-400",
 
-  pending:  "bg-purple-100 text-purple-700",
+  pending:  "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
 };
 
 const STATUS_OPTIONS: { value: PhotoJobStatus; label: string }[] = [
@@ -122,11 +122,11 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
       <div className="flex flex-col gap-5 pb-28">{/* pb-28: clears the fixed Upload Progress Photo bar on crew tablets */}
         {/* Back nav */}
         <div>
-          <button onClick={() => router.push("/photos/jobs")} className="mb-2 flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600">
+          <button onClick={() => router.push("/photos/jobs")} className="mb-2 flex items-center gap-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
             <ArrowLeft className="h-3.5 w-3.5" /> Job Photos
           </button>
           <div className="flex items-center justify-between gap-2">
-            <h1 className="min-w-0 flex-1 truncate text-xl font-semibold text-slate-900" title={job?.name}>{job?.name ?? "Job Photos"}</h1>
+            <h1 className="min-w-0 flex-1 truncate text-xl font-semibold text-slate-900 dark:text-neutral-100" title={job?.name}>{job?.name ?? "Job Photos"}</h1>
             {!isCrew && !editing && (
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={openEdit}>
@@ -136,7 +136,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                   <Button
                     size="sm"
                     variant="outline"
-                    className={job.isArchived ? "gap-1.5 border-brand-400 text-brand-600" : "gap-1.5 border-slate-300 text-slate-500"}
+                    className={job.isArchived ? "gap-1.5 border-brand-400 text-brand-600 dark:text-brand-400" : "gap-1.5 border-slate-300 dark:border-neutral-700 text-muted-foreground"}
                     disabled={archiving}
                     onClick={() =>
                       archiveJob(
@@ -166,7 +166,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
               <Button size="sm" variant="outline" onClick={() => changeStatus("active")} disabled={saving}>Reopen</Button>
             )}
             {job.status !== "pending" && (
-              <Button size="sm" variant="outline" className="text-purple-600 border-purple-200 hover:bg-purple-50" onClick={() => changeStatus("pending")} disabled={saving}>
+              <Button size="sm" variant="outline" className="text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40" onClick={() => changeStatus("pending")} disabled={saving}>
                 Mark Pending
               </Button>
             )}
@@ -175,10 +175,10 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
 
         {/* Edit form */}
         {editing && job && (
-          <div className="rounded-xl border border-brand-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-brand-200 dark:border-brand-800 bg-card p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
-              <p className="font-medium text-slate-900">Edit Job</p>
-              <button onClick={() => setEditing(false)} className="hidden sm:inline-flex"><X className="h-4 w-4 text-slate-400" /></button>
+              <p className="font-medium text-slate-900 dark:text-neutral-100">Edit Job</p>
+              <button onClick={() => setEditing(false)} className="hidden sm:inline-flex"><X className="h-4 w-4 text-slate-400 dark:text-neutral-500" /></button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
@@ -192,7 +192,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
               <div>
                 <Label className="text-xs">Status</Label>
                 <select
-                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                   value={form.status}
                   onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as PhotoJobStatus }))}
                 >
@@ -231,54 +231,54 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
 
         {/* Job info card (read mode) */}
         {job && !editing && (
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                {job.customerName && <p className="font-medium text-slate-900">{job.customerName}</p>}
+                {job.customerName && <p className="font-medium text-slate-900 dark:text-neutral-100">{job.customerName}</p>}
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_COLORS[job.status] ?? ""}`}>
                   {job.status.replace("_", " ")}
                 </span>
                 {job.isArchived && (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Archived</span>
                 )}
               </div>
               {fullAddress && (
-                <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <MapPin className="h-3.5 w-3.5 shrink-0" /><span>{fullAddress}</span>
                 </div>
               )}
               {job.notes && (
-                <div className="flex items-start gap-1.5 text-sm text-slate-500">
+                <div className="flex items-start gap-1.5 text-sm text-muted-foreground">
                   <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p className="whitespace-pre-wrap leading-relaxed">{job.notes}</p>
                 </div>
               )}
 
               {/* Project link row */}
-              <div className="mt-3 border-t border-slate-100 pt-3">
+              <div className="mt-3 border-t border-slate-100 dark:border-neutral-800 pt-3">
                 {editingLink ? (
                   <div className="flex items-center gap-2">
-                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
                     <select
-                      className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="flex-1 rounded-md border border-border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       value={selectedProjectId}
                       onChange={(e) => setSelectedProjectId(e.target.value)}
                     >
                       <option value="">— No project link —</option>
                       {pickerProjects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
                     </select>
-                    <button onClick={saveLink} disabled={saving} className="rounded-md p-1.5 text-brand-600 hover:bg-brand-50 disabled:opacity-50">
+                    <button onClick={saveLink} disabled={saving} className="rounded-md p-1.5 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 disabled:opacity-50">
                       <Check className="h-4 w-4" />
                     </button>
-                    <button onClick={() => setEditingLink(false)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100">
+                    <button onClick={() => setEditingLink(false)} className="rounded-md p-1.5 text-slate-400 dark:text-neutral-500 hover:bg-muted">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
                     {linkedProject ? (
                       <div className="flex items-center gap-2">
-                        <button onClick={() => setProjectSheetOpen(true)} className="text-sm font-medium text-brand-600 hover:underline">
+                        <button onClick={() => setProjectSheetOpen(true)} className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline">
                           {linkedProject.name}
                         </button>
                         <StatusBadge
@@ -286,16 +286,16 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                           label={PROJECT_STATUS_LABELS[linkedProject.status]}
                         />
                         {linkedProject.isArchived && (
-                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             Archived
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-sm text-slate-400">No project linked</span>
+                      <span className="text-sm text-slate-400 dark:text-neutral-500">No project linked</span>
                     )}
                     {(!isCrew || canAnnotate) && (
-                      <button onClick={openLinkEditor} className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                      <button onClick={openLinkEditor} className="ml-auto rounded-md p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -313,15 +313,15 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
         )}
 
         {/* Comments + Audit Trail tabs */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <Tabs defaultValue="comments">
-            <div className="shrink-0 overflow-x-auto border-b border-slate-200 px-5">
+            <div className="shrink-0 overflow-x-auto border-b border-border px-5">
               <TabsList className="h-10 bg-transparent p-0">
-                <TabsTrigger value="comments" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+                <TabsTrigger value="comments" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none">
                   Comments
                 </TabsTrigger>
                 {!isCrew && (
-                  <TabsTrigger value="audit" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+                  <TabsTrigger value="audit" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none">
                     Audit Trail
                   </TabsTrigger>
                 )}

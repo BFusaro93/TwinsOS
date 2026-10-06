@@ -44,8 +44,8 @@ function formatReadingDate(iso: string) {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -94,15 +94,15 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-4 py-4 sm:px-6 lg:pr-12">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-slate-900">{meter.assetName}</h2>
-          <p className="text-sm text-slate-500">{meter.name}</p>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{meter.assetName}</h2>
+          <p className="text-sm text-muted-foreground">{meter.name}</p>
         </div>
         <Badge
           variant="outline"
           className={
             meter.source === "samsara"
-              ? "border-brand-200 bg-brand-50 text-brand-700"
-              : "border-slate-200 bg-slate-100 text-slate-500"
+              ? "border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+              : "border-border bg-muted text-muted-foreground"
           }
         >
           {meter.source === "samsara" ? "Samsara" : "Manual"}
@@ -121,34 +121,34 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
       <div className="flex-1 overflow-y-auto">
         {/* Stat cards */}
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:p-6">
-          <div className="min-w-0 rounded-md border bg-slate-50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+          <div className="min-w-0 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Current
             </p>
-            <p className="mt-1 text-xl font-bold text-slate-900">
+            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-neutral-100">
               {meter.currentValue.toLocaleString()}
-              <span className="ml-1 break-words text-sm font-normal text-slate-400">{meter.unit}</span>
+              <span className="ml-1 break-words text-sm font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
             </p>
           </div>
           {totalDelta !== null && (
-            <div className="min-w-0 rounded-md border bg-slate-50 p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            <div className="min-w-0 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Past 12 mo
               </p>
-              <p className="mt-1 text-xl font-bold text-slate-900">
+              <p className="mt-1 text-xl font-bold text-slate-900 dark:text-neutral-100">
                 +{totalDelta.toLocaleString()}
-                <span className="ml-1 break-words text-sm font-normal text-slate-400">{meter.unit}</span>
+                <span className="ml-1 break-words text-sm font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
               </p>
             </div>
           )}
           {avgPerMonth !== null && (
-            <div className="min-w-0 rounded-md border bg-slate-50 p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            <div className="min-w-0 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Avg / mo
               </p>
-              <p className="mt-1 text-xl font-bold text-slate-900">
+              <p className="mt-1 text-xl font-bold text-slate-900 dark:text-neutral-100">
                 {avgPerMonth.toLocaleString()}
-                <span className="ml-1 break-words text-sm font-normal text-slate-400">{meter.unit}</span>
+                <span className="ml-1 break-words text-sm font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
               </p>
             </div>
           )}
@@ -158,12 +158,12 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
 
         {/* Chart */}
         <div className="p-6">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Reading History (12 months)
           </p>
           {isLoading ? (
             <div className="flex h-48 items-center justify-center">
-              <p className="text-sm text-slate-400">Loading chart…</p>
+              <p className="text-sm text-slate-400 dark:text-neutral-500">Loading chart…</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
@@ -210,7 +210,7 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
 
         {/* Recent readings table */}
         <div className="p-6">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Recent Readings
           </p>
           <dl>
@@ -227,28 +227,28 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
                 <div className={showAllReadings ? "max-h-96 overflow-y-auto" : undefined}>
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-slate-50">
-                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Reading</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Source</th>
+                      <tr className="bg-slate-50 dark:bg-muted/40">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Reading</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Source</th>
                         <th className="w-8 px-2 py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       {visible.map((r) => (
-                        <tr key={r.id} className="group border-t border-slate-100">
-                          <td className="px-3 py-2 text-slate-600">{formatDate(r.readingAt)}</td>
-                          <td className="px-3 py-2 text-right font-mono font-medium text-slate-900">
+                        <tr key={r.id} className="group border-t border-slate-100 dark:border-neutral-800">
+                          <td className="px-3 py-2 text-slate-600 dark:text-neutral-400">{formatDate(r.readingAt)}</td>
+                          <td className="px-3 py-2 text-right font-mono font-medium text-slate-900 dark:text-neutral-100">
                             {r.value.toLocaleString()}{" "}
-                            <span className="font-normal text-slate-400">{meter.unit}</span>
+                            <span className="font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
                           </td>
-                          <td className="px-3 py-2 text-right text-slate-400 capitalize">{r.source}</td>
+                          <td className="px-3 py-2 text-right text-slate-400 dark:text-neutral-500 capitalize">{r.source}</td>
                           <td className="px-2 py-2 text-right">
                             {canWriteEquipt && (
                               <button
                                 type="button"
                                 onClick={() => setDeletingReadingId(r.id)}
-                                className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                                className="rounded p-1 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 group-hover:opacity-100"
                                 title="Delete reading"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -264,7 +264,7 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
                   <button
                     type="button"
                     onClick={() => setShowAllReadings((v) => !v)}
-                    className="w-full border-t border-slate-100 bg-slate-50 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                    className="w-full border-t border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300"
                   >
                     {showAllReadings ? "Show less" : `Show all ${reversed.length} readings`}
                   </button>

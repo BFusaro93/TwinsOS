@@ -49,27 +49,27 @@ export function LaborRatesEditor() {
 
   return (
     <div className="space-y-4 text-xs">
-      <p className="text-slate-500">
+      <p className="text-muted-foreground">
         Used to auto-fill an estimate line item&apos;s Cost from its Budgeted Hours (Cost = Budgeted Hours ×
         Break-Even Labor Rate) whenever Cost is left at $0. This is the same org-wide rate set in Equipt →
         Settings → General → Finance — editing it here updates that too.
       </p>
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-slate-700">Break-Even Labor Rate</label>
-        <p className="text-[11px] text-slate-400">
+        <label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Break-Even Labor Rate</label>
+        <p className="text-[11px] text-slate-400 dark:text-neutral-500">
           Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery (LLR + Overhead).
         </p>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">$</span>
+          <span className="text-sm text-muted-foreground">$</span>
           <input
             type="number"
             min={0}
             step={0.01}
             value={breakevenDraft}
             onChange={(e) => setBreakevenDraft(e.target.value)}
-            className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-24 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
-          <span className="text-sm text-slate-500">/hr</span>
+          <span className="text-sm text-muted-foreground">/hr</span>
           <Button
             size="sm"
             className="h-8"
@@ -88,21 +88,21 @@ export function LaborRatesEditor() {
         </div>
       </div>
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-slate-700">Loaded Labor Rate (LLR)</label>
-        <p className="text-[11px] text-slate-400">
+        <label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Loaded Labor Rate (LLR)</label>
+        <p className="text-[11px] text-slate-400 dark:text-neutral-500">
           Wages + burden + non-billable uplift only — no fixed overhead recovery.
         </p>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">$</span>
+          <span className="text-sm text-muted-foreground">$</span>
           <input
             type="number"
             min={0}
             step={0.01}
             value={burdenedDraft}
             onChange={(e) => setBurdenedDraft(e.target.value)}
-            className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-24 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
-          <span className="text-sm text-slate-500">/hr</span>
+          <span className="text-sm text-muted-foreground">/hr</span>
           <Button
             size="sm"
             className="h-8"

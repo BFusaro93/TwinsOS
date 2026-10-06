@@ -127,7 +127,7 @@ export function BulkPartCostDialog({
           <DialogDescription>
             Edit unit costs for multiple parts at once.
             {costMethod !== "manual" && (
-              <span className="ml-1 text-amber-600">
+              <span className="ml-1 text-amber-600 dark:text-amber-400">
                 WAC/FIFO is active — received-goods costs take precedence over
                 this manual fallback.
               </span>
@@ -136,8 +136,8 @@ export function BulkPartCostDialog({
         </DialogHeader>
 
         {/* Quick % adjust */}
-        <div className="rounded-md border bg-slate-50 p-3">
-          <p className="mb-2 text-xs font-semibold text-slate-500">
+        <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">
             Quick % Adjust (applies to all visible rows)
           </p>
           <div className="flex items-center gap-2">
@@ -174,8 +174,8 @@ export function BulkPartCostDialog({
         {/* Table */}
         <div className="max-h-[40dvh] sm:max-h-[45vh] overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50">
-              <tr className="border-b text-left text-xs text-slate-500">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+              <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Part</th>
                 <th className="px-3 py-2 font-medium">Part #</th>
                 <th className="px-3 py-2 font-medium">Vendor</th>
@@ -187,10 +187,10 @@ export function BulkPartCostDialog({
                 const costChanged =
                   Math.round((parseFloat(r.unitCost) || 0) * 100) !== r.origUnitCost;
                 return (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50">
-                    <td className="px-3 py-2 font-medium text-slate-900">{r.name}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-slate-500">{r.partNumber}</td>
-                    <td className="px-3 py-2 text-slate-500">{r.vendorName || "—"}</td>
+                  <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
+                    <td className="px-3 py-2 font-medium text-slate-900 dark:text-neutral-100">{r.name}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.partNumber}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.vendorName || "—"}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
                         <Input
@@ -199,10 +199,10 @@ export function BulkPartCostDialog({
                           min={0}
                           value={r.unitCost}
                           onChange={(e) => setRowCost(r.id, e.target.value)}
-                          className={`h-7 w-28 text-xs ${costChanged ? "border-brand-400 bg-brand-50" : ""}`}
+                          className={`h-7 w-28 text-xs ${costChanged ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : ""}`}
                         />
                         {costChanged && (
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-slate-400 dark:text-neutral-500">
                             was {formatCurrency(r.origUnitCost)}
                           </span>
                         )}
@@ -213,7 +213,7 @@ export function BulkPartCostDialog({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-400">
+                  <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                     No parts match your search.
                   </td>
                 </tr>
@@ -224,7 +224,7 @@ export function BulkPartCostDialog({
 
         <DialogFooter className="items-center">
           {dirtyCount > 0 && (
-            <p className="mr-auto text-xs text-slate-500">
+            <p className="mr-auto text-xs text-muted-foreground">
               {dirtyCount} part{dirtyCount !== 1 ? "s" : ""} modified
             </p>
           )}

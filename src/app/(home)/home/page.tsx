@@ -50,20 +50,20 @@ function usePendingPlanRedirect() {
 }
 
 const INTERNAL_BOX =
-  "group flex w-full flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg sm:w-52";
+  "group flex w-full flex-col items-center gap-5 rounded-2xl border-2 border-border bg-card p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg sm:w-52";
 
 const CREW_BOX =
-  "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
+  "group flex flex-col items-center gap-5 rounded-2xl border-2 border-border bg-card p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
 
 const EXTERNAL_BOX =
-  "group flex w-full flex-col items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-sm transition-all duration-150 hover:border-slate-400 hover:shadow-lg sm:w-80";
+  "group flex w-full flex-col items-center gap-4 rounded-2xl border-2 border-border bg-card p-8 shadow-sm transition-all duration-150 hover:border-slate-400 dark:hover:border-neutral-600 hover:shadow-lg sm:w-80";
 
 function CrewHome() {
   const { logoDataUrl, orgName } = useSettingsStore();
   const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 dark:bg-background p-6">
       <div className="mb-10 flex flex-col items-center gap-3">
         {logoDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -75,8 +75,8 @@ function CrewHome() {
         ) : (
           <BrandMark variant="color" className="h-14 w-14 rounded-2xl shadow-md" />
         )}
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Landscapt</h1>
-        <p className="text-sm text-slate-500">What would you like to do?</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-neutral-100">Landscapt</h1>
+        <p className="text-sm text-muted-foreground">What would you like to do?</p>
       </div>
 
       {/* Primary tiles */}
@@ -84,33 +84,33 @@ function CrewHome() {
         {/* Crew field app (/crm/crew) — the CRM crew rollout is being tested;
             useCrmAccess scopes crew logins to this one CRM surface. */}
         <Link href="/crm/crew" className={CREW_BOX}>
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
             <CalendarCheck className="h-8 w-8" />
           </div>
           <div className="text-center">
-            <p className="text-lg font-semibold text-slate-900">My Schedule</p>
-            <p className="mt-1 text-sm text-slate-500">Today&apos;s stops &amp; job visits</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">My Schedule</p>
+            <p className="mt-1 text-sm text-muted-foreground">Today&apos;s stops &amp; job visits</p>
           </div>
         </Link>
 
         <Link href="/dashboards" className={CREW_BOX}>
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
             <BarChart2 className="h-8 w-8" />
           </div>
           <div className="text-center">
-            <p className="text-lg font-semibold text-slate-900">Dashboards</p>
-            <p className="mt-1 text-sm text-slate-500">Reports &amp; analytics</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Dashboards</p>
+            <p className="mt-1 text-sm text-muted-foreground">Reports &amp; analytics</p>
           </div>
         </Link>
 
         {hasJobPhotos && (
           <Link href="/photos/jobs" className={CREW_BOX}>
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
               <Camera className="h-8 w-8" />
             </div>
             <div className="text-center">
-              <p className="text-lg font-semibold text-slate-900">Job Photos</p>
-              <p className="mt-1 text-sm text-slate-500">Field photo documentation &amp; field forms</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Job Photos</p>
+              <p className="mt-1 text-sm text-muted-foreground">Field photo documentation &amp; field forms</p>
             </div>
           </Link>
         )}
@@ -141,7 +141,7 @@ export default function HomePage() {
   usePendingPlanRedirect();
 
   if (!currentUserLoaded) {
-    return <div className="min-h-dvh bg-slate-50" />;
+    return <div className="min-h-dvh bg-slate-50 dark:bg-background" />;
   }
 
   if (currentUser.role === "crew") {
@@ -149,7 +149,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 dark:bg-background p-6">
       {/* Logo / header */}
       <div className="mb-12 flex flex-col items-center gap-3">
         {logoDataUrl ? (
@@ -162,66 +162,66 @@ export default function HomePage() {
         ) : (
           <BrandMark variant="color" className="h-14 w-14 rounded-2xl shadow-md" />
         )}
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Landscapt</h1>
-        <p className="text-sm text-slate-500">Make a section to get started</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-neutral-100">Landscapt</h1>
+        <p className="text-sm text-muted-foreground">Make a section to get started</p>
       </div>
 
       {/* Primary app boxes */}
       <div className="flex w-full max-w-6xl flex-wrap justify-center gap-5">
         <Link href="/dashboards" className={INTERNAL_BOX}>
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
             <BarChart2 className="h-8 w-8" />
           </div>
           <div className="text-center">
-            <p className="text-lg font-semibold text-slate-900">Dashboards</p>
-            <p className="mt-1 text-sm text-slate-500">Custom reports &amp; analytics</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Dashboards</p>
+            <p className="mt-1 text-sm text-muted-foreground">Custom reports &amp; analytics</p>
           </div>
         </Link>
 
         {hasEquipt && (
           <Link href="/equipt/home" className={INTERNAL_BOX}>
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
               <Wrench className="h-8 w-8" />
             </div>
             <div className="text-center">
-              <p className="text-lg font-semibold text-slate-900">Equipt</p>
-              <p className="mt-1 text-sm text-slate-500">Work orders, purchasing &amp; asset management</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Equipt</p>
+              <p className="mt-1 text-sm text-muted-foreground">Work orders, purchasing &amp; asset management</p>
             </div>
           </Link>
         )}
 
         {hasLandscapt && hasCrmAccess && (
           <Link href="/crm/home" className={INTERNAL_BOX}>
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
               <Sprout className="h-8 w-8" />
             </div>
             <div className="text-center">
-              <p className="text-lg font-semibold text-slate-900">Landscapt</p>
-              <p className="mt-1 text-sm text-slate-500">Clients, estimating, scheduling &amp; invoicing</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Landscapt</p>
+              <p className="mt-1 text-sm text-muted-foreground">Clients, estimating, scheduling &amp; invoicing</p>
             </div>
           </Link>
         )}
 
         {hasLandscapt && (
           <Link href="/tools/calculators" className={INTERNAL_BOX}>
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
               <NotepadText className="h-8 w-8" />
             </div>
             <div className="text-center">
-              <p className="text-lg font-semibold text-slate-900">Tools</p>
-              <p className="mt-1 text-sm text-slate-500">Job costing, damage cases &amp; calculators</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Tools</p>
+              <p className="mt-1 text-sm text-muted-foreground">Job costing, damage cases &amp; calculators</p>
             </div>
           </Link>
         )}
 
         {hasJobPhotos && (
           <Link href="/photos/jobs" className={INTERNAL_BOX}>
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
               <Camera className="h-8 w-8" />
             </div>
             <div className="text-center">
-              <p className="text-lg font-semibold text-slate-900">Job Photos</p>
-              <p className="mt-1 text-sm text-slate-500">Field photo documentation &amp; field forms</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Job Photos</p>
+              <p className="mt-1 text-sm text-muted-foreground">Field photo documentation &amp; field forms</p>
             </div>
           </Link>
         )}
@@ -230,12 +230,12 @@ export default function HomePage() {
       {/* External app shortcuts */}
       <div className="mt-5 flex w-full max-w-5xl flex-wrap justify-center gap-5">
         <Link href="/settings" className={EXTERNAL_BOX}>
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors group-hover:bg-slate-200 dark:group-hover:bg-neutral-700">
             <Settings className="h-6 w-6" />
           </div>
           <div className="text-center">
-            <p className="text-base font-semibold text-slate-700">Settings</p>
-            <p className="mt-0.5 text-xs text-slate-400">Org, branding &amp; subscriptions</p>
+            <p className="text-base font-semibold text-slate-700 dark:text-neutral-300">Settings</p>
+            <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">Org, branding &amp; subscriptions</p>
           </div>
         </Link>
 
@@ -249,15 +249,15 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className={EXTERNAL_BOX}
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors group-hover:bg-slate-200 dark:group-hover:bg-neutral-700">
                 <Icon className="h-6 w-6" />
               </div>
               <div className="text-center">
                 <div className="flex items-center justify-center gap-1.5">
-                  <p className="text-base font-semibold text-slate-700">{shortcut.name}</p>
-                  <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                  <p className="text-base font-semibold text-slate-700 dark:text-neutral-300">{shortcut.name}</p>
+                  <ExternalLink className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                 </div>
-                <p className="mt-0.5 text-xs text-slate-400">{shortcut.subtitle}</p>
+                <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">{shortcut.subtitle}</p>
               </div>
             </a>
           );

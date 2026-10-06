@@ -1,3 +1,4 @@
+// dark-mode-codemod: skip — fixed dark surface in both themes (overlay + #1e1e1e panel)
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";

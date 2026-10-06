@@ -149,7 +149,7 @@ function parseNum(v: string): number {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Label className="text-xs font-medium text-slate-600">{label}</Label>
+      <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">{label}</Label>
       {children}
     </div>
   );
@@ -247,7 +247,7 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
   }
 
   const inputCls =
-    "w-full rounded border border-slate-200 px-1.5 py-0.5 text-right text-xs focus:outline-none focus:border-brand-400";
+    "w-full rounded border border-border px-1.5 py-0.5 text-right text-xs focus:outline-none focus:border-brand-400";
 
   return (
     <div className="flex flex-col gap-4">
@@ -271,7 +271,7 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
       <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-slate-50 border-b font-semibold text-slate-500 uppercase tracking-wide">
+            <tr className="bg-slate-50 dark:bg-muted/40 border-b font-semibold text-muted-foreground uppercase tracking-wide">
               <th className="px-3 py-2 text-left">From</th>
               <th className="px-3 py-2 text-left">To</th>
               <th className="px-3 py-2 text-left">Calc Type</th>
@@ -285,7 +285,7 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-slate-400 text-xs">
+                <td colSpan={8} className="px-3 py-6 text-center text-slate-400 dark:text-neutral-500 text-xs">
                   No rows yet. Click Add Row to get started.
                 </td>
               </tr>
@@ -303,7 +303,7 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
                 <td className="px-2 py-1.5">
                   <select defaultValue={String(row.calcType)}
                     onChange={(e) => saveField(row.id, "calc_type", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400 bg-white">
+                    className="w-full rounded border border-border px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400 bg-card">
                     <option value="1">Per Unit</option>
                     <option value="0">Fixed</option>
                   </select>
@@ -328,7 +328,7 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
                   <button onClick={() => deleteRow.mutate({ id: row.id, serviceId }, {
                       onError: () => toast.error("Failed to delete rate matrix row"),
                     })}
-                    className="rounded p-0.5 hover:bg-red-50">
+                    className="rounded p-0.5 hover:bg-red-50 dark:hover:bg-red-950/40">
                     <Trash2 className="h-3.5 w-3.5 text-red-400" />
                   </button>
                 </td>
@@ -336,17 +336,17 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
             ))}
           </tbody>
         </table>
-        <div className="p-2 border-t bg-slate-50 flex items-center gap-2">
+        <div className="p-2 border-t bg-slate-50 dark:bg-muted/40 flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={addRow} className="text-xs" disabled={!selectedFieldId}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
           </Button>
           {!selectedFieldId && (
-            <span className="text-xs text-slate-400">Pick a lookup field above so rows know what to measure against</span>
+            <span className="text-xs text-slate-400 dark:text-neutral-500">Pick a lookup field above so rows know what to measure against</span>
           )}
         </div>
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
         Tail rows apply when a property value exceeds all standard range rows. Mark a row as Tail to use it as the overflow rule.
       </p>
     </div>
@@ -427,14 +427,14 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         Sub-services appear as nested line items under <strong>{parentService.name}</strong> on estimates and jobs.
       </p>
 
       <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-50 border-b font-medium text-slate-500 text-xs uppercase tracking-wide">
+            <tr className="bg-slate-50 dark:bg-muted/40 border-b font-medium text-muted-foreground text-xs uppercase tracking-wide">
               <th className="px-3 py-2 text-left">Name</th>
               <th className="px-3 py-2 text-right">Default Rate</th>
               <th className="px-3 py-2 text-right">B.Hrs</th>
@@ -444,24 +444,24 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
           <tbody>
             {subServices.length === 0 && !addMode && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-slate-400 text-xs">
+                <td colSpan={4} className="px-3 py-6 text-center text-slate-400 dark:text-neutral-500 text-xs">
                   No sub-services yet.
                 </td>
               </tr>
             )}
             {subServices.map((s) => (
               <tr key={s.id} className="border-b last:border-0">
-                <td className="px-3 py-2 text-slate-800">{s.name}</td>
-                <td className="px-3 py-2 text-right text-slate-600">
+                <td className="px-3 py-2 text-slate-800 dark:text-neutral-100">{s.name}</td>
+                <td className="px-3 py-2 text-right text-slate-600 dark:text-neutral-400">
                   {s.defaultRateCents != null ? `$${(s.defaultRateCents / 100).toFixed(2)}` : "—"}
                 </td>
-                <td className="px-3 py-2 text-right text-slate-600">
+                <td className="px-3 py-2 text-right text-slate-600 dark:text-neutral-400">
                   {s.defaultBHrs > 0 ? s.defaultBHrs : "—"}
                 </td>
                 <td className="px-2 py-2 text-center">
                   <button
                     onClick={() => handleRemove(s)}
-                    className="rounded p-0.5 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                    className="rounded p-0.5 hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                     title="Remove from parent"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -472,7 +472,7 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
 
             {/* Add new inline row */}
             {addMode === "new" && (
-              <tr className="border-b bg-slate-50">
+              <tr className="border-b bg-slate-50 dark:bg-muted/40">
                 <td className="px-2 py-2" colSpan={4}>
                   <div className="flex items-center gap-2">
                     <Input
@@ -494,7 +494,7 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
 
             {/* Link existing inline row */}
             {addMode === "existing" && (
-              <tr className="border-b bg-slate-50">
+              <tr className="border-b bg-slate-50 dark:bg-muted/40">
                 <td className="px-2 py-2" colSpan={4}>
                   <div className="flex items-center gap-2">
                     <Select value={linkId || "none"} onValueChange={(v) => setLinkId(v === "none" ? "" : v)}>
@@ -520,18 +520,18 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
         </table>
 
         {addMode === null && (
-          <div className="p-2 border-t bg-slate-50 flex gap-2">
+          <div className="p-2 border-t bg-slate-50 dark:bg-muted/40 flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => setAddMode("new")} className="text-xs">
               <Plus className="mr-1 h-3.5 w-3.5" /> New sub-service
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setAddMode("existing")} className="text-xs text-slate-500">
+            <Button variant="ghost" size="sm" onClick={() => setAddMode("existing")} className="text-xs text-muted-foreground">
               Link existing
             </Button>
           </div>
         )}
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
         To edit a sub-service&apos;s rates, find it in the services list and open it directly.
       </p>
     </div>
@@ -589,7 +589,7 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         Chemical products attached here are pre-loaded onto every visit for this service — techs
         don&apos;t need to re-select them each time. Optional Start/End dates support seasonal rotation.
       </p>
@@ -597,7 +597,7 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
       <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-50 border-b font-medium text-slate-500 text-xs uppercase tracking-wide">
+            <tr className="bg-slate-50 dark:bg-muted/40 border-b font-medium text-muted-foreground text-xs uppercase tracking-wide">
               <th className="px-3 py-2 text-left">Product</th>
               <th className="px-3 py-2 text-left">Start Date</th>
               <th className="px-3 py-2 text-left">End Date</th>
@@ -607,20 +607,20 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
           <tbody>
             {serviceChemicals.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-slate-400 text-xs">
+                <td colSpan={4} className="px-3 py-6 text-center text-slate-400 dark:text-neutral-500 text-xs">
                   No chemicals attached yet.
                 </td>
               </tr>
             )}
             {serviceChemicals.map((c) => (
               <tr key={c.id} className="border-b last:border-0">
-                <td className="px-3 py-2 text-slate-800">{c.productName ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-800 dark:text-neutral-100">{c.productName ?? "—"}</td>
                 <td className="px-2 py-1.5">
                   <input
                     type="date"
                     defaultValue={c.startDate ?? ""}
                     onBlur={(e) => handleDateChange(c.productId, "startDate", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400"
+                    className="w-full rounded border border-border px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400"
                   />
                 </td>
                 <td className="px-2 py-1.5">
@@ -628,13 +628,13 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
                     type="date"
                     defaultValue={c.endDate ?? ""}
                     onBlur={(e) => handleDateChange(c.productId, "endDate", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400"
+                    className="w-full rounded border border-border px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400"
                   />
                 </td>
                 <td className="px-2 py-2 text-center">
                   <button
                     onClick={() => handleRemove(c.productId)}
-                    className="rounded p-0.5 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                    className="rounded p-0.5 hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -643,7 +643,7 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
             ))}
           </tbody>
         </table>
-        <div className="p-2 border-t bg-slate-50 flex items-center gap-2">
+        <div className="p-2 border-t bg-slate-50 dark:bg-muted/40 flex items-center gap-2">
           <Select value={addingProductId || "none"} onValueChange={(v) => setAddingProductId(v === "none" ? "" : v)}>
             <SelectTrigger className="h-7 w-64 text-xs">
               <SelectValue placeholder="Select a chemical product…" />
@@ -659,7 +659,7 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
             <Plus className="mr-1 h-3.5 w-3.5" /> Add
           </Button>
           {chemicalProducts.length === 0 && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-400 dark:text-neutral-500">
               No chemical products yet — mark a product &quot;Track Chemicals&quot; in the Products catalog.
             </span>
           )}
@@ -759,7 +759,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
             {activeService ? `Edit Service: ${activeService.name}` : "Add Service"}
           </DialogTitle>
           {activeService && !service && (
-            <p className="text-xs text-green-600 font-medium">Service created — you can now configure Rate Matrix and Sub-services.</p>
+            <p className="text-xs text-green-600 dark:text-green-400 font-medium">Service created — you can now configure Rate Matrix and Sub-services.</p>
           )}
         </DialogHeader>
 
@@ -781,7 +781,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
               onClick={() => !t.disabled && setTab(t.key)}
               disabled={t.disabled}
               className={`px-4 py-2 border-b-2 transition-colors font-medium
-                ${tab === t.key ? "border-brand-600 text-brand-700" : "border-transparent text-slate-500 hover:text-slate-700"}
+                ${tab === t.key ? "border-brand-600 text-brand-700 dark:text-brand-400" : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"}
                 ${t.disabled ? "opacity-40 cursor-not-allowed" : ""}
               `}
             >
@@ -882,19 +882,19 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                     type="color"
                     value={form.taskColor}
                     onChange={(e) => setForm({ ...form, taskColor: e.target.value })}
-                    className="h-9 w-14 cursor-pointer rounded border border-slate-200 p-0.5"
+                    className="h-9 w-14 cursor-pointer rounded border border-border p-0.5"
                   />
-                  <span className="text-xs text-slate-500">{form.taskColor}</span>
+                  <span className="text-xs text-muted-foreground">{form.taskColor}</span>
                 </div>
               </Field>
             </div>
 
             {/* Pricing defaults */}
             <div className="rounded-lg border p-3">
-              <p className="text-xs font-semibold text-slate-600 mb-2">Pricing Defaults</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400 mb-2">Pricing Defaults</p>
 
               <Field label="Budget Method">
-                <div className="flex gap-1 rounded-md border border-slate-200 bg-slate-50 p-0.5 w-fit">
+                <div className="flex gap-1 rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-0.5 w-fit">
                   {([
                     { value: "manual", label: "Manual Budget Rate" },
                     { value: "production_rate", label: "Production Rate" },
@@ -905,15 +905,15 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                       onClick={() => setForm({ ...form, budgetMethod: opt.value })}
                       className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                         form.budgetMethod === opt.value
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
+                          ? "bg-card text-slate-900 dark:text-neutral-100 shadow-sm"
+                          : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
                       }`}
                     >
                       {opt.label}
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
                   {form.budgetMethod === "manual"
                     ? "Budgeted hours are entered directly below (Default B.Hrs)."
                     : "Budgeted hours are calculated per job from quantity ÷ production rate."}
@@ -1000,7 +1000,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                     checked={form[key] as boolean}
                     onCheckedChange={(v) => setForm({ ...form, [key]: !!v })}
                   />
-                  <span className="text-slate-700">{label}</span>
+                  <span className="text-slate-700 dark:text-neutral-300">{label}</span>
                 </label>
               ))}
             </div>
@@ -1015,7 +1015,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                   placeholder="e.g. Beds look thin or washed out?"
                   className="text-sm"
                 />
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
                   Shown under the service name when a crew suggests work, so they know what to
                   look for.
                 </p>
@@ -1028,8 +1028,8 @@ export function ServiceDialog({ open, service, onClose }: Props) {
         {tab === "descriptions" && (
           <div className="flex flex-col gap-5 py-2">
             <div className="flex flex-col gap-2">
-              <Label className="text-xs font-semibold text-slate-600">Estimate Description</Label>
-              <p className="text-xs text-slate-400">Shown to clients on estimates. Supports rich formatting.</p>
+              <Label className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Estimate Description</Label>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">Shown to clients on estimates. Supports rich formatting.</p>
               <RichTextEditor
                 value={form.descriptionOnEstimate}
                 onChange={(html) => setForm({ ...form, descriptionOnEstimate: html })}
@@ -1038,8 +1038,8 @@ export function ServiceDialog({ open, service, onClose }: Props) {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label className="text-xs font-semibold text-slate-600">Invoice Description</Label>
-              <p className="text-xs text-slate-400">Shown on invoices for this service line item.</p>
+              <Label className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Invoice Description</Label>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">Shown on invoices for this service line item.</p>
               <RichTextEditor
                 value={form.invoiceDescription}
                 onChange={(html) => setForm({ ...form, invoiceDescription: html })}

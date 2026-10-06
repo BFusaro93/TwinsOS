@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 function TOCLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} className="block text-sm text-brand-600 hover:underline">
+    <a href={href} className="block text-sm text-brand-600 dark:text-brand-400 hover:underline">
       {children}
     </a>
   );
@@ -18,16 +18,16 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-6 rounded-lg border bg-white p-6 shadow-sm">
-      <h2 className="mb-3 text-lg font-semibold text-slate-900">{title}</h2>
-      <div className="flex flex-col gap-3 text-sm leading-relaxed text-slate-600">{children}</div>
+    <section id={id} className="scroll-mt-6 rounded-lg border bg-card p-6 shadow-sm">
+      <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-neutral-100">{title}</h2>
+      <div className="flex flex-col gap-3 text-sm leading-relaxed text-slate-600 dark:text-neutral-400">{children}</div>
     </section>
   );
 }
 
 function Callout({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
       {children}
     </div>
   );
@@ -37,12 +37,12 @@ export default function Page() {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Support</h1>
-        <p className="text-sm text-slate-500">Help and support resources</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-neutral-100">Support</h1>
+        <p className="text-sm text-muted-foreground">Help and support resources</p>
       </div>
 
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">On this page</h2>
+      <div className="rounded-lg border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-neutral-100">On this page</h2>
         <div className="flex flex-col gap-1">
           <TOCLink href="#overhead-recovery">Estimating: Overhead Recovery (Flat Rate vs. Per Cost Type)</TOCLink>
           <TOCLink href="#labor-rates">Labor Rates &amp; the Cost Auto-Fill</TOCLink>
@@ -59,7 +59,7 @@ export default function Page() {
           Equipt and Landscapt settings — it&apos;s the same org-wide setting either way).
         </p>
 
-        <h3 className="mt-2 font-semibold text-slate-800">Flat Rate</h3>
+        <h3 className="mt-2 font-semibold text-slate-800 dark:text-neutral-100">Flat Rate</h3>
         <p>
           A single percentage, typed directly on each individual estimate&apos;s Financial Settings panel
           (the &quot;Overhead Rate %&quot; field). It applies uniformly to that estimate&apos;s entire cost
@@ -68,7 +68,7 @@ export default function Page() {
           standard rate instead of 0%, saving you from typing it every time.
         </p>
 
-        <h3 className="mt-2 font-semibold text-slate-800">Per Cost Type</h3>
+        <h3 className="mt-2 font-semibold text-slate-800 dark:text-neutral-100">Per Cost Type</h3>
         <p>
           Six separate percentages, configured once, org-wide, in Settings: Labor Overhead %, Labor
           Burden %, Subcontract/Contract OH%, Equipment OH%, Materials OH%, and Other OH%. Each direct
@@ -79,7 +79,7 @@ export default function Page() {
           rates from each other.
         </p>
 
-        <h3 className="mt-2 font-semibold text-slate-800">Which one applies?</h3>
+        <h3 className="mt-2 font-semibold text-slate-800 dark:text-neutral-100">Which one applies?</h3>
         <p>
           This is <strong>not</strong> a per-estimate toggle you pick — it&apos;s automatic and org-wide:
         </p>
@@ -122,18 +122,18 @@ export default function Page() {
         </ul>
         <p>
           A labor line&apos;s <strong>Cost</strong> field auto-fills as{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">Budgeted Hours × Break-Even Labor Rate</code>{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">Budgeted Hours × Break-Even Labor Rate</code>{" "}
           any time it&apos;s left at exactly <strong>$0</strong> — clear it back to $0 to re-trigger the
           auto-fill, or type any other value to lock in a manual rate. The Cost cell shows the resulting
           figure in blue once you click away from it — that&apos;s the auto-fill confirming, not an error.
         </p>
         <Callout>
           <strong>Remember:</strong> Cost is a <em>per-unit</em> rate, not the line&apos;s total cost — the
-          actual Total Cost is <code className="rounded bg-amber-100 px-1 py-0.5">Cost × Qty × Visits</code>.
+          actual Total Cost is <code className="rounded bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5">Cost × Qty × Visits</code>.
           See the next section for why this matters.
         </Callout>
 
-        <h3 className="mt-2 font-semibold text-slate-800">Setting your Break-Even Labor Rate</h3>
+        <h3 className="mt-2 font-semibold text-slate-800 dark:text-neutral-100">Setting your Break-Even Labor Rate</h3>
         <p>
           Set it directly in Settings (Equipt → General → Finance, or Landscapt → Estimates → Labor Rates),
           or use the <strong>Job Costing Calculator</strong> (Tools) and click{" "}
@@ -156,7 +156,7 @@ export default function Page() {
           The single most common point of confusion: <strong>Cost is a per-unit rate, not a lump-sum
           total.</strong> The system always computes:
         </p>
-        <p className="rounded bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
+        <p className="rounded bg-slate-50 dark:bg-muted/40 px-3 py-2 font-mono text-xs text-slate-700 dark:text-neutral-300">
           Total Cost = Cost × Qty × Visits
         </p>
         <p>

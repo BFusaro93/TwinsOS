@@ -211,7 +211,7 @@ export function SnowInvoicing() {
       <PageHeader title="Snow Invoicing" description="Storm-based invoice generation" />
 
       <div className="flex items-center gap-3 px-4 shrink-0">
-        <Snowflake className="h-4 w-4 text-brand-500" />
+        <Snowflake className="h-4 w-4 text-brand-500 dark:text-brand-400" />
         <Select value={stormEventId || "all"} onValueChange={(v) => setStormEventId(v === "all" ? "" : v)}>
           <SelectTrigger className="h-9 w-64 text-sm"><SelectValue placeholder="All storm events" /></SelectTrigger>
           <SelectContent>
@@ -225,11 +225,11 @@ export function SnowInvoicing() {
         {selectedIds.size > 0 && (
           <div className="ml-auto flex items-center gap-3">
             {tiersError && (
-              <span className="text-xs font-medium text-red-600">
+              <span className="text-xs font-medium text-red-600 dark:text-red-400">
                 Couldn&apos;t load storm-depth rate tiers — amounts below may be wrong.
               </span>
             )}
-            <span className="text-sm text-slate-600">
+            <span className="text-sm text-slate-600 dark:text-neutral-400">
               {selectedIds.size} selected · <span className="font-semibold">{formatCurrency(selectedTotal)}</span>
             </span>
             {canGenerate && (
@@ -248,17 +248,17 @@ export function SnowInvoicing() {
         )}
       </div>
 
-      <div className="flex-1 overflow-auto bg-white mx-4 rounded-lg border shadow-sm">
+      <div className="flex-1 overflow-auto bg-card mx-4 rounded-lg border shadow-sm">
         {isLoading ? (
           <div className="p-5 space-y-2">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
           </div>
         ) : rows.length === 0 ? (
-          <p className="py-20 text-center text-sm text-slate-400">No completed snow visits are waiting to be invoiced.</p>
+          <p className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No completed snow visits are waiting to be invoiced.</p>
         ) : (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-slate-50 border-b">
-              <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+              <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 <th className="w-8 px-2 py-2.5">
                   <Checkbox checked={rows.length > 0 && selectedIds.size === rows.length} onCheckedChange={toggleAll} className="h-3.5 w-3.5" />
                 </th>
@@ -275,33 +275,33 @@ export function SnowInvoicing() {
                   {group.rows.map(({ visit, amountCents, groupSize }) => (
                     <tr
                       key={visit.id}
-                      className={cn("border-b border-slate-100 cursor-pointer", selectedIds.has(visit.id) ? "bg-brand-50" : "hover:bg-slate-50")}
+                      className={cn("border-b border-slate-100 dark:border-neutral-800 cursor-pointer", selectedIds.has(visit.id) ? "bg-brand-50 dark:bg-brand-900/30" : "hover:bg-slate-50 dark:hover:bg-muted/40")}
                       onClick={() => toggle(visit.id)}
                     >
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selectedIds.has(visit.id)} onCheckedChange={() => toggle(visit.id)} className="h-3.5 w-3.5" />
                       </td>
                       <td className="px-2 py-2">
-                        <Link href={`/crm/clients/${clientId}`} className="font-medium text-brand-600 hover:underline" onClick={(e) => e.stopPropagation()}>
+                        <Link href={`/crm/clients/${clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline" onClick={(e) => e.stopPropagation()}>
                           {visit.clientName ?? "—"}
                         </Link>
                       </td>
-                      <td className="px-2 py-2 text-slate-500">
+                      <td className="px-2 py-2 text-muted-foreground">
                         {visit.scheduledDate}
                         {(visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber !== undefined && (
-                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                          <span className="ml-2 rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300">
                             Possibly billed on {(visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber == null
                               ? "a draft invoice"
                               : `invoice #${(visit as UninvoicedSnowVisit).possibleDuplicateInvoiceNumber}`}
                           </span>
                         )}
                       </td>
-                      <td className="px-2 py-2 text-slate-500">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
-                      <td className="px-2 py-2 text-slate-500">{describeAmount(visit, groupSize, tiersByJobId)}</td>
-                      <td className="px-2 py-2 text-right font-medium text-slate-700">{formatCurrency(amountCents)}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{describeAmount(visit, groupSize, tiersByJobId)}</td>
+                      <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(amountCents)}</td>
                     </tr>
                   ))}
-                  <tr className="bg-slate-50 text-[10px] font-semibold text-slate-500">
+                  <tr className="bg-slate-50 dark:bg-muted/40 text-[10px] font-semibold text-muted-foreground">
                     <td colSpan={5} className="px-2 py-1 text-right">{group.clientName} subtotal</td>
                     <td className="px-2 py-1 text-right">
                       {formatCurrency(group.rows.reduce((s, r) => s + r.amountCents, 0))}

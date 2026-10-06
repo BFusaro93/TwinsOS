@@ -15,7 +15,7 @@ import { looksLikeHtml, sanitizeHtml } from "@/lib/utils/sanitize-html";
  */
 export function LineDescription({
   html,
-  className = "mt-0.5 text-sm text-slate-500",
+  className = "mt-0.5 text-sm text-muted-foreground",
 }: {
   html: string;
   className?: string;

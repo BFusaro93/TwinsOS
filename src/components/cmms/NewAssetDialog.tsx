@@ -241,13 +241,13 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
         <div className="max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto px-1">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Basic Info */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Basic Info
             </p>
 
             <div className="grid gap-1.5">
               <Label htmlFor="asset-name">
-                Asset Name <span className="text-red-500">*</span>
+                Asset Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="asset-name"
@@ -260,17 +260,17 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="asset-tag">
-                  Asset Tag <span className="text-red-500">*</span>
+                  Asset Tag <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Input
                   id="asset-tag"
                   value={assetTag}
                   onChange={(e) => setAssetTag(e.target.value)}
                   placeholder="e.g. A-0042"
-                  className={assetTagError ? "border-red-400 focus-visible:ring-red-300" : ""}
+                  className={assetTagError ? "border-red-400 focus-visible:ring-red-300 dark:focus-visible:ring-red-700" : ""}
                 />
                 {assetTagError && (
-                  <p className="text-xs text-red-500">{assetTagError}</p>
+                  <p className="text-xs text-red-500 dark:text-red-400">{assetTagError}</p>
                 )}
               </div>
 
@@ -288,7 +288,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="asset-type">
-                  Asset Type <span className="text-red-500">*</span>
+                  Asset Type <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Select value={assetType} onValueChange={setAssetType}>
                   <SelectTrigger id="asset-type">
@@ -322,7 +322,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
             </div>
 
             {/* Equipment Details */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Equipment Details
             </p>
 
@@ -413,7 +413,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
             </div>
 
             {/* Assignment */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Assignment
             </p>
 
@@ -487,7 +487,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
             )}
 
             {/* Purchase Info */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Purchase Info
             </p>
 
@@ -545,7 +545,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
             </div>
 
             {/* Warranty */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Warranty
             </p>
 
@@ -558,7 +558,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
             />
 
             {/* Notes */}
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Notes
             </p>
 

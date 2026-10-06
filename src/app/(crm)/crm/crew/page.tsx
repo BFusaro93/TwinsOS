@@ -93,7 +93,7 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
               <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">Running</span>
             )
           )}
-          <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-600 mt-1" />
+          <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500 mt-1" />
         </div>
       </div>
       {stop.notesToCrew && (
@@ -249,7 +249,7 @@ export default function CrewSchedulePage() {
 
         {!isLoading && stops.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <CheckCircle2 className="h-12 w-12 text-slate-300 dark:text-neutral-600 mb-3" />
+            <CheckCircle2 className="h-12 w-12 text-slate-300 dark:text-neutral-500 mb-3" />
             <p className="font-medium text-slate-600 dark:text-neutral-400">No jobs scheduled today</p>
             <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">Check back later or contact the office.</p>
           </div>

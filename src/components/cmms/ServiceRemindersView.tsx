@@ -39,14 +39,14 @@ function getVehicleBucket(v: Vehicle, timeZone: string, currentMiles?: number | 
 }
 
 function dateCell(dateStr: string | null, timeZone: string, dueMileage?: number | null, currentMiles?: number | null): React.ReactNode {
-  if (!dateStr && dueMileage == null) return <span className="text-slate-300">—</span>;
+  if (!dateStr && dueMileage == null) return <span className="text-slate-300 dark:text-neutral-500">—</span>;
 
   const todayStr = todayInZone(timeZone);
   const monthOut = shiftYmd(todayStr, 30);
 
   const dateColor = dateStr
-    ? dateStr < todayStr ? "text-red-600" : dateStr < monthOut ? "text-amber-600" : "text-green-700"
-    : "text-slate-500";
+    ? dateStr < todayStr ? "text-red-600 dark:text-red-400" : dateStr < monthOut ? "text-amber-600 dark:text-amber-400" : "text-green-700 dark:text-green-400"
+    : "text-muted-foreground";
 
   const daysLabel = (() => {
     if (!dateStr) return null;
@@ -65,11 +65,11 @@ function dateCell(dateStr: string | null, timeZone: string, dueMileage?: number 
   })();
 
   const mileageColor = (() => {
-    if (dueMileage == null || currentMiles == null) return "text-slate-500";
+    if (dueMileage == null || currentMiles == null) return "text-muted-foreground";
     const remaining = dueMileage - currentMiles;
-    if (remaining <= 0)   return "text-red-600";
-    if (remaining <= 500) return "text-amber-600";
-    return "text-green-700";
+    if (remaining <= 0)   return "text-red-600 dark:text-red-400";
+    if (remaining <= 500) return "text-amber-600 dark:text-amber-400";
+    return "text-green-700 dark:text-green-400";
   })();
 
   const mileageLabel = (() => {
@@ -109,9 +109,9 @@ function SectionHeader({ label, count, variant = "default" }: {
         colSpan={6}
         className={cn(
           "py-2 pl-4 text-xs font-semibold uppercase tracking-wide",
-          variant === "overdue"  && "bg-red-50 text-red-700",
-          variant === "complete" && "bg-green-50 text-green-700",
-          variant === "default"  && "bg-slate-50 text-slate-500",
+          variant === "overdue"  && "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
+          variant === "complete" && "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400",
+          variant === "default"  && "bg-slate-50 dark:bg-muted/40 text-muted-foreground",
         )}
       >
         {label}
@@ -155,7 +155,7 @@ export function ServiceRemindersView({
     const avatarColor = getAvatarColor(v.name);
     const currentMiles = currentMilesMap.get(v.id) ?? null;
     return (
-      <TableRow className="cursor-pointer hover:bg-slate-50" onClick={() => onRowClick(v)}>
+      <TableRow className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40" onClick={() => onRowClick(v)}>
         <TableCell>
           <div className="flex items-center gap-2.5">
             {v.photoUrl ? (
@@ -166,22 +166,22 @@ export function ServiceRemindersView({
               </div>
             )}
             <div>
-              <p className="font-medium text-slate-900">{v.name}</p>
-              <p className="text-xs text-slate-400">{v.licensePlate ?? v.assetTag}</p>
+              <p className="font-medium text-slate-900 dark:text-neutral-100">{v.name}</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">{v.licensePlate ?? v.assetTag}</p>
             </div>
           </div>
         </TableCell>
-        <TableCell className="font-mono text-xs text-slate-500">{v.assetTag}</TableCell>
-        <TableCell className="text-sm text-slate-600">{v.assignedCrew ?? "—"}</TableCell>
+        <TableCell className="font-mono text-xs text-muted-foreground">{v.assetTag}</TableCell>
+        <TableCell className="text-sm text-slate-600 dark:text-neutral-400">{v.assignedCrew ?? "—"}</TableCell>
         <TableCell>
           {v.nextOilChangeDue || v.nextOilChangeMileage != null
             ? dateCell(v.nextOilChangeDue, orgTimeZone, v.nextOilChangeMileage, currentMiles)
-            : <span className="text-slate-300">—</span>}
+            : <span className="text-slate-300 dark:text-neutral-500">—</span>}
         </TableCell>
         <TableCell>
           {v.nextInspectionStickerDue
             ? dateCell(v.nextInspectionStickerDue, orgTimeZone)
-            : <span className="text-slate-300">—</span>}
+            : <span className="text-slate-300 dark:text-neutral-500">—</span>}
         </TableCell>
         <TableCell>
           <StatusBadge
@@ -195,42 +195,42 @@ export function ServiceRemindersView({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-        <ClipboardCheck className="h-5 w-5 shrink-0 text-amber-600" />
+      <div className="flex items-center gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3">
+        <ClipboardCheck className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
         <div>
-          <p className="text-sm font-semibold text-amber-900">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
             {tracked.length} vehicle{tracked.length !== 1 ? "s" : ""} tracked
             {overdue.length > 0 && (
-              <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+              <span className="ml-2 rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-400">
                 {overdue.length} overdue
               </span>
             )}
             {dueSoon.length > 0 && (
-              <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+              <span className="ml-2 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                 {dueSoon.length} due within 30 days
               </span>
             )}
           </p>
-          <p className="text-xs text-amber-700">Click any row to open the vehicle and reset a reminder.</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400">Click any row to open the vehicle and reset a reminder.</p>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <TableHead>Vehicle</TableHead>
               <TableHead>Asset Tag</TableHead>
               <TableHead>Assigned Crew</TableHead>
               <TableHead>
                 <span className="flex items-center gap-1.5">
-                  <Droplets className="h-3.5 w-3.5 text-slate-400" />
+                  <Droplets className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   Oil Change Due
                 </span>
               </TableHead>
               <TableHead>
                 <span className="flex items-center gap-1.5">
-                  <FileCheck className="h-3.5 w-3.5 text-slate-400" />
+                  <FileCheck className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   Inspection Sticker Due
                 </span>
               </TableHead>
@@ -275,7 +275,7 @@ export function ServiceRemindersView({
                 )}
                 {vehicles.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center text-sm text-slate-400">
+                    <TableCell colSpan={6} className="py-12 text-center text-sm text-slate-400 dark:text-neutral-500">
                       No vehicles found
                     </TableCell>
                   </TableRow>

@@ -325,10 +325,10 @@ export function AutomationDialog({
             </div>
 
             {/* Trigger section */}
-            <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-700">
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-slate-50 dark:bg-muted/40 p-4">
+              <p className="text-sm font-semibold text-slate-700 dark:text-neutral-300">
                 Trigger{" "}
-                <span className="font-normal text-slate-500">— when does this fire?</span>
+                <span className="font-normal text-muted-foreground">— when does this fire?</span>
               </p>
 
               <div className="flex flex-col gap-1.5">
@@ -418,7 +418,7 @@ export function AutomationDialog({
                         onChange={(e) => setIntervalValue(e.target.value)}
                         required
                       />
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-foreground">
                         {actionType === "create_work_order" || actionType === "create_wo_request"
                           ? "e.g. 5000 — after the triggered request/WO is completed, the threshold advances by this amount so the next service fires on time."
                           : "e.g. 5000 — each time this fires, the threshold advances by this amount so it fires again at the next interval."}
@@ -467,7 +467,7 @@ export function AutomationDialog({
               )}
 
               {triggerType === "request_submitted" && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   Fires whenever a new maintenance request is submitted.
                 </p>
               )}
@@ -520,10 +520,10 @@ export function AutomationDialog({
             </div>
 
             {/* Action section */}
-            <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-700">
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-slate-50 dark:bg-muted/40 p-4">
+              <p className="text-sm font-semibold text-slate-700 dark:text-neutral-300">
                 Action{" "}
-                <span className="font-normal text-slate-500">— what happens?</span>
+                <span className="font-normal text-muted-foreground">— what happens?</span>
               </p>
 
               <div className="flex flex-col gap-1.5">
@@ -579,7 +579,7 @@ export function AutomationDialog({
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="wo-assigned-to">
                       Assigned To{" "}
-                      <span className="font-normal text-slate-500">(optional)</span>
+                      <span className="font-normal text-muted-foreground">(optional)</span>
                     </Label>
                     <Input
                       id="wo-assigned-to"
@@ -624,7 +624,7 @@ export function AutomationDialog({
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="wo-assigned-to">
                       Assigned To{" "}
-                      <span className="font-normal text-slate-500">(optional)</span>
+                      <span className="font-normal text-muted-foreground">(optional)</span>
                     </Label>
                     <Input
                       id="wo-assigned-to"
@@ -640,7 +640,7 @@ export function AutomationDialog({
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="req-notes">
                     Notes{" "}
-                    <span className="font-normal text-slate-500">(optional)</span>
+                    <span className="font-normal text-muted-foreground">(optional)</span>
                   </Label>
                   <Textarea
                     id="req-notes"

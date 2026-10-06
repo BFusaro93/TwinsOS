@@ -50,8 +50,8 @@ export function FormsGuide() {
         description="Building, publishing, and sharing public forms — and what happens to a submission once it lands."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -93,7 +93,7 @@ export function FormsGuide() {
           <strong>required</strong> individually — there&apos;s no form-level &quot;require
           everything&quot; toggle, it&apos;s a per-field flag.
         </p>
-        <p className="font-semibold text-[#0a0a0a]">Simple</p>
+        <p className="font-semibold text-[#0a0a0a] dark:text-neutral-100">Simple</p>
         <Table>
           <thead>
             <TableHeadRow>
@@ -103,14 +103,14 @@ export function FormsGuide() {
           </thead>
           <tbody>
             {FIELD_TYPES.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]"><code>{name}</code></td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100"><code>{name}</code></td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
         </Table>
-        <p className="font-semibold text-[#0a0a0a]">Advanced</p>
+        <p className="font-semibold text-[#0a0a0a] dark:text-neutral-100">Advanced</p>
         <Table>
           <thead>
             <TableHeadRow>
@@ -120,14 +120,14 @@ export function FormsGuide() {
           </thead>
           <tbody>
             {FIELD_TYPES_ADVANCED.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]"><code>{name}</code></td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100"><code>{name}</code></td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
         </Table>
-        <p className="font-semibold text-[#0a0a0a]">Layout</p>
+        <p className="font-semibold text-[#0a0a0a] dark:text-neutral-100">Layout</p>
         <Table>
           <thead>
             <TableHeadRow>
@@ -137,14 +137,14 @@ export function FormsGuide() {
           </thead>
           <tbody>
             {FIELD_TYPES_LAYOUT.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]"><code>{name}</code></td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100"><code>{name}</code></td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
         </Table>
-        <p className="font-semibold text-[#0a0a0a]">Widget</p>
+        <p className="font-semibold text-[#0a0a0a] dark:text-neutral-100">Widget</p>
         <p>
           <code>attachment</code> — lets a visitor upload a file with their submission. See{" "}
           <a href="#gotchas" className="text-[#60ab45] hover:underline">below</a> for the size/type
@@ -157,7 +157,7 @@ export function FormsGuide() {
           A complete lead-capture form, built end to end, using only settings covered on this
           page.
         </p>
-        <p className="font-semibold text-[#0a0a0a]">Design tab — fields, in order</p>
+        <p className="font-semibold text-[#0a0a0a] dark:text-neutral-100">Design tab — fields, in order</p>
         <ol className="list-decimal space-y-2 pl-5">
           <li><code>header</code> — &quot;Request a Free Estimate&quot;</li>
           <li><code>text</code> — Full Name, required</li>
@@ -167,7 +167,7 @@ export function FormsGuide() {
           <li><code>select</code> — Service Interested In (Lawn Care, Landscaping, Snow Removal, Other), required</li>
           <li><code>textarea</code> — Anything else we should know?, optional</li>
         </ol>
-        <p className="font-semibold text-[#0a0a0a]">Configure tab</p>
+        <p className="font-semibold text-[#0a0a0a] dark:text-neutral-100">Configure tab</p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Confirmation</strong> — type <em>message</em>: &quot;Thanks! A member of our
@@ -251,10 +251,10 @@ export function FormsGuide() {
           </thead>
           <tbody>
             {EMBED_MODES.map(([name, what, when]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{what}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{when}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{what}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{when}</td>
               </tr>
             ))}
           </tbody>
@@ -303,21 +303,21 @@ export function FormsGuide() {
             </TableHeadRow>
           </thead>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]"><code>completed</code></td>
-              <td className="px-3 py-2 text-[#4a4a46]">Auto-managed and matched/created a client automatically. No action needed.</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100"><code>completed</code></td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Auto-managed and matched/created a client automatically. No action needed.</td>
             </tr>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]"><code>on_hold</code></td>
-              <td className="px-3 py-2 text-[#4a4a46]">Auto-manage was off (or matching wasn&apos;t confident enough) — a staff member needs to review and manually attach or create the client.</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100"><code>on_hold</code></td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Auto-manage was off (or matching wasn&apos;t confident enough) — a staff member needs to review and manually attach or create the client.</td>
             </tr>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]"><code>spam</code></td>
-              <td className="px-3 py-2 text-[#4a4a46]">Set manually by staff on the Responses tab. There is no automatic spam detection — see the Callout below.</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100"><code>spam</code></td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Set manually by staff on the Responses tab. There is no automatic spam detection — see the Callout below.</td>
             </tr>
             <tr>
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]"><code>ignored</code></td>
-              <td className="px-3 py-2 text-[#4a4a46]">Also set manually — for a legitimate but not-actionable submission a staff member wants out of the queue without calling it spam.</td>
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100"><code>ignored</code></td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Also set manually — for a legitimate but not-actionable submission a staff member wants out of the queue without calling it spam.</td>
             </tr>
           </tbody>
         </Table>

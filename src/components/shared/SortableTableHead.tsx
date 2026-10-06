@@ -26,7 +26,7 @@ export function SortableTableHead({
       <button
         type="button"
         onClick={() => onToggle(sortKey)}
-        className="inline-flex items-center gap-1 text-xs font-medium hover:text-slate-900"
+        className="inline-flex items-center gap-1 text-xs font-medium hover:text-slate-900 dark:hover:text-neutral-100"
       >
         {label}
         {isActive ? (
@@ -36,7 +36,7 @@ export function SortableTableHead({
             <ChevronDown className="h-3 w-3" />
           )
         ) : (
-          <ChevronsUpDown className="h-3 w-3 text-slate-300" />
+          <ChevronsUpDown className="h-3 w-3 text-slate-300 dark:text-neutral-500" />
         )}
       </button>
     </TableHead>

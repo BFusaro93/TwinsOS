@@ -23,7 +23,7 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
   }, [pathname, setSidebarOpen]);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background">
       <RealtimeSync />
       <SettingsLoader />
 

@@ -518,23 +518,23 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                 <>
                   {/* Line Items Section */}
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                       Line Items
                     </p>
 
                     <div ref={lineItemsScrollRef} className="max-h-[35dvh] overflow-y-auto rounded border">
                     <div className="w-full overflow-x-auto">
                       <table className="w-full text-sm">
-                        <thead className="sticky top-0 z-10 bg-white">
-                          <tr className="border-b text-left text-xs text-slate-500">
+                        <thead className="sticky top-0 z-10 bg-card">
+                          <tr className="border-b text-left text-xs text-muted-foreground">
                             <th className="pb-1.5 pr-2 font-medium">
-                              Item <span className="text-red-500">*</span>
+                              Item <span className="text-red-500 dark:text-red-400">*</span>
                             </th>
                             <th className="w-20 pb-1.5 pr-2 font-medium">Qty</th>
                             <th className="w-28 pb-1.5 pr-2 font-medium">
                               Unit Cost ($)
                               {costMethod !== "manual" && (
-                                <span className="ml-1 font-normal text-brand-500">
+                                <span className="ml-1 font-normal text-brand-500 dark:text-brand-400">
                                   · {costMethod.toUpperCase()}
                                 </span>
                               )}
@@ -585,7 +585,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                                   if (!rec) return null;
                                   const suggestion = getCatalogCost(rec.unitCost, rec.costLayers, costMethod) / 100;
                                   return (
-                                    <p className="mt-0.5 text-[10px] text-slate-400">
+                                    <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500">
                                       {costMethod.toUpperCase()}: {formatCurrency(Math.round(suggestion * 100))}
                                     </p>
                                   );
@@ -599,7 +599,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-slate-400 hover:text-red-500"
+                                  className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                                   onClick={() => handleRemoveLineItem(li.id)}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -616,7 +616,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                                       handleLineItemProjectChange(li.id, val)
                                     }
                                   >
-                                    <SelectTrigger className="h-6 text-[10px] text-slate-500 border-slate-200">
+                                    <SelectTrigger className="h-6 text-[10px] text-muted-foreground border-border">
                                       <SelectValue placeholder="Link project..." />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -694,7 +694,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                         value={discountCost}
                         onChange={(e) => setDiscountCost(e.target.value)}
                       />
-                      <label className="flex items-center gap-2 text-xs text-slate-600">
+                      <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
                         <input
                           type="checkbox"
                           className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
@@ -707,36 +707,36 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                   </div>
 
                   {/* Totals Summary */}
-                  <div className="rounded-md bg-slate-50 p-3 space-y-1 text-sm">
-                    <div className="flex justify-between text-slate-600">
+                  <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 space-y-1 text-sm">
+                    <div className="flex justify-between text-slate-600 dark:text-neutral-400">
                       <span>Subtotal</span>
                       <span className="tabular-nums">
                         {formatCurrency(Math.round(subtotalDollars * 100))}
                       </span>
                     </div>
                     {discountDollars > 0 && (
-                      <div className="flex justify-between text-slate-600">
+                      <div className="flex justify-between text-slate-600 dark:text-neutral-400">
                         <span>Discount</span>
                         <span className="tabular-nums">
                           -{formatCurrency(Math.round(discountDollars * 100))}
                         </span>
                       </div>
                     )}
-                    <div className="flex justify-between text-slate-600">
+                    <div className="flex justify-between text-slate-600 dark:text-neutral-400">
                       <span>Tax ({taxRate}%)</span>
                       <span className="tabular-nums">
                         {formatCurrency(Math.round(taxDollars * 100))}
                       </span>
                     </div>
                     {shippingDollars > 0 && (
-                      <div className="flex justify-between text-slate-600">
+                      <div className="flex justify-between text-slate-600 dark:text-neutral-400">
                         <span>Shipping / Other</span>
                         <span className="tabular-nums">
                           {formatCurrency(Math.round(shippingDollars * 100))}
                         </span>
                       </div>
                     )}
-                    <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
+                    <div className="flex justify-between border-t pt-1 font-semibold text-slate-900 dark:text-neutral-100">
                       <span>Grand Total</span>
                       <span className="tabular-nums">
                         {formatCurrency(Math.round(grandTotalDollars * 100))}

@@ -46,13 +46,13 @@ function MultiCheck({
   selected: string[];
   onToggle: (id: string) => void;
 }) {
-  if (options.length === 0) return <p className="text-xs text-slate-400">None configured</p>;
+  if (options.length === 0) return <p className="text-xs text-slate-400 dark:text-neutral-500">None configured</p>;
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((o) => (
         <label
           key={o.id}
-          className="flex items-center gap-1 rounded border border-slate-200 px-1.5 py-0.5 text-xs cursor-pointer"
+          className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs cursor-pointer"
         >
           <Checkbox checked={selected.includes(o.id)} onCheckedChange={() => onToggle(o.id)} />
           {o.name}
@@ -143,10 +143,10 @@ function ApplicationRow({
     <div className="rounded-md border p-3 flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-slate-800">{productName}</span>
+          <span className="text-sm font-medium text-slate-800 dark:text-neutral-100">{productName}</span>
           <label className="flex items-center gap-1.5 text-xs">
             <Checkbox checked={used} onCheckedChange={(v) => setUsed(v === true)} />
-            <span className={used ? "text-green-600" : "text-red-500"}>{used ? "Used" : "Not used"}</span>
+            <span className={used ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}>{used ? "Used" : "Not used"}</span>
           </label>
         </div>
         {canEdit && (
@@ -154,7 +154,7 @@ function ApplicationRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-6 w-6 text-slate-400 hover:text-red-500"
+            className="h-6 w-6 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             onClick={async () => {
               if (!(await confirm({ title: `Remove ${productName} from this visit?`, confirmLabel: "Remove", destructive: true }))) return;
               del.mutate({ id: application.id, visitId }, {
@@ -169,7 +169,7 @@ function ApplicationRow({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="grid gap-1">
-          <label className="text-xs text-slate-500">Chemical Amt (active)</label>
+          <label className="text-xs text-muted-foreground">Chemical Amt (active)</label>
           <Input
             className="h-8 text-xs"
             type="number"
@@ -179,7 +179,7 @@ function ApplicationRow({
           />
         </div>
         <div className="grid gap-1">
-          <label className="text-xs text-slate-500">Unit</label>
+          <label className="text-xs text-muted-foreground">Unit</label>
           <Select value={unitOfMeasureId || "none"} onValueChange={(v) => setUnitOfMeasureId(v === "none" ? "" : v)}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="Unit" />
@@ -193,7 +193,7 @@ function ApplicationRow({
           </Select>
         </div>
         <div className="grid gap-1">
-          <label className="text-xs text-slate-500">Solution Amt (finished mix)</label>
+          <label className="text-xs text-muted-foreground">Solution Amt (finished mix)</label>
           <Input
             className="h-8 text-xs"
             type="number"
@@ -203,7 +203,7 @@ function ApplicationRow({
           />
         </div>
         <div className="grid gap-1">
-          <label className="text-xs text-slate-500">Solution Unit</label>
+          <label className="text-xs text-muted-foreground">Solution Unit</label>
           <Select
             value={solutionUnitOfMeasureId || "none"}
             onValueChange={(v) => setSolutionUnitOfMeasureId(v === "none" ? "" : v)}
@@ -222,7 +222,7 @@ function ApplicationRow({
       </div>
 
       <div className="grid gap-1">
-        <label className="text-xs text-slate-500">Application Method</label>
+        <label className="text-xs text-muted-foreground">Application Method</label>
         <Select value={applicationMethodId || "none"} onValueChange={(v) => setApplicationMethodId(v === "none" ? "" : v)}>
           <SelectTrigger className="h-8 text-xs">
             <SelectValue placeholder="Select method" />
@@ -237,17 +237,17 @@ function ApplicationRow({
       </div>
 
       <div className="grid gap-1">
-        <label className="text-xs text-slate-500">Target</label>
+        <label className="text-xs text-muted-foreground">Target</label>
         <MultiCheck options={targets} selected={targetIds} onToggle={toggleTarget} />
       </div>
 
       <div className="grid gap-1">
-        <label className="text-xs text-slate-500">Areas Treated</label>
+        <label className="text-xs text-muted-foreground">Areas Treated</label>
         <MultiCheck options={areasTreated} selected={areasTreatedIds} onToggle={toggleArea} />
       </div>
 
       <div className="grid gap-1">
-        <label className="text-xs text-slate-500">Applicator</label>
+        <label className="text-xs text-muted-foreground">Applicator</label>
         <Select
           value={applicatorEmployeeId || "none"}
           onValueChange={(v) => setApplicatorEmployeeId(v === "none" ? "" : v)}
@@ -268,7 +268,7 @@ function ApplicationRow({
       </div>
 
       <div className="grid gap-1">
-        <label className="text-xs text-slate-500">Notes</label>
+        <label className="text-xs text-muted-foreground">Notes</label>
         <Textarea rows={2} className="text-xs" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </div>
 
@@ -427,28 +427,28 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
         onSent={() => setNoticeDialogOpen(false)}
       />
       {(showWeather || showPh) && applications.length > 0 && (
-        <div className="rounded-md border bg-slate-50 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Conditions</p>
+        <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conditions</p>
           <div className="grid grid-cols-4 gap-2">
             {showWeather && (
               <>
                 <div className="grid gap-1">
-                  <label className="text-xs text-slate-500">Temp (°F)</label>
+                  <label className="text-xs text-muted-foreground">Temp (°F)</label>
                   <Input className="h-8 text-xs" type="number" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
                 </div>
                 <div className="grid gap-1">
-                  <label className="text-xs text-slate-500">Wind Speed</label>
+                  <label className="text-xs text-muted-foreground">Wind Speed</label>
                   <Input className="h-8 text-xs" type="number" value={windSpeed} onChange={(e) => setWindSpeed(e.target.value)} />
                 </div>
                 <div className="grid gap-1">
-                  <label className="text-xs text-slate-500">Wind Direction</label>
+                  <label className="text-xs text-muted-foreground">Wind Direction</label>
                   <Input className="h-8 text-xs" value={windDirection} onChange={(e) => setWindDirection(e.target.value)} placeholder="e.g. NW" />
                 </div>
               </>
             )}
             {showPh && (
               <div className="grid gap-1">
-                <label className="text-xs text-slate-500">pH Level</label>
+                <label className="text-xs text-muted-foreground">pH Level</label>
                 <Input className="h-8 text-xs" type="number" step="0.1" value={phLevel} onChange={(e) => setPhLevel(e.target.value)} />
               </div>
             )}
@@ -462,7 +462,7 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
       )}
 
       {applications.length === 0 && (
-        <p className="text-xs text-slate-400">No chemical applications logged for this visit yet.</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">No chemical applications logged for this visit yet.</p>
       )}
 
       {applications.map((a) => (

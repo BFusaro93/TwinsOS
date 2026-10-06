@@ -121,20 +121,20 @@ export function SnowRateTiersEditor({ jobId }: { jobId: string }) {
   if (isLoading) return null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-3">
       <div className="flex items-center justify-between">
-        <Label className="text-xs text-slate-500">Storm Depth Rate Tiers (optional)</Label>
+        <Label className="text-xs text-muted-foreground">Storm Depth Rate Tiers (optional)</Label>
         <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[11px]" onClick={addTier}>
           <Plus className="mr-1 h-3 w-3" />
           Add Tier
         </Button>
       </div>
-      <p className="text-[11px] text-slate-400">
+      <p className="text-[11px] text-slate-400 dark:text-neutral-500">
         Prices this storm by its total depth instead of the flat Rate Per Inch above. Leave the last
         tier&apos;s &quot;to&quot; blank for an open-ended top tier billed per inch (e.g. 12+&quot;).
       </p>
       {tiers.length === 0 && (
-        <p className="text-xs italic text-slate-400">No tiers — billed at the flat Rate Per Inch above.</p>
+        <p className="text-xs italic text-slate-400 dark:text-neutral-500">No tiers — billed at the flat Rate Per Inch above.</p>
       )}
       {tiers.map((t, i) => (
         <div key={i} className="flex items-center gap-1.5">
@@ -144,28 +144,28 @@ export function SnowRateTiersEditor({ jobId }: { jobId: string }) {
             onChange={(e) => updateTier(i, { minInches: e.target.value })}
             className="h-7 w-16 text-xs"
           />
-          <span className="text-xs text-slate-400">to</span>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">to</span>
           <Input
             type="number" min="0" step="0.5" placeholder="∞"
             value={t.maxInches}
             onChange={(e) => updateTier(i, { maxInches: e.target.value })}
             className="h-7 w-16 text-xs"
           />
-          <span className="text-xs text-slate-400">in.</span>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">in.</span>
           {t.maxInches.trim() === "" ? (
             <>
-              <span className="text-xs text-slate-400">$</span>
+              <span className="text-xs text-slate-400 dark:text-neutral-500">$</span>
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
                 value={t.ratePerInchDollars}
                 onChange={(e) => updateTier(i, { ratePerInchDollars: e.target.value })}
                 className="h-7 w-20 text-xs"
               />
-              <span className="text-xs text-slate-400">/ in.</span>
+              <span className="text-xs text-slate-400 dark:text-neutral-500">/ in.</span>
             </>
           ) : (
             <>
-              <span className="text-xs text-slate-400">flat $</span>
+              <span className="text-xs text-slate-400 dark:text-neutral-500">flat $</span>
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
                 value={t.rateDollars}
@@ -177,7 +177,7 @@ export function SnowRateTiersEditor({ jobId }: { jobId: string }) {
           <button
             type="button"
             onClick={() => removeTier(i)}
-            className="ml-auto text-slate-300 hover:text-red-500"
+            className="ml-auto text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

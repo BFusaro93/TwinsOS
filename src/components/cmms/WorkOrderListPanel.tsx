@@ -94,7 +94,7 @@ function AssigneeMultiSelect({
             );
           })}
           {users.length === 0 && (
-            <p className="px-2 py-1.5 text-xs text-slate-400">No users</p>
+            <p className="px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500">No users</p>
           )}
         </div>
       </PopoverContent>
@@ -121,7 +121,7 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
   return (
     <div className="flex flex-col overflow-y-auto">
       {workOrders.length === 0 && (
-        <p className="px-4 py-8 text-center text-sm text-slate-400">
+        <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
           No work orders found
         </p>
       )}
@@ -138,8 +138,8 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
             key={wo.id}
             onClick={() => onSelect(wo.id)}
             className={cn(
-              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
-              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 hover:bg-brand-50"
+              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40",
+              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-50 dark:hover:bg-brand-900/30"
             )}
           >
             {/* Avatar */}
@@ -155,33 +155,33 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
             {/* Content */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-semibold text-slate-900">
+                <span className="truncate text-sm font-semibold text-slate-900 dark:text-neutral-100">
                   {wo.workOrderNumber}
                 </span>
                 {wo.dueDate && (
-                  <span className="shrink-0 text-xs text-slate-400">
+                  <span className="shrink-0 text-xs text-slate-400 dark:text-neutral-500">
                     Due {formatDate(wo.dueDate)}
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 truncate text-xs text-slate-600">{wo.title}</p>
+              <p className="mt-0.5 truncate text-xs text-slate-600 dark:text-neutral-400">{wo.title}</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <StatusBadge variant={wo.status} label={WO_STATUS_LABELS[wo.status]} />
                 <StatusBadge variant={wo.priority} label={WO_PRIORITY_LABELS[wo.priority]} />
                 {isFutureWO && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
                     <CalendarDays className="h-2.5 w-2.5" />
                     Scheduled {formatDate(wo.startDate!)}
                   </span>
                 )}
                 {childCountMap.has(wo.id) && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                  <span className="inline-flex items-center gap-0.5 rounded-full border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-400">
                     <GitBranch className="h-2.5 w-2.5" />
                     {childCountMap.get(wo.id)} sub-WO{(childCountMap.get(wo.id) ?? 0) > 1 ? "s" : ""}
                   </span>
                 )}
                 {wo.parentWorkOrderId && (
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                  <span className="rounded-full border border-border bg-slate-50 dark:bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                     Sub-WO
                   </span>
                 )}
@@ -192,9 +192,9 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
                   {wo.assignedToNames.map((name, i) => (
                     <span
                       key={wo.assignedToIds[i] ?? i}
-                      className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
+                      className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:text-neutral-400"
                     >
-                      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-300 text-[8px] font-bold text-white">
+                      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-300 dark:bg-neutral-600 text-[8px] font-bold text-white">
                         {getInitials(name)}
                       </span>
                       {name.split(" ")[0]}
@@ -205,7 +205,7 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
               {(wo.categories?.length > 0 || wo.category) && (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {(wo.categories?.length > 0 ? wo.categories : (wo.category ? [wo.category] : [])).map((catId) => (
-                    <span key={catId} className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                    <span key={catId} className="rounded-full border border-border bg-slate-50 dark:bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                       {(woCategories ?? []).find((c) => c.id === catId)?.label ?? catId}
                     </span>
                   ))}

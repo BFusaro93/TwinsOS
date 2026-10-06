@@ -125,7 +125,7 @@ function EditableCell({
       type="button"
       onClick={startEdit}
       className={`w-full text-right text-sm ${
-        value !== null ? "font-medium text-slate-800" : "text-slate-400 hover:text-blue-500"
+        value !== null ? "font-medium text-slate-800 dark:text-neutral-100" : "text-slate-400 dark:text-neutral-500 hover:text-blue-500 dark:hover:text-blue-400"
       }`}
       title="Click to edit"
     >
@@ -138,13 +138,13 @@ function EditableCell({
 
 function ProgressBar({ pct }: { pct: number }) {
   const color =
-    pct >= 90 ? "bg-green-500" : pct >= 60 ? "bg-blue-500" : pct >= 30 ? "bg-amber-400" : "bg-slate-300";
+    pct >= 90 ? "bg-green-500" : pct >= 60 ? "bg-blue-500" : pct >= 30 ? "bg-amber-400" : "bg-slate-300 dark:bg-neutral-600";
   return (
     <div className="flex items-center justify-end gap-2">
-      <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
+      <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-neutral-700">
         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-8 text-right text-xs font-medium text-slate-600">{pct}%</span>
+      <span className="w-8 text-right text-xs font-medium text-slate-600 dark:text-neutral-400">{pct}%</span>
     </div>
   );
 }
@@ -152,7 +152,7 @@ function ProgressBar({ pct }: { pct: number }) {
 function AutoBadge({ source, snapshot }: { source: string; snapshot: boolean }) {
   return (
     <span
-      className="cursor-help rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500"
+      className="cursor-help rounded-full bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500 dark:text-blue-400"
       title={snapshot ? `${source} (Point-in-time value, not scoped to the selected year.)` : source}
     >
       auto
@@ -179,7 +179,7 @@ function resolveValues(
 
 function ReadOnlyValue({ value, unit }: { value: number | null; unit: KpiUnit }) {
   return (
-    <span className={`block text-right text-sm ${value !== null ? "font-medium text-slate-800" : "text-slate-400"}`}>
+    <span className={`block text-right text-sm ${value !== null ? "font-medium text-slate-800 dark:text-neutral-100" : "text-slate-400 dark:text-neutral-500"}`}>
       {value !== null ? formatKpiValue(value, unit) : "—"}
     </span>
   );
@@ -207,9 +207,9 @@ function CategoryCard({
   );
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
-        <h2 className="text-xl font-bold text-slate-800">{category.label}</h2>
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-6 py-4">
+        <h2 className="text-xl font-bold text-slate-800 dark:text-neutral-100">{category.label}</h2>
         <div
           className={`flex h-10 w-16 items-center justify-center rounded-full ${scoreColorClass(score)} text-sm font-bold text-white shadow-sm`}
         >
@@ -218,17 +218,17 @@ function CategoryCard({
       </div>
 
       {resolved.length === 0 ? (
-        <p className="px-6 py-6 text-sm text-slate-400">No metrics in this category yet. Use Customize to add some.</p>
+        <p className="px-6 py-6 text-sm text-slate-400 dark:text-neutral-500">No metrics in this category yet. Use Customize to add some.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/60 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/60 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <th className="px-5 py-3 text-left">Metric</th>
-                <th className="border-l border-slate-200 px-4 py-3 text-right">Target</th>
-                <th className="border-l border-slate-200 px-4 py-3 text-right">Actual</th>
-                <th className="border-l border-slate-200 px-4 py-3 text-right">Progress</th>
-                <th className="border-l border-slate-200 px-4 py-3 text-right">Weight</th>
+                <th className="border-l border-border px-4 py-3 text-right">Target</th>
+                <th className="border-l border-border px-4 py-3 text-right">Actual</th>
+                <th className="border-l border-border px-4 py-3 text-right">Progress</th>
+                <th className="border-l border-border px-4 py-3 text-right">Weight</th>
               </tr>
             </thead>
             <tbody>
@@ -238,27 +238,27 @@ function CategoryCard({
                 return (
                   <tr
                     key={metric.key}
-                    className={`border-b border-slate-100 last:border-0 ${idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"}`}
+                    className={`border-b border-slate-100 dark:border-neutral-800 last:border-0 ${idx % 2 === 1 ? "bg-slate-50/50 dark:bg-muted/40" : "bg-card"}`}
                   >
-                    <td className="px-5 py-3 font-medium text-slate-700">
+                    <td className="px-5 py-3 font-medium text-slate-700 dark:text-neutral-300">
                       {metric.label}
                       {metric.lowerIsBetter && (
-                        <span className="ml-1.5 text-[10px] font-normal text-slate-400" title="Lower is better">
+                        <span className="ml-1.5 text-[10px] font-normal text-slate-400 dark:text-neutral-500" title="Lower is better">
                           ↓
                         </span>
                       )}
                     </td>
-                    <td className="border-l border-slate-100 px-4 py-3">
+                    <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3">
                       {canEdit ? (
                         <EditableCell value={target} unit={metric.unit} onSave={(v) => onSaveTarget(metric.key, v)} />
                       ) : (
                         <ReadOnlyValue value={target} unit={metric.unit} />
                       )}
                     </td>
-                    <td className="border-l border-slate-100 px-4 py-3">
+                    <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3">
                       {metric.auto ? (
                         <div className="flex items-center justify-end gap-1.5">
-                          <span className={`text-sm font-medium ${actual !== null ? "text-slate-800" : "text-slate-400"}`}>
+                          <span className={`text-sm font-medium ${actual !== null ? "text-slate-800 dark:text-neutral-100" : "text-slate-400 dark:text-neutral-500"}`}>
                             {actual !== null ? formatKpiValue(actual, metric.unit) : "—"}
                           </span>
                           <AutoBadge source={metric.source} snapshot={metric.snapshot} />
@@ -269,10 +269,10 @@ function CategoryCard({
                         <ReadOnlyValue value={actual} unit={metric.unit} />
                       )}
                     </td>
-                    <td className="border-l border-slate-100 px-4 py-3">
+                    <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3">
                       <ProgressBar pct={pct} />
                     </td>
-                    <td className="border-l border-slate-100 px-4 py-3 text-right font-medium text-slate-600">
+                    <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3 text-right font-medium text-slate-600 dark:text-neutral-400">
                       {metric.weight}%
                     </td>
                   </tr>
@@ -343,8 +343,8 @@ function CategoryEditor({
   const available = KPI_CATALOG.filter((m) => !usedKeys.has(m.key));
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-dashed border-blue-300 bg-white shadow-sm">
-      <div className="flex items-center gap-3 border-b border-slate-100 bg-blue-50/40 px-6 py-3">
+    <div className="overflow-hidden rounded-2xl border border-dashed border-blue-300 dark:border-blue-700 bg-card shadow-sm">
+      <div className="flex items-center gap-3 border-b border-slate-100 dark:border-neutral-800 bg-blue-50/40 dark:bg-blue-950/40 px-6 py-3">
         <Input
           value={category.label}
           onChange={(e) => onChange({ ...category, label: e.target.value })}
@@ -353,18 +353,18 @@ function CategoryEditor({
         />
         <span
           className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
-            totalWeight === 100 ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
+            totalWeight === 100 ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
           }`}
           title="Weights are relative within a category; 100% total is the convention."
         >
           Weights: {totalWeight}%
         </span>
-        <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={onRemove} title="Remove category">
+        <Button variant="ghost" size="sm" className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400" onClick={onRemove} title="Remove category">
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
 
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-slate-100 dark:divide-neutral-800">
         {category.metrics.map((m, idx) => {
           const r = resolveMetric(m);
           return (
@@ -397,7 +397,7 @@ function CategoryEditor({
                     <select
                       value={m.unit ?? "number"}
                       onChange={(e) => updateMetric(idx, { unit: e.target.value as KpiUnit })}
-                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs"
+                      className="h-8 rounded-md border border-border bg-card px-2 text-xs"
                       aria-label="Unit"
                     >
                       {UNIT_OPTIONS.map((u) => (
@@ -409,22 +409,22 @@ function CategoryEditor({
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-slate-700">{r.label}</span>
+                    <span className="font-medium text-slate-700 dark:text-neutral-300">{r.label}</span>
                     {r.auto ? (
                       <AutoBadge source={r.source} snapshot={r.snapshot} />
                     ) : (
-                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500" title={r.source}>
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground" title={r.source}>
                         manual
                       </span>
                     )}
                   </div>
                 )}
-                <p className="mt-0.5 truncate text-xs text-slate-400" title={r.source}>
+                <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-neutral-500" title={r.source}>
                   {r.source}
                 </p>
               </div>
 
-              <label className="flex items-center gap-1.5 text-xs text-slate-500">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
                   checked={m.lowerIsBetter ?? r.lowerIsBetter}
@@ -433,7 +433,7 @@ function CategoryEditor({
                 Lower is better
               </label>
 
-              <label className="flex items-center gap-1.5 text-xs text-slate-500">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 Weight
                 <input
                   type="number"
@@ -441,12 +441,12 @@ function CategoryEditor({
                   max={100}
                   value={m.weight}
                   onChange={(e) => updateMetric(idx, { weight: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                  className="h-8 w-16 rounded-md border border-slate-200 px-2 text-right text-sm"
+                  className="h-8 w-16 rounded-md border border-border px-2 text-right text-sm"
                 />
                 %
               </label>
 
-              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-red-600" onClick={() => removeMetric(idx)} title="Remove metric">
+              <Button variant="ghost" size="sm" className="text-slate-400 dark:text-neutral-500 hover:text-red-600 dark:hover:text-red-400" onClick={() => removeMetric(idx)} title="Remove metric">
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -454,11 +454,11 @@ function CategoryEditor({
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 dark:border-neutral-800 bg-slate-50/60 dark:bg-muted/40 px-5 py-3">
         <select
           value={pick}
           onChange={(e) => addFromCatalog(e.target.value)}
-          className="h-9 min-w-[260px] rounded-md border border-slate-200 bg-white px-2 text-sm"
+          className="h-9 min-w-[260px] rounded-md border border-border bg-card px-2 text-sm"
           aria-label="Add a metric"
         >
           <option value="">+ Add a metric…</option>
@@ -477,7 +477,7 @@ function CategoryEditor({
           })}
         </select>
 
-        <span className="text-xs text-slate-400">or</span>
+        <span className="text-xs text-slate-400 dark:text-neutral-500">or</span>
 
         <div className="flex items-center gap-2">
           <Input
@@ -492,7 +492,7 @@ function CategoryEditor({
           <select
             value={customUnit}
             onChange={(e) => setCustomUnit(e.target.value as KpiUnit)}
-            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-border bg-card px-2 text-sm"
             aria-label="Custom metric unit"
           >
             {UNIT_OPTIONS.map((u) => (
@@ -600,7 +600,7 @@ export function LandscaptKpiScorecard() {
               <select
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-slate-700 dark:text-neutral-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Year"
               >
                 {years.map((y) => (
@@ -624,16 +624,16 @@ export function LandscaptKpiScorecard() {
       />
 
       {scorecardError && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">
           {scorecardError.message}
         </p>
       )}
       {saveError && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{saveError}</p>
+        <p className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">{saveError}</p>
       )}
 
       {loadingScorecard && !scorecard ? (
-        <p className="text-sm text-slate-400">Loading scorecard…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading scorecard…</p>
       ) : editing && draft ? (
         <>
           {draft.categories.map((cat, idx) => (
@@ -677,11 +677,11 @@ export function LandscaptKpiScorecard() {
               onSaveActual={saveActual}
             />
           ))}
-          <p className="text-center text-xs text-slate-400">
+          <p className="text-center text-xs text-slate-400 dark:text-neutral-500">
             {canEdit
               ? "Click any Target (or a manual Actual) to edit — changes save automatically. "
               : "Editing targets, manual actuals, and the layout requires the Manage Report Center permission. "}
-            <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500">auto</span>{" "}
+            <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500 dark:text-blue-400">auto</span>{" "}
             values are computed from Landscapt data for {period}
             {loadingActuals ? " (refreshing…)" : actuals ? ` as of ${new Date(actuals.computedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}
             . Hover a badge for the definition.

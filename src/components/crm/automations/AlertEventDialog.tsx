@@ -92,9 +92,9 @@ export function AlertEventDialog({ open, onOpenChange, event }: Props) {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Alert</Label>
-            <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-md border border-slate-200 p-2">
+            <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-md border border-border p-2">
               {(users ?? []).length === 0 && (
-                <p className="text-sm text-slate-400 italic">No users found.</p>
+                <p className="text-sm text-slate-400 dark:text-neutral-500 italic">No users found.</p>
               )}
               {(users ?? []).map((u) => (
                 <div key={u.id} className="flex items-center gap-2">
@@ -110,7 +110,7 @@ export function AlertEventDialog({ open, onOpenChange, event }: Props) {
               ))}
             </div>
             {recipientUserIds.length === 0 && (
-              <p className="text-[11px] text-amber-600">Select at least one user to receive this alert.</p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">Select at least one user to receive this alert.</p>
             )}
           </div>
         </div>

@@ -40,11 +40,11 @@ export function ReportCatalog() {
         inputClassName="h-9 text-sm"
       />
 
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <th className="w-[280px] px-4 py-2.5 text-left">Report</th>
                 <th className="px-4 py-2.5 text-left">Description</th>
               </tr>
@@ -54,7 +54,7 @@ export function ReportCatalog() {
                 <tr>
                   <td
                     colSpan={2}
-                    className="px-4 py-12 text-center text-sm text-slate-400"
+                    className="px-4 py-12 text-center text-sm text-slate-400 dark:text-neutral-500"
                   >
                     No reports match your search.
                   </td>
@@ -86,21 +86,21 @@ function SectionRows({
   return (
     <>
       <tr className="border-b bg-muted">
-        <td colSpan={2} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
+        <td colSpan={2} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-neutral-300">
           {label}
         </td>
       </tr>
       {reports.map((def) => (
-        <tr key={def.key} className="border-b last:border-0 hover:bg-slate-50">
+        <tr key={def.key} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
           <td className="px-4 py-2.5 align-top">
             <Link
               href={reportHref(def)}
-              className="font-medium text-blue-600 hover:underline"
+              className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
             >
               {def.name}
             </Link>
           </td>
-          <td className="px-4 py-2.5 align-top text-slate-600">
+          <td className="px-4 py-2.5 align-top text-slate-600 dark:text-neutral-400">
             {def.description}
           </td>
         </tr>

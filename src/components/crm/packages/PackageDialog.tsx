@@ -186,18 +186,18 @@ function PackageServiceRow({
       </td>
       <td className="px-3 py-1.5">
         {schedule?.scheduledDate ? (
-          <span className={schedule.conflict ? "text-red-600 font-medium" : "text-slate-700"}>
+          <span className={schedule.conflict ? "text-red-600 dark:text-red-400 font-medium" : "text-slate-700 dark:text-neutral-300"}>
             {schedule.scheduledDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             {schedule.conflict && (
-              <span className="block text-[10px] font-normal text-red-500">after end date — conflict</span>
+              <span className="block text-[10px] font-normal text-red-500 dark:text-red-400">after end date — conflict</span>
             )}
           </span>
         ) : (
-          <span className="text-slate-300">—</span>
+          <span className="text-slate-300 dark:text-neutral-500">—</span>
         )}
       </td>
       <td className="px-2 py-1.5 text-center">
-        <button onClick={onDelete} className="rounded p-0.5 hover:bg-red-50">
+        <button onClick={onDelete} className="rounded p-0.5 hover:bg-red-50 dark:hover:bg-red-950/40">
           <Trash2 className="h-3.5 w-3.5 text-red-400" />
         </button>
       </td>
@@ -311,7 +311,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
               onClick={() => !t.disabled && setTab(t.key)}
               disabled={t.disabled}
               className={`px-4 py-2 border-b-2 font-medium transition-colors
-                ${tab === t.key ? "border-brand-600 text-brand-700" : "border-transparent text-slate-500 hover:text-slate-700"}
+                ${tab === t.key ? "border-brand-600 text-brand-700 dark:text-brand-400" : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"}
                 ${t.disabled ? "opacity-40 cursor-not-allowed" : ""}
               `}
             >
@@ -325,49 +325,49 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
           <div className="flex flex-col gap-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-medium text-slate-600">Package Name *</Label>
+                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Package Name *</Label>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 7-Step Fertilizer" className="text-sm" />
               </div>
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-medium text-slate-600">Code</Label>
+                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Code</Label>
                 <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="e.g. FERT7" className="text-sm" />
               </div>
             </div>
 
             <div className="flex flex-col gap-1">
-              <Label className="text-xs font-medium text-slate-600">Description</Label>
+              <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="text-sm resize-none" />
-              <p className="text-xs text-slate-400">Internal notes — not shown to the client.</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">Internal notes — not shown to the client.</p>
             </div>
 
             <div className="flex flex-col gap-1">
-              <Label className="text-xs font-medium text-slate-600">Estimate Description</Label>
+              <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Estimate Description</Label>
               <Textarea value={form.descriptionOnEstimate} onChange={(e) => setForm({ ...form, descriptionOnEstimate: e.target.value })} rows={2} className="text-sm resize-none" placeholder="Wording shown to the client when this package appears on an estimate" />
             </div>
 
             <div className="flex flex-col gap-1">
-              <Label className="text-xs font-medium text-slate-600">Invoice Description</Label>
+              <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Invoice Description</Label>
               <Textarea value={form.invoiceDescription} onChange={(e) => setForm({ ...form, invoiceDescription: e.target.value })} rows={2} className="text-sm resize-none" placeholder="Wording shown on invoices for this package's visits" />
             </div>
 
             {/* Visit schedule */}
             <div className="rounded-lg border p-3 flex flex-col gap-3">
-              <p className="text-xs font-semibold text-slate-600">Visit Schedule</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Visit Schedule</p>
               <div className="flex flex-col gap-1">
-                <Label className="text-xs text-slate-500">Visits per Season</Label>
+                <Label className="text-xs text-muted-foreground">Visits per Season</Label>
                 {pkg ? (
-                  <p className="text-sm font-semibold text-slate-800 mt-1.5">
-                    {pkg.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) ?? 0} <span className="font-normal text-slate-400">(from Services tab)</span>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100 mt-1.5">
+                    {pkg.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) ?? 0} <span className="font-normal text-slate-400 dark:text-neutral-500">(from Services tab)</span>
                   </p>
                 ) : (
-                  <p className="text-xs text-slate-400 mt-1.5">Add services after creating the package</p>
+                  <p className="text-xs text-slate-400 dark:text-neutral-500 mt-1.5">Add services after creating the package</p>
                 )}
               </div>
             </div>
 
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <Checkbox checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} />
-              <span className="text-slate-700">Active</span>
+              <span className="text-slate-700 dark:text-neutral-300">Active</span>
             </label>
           </div>
         )}
@@ -375,17 +375,17 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
         {/* Services tab */}
         {tab === "services" && pkg && (
           <div className="flex flex-col gap-3 py-2">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Each row is one numbered visit in the program (e.g. &ldquo;Visit 1&rdquo; = Step 1 of 5). Give it a
               service, the date window it should fall within, and the minimum days required before the next visit.
-              The <span className="font-medium text-slate-600">Scheduled</span> column shows the earliest date each
+              The <span className="font-medium text-slate-600 dark:text-neutral-400">Scheduled</span> column shows the earliest date each
               visit can actually happen, given its window and the spacing from the visit before it.
             </p>
 
             <div className="rounded-lg border overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     <th className="px-3 py-2.5 text-left">Name</th>
                     <th className="px-3 py-2.5 text-left">Service</th>
                     <th className="px-3 py-2.5 text-left">Start</th>
@@ -400,7 +400,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
                 </thead>
                 <tbody>
                   {(pkg.services ?? []).length === 0 && (
-                    <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400 text-sm">No visits added yet.</td></tr>
+                    <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400 dark:text-neutral-500 text-sm">No visits added yet.</td></tr>
                   )}
                   {(pkg.services ?? []).map((s) => (
                     <PackageServiceRow
@@ -422,7 +422,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
               <Plus className="mr-1 h-3.5 w-3.5" /> Add Visit
             </Button>
             {services.length === 0 && (
-              <p className="text-xs text-amber-600">No services defined yet — add services under CRM Settings → Services first.</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">No services defined yet — add services under CRM Settings → Services first.</p>
             )}
           </div>
         )}

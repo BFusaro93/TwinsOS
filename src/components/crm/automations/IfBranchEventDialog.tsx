@@ -55,7 +55,7 @@ export function IfBranchEventDialog({ open, onOpenChange, event }: Props) {
           <DialogTitle>Edit IF Branch</DialogTitle>
         </DialogHeader>
 
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           Events nested under this IF block only run when ALL conditions below are met. If no conditions are met, clients skip the IF block and continue in the sequence.
         </p>
 

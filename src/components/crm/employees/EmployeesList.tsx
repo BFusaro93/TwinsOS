@@ -76,9 +76,9 @@ function Field({
 }) {
   return (
     <div className="grid grid-cols-[180px_1fr] items-center gap-x-3 gap-y-1">
-      <Label className={`text-right text-sm ${required ? "font-semibold" : "font-normal text-slate-500"}`}>
+      <Label className={`text-right text-sm ${required ? "font-semibold" : "font-normal text-muted-foreground"}`}>
         {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
+        {required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
       </Label>
       <div>{children}</div>
     </div>
@@ -175,7 +175,7 @@ function PersonalTab({
               onChange={(e) => onChange("resource_tags", e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean))}
               placeholder="e.g. snow, mowing, irrigation"
             />
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               Type keywords or terms to group employees together. Then you can quickly select the group in the calendar.
             </p>
           </div>
@@ -374,7 +374,7 @@ function PayrollTab({
                     onChange={(e) => onChange("commission_pct", parseFloat(e.target.value) || 0)}
                     className="h-8 w-20 text-sm"
                   />
-                  <span className="text-sm text-slate-500">%</span>
+                  <span className="text-sm text-muted-foreground">%</span>
                 </div>
               </Field>
             </PermissionGate>
@@ -534,10 +534,10 @@ function UserSettingsTab({
           <Field label="User Role">
             {linkedAccountRole ? (
               <>
-                <div className="flex h-8 items-center rounded border bg-slate-50 px-3 text-sm text-slate-600">
+                <div className="flex h-8 items-center rounded border bg-slate-50 dark:bg-muted/40 px-3 text-sm text-slate-600 dark:text-neutral-400">
                   {PLATFORM_ROLE_LABELS[linkedAccountRole] ?? linkedAccountRole}
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
                   Set automatically from the linked account&apos;s role. Manage it in Settings → Users.
                 </p>
               </>
@@ -551,7 +551,7 @@ function UserSettingsTab({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
                   Display label only — link this employee to a login account to set it automatically.
                 </p>
               </>
@@ -567,7 +567,7 @@ function UserSettingsTab({
                 ))}
               </SelectContent>
             </Select>
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
               Only applies to non-admin logins — an account with the Admin user role always has full access, regardless of what&apos;s selected here.
             </p>
           </Field>
@@ -577,22 +577,22 @@ function UserSettingsTab({
                 type="color"
                 value={HEX_COLOR_RE.test(form.map_icon_color ?? "") ? form.map_icon_color : "#94a3b8"}
                 onChange={(e) => onChange("map_icon_color", e.target.value)}
-                className="h-9 w-14 cursor-pointer rounded border border-slate-200 p-0.5"
+                className="h-9 w-14 cursor-pointer rounded border border-border p-0.5"
               />
-              <span className="text-xs text-slate-500">{form.map_icon_color || "No color set"}</span>
+              <span className="text-xs text-muted-foreground">{form.map_icon_color || "No color set"}</span>
               {form.map_icon_color && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-xs text-slate-400 hover:text-slate-600"
+                  className="h-7 px-2 text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
                   onClick={() => onChange("map_icon_color", null)}
                 >
                   Clear
                 </Button>
               )}
             </div>
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
               Colors this rep&apos;s legend dot on the Sales Meetings calendar.
             </p>
           </Field>
@@ -632,20 +632,20 @@ function UserSettingsTab({
       <div className="mt-4 rounded border">
         <SectionBar title="User Account" />
         <div className="p-4 space-y-3">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             All users are employees, but not all employees are users. Link this employee to a login account so they can access the app.
           </p>
           {form.user_id ? (
             <div className="flex items-center gap-3">
-              <div className="flex-1 rounded bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-700">
+              <div className="flex-1 rounded bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 px-3 py-2 text-sm text-green-700 dark:text-green-400">
                 {linkedUser
-                  ? <>Linked to <span className="font-medium">{linkedUser.name || linkedUser.email}</span>{linkedUser.name && <span className="text-green-600"> · {linkedUser.email}</span>}</>
+                  ? <>Linked to <span className="font-medium">{linkedUser.name || linkedUser.email}</span>{linkedUser.name && <span className="text-green-600 dark:text-green-400"> · {linkedUser.email}</span>}</>
                   : "Linked to user account"}
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs text-red-500 hover:text-red-700"
+                className="h-8 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400"
                 onClick={() => onChange("user_id", null)}
               >
                 Unlink
@@ -661,12 +661,12 @@ function UserSettingsTab({
                   {linkableUsers.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.name || u.email}
-                      {u.name && <span className="text-slate-400"> · {u.email}</span>}
+                      {u.name && <span className="text-slate-400 dark:text-neutral-500"> · {u.email}</span>}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-slate-400 shrink-0">or invite via Settings → Users</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500 shrink-0">or invite via Settings → Users</p>
             </div>
           )}
         </div>
@@ -799,7 +799,7 @@ function EmployeeDialog({
         </DialogHeader>
 
         <Tabs defaultValue="personal" className="flex flex-1 flex-col overflow-hidden">
-          <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-4 py-0 h-10 gap-0 flex-wrap">
+          <TabsList className="shrink-0 border-b bg-card rounded-none justify-start px-4 py-0 h-10 gap-0 flex-wrap">
             {[
               { value: "personal", label: "Personal Information" },
               { value: "employment", label: "Employment" },
@@ -812,7 +812,7 @@ function EmployeeDialog({
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="h-full rounded-none border-b-2 border-transparent px-3 py-0 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                className="h-full rounded-none border-b-2 border-transparent px-3 py-0 text-sm font-medium text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
               >
                 {tab.label}
               </TabsTrigger>
@@ -863,7 +863,7 @@ function EmployeeDialog({
         </Tabs>
 
         {/* Footer */}
-        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-white">
+        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-card">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={submit} disabled={creating || updating}>
             {creating || updating ? "Saving…" : "Save"}
@@ -877,11 +877,11 @@ function EmployeeDialog({
 // ── status badge ──────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
-  full_time:   "bg-green-100 text-green-700",
-  part_time:   "bg-blue-100 text-blue-700",
-  seasonal:    "bg-yellow-100 text-yellow-700",
-  contractor:  "bg-purple-100 text-purple-700",
-  terminated:  "bg-red-100 text-red-600",
+  full_time:   "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  part_time:   "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  seasonal:    "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  contractor:  "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
+  terminated:  "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
 // ── read-only detail panel (used in both list + table views) ──────────────────
@@ -889,8 +889,8 @@ const STATUS_COLOR: Record<string, string> = {
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[140px_1fr] gap-x-3 py-1.5 text-sm">
-      <span className="text-right text-slate-400 shrink-0">{label}</span>
-      <span className="text-slate-800 font-medium">{value || "—"}</span>
+      <span className="text-right text-slate-400 dark:text-neutral-500 shrink-0">{label}</span>
+      <span className="text-slate-800 dark:text-neutral-100 font-medium">{value || "—"}</span>
     </div>
   );
 }
@@ -909,20 +909,20 @@ function EmployeeDetail({
   return (
     <div className="flex h-full flex-col overflow-auto">
       {/* Top card */}
-      <div className="border-b bg-slate-50 px-6 py-5">
+      <div className="border-b bg-slate-50 dark:bg-muted/40 px-6 py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white uppercase ${getAvatarColor(name)}`}>
               {employee.firstName[0]}{employee.lastName[0]}
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">{name}</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{name}</h2>
               <div className="mt-1 flex items-center gap-2">
-                <Badge className={`capitalize text-xs border-0 ${STATUS_COLOR[employee.employmentStatus] ?? "bg-slate-100 text-slate-600"}`}>
+                <Badge className={`capitalize text-xs border-0 ${STATUS_COLOR[employee.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
                   {employee.employmentStatus.replace("_", " ")}
                 </Badge>
                 {employee.resourceCode && (
-                  <span className="font-mono text-xs text-slate-400">{employee.resourceCode}</span>
+                  <span className="font-mono text-xs text-slate-400 dark:text-neutral-500">{employee.resourceCode}</span>
                 )}
               </div>
             </div>
@@ -937,7 +937,7 @@ function EmployeeDetail({
 
       {/* Details */}
       <div className="flex-1 px-6 py-4 space-y-1">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Contact</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Contact</p>
         <DetailRow label="Email" value={employee.email} />
         <DetailRow label="Cell" value={employee.cellPhone} />
         <DetailRow label="Phone" value={employee.phone} />
@@ -945,7 +945,7 @@ function EmployeeDetail({
           [employee.address, employee.city, employee.state, employee.zip].filter(Boolean).join(", ") || null
         } />
 
-        <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Employment</p>
+        <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Employment</p>
         <DetailRow label="Type" value={employee.userType?.replace("_", " ")} />
         <DetailRow label="Manager" value={employee.managerName} />
         <DetailRow label="Date Hired" value={formatDetailDate(employee.dateHired)} />
@@ -970,7 +970,7 @@ function EmployeeDetail({
 
         {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance) && (
           <PermissionGate permission="emp_view_license_info">
-            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Certifications &amp; Licensing</p>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Certifications &amp; Licensing</p>
             <DetailRow label="Driver License #" value={employee.driverLicense} />
             <DetailRow label="License Expiration" value={formatDetailDate(employee.licenseExpiration)} />
             <DetailRow label="Certified Driver" value={employee.isCertifiedDriver ? "Yes" : null} />
@@ -982,7 +982,7 @@ function EmployeeDetail({
 
         {(employee.birthDate || employee.maritalStatus || employee.spouseName || employee.citizenship) && (
           <>
-            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Personal</p>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Personal</p>
             <DetailRow label="Birth Date" value={formatDetailDate(employee.birthDate)} />
             <DetailRow label="Marital Status" value={employee.maritalStatus} />
             <DetailRow label="Spouse Name" value={employee.spouseName} />
@@ -994,13 +994,13 @@ function EmployeeDetail({
 
         {(employee.emergencyContact || employee.emergencyPhone) && (
           <>
-            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Emergency Contact</p>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Emergency Contact</p>
             <DetailRow label="Name" value={employee.emergencyContact} />
             <DetailRow label="Phone" value={employee.emergencyPhone} />
           </>
         )}
 
-        <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">App Access</p>
+        <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">App Access</p>
         <DetailRow label="Landscapt Role" value={roleName} />
         <DetailRow label="Sales Rep" value={employee.isSalesRep ? "Yes" : null} />
         <DetailRow label="Show in Calendar" value={employee.showInCalendar ? "Yes" : "No"} />
@@ -1011,8 +1011,8 @@ function EmployeeDetail({
 
         {employee.notes && (
           <>
-            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{employee.notes}</p>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Notes</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-neutral-300">{employee.notes}</p>
           </>
         )}
       </div>
@@ -1051,8 +1051,8 @@ function EmployeeTable({
   const showPayRate = can("payroll_show_pay_rate");
   return (
     <table className="w-full text-sm">
-      <thead className="sticky top-0 bg-slate-50 z-10">
-        <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 z-10">
+        <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           <th className="px-4 py-3">Name</th>
           <th className="px-4 py-3">Resource Code</th>
           <th className="px-4 py-3">Status</th>
@@ -1078,7 +1078,7 @@ function EmployeeTable({
             <td colSpan={colSpan} className="py-20 text-center">
               <div className="flex flex-col items-center gap-2">
                 <UserCog className="h-8 w-8 text-slate-200" />
-                <p className="text-sm text-slate-400">No employees match your search</p>
+                <p className="text-sm text-slate-400 dark:text-neutral-500">No employees match your search</p>
               </div>
             </td>
           </tr>
@@ -1087,33 +1087,33 @@ function EmployeeTable({
             <tr
               key={e.id}
               className={`border-b cursor-pointer transition-colors
-                ${selectedId === e.id ? "bg-brand-50" : "hover:bg-slate-50"}
+                ${selectedId === e.id ? "bg-brand-50 dark:bg-brand-900/30" : "hover:bg-slate-50 dark:hover:bg-muted/40"}
                 ${!e.isActive ? "opacity-50" : ""}`}
               onClick={() => onSelect(e)}
             >
               <td className="px-4 py-2.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-medium text-slate-900">{e.firstName} {e.lastName}</span>
+                  <span className="font-medium text-slate-900 dark:text-neutral-100">{e.firstName} {e.lastName}</span>
                   {e.managerName && (
-                    <span className="text-xs text-slate-400">· Mgr: {e.managerName}</span>
+                    <span className="text-xs text-slate-400 dark:text-neutral-500">· Mgr: {e.managerName}</span>
                   )}
                 </div>
               </td>
-              <td className="px-4 py-2.5 text-slate-500">{e.resourceCode ?? "—"}</td>
+              <td className="px-4 py-2.5 text-muted-foreground">{e.resourceCode ?? "—"}</td>
               <td className="px-4 py-2.5">
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_COLOR[e.employmentStatus] ?? "bg-slate-100 text-slate-600"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_COLOR[e.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
                   {e.employmentStatus.replace("_", " ")}
                 </span>
               </td>
-              <td className="px-4 py-2.5 capitalize text-slate-500 text-xs">{e.userType?.replace("_", " ") ?? "—"}</td>
-              <td className="px-4 py-2.5 text-slate-600">{e.cellPhone ?? e.phone ?? "—"}</td>
-              <td className="px-4 py-2.5 text-slate-500">{e.email ?? "—"}</td>
+              <td className="px-4 py-2.5 capitalize text-muted-foreground text-xs">{e.userType?.replace("_", " ") ?? "—"}</td>
+              <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{e.cellPhone ?? e.phone ?? "—"}</td>
+              <td className="px-4 py-2.5 text-muted-foreground">{e.email ?? "—"}</td>
               {showPayRate && (
-                <td className="px-4 py-2.5 text-right font-medium text-slate-700">
+                <td className="px-4 py-2.5 text-right font-medium text-slate-700 dark:text-neutral-300">
                   {e.hourlyRateCents > 0 ? formatCurrency(e.hourlyRateCents) : "—"}
                 </td>
               )}
-              <td className="px-4 py-2.5 text-slate-500">
+              <td className="px-4 py-2.5 text-muted-foreground">
                 {e.dateHired ? new Date(e.dateHired + "T12:00:00").toLocaleDateString("en-US", {
                   month: "short", day: "numeric", year: "numeric",
                 }) : "—"}
@@ -1121,7 +1121,7 @@ function EmployeeTable({
               <td className="px-4 py-2.5" onClick={(ev) => ev.stopPropagation()}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="rounded p-1 text-slate-400 hover:bg-slate-100">
+                    <button className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted">
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
                   </DropdownMenuTrigger>
@@ -1132,7 +1132,7 @@ function EmployeeTable({
                     {e.isActive ? (
                       <PermissionGate permission="emp_manage">
                         <DropdownMenuItem
-                          className="text-red-600"
+                          className="text-red-600 dark:text-red-400"
                           onClick={() => onDeactivate(e.id, `${e.firstName} ${e.lastName}`)}
                         >
                           Deactivate
@@ -1141,7 +1141,7 @@ function EmployeeTable({
                     ) : (
                       <PermissionGate permission="emp_manage">
                         <DropdownMenuItem
-                          className="text-green-600"
+                          className="text-green-600 dark:text-green-400"
                           onClick={() => onActivate(e.id, `${e.firstName} ${e.lastName}`)}
                         >
                           Activate
@@ -1192,14 +1192,14 @@ export function EmployeeListPanel({
           inputClassName="h-8 text-sm"
         />
         <div className="mt-2 flex items-center justify-between">
-          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
             <Checkbox
               checked={showInactive}
               onCheckedChange={(c) => setShowInactive(!!c)}
             />
             Show terminated
           </label>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-400 dark:text-neutral-500">
             {filtered.length} employee{filtered.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -1216,7 +1216,7 @@ export function EmployeeListPanel({
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-20">
             <UserCog className="h-8 w-8 text-slate-200" />
-            <p className="text-sm text-slate-400">No employees match your search</p>
+            <p className="text-sm text-slate-400 dark:text-neutral-500">No employees match your search</p>
           </div>
         ) : (
           <ul className="divide-y">
@@ -1224,7 +1224,7 @@ export function EmployeeListPanel({
               <li
                 key={e.id}
                 className={`flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors border-l-2
-                  ${selectedId === e.id ? "bg-brand-50 border-l-brand-500" : "hover:bg-slate-50 border-l-transparent"}
+                  ${selectedId === e.id ? "bg-brand-50 dark:bg-brand-900/30 border-l-brand-500" : "hover:bg-slate-50 dark:hover:bg-muted/40 border-l-transparent"}
                   ${!e.isActive ? "opacity-50" : ""}`}
                 onClick={() => onSelect(e)}
               >
@@ -1232,15 +1232,15 @@ export function EmployeeListPanel({
                   {e.firstName[0]}{e.lastName[0]}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-slate-800 text-sm">
+                  <div className="truncate font-medium text-slate-800 dark:text-neutral-100 text-sm">
                     {e.firstName} {e.lastName}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <Badge className={`shrink-0 rounded-full border-0 px-1.5 py-0 text-[10px] capitalize ${STATUS_COLOR[e.employmentStatus] ?? "bg-slate-100 text-slate-600"}`}>
+                    <Badge className={`shrink-0 rounded-full border-0 px-1.5 py-0 text-[10px] capitalize ${STATUS_COLOR[e.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
                       {e.employmentStatus.replace("_", " ")}
                     </Badge>
                     {e.resourceCode && (
-                      <span className="font-mono text-xs text-slate-400">{e.resourceCode}</span>
+                      <span className="font-mono text-xs text-slate-400 dark:text-neutral-500">{e.resourceCode}</span>
                     )}
                   </div>
                 </div>
@@ -1307,16 +1307,16 @@ export function EmployeesTable({
           className="max-w-sm flex-1"
           inputClassName="h-8 text-sm"
         />
-        <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
           <Checkbox checked={showInactive} onCheckedChange={(c) => setShowInactive(!!c)} />
           Show terminated
         </label>
-        <span className="ml-auto text-xs text-slate-400">
+        <span className="ml-auto text-xs text-slate-400 dark:text-neutral-500">
           {filtered.length} employee{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
+      <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <EmployeeTable
           employees={filtered}
           isLoading={isLoading}

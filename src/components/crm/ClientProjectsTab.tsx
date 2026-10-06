@@ -41,10 +41,10 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
   if (!projects?.length) {
     return (
       <>
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-white py-12 text-center">
-          <FolderKanban className="h-8 w-8 text-slate-300" />
-          <p className="text-sm font-medium text-slate-600">No projects yet</p>
-          <p className="text-xs text-slate-400">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card py-12 text-center">
+          <FolderKanban className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+          <p className="text-sm font-medium text-slate-600 dark:text-neutral-400">No projects yet</p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
             Projects matching this client&apos;s name will appear here.
           </p>
           <div className="mt-2">{newProjectButton}</div>
@@ -57,10 +57,10 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
   return (
     <>
       <div className="mb-3 flex justify-end">{newProjectButton}</div>
-      <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="px-4 py-2">Project</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Start</th>
@@ -73,27 +73,27 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
             {projects.map((p) => (
               <tr
                 key={p.id}
-                className="cursor-pointer border-b last:border-b-0 hover:bg-slate-50"
+                className="cursor-pointer border-b last:border-b-0 hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => setOpenProject(p)}
               >
-                <td className="px-4 py-2.5 font-medium text-slate-800">{p.name}</td>
+                <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-neutral-100">{p.name}</td>
                 <td className="px-4 py-2.5">
                   <StatusBadge
                     variant={p.status === "on_hold" ? "on_hold_project" : p.status}
                     label={PROJECT_STATUS_LABELS[p.status]}
                   />
                 </td>
-                <td className="px-4 py-2.5 text-slate-500">{formatDate(p.startDate)}</td>
-                <td className="px-4 py-2.5 text-slate-500">{formatDate(p.endDate)}</td>
-                <td className="px-4 py-2.5 text-right text-slate-700">
+                <td className="px-4 py-2.5 text-muted-foreground">{formatDate(p.startDate)}</td>
+                <td className="px-4 py-2.5 text-muted-foreground">{formatDate(p.endDate)}</td>
+                <td className="px-4 py-2.5 text-right text-slate-700 dark:text-neutral-300">
                   {p.contractPrice ? formatCurrency(p.contractPrice) : "—"}
                 </td>
-                <td className="px-4 py-2.5 text-right text-slate-700">{formatCurrency(p.totalCost)}</td>
+                <td className="px-4 py-2.5 text-right text-slate-700 dark:text-neutral-300">{formatCurrency(p.totalCost)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="border-t px-4 py-2 text-xs text-slate-400">
+        <div className="border-t px-4 py-2 text-xs text-slate-400 dark:text-neutral-500">
           {projects.length} project{projects.length !== 1 ? "s" : ""}
         </div>
       </div>

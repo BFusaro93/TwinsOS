@@ -463,7 +463,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
 
         {/* Sequence information */}
         <div className="flex flex-col gap-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
             Sequence Information
           </p>
 
@@ -514,7 +514,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                 value={reentryDays}
                 onChange={(e) => setReentryDays(Math.max(1, parseInt(e.target.value) || 1))}
               />
-              <span className="text-sm text-slate-500">day(s)</span>
+              <span className="text-sm text-muted-foreground">day(s)</span>
             </div>
           )}
         </div>
@@ -525,10 +525,10 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
                 Start Triggers
               </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-slate-400 dark:text-neutral-500 mt-0.5">
                 Sequence starts when ANY trigger fires (and its own conditions, if any, all match).
               </p>
             </div>
@@ -539,11 +539,11 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
           </div>
 
           {triggers.length === 0 && (
-            <p className="text-sm text-slate-400 italic">No triggers configured — sequence will not start automatically.</p>
+            <p className="text-sm text-slate-400 dark:text-neutral-500 italic">No triggers configured — sequence will not start automatically.</p>
           )}
 
           {triggers.map((t) => (
-            <div key={t._key} className="rounded-md border border-slate-200 p-3 flex flex-col gap-2">
+            <div key={t._key} className="rounded-md border border-border p-3 flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <Select value={t.triggerType} onValueChange={(v) => updateTriggerType(t._key, v as TriggerType)}>
                   <SelectTrigger className="flex-1">
@@ -572,7 +572,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                       placeholder="7"
                       className="h-9 w-16 text-sm"
                     />
-                    <span className="text-xs text-slate-400 whitespace-nowrap">
+                    <span className="text-xs text-slate-400 dark:text-neutral-500 whitespace-nowrap">
                       {t.triggerType === "estimate_expiring" ? "days before expiry" : "days since sent"}
                     </span>
                   </div>
@@ -588,7 +588,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                       placeholder="60"
                       className="h-9 w-16 text-sm"
                     />
-                    <span className="text-xs text-slate-400 whitespace-nowrap">minutes before</span>
+                    <span className="text-xs text-slate-400 dark:text-neutral-500 whitespace-nowrap">minutes before</span>
                   </div>
                 )}
                 {SERVICE_TRIGGER_TYPES.has(t.triggerType) && (
@@ -618,14 +618,14 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600"
+                  className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-400"
                   onClick={() => removeTrigger(t._key)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
 
-              <div className="pl-2 border-l-2 border-slate-100 ml-1">
+              <div className="pl-2 border-l-2 border-slate-100 dark:border-neutral-800 ml-1">
                 <ConditionListEditor
                   conditions={t.conditions}
                   onChange={(rows) => updateTriggerConditions(t._key, rows)}
@@ -643,10 +643,10 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
         {/* Stop conditions */}
         <div className="flex flex-col gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
               Stop Conditions
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-slate-400 dark:text-neutral-500 mt-0.5">
               Sequence stops before the next event when any condition is met.
             </p>
           </div>

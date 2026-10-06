@@ -82,11 +82,11 @@ export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
       >
         {/* Drag handle + close */}
         <div
-          className="flex w-8 cursor-ew-resize flex-col items-center bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0 border-r border-slate-200"
+          className="flex w-8 cursor-ew-resize flex-col items-center bg-muted hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors flex-shrink-0 border-r border-border"
           onMouseDown={startDrag}
         >
           <button
-            className="mt-3 rounded p-1 text-slate-400 hover:bg-slate-300 hover:text-slate-700 transition-colors cursor-pointer"
+            className="mt-3 rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-slate-300 dark:hover:bg-neutral-600 hover:text-slate-700 dark:hover:text-neutral-300 transition-colors cursor-pointer"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => onOpenChange(false)}
             title="Close"
@@ -94,7 +94,7 @@ export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
             <X className="h-4 w-4" />
           </button>
           <button
-            className="mt-2 rounded p-1 text-slate-400 hover:bg-slate-300 hover:text-slate-700 transition-colors cursor-pointer"
+            className="mt-2 rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-slate-300 dark:hover:bg-neutral-600 hover:text-slate-700 dark:hover:text-neutral-300 transition-colors cursor-pointer"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => {
               const qs = estimate?.clientId ? `?clientId=${estimate.clientId}` : "";
@@ -106,12 +106,12 @@ export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
             <Maximize2 className="h-4 w-4" />
           </button>
           <div className="flex flex-1 items-center">
-            <GripVertical className="h-4 w-4 text-slate-300" />
+            <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex flex-1 flex-col overflow-hidden bg-white">
+        <div className="flex flex-1 flex-col overflow-hidden bg-card">
           <EstimateDetail estimateId={estimateId} onClose={() => onOpenChange(false)} compact />
 
         </div>

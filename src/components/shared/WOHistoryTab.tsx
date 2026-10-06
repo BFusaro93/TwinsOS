@@ -73,7 +73,7 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
   if (assetWOs.length === 0) {
     return (
       <div className="flex h-40 flex-col items-center justify-center gap-3">
-        <p className="text-sm text-slate-400">No work orders found for this {recordLabel}.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">No work orders found for this {recordLabel}.</p>
         {canEditWorkOrders && (
           <Button size="sm" className="gap-1.5 text-xs" onClick={() => setNewWOOpen(true)}>
             <Plus className="h-3.5 w-3.5" />
@@ -93,7 +93,7 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
     <>
       <div className="p-6">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             {assetWOs.length} work order{assetWOs.length !== 1 ? "s" : ""}
           </p>
           {canEditWorkOrders && (
@@ -106,26 +106,26 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
         <div className="overflow-hidden rounded-md border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">WO #</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Title</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Priority</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+              <tr className="bg-slate-50 dark:bg-muted/40">
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">WO #</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Title</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Priority</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
               </tr>
             </thead>
             <tbody>
               {assetWOs.map((wo) => (
-                <tr key={wo.id} className="border-t border-slate-100 hover:bg-slate-50">
+                <tr key={wo.id} className="border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                   <td className="px-3 py-2">
                     <button
-                      className="font-mono text-xs font-semibold text-brand-600 hover:underline"
+                      className="font-mono text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
                       onClick={() => setSelectedWO(wo)}
                     >
                       {wo.workOrderNumber}
                     </button>
                   </td>
-                  <td className="px-3 py-2 text-slate-800">{wo.title}</td>
+                  <td className="px-3 py-2 text-slate-800 dark:text-neutral-100">{wo.title}</td>
                   <td className="px-3 py-2">
                     <StatusBadge
                       variant={wo.status}
@@ -138,7 +138,7 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
                       label={WO_PRIORITY_LABELS[wo.priority] ?? wo.priority}
                     />
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{formatDate(wo.createdAt)}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{formatDate(wo.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

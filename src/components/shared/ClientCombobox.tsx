@@ -93,10 +93,10 @@ export function ClientCombobox({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
                       {c.displayName}
-                      {c.accountNumber && <span className="ml-1.5 text-xs font-normal text-slate-400">#{c.accountNumber}</span>}
+                      {c.accountNumber && <span className="ml-1.5 text-xs font-normal text-slate-400 dark:text-neutral-500">#{c.accountNumber}</span>}
                     </p>
                     {c.billingAddress && (
-                      <p className="truncate text-xs text-slate-400">{c.billingAddress}</p>
+                      <p className="truncate text-xs text-slate-400 dark:text-neutral-500">{c.billingAddress}</p>
                     )}
                   </div>
                 </CommandItem>

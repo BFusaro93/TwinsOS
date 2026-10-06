@@ -11,7 +11,7 @@ export function WorkOrdersStub() {
         description="Track and manage maintenance tasks"
         action={<Button size="sm" disabled>+ New Work Order</Button>}
       />
-      <div className="flex flex-1 items-center justify-center rounded-lg border bg-white shadow-sm">
+      <div className="flex flex-1 items-center justify-center rounded-lg border bg-card shadow-sm">
         <EmptyState
           icon={Wrench}
           title="Work Orders coming soon"

@@ -140,7 +140,7 @@ function ChargeMultiForm({ totalChargeCents, onSuccess }: { totalChargeCents: nu
       <div className={STRIPE_ELEMENT_MIN_HEIGHT}>
         <PaymentElement options={{ wallets: { link: "never" } }} />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Charge {formatCurrency(totalChargeCents)}
@@ -536,9 +536,9 @@ export function AddPaymentDialog({
       <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
         <DialogContent className="max-w-3xl">
           <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <Check className="h-8 w-8 text-green-500" />
-            <p className="text-sm font-medium text-slate-900">Payment submitted</p>
-            <p className="text-xs text-slate-500">
+            <Check className="h-8 w-8 text-green-500 dark:text-green-400" />
+            <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Payment submitted</p>
+            <p className="text-xs text-muted-foreground">
               Invoice balances will update in a few seconds once it&apos;s confirmed.
             </p>
             <Button size="sm" className="mt-2" onClick={() => { resetForm(); onOpenChange(false); }}>
@@ -564,12 +564,12 @@ export function AddPaymentDialog({
           <div className="flex flex-col gap-4 py-2">
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Amount</span>
+                <span className="text-muted-foreground">Amount</span>
                 <span className="tabular-nums">{formatCurrency(chargeIntent.balanceCents)}</span>
               </div>
               {chargeIntent.feeCents > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Processing Fee</span>
+                  <span className="text-muted-foreground">Processing Fee</span>
                   <span className="tabular-nums">{formatCurrency(chargeIntent.feeCents)}</span>
                 </div>
               )}
@@ -619,10 +619,10 @@ export function AddPaymentDialog({
             <div className="grid grid-cols-[120px_1fr] items-center gap-x-4 gap-y-3">
               <Label className="text-right text-sm font-medium">Client</Label>
               {isEdit && selectedClient ? (
-                <div className="text-sm text-slate-700">
+                <div className="text-sm text-slate-700 dark:text-neutral-300">
                   {selectedClient.displayName}
                   {selectedClient.billingAddress && (
-                    <span className="ml-1 text-slate-400">: {selectedClient.billingAddress}</span>
+                    <span className="ml-1 text-slate-400 dark:text-neutral-500">: {selectedClient.billingAddress}</span>
                   )}
                 </div>
               ) : (
@@ -669,7 +669,7 @@ export function AddPaymentDialog({
                     onCheckedChange={(c) => handleAutoAllocate(!!c)}
                     disabled={!clientId || !amount}
                   />
-                  <Label htmlFor="auto-allocate" className="text-xs text-slate-600 cursor-pointer">
+                  <Label htmlFor="auto-allocate" className="text-xs text-slate-600 dark:text-neutral-400 cursor-pointer">
                     Auto Allocate
                   </Label>
                 </div>
@@ -709,8 +709,8 @@ export function AddPaymentDialog({
                         onClick={() => setChargePaymentMethod("card")}
                         className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                           chargePaymentMethod === "card"
-                            ? "border-brand-500 bg-brand-50 text-brand-700"
-                            : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                            ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                            : "border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                         }`}
                       >
                         Card
@@ -721,8 +721,8 @@ export function AddPaymentDialog({
                           onClick={() => setChargePaymentMethod("us_bank_account")}
                           className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                             chargePaymentMethod === "us_bank_account"
-                              ? "border-brand-500 bg-brand-50 text-brand-700"
-                              : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                              ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                              : "border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                           }`}
                         >
                           Bank Account (ACH)
@@ -730,7 +730,7 @@ export function AddPaymentDialog({
                       )}
                     </div>
                     {chargeSavedMethodType && (
-                      <p className="text-xs text-slate-500">Saved on file: {chargeSavedMethodSummary}</p>
+                      <p className="text-xs text-muted-foreground">Saved on file: {chargeSavedMethodSummary}</p>
                     )}
                   </div>
                 </>
@@ -765,15 +765,15 @@ export function AddPaymentDialog({
           <div className="w-52 shrink-0 bg-[#5a5a5a] p-5 text-sm text-white rounded-tr-lg">
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-slate-300">Amount Applied:</span>
+                <span className="text-slate-300 dm-fixed-dark">Amount Applied:</span>
                 <span className="font-medium">{formatCurrency(amountApplied)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-300">Unused Amount:</span>
+                <span className="text-slate-300 dm-fixed-dark">Unused Amount:</span>
                 <span className="font-medium">{formatCurrency(unusedCents)}</span>
               </div>
               <div className="flex justify-between border-t border-slate-500 pt-2">
-                <span className="text-slate-300">Account Balance:</span>
+                <span className="text-slate-300 dm-fixed-dark">Account Balance:</span>
                 <span className="font-semibold">{formatCurrency(accountBalanceCents)}</span>
               </div>
             </div>
@@ -785,10 +785,10 @@ export function AddPaymentDialog({
           <div className="border-t">
             <div className="mx-6 mt-4 mb-1 rounded bg-[#4a4a4a] px-3 py-1.5 text-sm font-semibold text-white flex items-center justify-between">
               <span>({allocationInvoices.length} of {allocationInvoices.length} in 1 page)</span>
-              <span className="text-xs text-slate-300">Page Size: 30</span>
+              <span className="text-xs text-slate-300 dm-fixed-dark">Page Size: 30</span>
             </div>
 
-            <div className="mx-6 mb-4 overflow-auto rounded border bg-white">
+            <div className="mx-6 mb-4 overflow-auto rounded border bg-card">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-[#4a4a4a] text-white">
@@ -803,7 +803,7 @@ export function AddPaymentDialog({
                 <tbody>
                   {allocationInvoices.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-4 text-center text-slate-400">
+                      <td colSpan={6} className="py-4 text-center text-slate-400 dark:text-neutral-500">
                         No invoices
                       </td>
                     </tr>
@@ -814,15 +814,15 @@ export function AddPaymentDialog({
                             client has child accounts, so a single-client
                             payment renders exactly as before. */}
                         {hasChildAccounts && (
-                          <tr className="bg-slate-100">
-                            <td colSpan={6} className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          <tr className="bg-muted">
+                            <td colSpan={6} className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                               {group.clientName ?? "Account"}
                             </td>
                           </tr>
                         )}
                         {group.rows.map((a) => (
                           <tr key={a.invoiceId} className="border-b last:border-0">
-                            <td className="px-3 py-2 font-medium text-slate-700">
+                            <td className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-300">
                               #{a.invoiceNumber}
                             </td>
                             <td className="px-3 py-2 text-center">
@@ -843,12 +843,12 @@ export function AddPaymentDialog({
                             <td className="px-3 py-2 text-right font-medium">
                               {formatCurrency(a.balanceCents)}
                             </td>
-                            <td className="px-3 py-2 text-right text-slate-500">
+                            <td className="px-3 py-2 text-right text-muted-foreground">
                               {new Date(a.invoiceDate + "T12:00:00").toLocaleDateString("en-US", {
                                 month: "2-digit", day: "2-digit", year: "numeric",
                               })}
                             </td>
-                            <td className="px-3 py-2 text-slate-500">
+                            <td className="px-3 py-2 text-muted-foreground">
                               {a.clientName ?? selectedClient?.displayName ?? ""}
                               {a.clientAddress && <div>{a.clientAddress}</div>}
                             </td>
@@ -864,7 +864,7 @@ export function AddPaymentDialog({
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-center gap-3 border-t bg-slate-50 px-6 py-4">
+        <div className="flex items-center justify-center gap-3 border-t bg-slate-50 dark:bg-muted/40 px-6 py-4">
           {chargeMode ? (
             <>
               {chargeSavedMethodType && (
@@ -906,9 +906,9 @@ export function AddPaymentDialog({
               </Button>
             </>
           )}
-          <span className="text-slate-400 text-sm">or</span>
+          <span className="text-slate-400 dark:text-neutral-500 text-sm">or</span>
           <button
-            className="text-brand-600 text-sm hover:underline"
+            className="text-brand-600 dark:text-brand-400 text-sm hover:underline"
             onClick={() => { resetForm(); onOpenChange(false); }}
           >
             Cancel
@@ -1063,8 +1063,8 @@ export function PaymentsList({ clientId }: Props) {
       )}
 
       {/* Filter bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
-        <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
+      <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
+        <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {(["reference", "date", "client", "address", "method"] as FilterField[]).map((key) => {
             const label = { reference: "Reference #", date: "Date", client: "Client", address: "Address", method: "Payment Method" }[key];
@@ -1073,7 +1073,7 @@ export function PaymentsList({ clientId }: Props) {
                 key={key}
                 onClick={() => { setActiveFilter(key); setFilterValue(""); }}
                 className={`px-2 py-0.5 rounded text-xs transition-colors whitespace-nowrap ${
-                  activeFilter === key ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
+                  activeFilter === key ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
                 }`}
               >
                 {label}
@@ -1093,7 +1093,7 @@ export function PaymentsList({ clientId }: Props) {
                   autoFocus
                 />
               )}
-              <button onClick={() => { setActiveFilter(null); setFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setActiveFilter(null); setFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>
@@ -1131,7 +1131,7 @@ export function PaymentsList({ clientId }: Props) {
                 onClick={() => setActiveTab(tab)}
                 className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                   activeTab === tab
-                    ? "bg-white text-slate-800"
+                    ? "bg-card text-slate-800 dark:text-neutral-100"
                     : "text-slate-300 hover:text-white"
                 }`}
               >
@@ -1155,10 +1155,10 @@ export function PaymentsList({ clientId }: Props) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="px-3 py-3">Date</th>
               {!clientId && (
                 <th className="min-w-[200px] px-3 py-3">Client</th>
@@ -1183,48 +1183,48 @@ export function PaymentsList({ clientId }: Props) {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={clientId ? 6 : 7} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={clientId ? 6 : 7} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   No payments recorded yet
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
-                <tr key={p.id} className="group cursor-pointer border-b hover:bg-slate-50" onClick={() => setViewPayment(p)}>
-                  <td className="px-3 py-2.5 text-slate-700 font-medium">
+                <tr key={p.id} className="group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40" onClick={() => setViewPayment(p)}>
+                  <td className="px-3 py-2.5 text-slate-700 dark:text-neutral-300 font-medium">
                     {new Date(p.paymentDate + "T12:00:00").toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
                     })}
                   </td>
                   {!clientId && (
                     <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <Link href={`/crm/clients/${p.clientId}`} className="font-medium text-brand-600 hover:underline">
+                      <Link href={`/crm/clients/${p.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                         {p.clientName ?? "—"}
                       </Link>
                       {p.clientAddress && (
-                        <div className="text-xs text-slate-400">{p.clientAddress}</div>
+                        <div className="text-xs text-slate-400 dark:text-neutral-500">{p.clientAddress}</div>
                       )}
                     </td>
                   )}
-                  <td className="px-3 py-2.5 text-right font-medium text-slate-800">
+                  <td className="px-3 py-2.5 text-right font-medium text-slate-800 dark:text-neutral-100">
                     {formatCurrency(p.amountCents)}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">
+                  <td className="px-3 py-2.5 text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(p.unusedAmountCents)}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">
+                  <td className="px-3 py-2.5 text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(p.refundedAmountCents)}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-500 text-xs">
+                  <td className="px-3 py-2.5 text-muted-foreground text-xs">
                     {p.reference ?? ""}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-700 text-xs">
+                  <td className="px-3 py-2.5 text-slate-700 dark:text-neutral-300 text-xs">
                     {p.method}
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {(p.isCredit ? can("acct_add_modify_credits") : canModify) && (
                         <button
-                          className="rounded px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600"
+                          className="rounded px-2 py-0.5 text-xs bg-muted hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-600 dark:text-neutral-400"
                           onClick={(e) => { e.stopPropagation(); setEditPayment(p); }}
                         >
                           Edit
@@ -1232,7 +1232,7 @@ export function PaymentsList({ clientId }: Props) {
                       )}
                       {canRefund && (
                         <button
-                          className="rounded px-2 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600"
+                          className="rounded px-2 py-0.5 text-xs bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400"
                           onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
                         >
                           Refund
@@ -1280,39 +1280,39 @@ export function PaymentsList({ clientId }: Props) {
           {viewPayment && (
             <div className="space-y-3 text-sm">
               <div className="flex justify-between py-1 border-b">
-                <span className="text-slate-500">Date</span>
+                <span className="text-muted-foreground">Date</span>
                 <span className="font-medium">{new Date(viewPayment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
               </div>
               {viewPayment.clientName && (
                 <div className="flex justify-between py-1 border-b">
-                  <span className="text-slate-500">Client</span>
+                  <span className="text-muted-foreground">Client</span>
                   <span className="font-medium">{viewPayment.clientName}</span>
                 </div>
               )}
               <div className="flex justify-between py-1 border-b">
-                <span className="text-slate-500">Amount</span>
-                <span className="font-semibold text-slate-900">{formatCurrency(viewPayment.amountCents)}</span>
+                <span className="text-muted-foreground">Amount</span>
+                <span className="font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(viewPayment.amountCents)}</span>
               </div>
               <div className="flex justify-between py-1 border-b">
-                <span className="text-slate-500">Method</span>
+                <span className="text-muted-foreground">Method</span>
                 <span>{viewPayment.method}</span>
               </div>
               {viewPayment.reference && (
                 <div className="flex justify-between py-1 border-b">
-                  <span className="text-slate-500">Reference #</span>
+                  <span className="text-muted-foreground">Reference #</span>
                   <span className="font-mono text-xs">{viewPayment.reference}</span>
                 </div>
               )}
               {viewPayment.unusedAmountCents > 0 && (
                 <div className="flex justify-between py-1 border-b">
-                  <span className="text-slate-500">Unused Amount</span>
-                  <span className="text-yellow-600">{formatCurrency(viewPayment.unusedAmountCents)}</span>
+                  <span className="text-muted-foreground">Unused Amount</span>
+                  <span className="text-yellow-600 dark:text-yellow-400">{formatCurrency(viewPayment.unusedAmountCents)}</span>
                 </div>
               )}
               {viewPayment.refundedAmountCents > 0 && (
                 <div className="flex justify-between py-1 border-b">
-                  <span className="text-slate-500">Refunded</span>
-                  <span className="text-red-500">{formatCurrency(viewPayment.refundedAmountCents)}</span>
+                  <span className="text-muted-foreground">Refunded</span>
+                  <span className="text-red-500 dark:text-red-400">{formatCurrency(viewPayment.refundedAmountCents)}</span>
                 </div>
               )}
             </div>
@@ -1322,7 +1322,7 @@ export function PaymentsList({ clientId }: Props) {
               Edit
             </Button>
             {canRefund && (
-              <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
+              <Button size="sm" variant="outline" className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40"
                 onClick={() => { setRefundPayment(viewPayment); setViewPayment(null); }}>
                 Refund
               </Button>
@@ -1367,19 +1367,19 @@ export function RefundDialog({ payment, onClose }: { payment: CRMPayment | null;
           <DialogTitle>Issue Refund</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-1 text-sm">
-          <div className="rounded bg-slate-50 p-3 space-y-1">
-            <div className="flex justify-between text-slate-500">
+          <div className="rounded bg-slate-50 dark:bg-muted/40 p-3 space-y-1">
+            <div className="flex justify-between text-muted-foreground">
               <span>Original payment</span>
-              <span className="font-medium text-slate-800">{formatCurrency(payment.amountCents)}</span>
+              <span className="font-medium text-slate-800 dark:text-neutral-100">{formatCurrency(payment.amountCents)}</span>
             </div>
             {payment.refundedAmountCents > 0 && (
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between text-muted-foreground">
                 <span>Previously refunded</span>
-                <span className="text-red-500">({formatCurrency(payment.refundedAmountCents)})</span>
+                <span className="text-red-500 dark:text-red-400">({formatCurrency(payment.refundedAmountCents)})</span>
               </div>
             )}
             <div className="flex justify-between border-t pt-1">
-              <span className="text-slate-500">Max refundable</span>
+              <span className="text-muted-foreground">Max refundable</span>
               <span className="font-semibold">{formatCurrency(maxRefund)}</span>
             </div>
           </div>

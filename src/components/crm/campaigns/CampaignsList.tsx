@@ -85,13 +85,13 @@ const STATUS_LABELS: Record<CampaignStatus, string> = {
 };
 
 const STATUS_COLORS: Record<CampaignStatus, string> = {
-  draft: "bg-slate-100 text-slate-600",
-  scheduled: "bg-blue-100 text-blue-700",
-  sending: "bg-orange-100 text-orange-700",
-  active: "bg-green-100 text-green-700",
-  paused: "bg-amber-100 text-amber-700",
-  completed: "bg-teal-100 text-teal-700",
-  cancelled: "bg-red-100 text-red-600",
+  draft: "bg-muted text-slate-600 dark:text-neutral-400",
+  scheduled: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  sending: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
+  active: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  paused: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",
+  completed: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",
+  cancelled: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
 const STATUS_TABS: Array<{ key: "all" | CampaignStatus; label: string }> = [
@@ -308,7 +308,7 @@ function CampaignDialog({
               />
             </div>
           ) : segmentExclusionCount > 0 ? (
-            <p className="rounded bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+            <p className="rounded bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
               Excludes {segmentExclusionCount} client{segmentExclusionCount !== 1 ? "s" : ""} marked Do Not Market
             </p>
           ) : null}
@@ -328,13 +328,13 @@ function CampaignDialog({
             <div className="flex items-center justify-between">
               <Label>Message Body</Label>
               {form.type === "email" && (
-                <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5 text-xs">
+                <div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5 text-xs">
                   <button
                     type="button"
                     onClick={() => setBodyMode("custom")}
                     className={cn(
                       "rounded px-2 py-1 font-medium transition-colors",
-                      bodyMode === "custom" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                      bodyMode === "custom" ? "bg-card text-slate-800 dark:text-neutral-100 shadow-sm" : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
                     )}
                   >
                     Write Your Own
@@ -344,7 +344,7 @@ function CampaignDialog({
                     onClick={() => setBodyMode("template")}
                     className={cn(
                       "rounded px-2 py-1 font-medium transition-colors",
-                      bodyMode === "template" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                      bodyMode === "template" ? "bg-card text-slate-800 dark:text-neutral-100 shadow-sm" : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
                     )}
                   >
                     Use a Template
@@ -366,12 +366,12 @@ function CampaignDialog({
                   </SelectContent>
                 </Select>
                 {marketingTemplates.length === 0 ? (
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">
                     No &ldquo;Marketing&rdquo; templates yet — create one under Settings → Documents, then it&rsquo;ll show up here.
                   </p>
                 ) : templateDetail ? (
-                  <div className="max-h-56 overflow-y-auto rounded-md border bg-white p-3">
-                    <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                  <div className="max-h-56 overflow-y-auto rounded-md border bg-card p-3">
+                    <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                       Preview with sample data — the real client&rsquo;s details are used when sent
                     </p>
                     <div dangerouslySetInnerHTML={{ __html: renderBlocksToHtml(templateDetail.blocks, SAMPLE_MERGE_VALUES) }} />
@@ -443,22 +443,22 @@ function CampaignRow({
 
   return (
     <tr
-      className={cn("border-b transition-colors hover:bg-slate-50", canEdit && "cursor-pointer")}
+      className={cn("border-b transition-colors hover:bg-slate-50 dark:hover:bg-muted/40", canEdit && "cursor-pointer")}
       onClick={canEdit ? () => onEdit(campaign) : undefined}
     >
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
             {campaign.type === "sms" ? (
-              <MessageSquare className="h-3.5 w-3.5 text-slate-500" />
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <Mail className="h-3.5 w-3.5 text-slate-500" />
+              <Mail className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </div>
           <div>
-            <p className="font-medium text-sm text-slate-900">{campaign.name}</p>
+            <p className="font-medium text-sm text-slate-900 dark:text-neutral-100">{campaign.name}</p>
             {campaign.subject && (
-              <p className="text-xs text-slate-400 truncate max-w-[280px]">{campaign.subject}</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500 truncate max-w-[280px]">{campaign.subject}</p>
             )}
           </div>
         </div>
@@ -473,10 +473,10 @@ function CampaignRow({
           {STATUS_LABELS[campaign.status]}
         </span>
       </td>
-      <td className="px-3 py-3 text-xs text-slate-500">
+      <td className="px-3 py-3 text-xs text-muted-foreground">
         {SEGMENT_LABELS[campaign.targetSegment] ?? campaign.targetSegment}
       </td>
-      <td className="px-3 py-3 text-xs text-slate-500">
+      <td className="px-3 py-3 text-xs text-muted-foreground">
         {campaign.totalRecipients > 0 ? (
           <div className="flex items-center gap-1">
             <Users className="h-3 w-3" />
@@ -486,17 +486,17 @@ function CampaignRow({
           "—"
         )}
       </td>
-      <td className="px-3 py-3 text-xs text-slate-500">
+      <td className="px-3 py-3 text-xs text-muted-foreground">
         {openRate !== null ? (
           <div className="flex items-center gap-1">
             <BarChart2 className="h-3 w-3" />
-            {openRate}%{clickRate !== null && <span className="text-slate-400"> · {clickRate}% CTR</span>}
+            {openRate}%{clickRate !== null && <span className="text-slate-400 dark:text-neutral-500"> · {clickRate}% CTR</span>}
           </div>
         ) : (
           "—"
         )}
       </td>
-      <td className="px-3 py-3 text-xs text-slate-500">
+      <td className="px-3 py-3 text-xs text-muted-foreground">
         {campaign.scheduledAt
           ? format(new Date(campaign.scheduledAt), "MMM d, yyyy h:mm a")
           : campaign.sentAt
@@ -557,7 +557,7 @@ function CampaignRow({
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="text-red-600"
+                  className="text-red-600 dark:text-red-400"
                   onClick={() => onDelete(campaign)}
                 >
                   <Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -703,7 +703,7 @@ export function CampaignsList() {
                   className={cn(
                     "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                     statusTab === t.key
-                      ? "bg-white text-slate-800"
+                      ? "bg-card text-slate-800 dark:text-neutral-100"
                       : "text-slate-300 hover:text-white"
                   )}
                 >
@@ -713,7 +713,7 @@ export function CampaignsList() {
                       className={cn(
                         "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
                         statusTab === t.key
-                          ? "bg-slate-200 text-slate-700"
+                          ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300"
                           : "bg-white/20 text-white"
                       )}
                     >
@@ -761,8 +761,8 @@ export function CampaignsList() {
           />
         ) : (
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 border-b bg-slate-50">
-              <tr className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+            <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted/40">
+              <tr className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 <th className="px-4 py-2.5 text-left">Campaign</th>
                 <th className="px-3 py-2.5 text-left">Status</th>
                 <th className="px-3 py-2.5 text-left">Segment</th>

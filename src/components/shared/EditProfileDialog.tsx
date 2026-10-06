@@ -117,7 +117,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
 
           {/* ── Display name ── */}
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Display Name
             </p>
             <div className="grid gap-1.5">
@@ -139,14 +139,14 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                 </Button>
               </div>
               {saveName.isSuccess && (
-                <p className="flex items-center gap-1 text-xs text-green-600">
+                <p className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Name updated.
                 </p>
               )}
             </div>
             <div className="grid gap-1.5">
-              <Label className="text-slate-500">Role</Label>
-              <p className="text-sm capitalize text-slate-600">{currentUser.role}</p>
+              <Label className="text-muted-foreground">Role</Label>
+              <p className="text-sm capitalize text-slate-600 dark:text-neutral-400">{currentUser.role}</p>
             </div>
           </div>
 
@@ -154,15 +154,15 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
 
           {/* ── Email address ── */}
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Email Address
             </p>
             <div className="grid gap-1.5">
-              <Label className="text-slate-500">Current email</Label>
-              <p className="text-sm text-slate-600">{currentUser.email}</p>
+              <Label className="text-muted-foreground">Current email</Label>
+              <p className="text-sm text-slate-600 dark:text-neutral-400">{currentUser.email}</p>
             </div>
             {emailSent ? (
-              <p className="flex items-center gap-1 text-xs text-green-600">
+              <p className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Confirmation sent to your new address — click the link to confirm.
               </p>
@@ -188,11 +188,11 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                     {changeEmail.isPending ? "Sending…" : "Send"}
                   </Button>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 dark:text-neutral-500">
                   A confirmation link will be sent to the new address.
                 </p>
                 {changeEmail.isError && (
-                  <p className="text-xs text-red-500">
+                  <p className="text-xs text-red-500 dark:text-red-400">
                     {(changeEmail.error as Error).message}
                   </p>
                 )}
@@ -204,11 +204,11 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
 
           {/* ── Password ── */}
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Password
             </p>
             {passwordSaved ? (
-              <p className="flex items-center gap-1 text-xs text-green-600">
+              <p className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Password updated.
               </p>
             ) : (
@@ -234,7 +234,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                   />
                 </div>
                 {confirmPassword && !passwordValid && (
-                  <p className="text-xs text-red-500">
+                  <p className="text-xs text-red-500 dark:text-red-400">
                     {newPassword.length < 8
                       ? "Password must be at least 8 characters."
                       : "Passwords do not match."}
@@ -248,7 +248,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                   {changePassword.isPending ? "Updating…" : "Update Password"}
                 </Button>
                 {changePassword.isError && (
-                  <p className="text-xs text-red-500">
+                  <p className="text-xs text-red-500 dark:text-red-400">
                     {(changePassword.error as Error).message}
                   </p>
                 )}

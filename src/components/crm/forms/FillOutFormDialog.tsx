@@ -54,14 +54,14 @@ function FieldRenderer({
   onAttachmentSelect?: (file: File | null) => void;
 }) {
   const base =
-    "mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 placeholder-slate-400";
+    "mt-1 block w-full rounded-md border border-slate-300 dark:border-neutral-700 bg-card px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 placeholder-slate-400";
   const errCls = "border-red-400 focus:ring-red-400 focus:border-red-400";
 
   if (field.fieldType === "header") {
     return (
       <div>
-        <h2 className="text-lg font-bold text-slate-800">{field.label}</h2>
-        {field.description && <p className="mt-0.5 text-sm text-slate-500">{field.description}</p>}
+        <h2 className="text-lg font-bold text-slate-800 dark:text-neutral-100">{field.label}</h2>
+        {field.description && <p className="mt-0.5 text-sm text-muted-foreground">{field.description}</p>}
       </div>
     );
   }
@@ -69,14 +69,14 @@ function FieldRenderer({
   if (field.fieldType === "paragraph") {
     return (
       <div>
-        {field.label && <p className="text-sm font-medium text-slate-700 mb-0.5">{field.label}</p>}
-        <p className="text-sm text-slate-600">{field.description ?? ""}</p>
+        {field.label && <p className="text-sm font-medium text-slate-700 dark:text-neutral-300 mb-0.5">{field.label}</p>}
+        <p className="text-sm text-slate-600 dark:text-neutral-400">{field.description ?? ""}</p>
       </div>
     );
   }
 
   if (field.fieldType === "divider") {
-    return <hr className="border-slate-200" />;
+    return <hr className="border-border" />;
   }
 
   if (field.fieldType === "hidden") {
@@ -86,9 +86,9 @@ function FieldRenderer({
   if (field.fieldType === "multiple_choice") {
     return (
       <div>
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
           {field.label}
-          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+          {field.required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
         </label>
         <div className="mt-2 space-y-2">
           {(field.options ?? []).map((opt) => (
@@ -99,13 +99,13 @@ function FieldRenderer({
                 value={opt}
                 checked={value === opt}
                 onChange={() => onChange(opt)}
-                className="h-4 w-4 border-slate-300 text-brand-600 focus:ring-brand-500"
+                className="h-4 w-4 border-slate-300 dark:border-neutral-700 text-brand-600 dark:text-brand-400 focus:ring-brand-500"
               />
-              <span className="text-sm text-slate-700">{opt}</span>
+              <span className="text-sm text-slate-700 dark:text-neutral-300">{opt}</span>
             </label>
           ))}
         </div>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
     );
   }
@@ -113,9 +113,9 @@ function FieldRenderer({
   if (field.fieldType === "checklist") {
     return (
       <div>
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
           {field.label}
-          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+          {field.required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
         </label>
         <div className="mt-2 space-y-2">
           {(field.options ?? []).map((opt) => (
@@ -124,13 +124,13 @@ function FieldRenderer({
                 type="checkbox"
                 checked={multiValue.includes(opt)}
                 onChange={() => onToggleMulti(opt)}
-                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                className="h-4 w-4 rounded border-slate-300 dark:border-neutral-700 text-brand-600 dark:text-brand-400 focus:ring-brand-500"
               />
-              <span className="text-sm text-slate-700">{opt}</span>
+              <span className="text-sm text-slate-700 dark:text-neutral-300">{opt}</span>
             </label>
           ))}
         </div>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
     );
   }
@@ -142,9 +142,9 @@ function FieldRenderer({
     const selected = value !== "" ? Number(value) : null;
     return (
       <div>
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
           {field.label}
-          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+          {field.required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
         </label>
         <div className="mt-2">
           <div className="flex flex-wrap gap-1">
@@ -156,19 +156,19 @@ function FieldRenderer({
                 className={`flex h-9 w-9 items-center justify-center rounded border text-sm font-semibold transition-colors ${
                   selected === i
                     ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:border-brand-400"
+                    : "border-slate-300 dark:border-neutral-700 bg-card text-slate-700 dark:text-neutral-300 hover:border-brand-400"
                 }`}
               >
                 {i}
               </button>
             ))}
           </div>
-          <div className="mt-1 flex justify-between text-[10px] text-slate-400">
+          <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-neutral-500">
             <span>{labelMin}</span>
             <span>{labelMax}</span>
           </div>
         </div>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
     );
   }
@@ -178,9 +178,9 @@ function FieldRenderer({
     const selected = value !== "" ? Number(value) : 0;
     return (
       <div>
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
           {field.label}
-          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+          {field.required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
         </label>
         <div className="mt-2 flex gap-1">
           {Array.from({ length: max }).map((_, i) => {
@@ -192,12 +192,12 @@ function FieldRenderer({
                 onClick={() => onChange(String(starNum))}
                 className="text-2xl transition-colors focus:outline-none"
               >
-                <span className={starNum <= selected ? "text-amber-400" : "text-slate-300"}>★</span>
+                <span className={starNum <= selected ? "text-amber-400" : "text-slate-300 dark:text-neutral-500"}>★</span>
               </button>
             );
           })}
         </div>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
     );
   }
@@ -210,17 +210,17 @@ function FieldRenderer({
             type="checkbox"
             checked={value === "true"}
             onChange={(e) => onChange(e.target.checked ? "true" : "false")}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-neutral-700 text-brand-600 dark:text-brand-400 focus:ring-brand-500"
           />
           <div>
-            <label className="text-sm font-medium text-slate-700">
+            <label className="text-sm font-medium text-slate-700 dark:text-neutral-300">
               {field.label || "SMS Opt-in"}
-              {field.required && <span className="ml-0.5 text-red-500">*</span>}
+              {field.required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
             </label>
             {field.description && (
-              <p className="text-xs text-slate-500 mt-0.5">{field.description}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{field.description}</p>
             )}
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               See our{" "}
               <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline">
                 Privacy Policy
@@ -233,16 +233,16 @@ function FieldRenderer({
             </p>
           </div>
         </div>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
     );
   }
 
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700">
+      <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
         {field.label}
-        {field.required && <span className="ml-0.5 text-red-500">*</span>}
+        {field.required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
       </label>
 
       {field.fieldType === "textarea" ? (
@@ -270,9 +270,9 @@ function FieldRenderer({
             type="checkbox"
             checked={value === "true"}
             onChange={(e) => onChange(e.target.checked ? "true" : "false")}
-            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            className="h-4 w-4 rounded border-slate-300 dark:border-neutral-700 text-brand-600 dark:text-brand-400 focus:ring-brand-500"
           />
-          <span className="text-sm text-slate-600">{field.placeholder ?? field.label}</span>
+          <span className="text-sm text-slate-600 dark:text-neutral-400">{field.placeholder ?? field.label}</span>
         </div>
       ) : field.fieldType === "attachment" ? (
         <div>
@@ -281,15 +281,15 @@ function FieldRenderer({
             accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
             disabled={attachmentUploading}
             onChange={(e) => onAttachmentSelect?.(e.target.files?.[0] ?? null)}
-            className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100 cursor-pointer disabled:opacity-60"
+            className="mt-1 block w-full text-sm text-slate-600 dark:text-neutral-400 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 dark:file:bg-brand-900/30 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700 dark:file:text-brand-400 hover:file:bg-brand-100 dark:hover:file:bg-brand-900/40 cursor-pointer disabled:opacity-60"
           />
-          {attachmentUploading && <p className="mt-1 text-xs text-slate-500">Uploading…</p>}
+          {attachmentUploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
           {attachment && !attachmentUploading && (
-            <p className="mt-1 text-xs text-emerald-600">
+            <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
               ✓ {attachment.name} ({Math.round(attachment.size / 1024)} KB)
             </p>
           )}
-          {attachmentError && <p className="mt-1 text-xs text-red-600">{attachmentError}</p>}
+          {attachmentError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{attachmentError}</p>}
         </div>
       ) : (
         <input
@@ -306,7 +306,7 @@ function FieldRenderer({
         />
       )}
 
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }
@@ -451,19 +451,19 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>{form.name}</DialogTitle>
           {form.description && (
-            <p className="text-sm text-slate-500 mt-0.5">{form.description}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{form.description}</p>
           )}
         </DialogHeader>
 
         {state === "success" ? (
           <div className="py-10 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-              <svg className="h-7 w-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
+              <svg className="h-7 w-7 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p className="font-semibold text-slate-800">Submitted!</p>
-            <p className="mt-1 text-sm text-slate-500">Response recorded successfully.</p>
+            <p className="font-semibold text-slate-800 dark:text-neutral-100">Submitted!</p>
+            <p className="mt-1 text-sm text-muted-foreground">Response recorded successfully.</p>
             <Button size="sm" className="mt-4" onClick={() => { setValues({}); setMultiValues({}); setErrors({}); setState("idle"); }}>
               Fill Out Again
             </Button>
@@ -471,7 +471,7 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 py-2" noValidate>
             {form.fields.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-400">
+              <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
                 No fields yet — add fields in the Builder tab first.
               </p>
             ) : (

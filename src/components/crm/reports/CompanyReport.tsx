@@ -39,13 +39,13 @@ import type {
 type Accent = "emerald" | "rose" | "blue" | "violet" | "amber" | "orange" | "slate";
 
 const ACCENT = {
-  emerald: { chipBg: "bg-emerald-50", chipText: "text-emerald-600", value: "text-emerald-700", head: "bg-emerald-50/70 text-emerald-800", underline: "decoration-emerald-400", border: "border-emerald-400" },
-  rose: { chipBg: "bg-rose-50", chipText: "text-rose-600", value: "text-rose-700", head: "bg-rose-50/70 text-rose-800", underline: "decoration-rose-400", border: "border-rose-400" },
-  blue: { chipBg: "bg-blue-50", chipText: "text-blue-600", value: "text-blue-700", head: "bg-blue-50/70 text-blue-800", underline: "decoration-blue-400", border: "border-blue-400" },
-  violet: { chipBg: "bg-violet-50", chipText: "text-violet-600", value: "text-violet-700", head: "bg-violet-50/70 text-violet-800", underline: "decoration-violet-400", border: "border-violet-400" },
-  amber: { chipBg: "bg-amber-50", chipText: "text-amber-600", value: "text-amber-700", head: "bg-amber-50/70 text-amber-800", underline: "decoration-amber-400", border: "border-amber-400" },
-  orange: { chipBg: "bg-orange-50", chipText: "text-orange-600", value: "text-orange-700", head: "bg-orange-50/70 text-orange-800", underline: "decoration-orange-400", border: "border-orange-400" },
-  slate: { chipBg: "bg-slate-100", chipText: "text-slate-500", value: "text-slate-800", head: "bg-slate-50 text-slate-500", underline: "decoration-slate-300", border: "border-slate-300" },
+  emerald: { chipBg: "bg-emerald-50 dark:bg-emerald-950/40", chipText: "text-emerald-600 dark:text-emerald-400", value: "text-emerald-700 dark:text-emerald-400", head: "bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300", underline: "decoration-emerald-400", border: "border-emerald-400" },
+  rose: { chipBg: "bg-rose-50 dark:bg-rose-950/40", chipText: "text-rose-600 dark:text-rose-400", value: "text-rose-700 dark:text-rose-400", head: "bg-rose-50/70 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300", underline: "decoration-rose-400", border: "border-rose-400" },
+  blue: { chipBg: "bg-blue-50 dark:bg-blue-950/40", chipText: "text-blue-600 dark:text-blue-400", value: "text-blue-700 dark:text-blue-400", head: "bg-blue-50/70 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300", underline: "decoration-blue-400", border: "border-blue-400" },
+  violet: { chipBg: "bg-violet-50 dark:bg-violet-950/40", chipText: "text-violet-600 dark:text-violet-400", value: "text-violet-700 dark:text-violet-400", head: "bg-violet-50/70 dark:bg-violet-950/40 text-violet-800 dark:text-violet-300", underline: "decoration-violet-400", border: "border-violet-400" },
+  amber: { chipBg: "bg-amber-50 dark:bg-amber-950/40", chipText: "text-amber-600 dark:text-amber-400", value: "text-amber-700 dark:text-amber-400", head: "bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300", underline: "decoration-amber-400", border: "border-amber-400" },
+  orange: { chipBg: "bg-orange-50 dark:bg-orange-950/40", chipText: "text-orange-600 dark:text-orange-400", value: "text-orange-700 dark:text-orange-400", head: "bg-orange-50/70 dark:bg-orange-950/40 text-orange-800 dark:text-orange-300", underline: "decoration-orange-400", border: "border-orange-400" },
+  slate: { chipBg: "bg-muted", chipText: "text-muted-foreground", value: "text-slate-800 dark:text-neutral-100", head: "bg-slate-50 dark:bg-muted/40 text-muted-foreground", underline: "decoration-slate-300", border: "border-slate-300 dark:border-neutral-700" },
 } satisfies Record<Accent, { chipBg: string; chipText: string; value: string; head: string; underline: string; border: string }>;
 
 function money(cents: number | null | undefined): string {
@@ -60,10 +60,10 @@ function pct(value: number | null | undefined): string {
 
 /** Threshold-based color for a "higher is healthier" percent, e.g. Percent Paid, Conversion %. */
 function healthColorClass(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "text-slate-700";
-  if (value >= 90) return "text-emerald-600";
-  if (value >= 70) return "text-amber-600";
-  return "text-red-600";
+  if (value === null || value === undefined) return "text-slate-700 dark:text-neutral-300";
+  if (value >= 90) return "text-emerald-600 dark:text-emerald-400";
+  if (value >= 70) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
 }
 
 // ── Small building blocks ─────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ function Section({ title, icon, accent, children }: { title: string; icon: Lucid
   const a = ACCENT[accent];
   return (
     <div className="flex flex-col gap-4">
-      <h2 className={`flex items-center gap-2 text-lg font-bold text-slate-800 underline decoration-2 underline-offset-8 ${a.underline}`}>
+      <h2 className={`flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-neutral-100 underline decoration-2 underline-offset-8 ${a.underline}`}>
         <SectionIcon icon={icon} accent={accent} />
         {title}
       </h2>
@@ -103,11 +103,11 @@ function Card({
 }) {
   const a = ACCENT[accent];
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
       {title && (
         <div className={`border-l-4 ${a.border} pl-3`}>
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-600">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
+          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-600 dark:text-neutral-400">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">{subtitle}</p>}
         </div>
       )}
       {children}
@@ -137,9 +137,9 @@ function Table({ headers, accent = "slate", children }: { headers: string[]; acc
 
 function Row({ cells, bold }: { cells: React.ReactNode[]; bold?: boolean }) {
   return (
-    <tr className={`border-b border-slate-50 last:border-0 ${bold ? "bg-slate-50 font-semibold" : ""}`}>
+    <tr className={`border-b border-slate-50 dark:border-neutral-800 last:border-0 ${bold ? "bg-slate-50 dark:bg-muted/40 font-semibold" : ""}`}>
       {cells.map((c, i) => (
-        <td key={i} className={`px-2 py-1.5 ${i === 0 ? "text-left text-slate-700" : "text-right text-slate-700"}`}>
+        <td key={i} className={`px-2 py-1.5 ${i === 0 ? "text-left text-slate-700 dark:text-neutral-300" : "text-right text-slate-700 dark:text-neutral-300"}`}>
           {c}
         </td>
       ))}
@@ -148,7 +148,7 @@ function Row({ cells, bold }: { cells: React.ReactNode[]; bold?: boolean }) {
 }
 
 function RepTable({ rows, accent = "slate", showAmount = true }: { rows: RepBreakdown[]; accent?: Accent; showAmount?: boolean }) {
-  if (rows.length === 0) return <p className="text-xs text-slate-400">No data.</p>;
+  if (rows.length === 0) return <p className="text-xs text-slate-400 dark:text-neutral-500">No data.</p>;
   return (
     <Table accent={accent} headers={showAmount ? ["Name", "Count", "Amount"] : ["Name", "Count"]}>
       {rows.map((r) => (
@@ -176,9 +176,9 @@ function KpiTile({
   const a = ACCENT[accent ?? "slate"];
   const showProgress = target !== undefined && target !== null && target > 0;
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{label}</p>
         {Icon && (
           <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${a.chipBg} ${a.chipText}`}>
             <Icon className="h-3.5 w-3.5" />
@@ -187,16 +187,16 @@ function KpiTile({
       </div>
       <p className={`mt-1 text-2xl font-bold ${a.value}`}>{value}</p>
       {showProgress && target && formatTarget && (
-        <p className="mt-1 text-xs text-slate-400">of {formatTarget(target)} goal</p>
+        <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">of {formatTarget(target)} goal</p>
       )}
     </div>
   );
 }
 
 const FLAG_STYLES: Record<FlagSeverity, { bg: string; border: string; text: string; icon: string }> = {
-  alert: { bg: "bg-red-50", border: "border-red-400", text: "text-red-700", icon: "🚨" },
-  caution: { bg: "bg-amber-50", border: "border-amber-400", text: "text-amber-700", icon: "⚠️" },
-  good: { bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-700", icon: "✅" },
+  alert: { bg: "bg-red-50 dark:bg-red-950/40", border: "border-red-400", text: "text-red-700 dark:text-red-400", icon: "🚨" },
+  caution: { bg: "bg-amber-50 dark:bg-amber-950/40", border: "border-amber-400", text: "text-amber-700 dark:text-amber-400", icon: "⚠️" },
+  good: { bg: "bg-emerald-50 dark:bg-emerald-950/40", border: "border-emerald-400", text: "text-emerald-700 dark:text-emerald-400", icon: "✅" },
 };
 
 function FlagCard({ flag }: { flag: CompanyReportFlag }) {
@@ -207,16 +207,16 @@ function FlagCard({ flag }: { flag: CompanyReportFlag }) {
         <span className="mr-1.5">{style.icon}</span>
         {flag.title}
       </p>
-      <p className="mt-0.5 text-xs text-slate-600">{flag.detail}</p>
+      <p className="mt-0.5 text-xs text-slate-600 dark:text-neutral-400">{flag.detail}</p>
     </div>
   );
 }
 
 const BADGE_STYLES: Record<ClientBalanceRow["badge"], string> = {
-  ok: "bg-emerald-100 text-emerald-700",
-  monitor: "bg-amber-100 text-amber-700",
-  action: "bg-orange-100 text-orange-700",
-  escalate: "bg-red-100 text-red-700",
+  ok: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400",
+  monitor: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",
+  action: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
+  escalate: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
 };
 
 function AgingBadgePill({ badge }: { badge: ClientBalanceRow["badge"] }) {
@@ -235,7 +235,7 @@ export function CompanyReport() {
       <div className="flex flex-col gap-6">
         <PageHeader title="Company Report" description="Loading a live snapshot of Landscapt data…" />
         {error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error.message}</p>
+          <p className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">{error.message}</p>
         )}
       </div>
     );
@@ -336,14 +336,14 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
                 <Row key={s.stage} cells={[s.stage, money(s.amountCents), pct(s.pct)]} />
               ))}
             </Table>
-            <h4 className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-500">Top 5 Open Estimates</h4>
+            <h4 className="mt-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Top 5 Open Estimates</h4>
             <Table accent="blue" headers={["Client", "Value"]}>
               {sales.openPipeline.topEstimates.map((e, i) => (
                 <Row key={i} cells={[e.clientName, money(e.amountCents)]} />
               ))}
             </Table>
             {sales.openPipeline.byRep.length > 0 && (
-              <p className="text-xs italic text-slate-400">
+              <p className="text-xs italic text-slate-400 dark:text-neutral-500">
                 Pipeline by rep: {sales.openPipeline.byRep.map((r) => `${r.label} ${money(r.amountCents)}`).join(" | ")}
               </p>
             )}
@@ -352,12 +352,12 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
           <Card accent="blue" title="Won Estimates YTD Leaderboard" subtitle={money(sales.wonEstimatesYtd.totalAmountCents) + " total won"}>
             <Table accent="blue" headers={["Sales Rep", "Won Value"]}>
               {sales.wonEstimatesYtd.rows.map((r) => (
-                <Row key={r.label} cells={[r.label, <span key="v" className="font-semibold text-emerald-600">{money(r.amountCents)}</span>]} />
+                <Row key={r.label} cells={[r.label, <span key="v" className="font-semibold text-emerald-600 dark:text-emerald-400">{money(r.amountCents)}</span>]} />
               ))}
-              <Row bold cells={["Total Won YTD", <span key="v" className="font-bold text-emerald-700">{money(sales.wonEstimatesYtd.totalAmountCents)}</span>]} />
+              <Row bold cells={["Total Won YTD", <span key="v" className="font-bold text-emerald-700 dark:text-emerald-400">{money(sales.wonEstimatesYtd.totalAmountCents)}</span>]} />
             </Table>
             {sales.wonEstimatesYtd.openCountByRep.length > 0 && (
-              <p className="text-xs italic text-slate-400">
+              <p className="text-xs italic text-slate-400 dark:text-neutral-500">
                 Open estimates by rep: {sales.wonEstimatesYtd.openCountByRep.map((r) => `${r.label} ${r.count}`).join(" | ")}
               </p>
             )}
@@ -370,7 +370,7 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
             <RepTable rows={sales.newClientsThisMonth.bySource} accent="blue" showAmount={false} />
           </div>
           {sales.newClientsThisMonth.ytdTopSources.length > 0 && (
-            <p className="text-xs italic text-slate-400">
+            <p className="text-xs italic text-slate-400 dark:text-neutral-500">
               YTD top sources: {sales.newClientsThisMonth.ytdTopSources.map((r) => `${r.label} ${r.count}`).join(" | ")}
             </p>
           )}
@@ -383,12 +383,12 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
           <Table accent="amber" headers={["Metric", ...opsMonthLabels]}>
             <Row cells={["Total Invoiced", ...operations.monthlyOps.map((m) => money(m.totalInvoicedCents))]} />
             <Row cells={["Sales Tax", ...operations.monthlyOps.map((m) => money(m.salesTaxCents))]} />
-            <Row cells={["Unpaid", ...operations.monthlyOps.map((m, i) => <span key={i} className={m.unpaidCents > 0 ? "text-amber-600" : "text-slate-700"}>{money(m.unpaidCents)}</span>)]} />
+            <Row cells={["Unpaid", ...operations.monthlyOps.map((m, i) => <span key={i} className={m.unpaidCents > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-700 dark:text-neutral-300"}>{money(m.unpaidCents)}</span>)]} />
             <Row cells={["Percent Paid", ...operations.monthlyOps.map((m, i) => <span key={i} className={healthColorClass(m.percentPaid)}>{pct(m.percentPaid)}</span>)]} />
-            <Row cells={["Uninvoiced (live)", ...operations.monthlyOps.map((m, i) => (m.uninvoicedCents === null ? "—" : <span key={i} className="text-amber-600">{money(m.uninvoicedCents)}</span>))]} />
-            <Row cells={["Payments Received", ...operations.monthlyOps.map((m, i) => <span key={i} className="text-emerald-600">{money(m.paymentsReceivedCents)}</span>)]} />
+            <Row cells={["Uninvoiced (live)", ...operations.monthlyOps.map((m, i) => (m.uninvoicedCents === null ? "—" : <span key={i} className="text-amber-600 dark:text-amber-400">{money(m.uninvoicedCents)}</span>))]} />
+            <Row cells={["Payments Received", ...operations.monthlyOps.map((m, i) => <span key={i} className="text-emerald-600 dark:text-emerald-400">{money(m.paymentsReceivedCents)}</span>)]} />
           </Table>
-          <p className="text-xs italic text-slate-400">
+          <p className="text-xs italic text-slate-400 dark:text-neutral-500">
             &quot;Uninvoiced&quot; is a live balance as of today, shown only in the current month&apos;s column — it isn&apos;t a historical figure.
           </p>
         </Card>
@@ -400,7 +400,7 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
               <RepTable rows={operations.tickets.byAssignee} accent="amber" showAmount={false} />
             </div>
             {operations.tickets.dueWithin7Days.length > 0 && (
-              <p className="text-xs italic text-slate-400">
+              <p className="text-xs italic text-slate-400 dark:text-neutral-500">
                 Due in 7 days: {operations.tickets.dueWithin7Days.map((r) => `${r.label} ${r.count}`).join(" | ")}
               </p>
             )}
@@ -409,25 +409,25 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
           <Card accent="amber" title="Unapplied &amp; Pre-Payments">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <p className="text-xs font-semibold text-slate-600">Unapplied Payments</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Unapplied Payments</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   {money(operations.unappliedPayments.appliedCents)} applied |{" "}
-                  <span className="font-medium text-amber-600">{money(operations.unappliedPayments.unusedCents)} unused</span>
+                  <span className="font-medium text-amber-600 dark:text-amber-400">{money(operations.unappliedPayments.unusedCents)} unused</span>
                 </p>
                 {operations.unappliedPayments.topUnused.map((r, i) => (
-                  <p key={i} className="text-xs text-slate-400">
+                  <p key={i} className="text-xs text-slate-400 dark:text-neutral-500">
                     {r.clientName}: {money(r.unusedCents)}
                   </p>
                 ))}
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-600">Pre-Payments on Account</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  <span className="font-medium text-amber-600">{money(operations.prePayments.unusedCents)} sitting idle</span> of{" "}
+                <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Pre-Payments on Account</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span className="font-medium text-amber-600 dark:text-amber-400">{money(operations.prePayments.unusedCents)} sitting idle</span> of{" "}
                   {money(operations.prePayments.receivedCents)} received
                 </p>
                 {operations.prePayments.topUnused.map((r, i) => (
-                  <p key={i} className="text-xs text-slate-400">
+                  <p key={i} className="text-xs text-slate-400 dark:text-neutral-500">
                     {r.clientName}: {money(r.unusedCents)}
                   </p>
                 ))}

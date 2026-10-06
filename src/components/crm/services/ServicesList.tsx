@@ -107,7 +107,7 @@ export function ServicesList({ onAdd, onEdit }: Props) {
               className={`px-3 py-1.5 capitalize transition-colors ${
                 tab === t
                   ? "bg-brand-600 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50"
+                  : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               }`}
             >
               {t}
@@ -159,10 +159,10 @@ export function ServicesList({ onAdd, onEdit }: Props) {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               <th className="px-4 py-3 text-left">Service Type</th>
               <th className="px-4 py-3 text-left">Code</th>
               <th className="px-4 py-3 text-left">Svc Mode</th>
@@ -176,14 +176,14 @@ export function ServicesList({ onAdd, onEdit }: Props) {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500">
                   No services found.
                 </td>
               </tr>
@@ -191,17 +191,17 @@ export function ServicesList({ onAdd, onEdit }: Props) {
             {groupServices(filtered).map(({ service: s, depth }) => (
               <tr
                 key={s.id}
-                className={`border-b last:border-0 hover:bg-slate-50 ${canEdit ? "cursor-pointer" : ""}`}
+                className={`border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 ${canEdit ? "cursor-pointer" : ""}`}
                 onClick={canEdit ? () => onEdit(s) : undefined}
               >
-                <td className="px-4 py-3 font-medium text-slate-800">
+                <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">
                   <span style={depth > 0 ? { paddingLeft: depth * 20 } : undefined} className="inline-flex items-center gap-1.5">
-                    {depth > 0 && <span className="text-slate-300">↳</span>}
-                    <span className={depth > 0 ? "font-normal text-slate-600" : undefined}>{s.name}</span>
+                    {depth > 0 && <span className="text-slate-300 dark:text-neutral-500">↳</span>}
+                    <span className={depth > 0 ? "font-normal text-slate-600 dark:text-neutral-400" : undefined}>{s.name}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-500">{s.code ?? "—"}</td>
-                <td className="px-4 py-3 text-slate-600">
+                <td className="px-4 py-3 text-muted-foreground">{s.code ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
                   {MODE_LABEL[s.serviceMode] ?? s.serviceMode}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
@@ -210,7 +210,7 @@ export function ServicesList({ onAdd, onEdit }: Props) {
                 <td className="px-4 py-3 text-right tabular-nums">
                   {s.defaultBHrs > 0 ? s.defaultBHrs.toFixed(2) : "—"}
                 </td>
-                <td className="px-4 py-3 text-slate-500">{s.unit}</td>
+                <td className="px-4 py-3 text-muted-foreground">{s.unit}</td>
                 <td className="px-4 py-3 text-center">
                   <Badge variant={s.isActive ? "default" : "secondary"} className="text-[10px]">
                     {s.isActive ? "Yes" : "No"}
@@ -224,16 +224,16 @@ export function ServicesList({ onAdd, onEdit }: Props) {
                     {canEdit && (
                       <button
                         onClick={() => onEdit(s)}
-                        className="rounded p-1 hover:bg-slate-100"
+                        className="rounded p-1 hover:bg-muted"
                         title="Edit"
                       >
-                        <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                        <Pencil className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                       </button>
                     )}
                     {canDelete && (
                       <button
                         onClick={() => void handleDelete(s)}
-                        className="rounded p-1 hover:bg-red-50"
+                        className="rounded p-1 hover:bg-red-50 dark:hover:bg-red-950/40"
                         title="Delete"
                       >
                         <Trash2 className="h-3.5 w-3.5 text-red-400" />

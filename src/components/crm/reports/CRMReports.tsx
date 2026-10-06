@@ -21,14 +21,14 @@ import { useReportData, KPICard, RevenueSnapshot } from "./RevenueSnapshot";
 function MonthlyRevenueChart({ data }: { data: Array<{ month: string; revenue: number }> }) {
   const max = Math.max(...data.map((d) => d.revenue), 1);
   return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm">
-      <p className="mb-4 text-sm font-semibold text-slate-800">Collected — Last 6 Months</p>
+    <div className="rounded-xl border bg-card p-5 shadow-sm">
+      <p className="mb-4 text-sm font-semibold text-slate-800 dark:text-neutral-100">Collected — Last 6 Months</p>
       <div className="flex items-end gap-2 h-32">
         {data.map((d) => {
           const pct = (d.revenue / max) * 100;
           return (
             <div key={d.month} className="flex flex-1 flex-col items-center gap-1">
-              <p className="text-[10px] font-semibold text-slate-600">
+              <p className="text-[10px] font-semibold text-slate-600 dark:text-neutral-400">
                 {d.revenue > 0 ? formatCurrency(d.revenue) : ""}
               </p>
               <div className="relative flex w-full flex-1 flex-col justify-end">
@@ -37,7 +37,7 @@ function MonthlyRevenueChart({ data }: { data: Array<{ month: string; revenue: n
                   style={{ height: `${Math.max(pct, 2)}%` }}
                 />
               </div>
-              <p className="text-[10px] text-slate-400">{d.month}</p>
+              <p className="text-[10px] text-slate-400 dark:text-neutral-500">{d.month}</p>
             </div>
           );
         })}
@@ -77,7 +77,7 @@ export function CRMReports({ hideHeader = false }: { hideHeader?: boolean }) {
             {/* Clients & Jobs */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <section>
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
                   Clients
                 </h2>
                 <div className="grid grid-cols-2 gap-4">
@@ -99,7 +99,7 @@ export function CRMReports({ hideHeader = false }: { hideHeader?: boolean }) {
               </section>
 
               <section>
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
                   Jobs
                 </h2>
                 <div className="grid grid-cols-3 gap-4">
@@ -133,54 +133,54 @@ export function CRMReports({ hideHeader = false }: { hideHeader?: boolean }) {
 
         {/* Detailed Reports */}
         <section>
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
             Detailed Reports
           </h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Link
               href="/crm/reports/job-costing"
-              className="group flex items-center gap-4 rounded-xl border bg-white p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
+              className="group flex items-center gap-4 rounded-xl border bg-card p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shrink-0">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 shrink-0">
                 <TrendingUp className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-900">Job Costing Report</p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="font-semibold text-slate-900 dark:text-neutral-100">Job Costing Report</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Per-job view — actual vs. estimated hours, labor cost, Rev/Man Hr, and Target Over/Under
                 </p>
               </div>
-              <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 shrink-0 transition-colors" />
+              <ArrowRight className="h-4 w-4 text-slate-300 dark:text-neutral-500 group-hover:text-brand-500 dark:group-hover:text-brand-400 shrink-0 transition-colors" />
             </Link>
             <Link
               href="/crm/reports/cogs"
-              className="group flex items-center gap-4 rounded-xl border bg-white p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
+              className="group flex items-center gap-4 rounded-xl border bg-card p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
                 <BarChart2 className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-900">COGS by Service</p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="font-semibold text-slate-900 dark:text-neutral-100">COGS by Service</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Which services are making money? Gross sales, labor %, materials, and margin by service type
                 </p>
               </div>
-              <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 shrink-0 transition-colors" />
+              <ArrowRight className="h-4 w-4 text-slate-300 dark:text-neutral-500 group-hover:text-brand-500 dark:group-hover:text-brand-400 shrink-0 transition-colors" />
             </Link>
             <Link
               href="/crm/reports/referrals"
-              className="group flex items-center gap-4 rounded-xl border bg-white p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
+              className="group flex items-center gap-4 rounded-xl border bg-card p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-600 shrink-0">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 shrink-0">
                 <Users className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-900">Client Referrals</p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="font-semibold text-slate-900 dark:text-neutral-100">Client Referrals</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Which clients are referring the most business, and whether those referrals stuck around
                 </p>
               </div>
-              <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 shrink-0 transition-colors" />
+              <ArrowRight className="h-4 w-4 text-slate-300 dark:text-neutral-500 group-hover:text-brand-500 dark:group-hover:text-brand-400 shrink-0 transition-colors" />
             </Link>
           </div>
         </section>

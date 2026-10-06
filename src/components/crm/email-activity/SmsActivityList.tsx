@@ -150,15 +150,15 @@ export function SmsActivityList() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Sent",      value: total.toLocaleString(),               color: "text-slate-900" },
-          { label: "Delivered", value: fmtPct(deliveredCount, total),        color: "text-green-600", sub: deliveredCount.toLocaleString() },
-          { label: "Failed",    value: fmtPct(failedCount, total),           color: "text-red-600",   sub: failedCount.toLocaleString() },
-          { label: "Received",  value: receivedCount.toLocaleString(),       color: "text-sky-600" },
+          { label: "Sent",      value: total.toLocaleString(),               color: "text-slate-900 dark:text-neutral-100" },
+          { label: "Delivered", value: fmtPct(deliveredCount, total),        color: "text-green-600 dark:text-green-400", sub: deliveredCount.toLocaleString() },
+          { label: "Failed",    value: fmtPct(failedCount, total),           color: "text-red-600 dark:text-red-400",   sub: failedCount.toLocaleString() },
+          { label: "Received",  value: receivedCount.toLocaleString(),       color: "text-sky-600 dark:text-sky-400" },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+          <div key={s.label} className="rounded-lg border bg-card p-4 shadow-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{s.label}</p>
             <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
-            {"sub" in s && s.sub && <p className="text-xs text-slate-400">{s.sub}</p>}
+            {"sub" in s && s.sub && <p className="text-xs text-slate-400 dark:text-neutral-500">{s.sub}</p>}
           </div>
         ))}
       </div>
@@ -182,7 +182,7 @@ export function SmsActivityList() {
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                   quickFilter === key
-                    ? "bg-white text-slate-800"
+                    ? "bg-card text-slate-800 dark:text-neutral-100"
                     : "text-slate-300 hover:text-white"
                 )}
               >
@@ -191,7 +191,7 @@ export function SmsActivityList() {
                   <span className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
                     quickFilter === key
-                      ? "bg-slate-200 text-slate-700"
+                      ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300"
                       : "bg-white/20 text-white"
                   )}>
                     {counts[key]}
@@ -202,12 +202,12 @@ export function SmsActivityList() {
           </div>
 
           <div className="relative ml-2">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search…"
-              className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
+              className="h-7 w-44 pl-7 text-xs bg-card border-border focus-visible:ring-0"
             />
           </div>
           {search && (
@@ -226,10 +226,10 @@ export function SmsActivityList() {
           description="Texts sent to clients from automations, and any replies they send back, will appear here."
         />
       ) : (
-        <div className="flex-1 overflow-auto bg-white">
+        <div className="flex-1 overflow-auto bg-card">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50">
+              <TableRow className="bg-slate-50 dark:bg-muted/40">
                 <TableHead className="w-10"></TableHead>
                 <TableHead className="whitespace-nowrap">Date</TableHead>
                 <TableHead>Message</TableHead>
@@ -240,37 +240,37 @@ export function SmsActivityList() {
             </TableHeader>
             <TableBody>
               {filtered.map((t) => (
-                <TableRow key={t.id} className="hover:bg-slate-50">
+                <TableRow key={t.id} className="hover:bg-slate-50 dark:hover:bg-muted/40">
                   <TableCell>
                     {t.direction === "inbound" ? (
-                      <ArrowDownLeft className="h-3.5 w-3.5 text-sky-500" aria-label="Received" />
+                      <ArrowDownLeft className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" aria-label="Received" />
                     ) : (
-                      <ArrowUpRight className="h-3.5 w-3.5 text-slate-400" aria-label="Sent" />
+                      <ArrowUpRight className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" aria-label="Sent" />
                     )}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-slate-500">
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {fmtDate(t.occurredAt)}
                   </TableCell>
-                  <TableCell className="max-w-sm truncate text-slate-800">
+                  <TableCell className="max-w-sm truncate text-slate-800 dark:text-neutral-100">
                     {t.body ?? "—"}
                   </TableCell>
-                  <TableCell className="text-sm text-slate-600">{t.clientName}</TableCell>
-                  <TableCell className="text-sm text-slate-500">{t.sentTo ?? "—"}</TableCell>
+                  <TableCell className="text-sm text-slate-600 dark:text-neutral-400">{t.clientName}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{t.sentTo ?? "—"}</TableCell>
                   <TableCell className="text-sm">
                     {t.direction === "inbound" ? (
-                      <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-sky-200">
+                      <span className="inline-flex items-center rounded-full bg-sky-50 dark:bg-sky-950/40 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-400 ring-1 ring-sky-200 dark:ring-sky-800">
                         Received
                       </span>
                     ) : t.deliveredAt ? (
-                      <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-green-200">
+                      <span className="inline-flex items-center rounded-full bg-green-50 dark:bg-green-950/40 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-green-200 dark:ring-green-800">
                         Delivered
                       </span>
                     ) : t.failedAt ? (
-                      <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-200">
+                      <span className="inline-flex items-center rounded-full bg-red-50 dark:bg-red-950/40 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800">
                         Failed
                       </span>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                         {t.status ?? "Sent"}
                       </span>
                     )}

@@ -51,7 +51,7 @@ export function WaitEventDialog({ open, onOpenChange, event }: Props) {
           <DialogTitle>Wait Event</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Pause the sequence for the specified duration before proceeding to the next event.
           </p>
           <div className="grid grid-cols-3 gap-3">

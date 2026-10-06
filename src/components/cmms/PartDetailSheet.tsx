@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useChartColors } from "@/lib/theme/use-chart-colors";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,8 +62,8 @@ interface PartDetailSheetProps {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -112,15 +113,15 @@ function DetailsTab({
 
       {/* Purchasing catalog link */}
       {linkedProductName && (
-        <div className="flex items-center gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2">
-          <ShoppingCart className="h-3.5 w-3.5 shrink-0 text-brand-600" />
+        <div className="flex items-center gap-2 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-3 py-2">
+          <ShoppingCart className="h-3.5 w-3.5 shrink-0 text-brand-600 dark:text-brand-400" />
           <div className="min-w-0">
-            <p className="text-xs font-medium text-brand-800">Linked to Purchasing Catalog</p>
-            <p className="truncate text-xs text-brand-600">{linkedProductName}</p>
+            <p className="text-xs font-medium text-brand-800 dark:text-brand-300">Linked to Purchasing Catalog</p>
+            <p className="truncate text-xs text-brand-600 dark:text-brand-400">{linkedProductName}</p>
           </div>
           <Badge
             variant="outline"
-            className="ml-auto shrink-0 border-brand-200 bg-white text-brand-700 text-[10px]"
+            className="ml-auto shrink-0 border-brand-200 dark:border-brand-800 bg-card text-brand-700 dark:text-brand-400 text-[10px]"
           >
             maintenance part
           </Badge>
@@ -131,42 +132,42 @@ function DetailsTab({
       {part.isInventory ? (
         <div
           className={`rounded-md border p-4 ${
-            isLowStock ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"
+            isLowStock ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40" : "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40"
           }`}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Quantity on Hand
               </p>
               <p
                 className={`mt-1 text-2xl font-bold ${
-                  isLowStock ? "text-red-700" : "text-green-700"
+                  isLowStock ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"
                 }`}
               >
                 {qtyOnHand}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Min Stock
               </p>
-              <p className="mt-1 text-2xl font-bold text-slate-700">{part.minimumStock}</p>
+              <p className="mt-1 text-2xl font-bold text-slate-700 dark:text-neutral-300">{part.minimumStock}</p>
             </div>
           </div>
           <div className="mt-2 flex items-center gap-2">
             {isLowStock && (
-              <Badge variant="outline" className="border-red-300 bg-red-100 text-red-700">
+              <Badge variant="outline" className="border-red-300 dark:border-red-700 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400">
                 Low Stock
               </Badge>
             )}
             {onOrderQty > 0 && (
-              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+              <Badge variant="outline" className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400">
                 {onOrderQty} on order
               </Badge>
             )}
             {woAssignedQty > 0 && (
-              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+              <Badge variant="outline" className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400">
                 {woAssignedQty} assigned to open WOs
               </Badge>
             )}
@@ -174,8 +175,8 @@ function DetailsTab({
           {canManageInventory && <QtyAdjustControl value={qtyOnHand} onChange={setQtyOnHand} />}
         </div>
       ) : (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-sm text-slate-500">
+        <div className="rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-4 py-3">
+          <p className="text-sm text-muted-foreground">
             Not tracked as an inventory item — quantity and stock levels are not monitored for this part.
           </p>
         </div>
@@ -193,7 +194,7 @@ function DetailsTab({
       <Separator />
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vendors</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Vendors</p>
           {canManageInventory && (
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
               Manage
@@ -204,11 +205,11 @@ function DetailsTab({
           <div className="flex flex-col gap-1.5">
             {allVendors.map((v, i) => (
               <div key={v.vendorId} className="flex items-center gap-2">
-                <span className="text-sm text-slate-700">{v.vendorName}</span>
+                <span className="text-sm text-slate-700 dark:text-neutral-300">{v.vendorName}</span>
                 {i === 0 && (
                   <Badge
                     variant="outline"
-                    className="border-brand-200 bg-brand-50 text-brand-700 text-xs"
+                    className="border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 text-xs"
                   >
                     Primary
                   </Badge>
@@ -217,7 +218,7 @@ function DetailsTab({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-400">No vendor assigned</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No vendor assigned</p>
         )}
       </div>
 
@@ -227,7 +228,7 @@ function DetailsTab({
           <Separator />
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Interchangeable Parts
               </p>
               {canManageInventory && (
@@ -247,23 +248,23 @@ function DetailsTab({
                 <button
                   key={sp.id}
                   onClick={() => onPartClick(sp)}
-                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:border-brand-200 hover:bg-brand-50 transition-colors"
+                  className="flex w-full items-center justify-between rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-3 py-2 text-left hover:border-brand-200 dark:hover:border-brand-800 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
                 >
                   <div>
-                    <p className="text-sm font-medium text-brand-700 hover:underline">{sp.name}</p>
-                    <p className="text-xs text-slate-500">{sp.partNumber}</p>
+                    <p className="text-sm font-medium text-brand-700 dark:text-brand-400 hover:underline">{sp.name}</p>
+                    <p className="text-xs text-muted-foreground">{sp.partNumber}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-slate-700">
+                    <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                       {formatCurrency(sp.unitCost)}
                     </p>
                     <p
                       className={`text-xs font-medium ${
                         !sp.isInventory
-                          ? "text-slate-400"
+                          ? "text-slate-400 dark:text-neutral-500"
                           : sp.quantityOnHand <= sp.minimumStock
-                          ? "text-red-600"
-                          : "text-green-600"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-green-600 dark:text-green-400"
                       }`}
                     >
                       {sp.isInventory ? `${sp.quantityOnHand} on hand` : "Not tracked"}
@@ -281,12 +282,12 @@ function DetailsTab({
         <>
           <Separator />
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Interchangeable Parts
             </p>
             <button
               onClick={() => onLinkSelfAsGeneric()}
-              className="flex w-full items-center gap-2 rounded-md border border-dashed border-slate-200 px-3 py-2.5 text-left text-sm text-slate-400 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 transition-colors"
+              className="flex w-full items-center gap-2 rounded-md border border-dashed border-border px-3 py-2.5 text-left text-sm text-slate-400 dark:text-neutral-500 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               Link as alternative part
@@ -301,7 +302,7 @@ function DetailsTab({
           <Separator />
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Interchangeable Parts
               </p>
               {canManageInventory && (
@@ -320,23 +321,23 @@ function DetailsTab({
               {/* OEM / name-brand parent */}
               <button
                 onClick={() => onPartClick(parentPart)}
-                className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:border-brand-200 hover:bg-brand-50 transition-colors"
+                className="flex w-full items-center justify-between rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-3 py-2 text-left hover:border-brand-200 dark:hover:border-brand-800 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
               >
                 <div>
-                  <p className="text-sm font-medium text-brand-700 hover:underline">{parentPart.name}</p>
-                  <p className="text-xs text-slate-500">{parentPart.partNumber}</p>
+                  <p className="text-sm font-medium text-brand-700 dark:text-brand-400 hover:underline">{parentPart.name}</p>
+                  <p className="text-xs text-muted-foreground">{parentPart.partNumber}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <p className="text-sm font-medium text-slate-700">
+                  <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                     {formatCurrency(parentPart.unitCost)}
                   </p>
                   <p
                     className={`text-xs font-medium ${
                       !parentPart.isInventory
-                        ? "text-slate-400"
+                        ? "text-slate-400 dark:text-neutral-500"
                         : parentPart.quantityOnHand <= parentPart.minimumStock
-                        ? "text-red-600"
-                        : "text-green-600"
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-green-600 dark:text-green-400"
                     }`}
                   >
                     {parentPart.isInventory
@@ -350,23 +351,23 @@ function DetailsTab({
                 <button
                   key={sp.id}
                   onClick={() => onPartClick(sp)}
-                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:border-brand-200 hover:bg-brand-50 transition-colors"
+                  className="flex w-full items-center justify-between rounded-md border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-3 py-2 text-left hover:border-brand-200 dark:hover:border-brand-800 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
                 >
                   <div>
-                    <p className="text-sm font-medium text-brand-700 hover:underline">{sp.name}</p>
-                    <p className="text-xs text-slate-500">{sp.partNumber}</p>
+                    <p className="text-sm font-medium text-brand-700 dark:text-brand-400 hover:underline">{sp.name}</p>
+                    <p className="text-xs text-muted-foreground">{sp.partNumber}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-slate-700">
+                    <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                       {formatCurrency(sp.unitCost)}
                     </p>
                     <p
                       className={`text-xs font-medium ${
                         !sp.isInventory
-                          ? "text-slate-400"
+                          ? "text-slate-400 dark:text-neutral-500"
                           : sp.quantityOnHand <= sp.minimumStock
-                          ? "text-red-600"
-                          : "text-green-600"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-green-600 dark:text-green-400"
                       }`}
                     >
                       {sp.isInventory ? `${sp.quantityOnHand} on hand` : "Not tracked"}
@@ -383,10 +384,10 @@ function DetailsTab({
         <>
           <Separator />
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Description
             </p>
-            <p className="whitespace-pre-line text-sm text-slate-700">{part.description}</p>
+            <p className="whitespace-pre-line text-sm text-slate-700 dark:text-neutral-300">{part.description}</p>
           </div>
         </>
       )}
@@ -401,6 +402,7 @@ function DetailsTab({
 }
 
 function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part; purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"]; onPOClick: (poId: string) => void; onWOClick: (woId: string) => void }) {
+  const chartColors = useChartColors();
   // ── WO usage history ──────────────────────────────────────────────────────
   const { data: woHistory = [] } = useQuery({
     queryKey: ["part-wo-history", part.id],
@@ -467,14 +469,14 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
     <div className="p-6">
       {!hasAnyHistory ? (
         <div className="flex h-48 items-center justify-center">
-          <p className="text-sm text-slate-400">No history found for this part.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No history found for this part.</p>
         </div>
       ) : (
         <>
           {/* Price trend chart — only shown when there are 2+ PO data points */}
           {priceHistory.length > 1 && (
             <div className="mb-6">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Unit Cost Trend
               </p>
               <ResponsiveContainer width="100%" height={180}>
@@ -482,15 +484,15 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
                   data={priceHistory}
                   margin={{ top: 4, right: 8, bottom: 0, left: 8 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tick={{ fontSize: 11, fill: chartColors.axis }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tick={{ fontSize: 11, fill: chartColors.axis }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => `$${v.toLocaleString()}`}
@@ -498,9 +500,11 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
                   />
                   <Tooltip
                     formatter={(value: number) => [`$${value.toFixed(2)}`, "Unit Cost"]}
-                    labelStyle={{ color: "#475569", fontSize: 12 }}
+                    labelStyle={{ color: chartColors.label, fontSize: 12 }}
                     contentStyle={{
-                      border: "1px solid #e2e8f0",
+                      border: `1px solid ${chartColors.tooltipBorder}`,
+                      backgroundColor: chartColors.tooltipBg,
+                      color: chartColors.tooltipText,
                       borderRadius: "6px",
                       fontSize: 12,
                     }}
@@ -521,46 +525,46 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
           {/* Work Order usage table */}
           {woHistory.length > 0 && (
             <div className="mb-6">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Work Order Usage
               </p>
               <div className="overflow-hidden rounded-md border">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50">
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">WO #</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Title</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date Used</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                    <tr className="bg-slate-50 dark:bg-muted/40">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">WO #</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Title</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date Used</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Qty</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Unit Cost</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {woHistory.map((row) => (
-                      <tr key={row.id} className="border-t border-slate-100">
+                      <tr key={row.id} className="border-t border-slate-100 dark:border-neutral-800">
                         <td className="px-3 py-2 font-mono text-xs font-medium">
                           <span className="flex items-center gap-1.5">
-                            <Wrench className="h-3 w-3 text-slate-400" />
+                            <Wrench className="h-3 w-3 text-slate-400 dark:text-neutral-500" />
                             {row.work_orders?.id ? (
                               <button
                                 type="button"
                                 onClick={() => onWOClick(row.work_orders!.id)}
-                                className="text-brand-600 hover:underline"
+                                className="text-brand-600 dark:text-brand-400 hover:underline"
                               >
                                 {row.work_orders.work_order_number}
                               </button>
                             ) : (
-                              <span className="text-slate-700">{row.work_orders?.work_order_number ?? "—"}</span>
+                              <span className="text-slate-700 dark:text-neutral-300">{row.work_orders?.work_order_number ?? "—"}</span>
                             )}
                           </span>
                         </td>
-                        <td className="max-w-[160px] truncate px-3 py-2 text-slate-600">
+                        <td className="max-w-[160px] truncate px-3 py-2 text-slate-600 dark:text-neutral-400">
                           {row.work_orders?.title ?? "—"}
                         </td>
-                        <td className="px-3 py-2 text-slate-500">{formatDate(row.created_at)}</td>
-                        <td className="px-3 py-2 text-right text-slate-700">{row.quantity}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        <td className="px-3 py-2 text-muted-foreground">{formatDate(row.created_at)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700 dark:text-neutral-300">{row.quantity}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                           {row.unit_cost > 0 ? formatCurrency(row.unit_cost) : "—"}
                         </td>
                         <td className="px-3 py-2">
@@ -582,37 +586,37 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
           {/* PO table */}
           {pos.length > 0 && (
             <>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Purchase Orders
               </p>
               <div className="overflow-hidden rounded-md border">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50">
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                    <tr className="bg-slate-50 dark:bg-muted/40">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">PO #</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Qty</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Unit Cost</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[...pos].reverse().map((po) => {
                       const li = aggregateLi(po);
                       return (
-                        <tr key={po.id} className="border-t border-slate-100">
+                        <tr key={po.id} className="border-t border-slate-100 dark:border-neutral-800">
                           <td className="px-3 py-2 font-mono text-xs font-medium">
                             <button
                               type="button"
                               onClick={() => onPOClick(po.id)}
-                              className="text-brand-600 hover:underline"
+                              className="text-brand-600 dark:text-brand-400 hover:underline"
                             >
                               {po.poNumber}
                             </button>
                           </td>
-                          <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
-                          <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
-                          <td className="px-3 py-2 text-right font-medium text-slate-900">
+                          <td className="px-3 py-2 text-muted-foreground">{formatDate(po.poDate ?? po.createdAt)}</td>
+                          <td className="px-3 py-2 text-right text-slate-700 dark:text-neutral-300">{li.quantity}</td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                             {formatCurrency(li.unitCost)}
                           </td>
                           <td className="px-3 py-2">
@@ -839,7 +843,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   {(livePart.categories?.length ? livePart.categories : livePart.category ? [livePart.category] : []).map((cat) => (
-                    <span key={cat} className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 capitalize">
+                    <span key={cat} className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-neutral-400 capitalize">
                       {cat}
                     </span>
                   ))}
@@ -866,7 +870,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                   <TabsTrigger
                     key={v}
                     value={v}
-                    className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none capitalize"
+                    className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none capitalize"
                   >
                     {v}
                   </TabsTrigger>
@@ -1082,7 +1086,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                 </DialogDescription>
               </DialogHeader>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
                 <Input
                   placeholder="Search by name or part #…"
                   value={linkSearch}
@@ -1093,7 +1097,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
               </div>
               <div className="max-h-72 overflow-y-auto">
                 {filtered.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-slate-400">
+                  <p className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                     {linkSearch ? "No parts match your search." : "No eligible parts found."}
                   </p>
                 ) : (
@@ -1101,16 +1105,16 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                     {filtered.map((p) => (
                       <li key={p.id}>
                         <button
-                          className="flex w-full items-start gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50"
+                          className="flex w-full items-start gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
                           onClick={() => handlePick(p)}
                         >
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-slate-800">{p.name}</p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{p.name}</p>
+                            <p className="text-xs text-muted-foreground">
                               {p.partNumber} &middot; {p.category}
                             </p>
                           </div>
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-slate-400 dark:text-neutral-500">
                             {p.isInventory ? `${p.quantityOnHand} on hand` : "Not tracked"}
                           </span>
                         </button>

@@ -10,17 +10,17 @@ import {
 } from "@/lib/utils/warranty";
 
 const STATE_CLASS = {
-  active: "text-green-700",
-  expiring: "text-amber-600",
-  expired: "text-red-600",
-  none: "text-slate-500",
+  active: "text-green-700 dark:text-green-400",
+  expiring: "text-amber-600 dark:text-amber-400",
+  expired: "text-red-600 dark:text-red-400",
+  none: "text-muted-foreground",
 } as const;
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -32,7 +32,7 @@ export function WarrantyInfo({ record }: { record: WarrantyRecordFields }) {
 
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Warranty</p>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Warranty</p>
       <dl>
         <Row
           label="Coverage Ends"

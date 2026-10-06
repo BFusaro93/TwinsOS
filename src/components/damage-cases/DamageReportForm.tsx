@@ -35,14 +35,14 @@ export function DamageReportForm() {
       <h1 className="text-xl font-semibold">Damage Report</h1>
       <p className="mb-4 text-sm text-muted-foreground">Report property damage or a warranty issue. This opens a new damage case for the office to follow up on.</p>
       {submitted ? (
-        <div className="space-y-4 rounded-lg border bg-white p-6 text-center">
-          <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />
+        <div className="space-y-4 rounded-lg border bg-card p-6 text-center">
+          <CheckCircle2 className="mx-auto h-10 w-10 text-green-600 dark:text-green-400" />
           <p className="font-medium">Report submitted — case {submitted} opened.</p>
           <Button variant="outline" onClick={reset}>File another report</Button>
         </div>
       ) : (
         <form
-          className="space-y-4 rounded-lg border bg-white p-4 md:p-6"
+          className="space-y-4 rounded-lg border bg-card p-4 md:p-6"
           onSubmit={async (e) => {
             e.preventDefault();
             try {

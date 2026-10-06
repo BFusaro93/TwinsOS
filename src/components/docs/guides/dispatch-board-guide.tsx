@@ -39,8 +39,8 @@ export function DispatchBoardGuide() {
         description="The daily scheduling screen crews and dispatchers live in — visits, crews, status, and how actual hours get calculated."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -119,9 +119,9 @@ export function DispatchBoardGuide() {
           </thead>
           <tbody>
             {VISIT_STATUSES.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -281,13 +281,13 @@ export function DispatchBoardGuide() {
         </p>
         <Table>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a]">Fallback used</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Scheduled Start/End (no clock data)</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">Fallback used</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Scheduled Start/End (no clock data)</td>
             </tr>
-            <tr className="border-b border-[#eceae3]">
-              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a]">Calculation</td>
-              <td className="px-3 py-2 text-[#4a4a46]">(11:00 AM − 8:00 AM) × 3 crew members = 3 hours × 3 = <strong>9 man-hours</strong></td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">Calculation</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">(11:00 AM − 8:00 AM) × 3 crew members = 3 hours × 3 = <strong>9 man-hours</strong></td>
             </tr>
           </tbody>
         </Table>
@@ -297,13 +297,13 @@ export function DispatchBoardGuide() {
         </p>
         <Table>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a]">Fallback used</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Real clock-in/out punches</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">Fallback used</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Real clock-in/out punches</td>
             </tr>
-            <tr className="border-b border-[#eceae3]">
-              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a]">Calculation</td>
-              <td className="px-3 py-2 text-[#4a4a46]">(10:45 AM − 8:15 AM) × 3 crew members = 2.5 hours × 3 = <strong>7.5 man-hours</strong></td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="w-56 px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">Calculation</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">(10:45 AM − 8:15 AM) × 3 crew members = 2.5 hours × 3 = <strong>7.5 man-hours</strong></td>
             </tr>
           </tbody>
         </Table>
@@ -329,9 +329,9 @@ export function DispatchBoardGuide() {
           </thead>
           <tbody>
             {COLUMNS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -483,7 +483,7 @@ export function DispatchBoardGuide() {
           with nothing checked, all three act on every visit currently visible.
         </Callout>
 
-        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642] dark:text-[#9ebfb7]">
           The order is remembered for next week
         </h3>
         <p>
@@ -504,7 +504,7 @@ export function DispatchBoardGuide() {
           remembered order, so a one-off change for a single day never overwrites the usual route.
         </p>
 
-        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642] dark:text-[#9ebfb7]">
           Optimize Route
         </h3>
         <p>
@@ -519,14 +519,14 @@ export function DispatchBoardGuide() {
             </TableHeadRow>
           </thead>
           <tbody>
-            <tr className="border-t border-[#e6e6e0]">
+            <tr className="border-t border-[#e6e6e0] dark:border-border">
               <td className="px-4 py-2 align-top font-semibold">Nearest first</td>
               <td className="px-4 py-2 align-top">
                 Leaves the shop and takes the closest remaining stop each time. Usually the shortest
                 total drive, but the crew can finish the day far from the yard.
               </td>
             </tr>
-            <tr className="border-t border-[#e6e6e0]">
+            <tr className="border-t border-[#e6e6e0] dark:border-border">
               <td className="px-4 py-2 align-top font-semibold">Furthest first</td>
               <td className="px-4 py-2 align-top">
                 Drives out to the far end of the route first and works back in, so the crew finishes

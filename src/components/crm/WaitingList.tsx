@@ -324,7 +324,7 @@ function WaitingJobRow({
 
   return (
     <tr
-      className={cn("cursor-pointer border-b border-slate-100 text-sm hover:bg-slate-50", selected && "bg-brand-50")}
+      className={cn("cursor-pointer border-b border-slate-100 dark:border-neutral-800 text-sm hover:bg-slate-50 dark:hover:bg-muted/40", selected && "bg-brand-50 dark:bg-brand-900/30")}
       onClick={onOpenJob}
     >
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -332,41 +332,41 @@ function WaitingJobRow({
           type="checkbox"
           checked={selected}
           onChange={onToggle}
-          className="rounded border-slate-300 accent-brand-500"
+          className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
         />
       </td>
       {isVisible("client") && (
         <td className="min-w-[200px] px-4 py-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 hover:underline">
+          <Link href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
             {job.clientName ?? "—"}
           </Link>
           {job.serviceAddress && (
-            <p className="text-xs text-slate-400">{job.serviceAddress}</p>
+            <p className="text-xs text-slate-400 dark:text-neutral-500">{job.serviceAddress}</p>
           )}
         </td>
       )}
       {isVisible("service") && (
-        <td className="min-w-[180px] px-4 py-3 text-slate-700">{serviceName}</td>
+        <td className="min-w-[180px] px-4 py-3 text-slate-700 dark:text-neutral-300">{serviceName}</td>
       )}
       {isVisible("dateRange") && service && (
         <td className="px-4 py-3">
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-neutral-400">
             {formatDateRange(service.startDate, service.completeByDate)}
           </span>
         </td>
       )}
       {isVisible("dateRange") && !service && (
         <td className="px-4 py-3">
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-neutral-400">
             {formatDateRange(job.waitingListStart, job.waitingListEnd)}
           </span>
         </td>
       )}
       {isVisible("city") && (
-        <td className="px-4 py-3 text-slate-500">{job.serviceCity ?? "—"}</td>
+        <td className="px-4 py-3 text-muted-foreground">{job.serviceCity ?? "—"}</td>
       )}
       {isVisible("zip") && (
-        <td className="px-4 py-3 text-xs text-slate-400">{job.serviceZip ?? "—"}</td>
+        <td className="px-4 py-3 text-xs text-slate-400 dark:text-neutral-500">{job.serviceZip ?? "—"}</td>
       )}
       {isVisible("crew") && (
         <td className="px-4 py-3">
@@ -375,25 +375,25 @@ function WaitingJobRow({
               {effectiveCrew}
             </Badge>
           ) : (
-            <span className="text-xs text-slate-400">Unassigned</span>
+            <span className="text-xs text-slate-400 dark:text-neutral-500">Unassigned</span>
           )}
         </td>
       )}
       {isVisible("rate") && (
-        <td className="px-4 py-3 text-right font-medium text-slate-700">
+        <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-neutral-300">
           {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
         </td>
       )}
       {isVisible("priority") && (
         <td className="px-4 py-3 whitespace-nowrap">
           <div className="flex items-center gap-1">
-            {job.isHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500" /></span>}
-            <span className="text-xs capitalize text-slate-500">{job.clientPriority ?? "normal"}</span>
+            {job.isHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500 dark:text-red-400" /></span>}
+            <span className="text-xs capitalize text-muted-foreground">{job.clientPriority ?? "normal"}</span>
           </div>
         </td>
       )}
       {EXTRA_COLUMNS.filter((c) => c.key !== "priority").map((c) => isVisible(c.key) && (
-        <td key={c.key} className="max-w-[160px] truncate px-4 py-3 text-slate-500" title={extraColCellText(c.key, job)}>
+        <td key={c.key} className="max-w-[160px] truncate px-4 py-3 text-muted-foreground" title={extraColCellText(c.key, job)}>
           {extraColCellText(c.key, job)}
         </td>
       ))}
@@ -403,7 +403,7 @@ function WaitingJobRow({
         const val = job.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
         const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
         return (
-          <td key={key} className="max-w-[160px] truncate px-4 py-3 text-slate-500" title={display}>
+          <td key={key} className="max-w-[160px] truncate px-4 py-3 text-muted-foreground" title={display}>
             {display}
           </td>
         );
@@ -609,32 +609,32 @@ export function WaitingList() {
       />
 
       {/* Date window */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-white px-4 py-2.5 shadow-sm">
-        <ListOrdered className="h-4 w-4 shrink-0 text-slate-400" />
-        <span className="text-sm font-medium text-slate-700">Date Window</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-4 py-2.5 shadow-sm">
+        <ListOrdered className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
+        <span className="text-sm font-medium text-slate-700 dark:text-neutral-300">Date Window</span>
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={startDate}
             onChange={(e) => e.target.value && setStartDate(e.target.value)}
-            className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
-          <span className="text-xs text-slate-400">to</span>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">to</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => e.target.value && setEndDate(e.target.value)}
-            className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
         </div>
-        <span className="ml-auto text-xs text-slate-400">
+        <span className="ml-auto text-xs text-slate-400 dark:text-neutral-500">
           {isLoading ? "…" : `${visitRows.length} jobs`}
         </span>
       </div>
 
       {/* Select a filter bar */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b bg-white px-4 py-2">
-        <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
+      <div className="flex flex-wrap items-center gap-1.5 border-b bg-card px-4 py-2">
+        <span className="shrink-0 text-xs font-medium text-muted-foreground mr-1">Select a Filter:</span>
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           {COL_FILTERS.map(({ key, label }) => (
             <button
@@ -646,8 +646,8 @@ export function WaitingList() {
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
                 activeColFilter === key
-                  ? "bg-brand-100 text-brand-700 font-medium"
-                  : "hover:bg-slate-100 text-slate-600"
+                  ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+                  : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
             >
               {label}
@@ -665,16 +665,16 @@ export function WaitingList() {
               <button
                 className={cn(
                   "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                  serviceFilters.length > 0 ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
+                  serviceFilters.length > 0 ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
                 )}
               >
                 Service{serviceFilters.length > 0 && ` · ${serviceFilters.length}`}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-56 p-1" align="start">
-              <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Services</p>
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 dark:text-neutral-500 tracking-wide">Services</p>
               {allServices.length === 0 && (
-                <p className="px-2 py-2 text-xs text-slate-400 italic">No services found</p>
+                <p className="px-2 py-2 text-xs text-slate-400 dark:text-neutral-500 italic">No services found</p>
               )}
               {allServices.map((name) => (
                 <FilterOptionRow
@@ -683,7 +683,7 @@ export function WaitingList() {
                   onToggle={() => setServiceFilters((prev) =>
                     prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
                   )}
-                  className={serviceFilters.includes(name) ? "bg-brand-50 text-brand-700 font-medium" : undefined}
+                  className={serviceFilters.includes(name) ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : undefined}
                 >
                   {name}
                 </FilterOptionRow>
@@ -691,7 +691,7 @@ export function WaitingList() {
               {serviceFilters.length > 0 && (
                 <div className="border-t mt-1 pt-1">
                   <button
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100"
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:bg-muted"
                     onClick={() => setServiceFilters([])}
                   >
                     <X className="h-3 w-3" /> Clear filter
@@ -728,7 +728,7 @@ export function WaitingList() {
               )}
               <button
                 onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -840,7 +840,7 @@ export function WaitingList() {
                 All Tags
               </FilterOptionRow>
               {orgTags.length === 0 && (
-                <p className="px-2 py-1.5 text-[11px] text-slate-400">No client tags yet</p>
+                <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No client tags yet</p>
               )}
               {orgTags.map((tag) => (
                 <FilterOptionRow
@@ -870,7 +870,7 @@ export function WaitingList() {
                 All Priorities
               </FilterOptionRow>
               <div className="my-1 border-t" />
-              <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Job</p>
+              <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Job</p>
               {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
                 <FilterOptionRow
                   key={o.value}
@@ -879,12 +879,12 @@ export function WaitingList() {
                     prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
                   )}
                 >
-                  {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500" />}
+                  {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500 dark:text-red-400" />}
                   {o.label}
                 </FilterOptionRow>
               ))}
               <div className="my-1 border-t" />
-              <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Client</p>
+              <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Client</p>
               {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
                 <FilterOptionRow
                   key={o.value}
@@ -908,16 +908,16 @@ export function WaitingList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
+      <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full min-w-[900px] text-sm">
-          <thead className="sticky top-0 bg-slate-50">
-            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleAll}
-                  className="rounded border-slate-300 accent-brand-500"
+                  className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                 />
               </th>
               {visibleKeys.includes("client") && <th className="min-w-[200px] px-4 py-3">Client</th>}
@@ -948,7 +948,7 @@ export function WaitingList() {
               ))
             ) : visitRows.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search || activeColFilter
                     ? "No jobs match your filters"
                     : "No jobs on the waiting list for this date range"}

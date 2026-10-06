@@ -62,14 +62,14 @@ export function ApplyRatesToProjectsDialog({
         </DialogHeader>
 
         {isLoading ? (
-          <p className="text-sm text-slate-500">Checking existing projects…</p>
+          <p className="text-sm text-muted-foreground">Checking existing projects…</p>
         ) : n === 0 ? (
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             No open projects use a different rate, so nothing else needs updating. Completed projects are locked and
             keep the rates they were closed with.
           </p>
         ) : (
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
             {n} open project{n === 1 ? "" : "s"} (sold, scheduled, in progress or on hold) {n === 1 ? "uses" : "use"} a
             different rate. Do you want to update {n === 1 ? "it" : "them"} too? Completed projects are locked and
             will not change either way.

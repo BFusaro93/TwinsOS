@@ -116,11 +116,11 @@ function VarBadge({ actual, compare, label }: { actual: number; compare: number;
   return (
     <div className="flex items-center gap-1 text-[10px] mt-0.5">
       {pos ? (
-        <TrendingUp className="h-2.5 w-2.5 text-emerald-500" />
+        <TrendingUp className="h-2.5 w-2.5 text-emerald-500 dark:text-emerald-400" />
       ) : (
         <TrendingDown className="h-2.5 w-2.5 text-red-400" />
       )}
-      <span className={pos ? "text-emerald-600" : "text-red-500"}>
+      <span className={pos ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}>
         {fmtPct(pct)} {label}
       </span>
     </div>
@@ -141,19 +141,19 @@ interface KpiCardProps {
   positive?: boolean; // override color logic
 }
 
-function KpiCard({ label, sublabel, value, prevMonth, budget, priorYear, icon, accent = "text-brand-500", positive }: KpiCardProps) {
+function KpiCard({ label, sublabel, value, prevMonth, budget, priorYear, icon, accent = "text-brand-500 dark:text-brand-400", positive }: KpiCardProps) {
   const isPos = positive !== undefined ? positive : value >= 0;
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</p>
-          {sublabel && <p className="text-[10px] text-slate-400">{sublabel}</p>}
-          <p className={`mt-1 text-2xl font-bold ${isPos ? accent : "text-red-500"}`}>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+          {sublabel && <p className="text-[10px] text-slate-400 dark:text-neutral-500">{sublabel}</p>}
+          <p className={`mt-1 text-2xl font-bold ${isPos ? accent : "text-red-500 dark:text-red-400"}`}>
             {fmt(value)}
           </p>
         </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
           {icon}
         </div>
       </div>
@@ -175,13 +175,13 @@ function DollarTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-md text-xs">
-      <p className="mb-1.5 font-semibold text-slate-700">{label}</p>
+    <div className="rounded-lg border border-border bg-card p-3 shadow-md text-xs">
+      <p className="mb-1.5 font-semibold text-slate-700 dark:text-neutral-300">{label}</p>
       {payload.map((p) => (
         <div key={p.name} className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
-          <span className="text-slate-500">{p.name}:</span>
-          <span className="font-medium text-slate-800">{fmtK(p.value)}</span>
+          <span className="text-muted-foreground">{p.name}:</span>
+          <span className="font-medium text-slate-800 dark:text-neutral-100">{fmtK(p.value)}</span>
         </div>
       ))}
     </div>
@@ -201,9 +201,9 @@ function CentsInput({ label, value, onChange, negative }: CentsInputProps) {
   const dollars = Math.abs(value) / 100;
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-neutral-400">{label}</label>
       <div className="relative">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 text-sm">$</span>
         <input
           type="number"
           step="0.01"
@@ -214,7 +214,7 @@ function CentsInput({ label, value, onChange, negative }: CentsInputProps) {
             onChange(Math.round((negative ? -v : v) * 100));
           }}
           placeholder="0.00"
-          className="w-full rounded-md border border-slate-300 bg-white py-2 pl-7 pr-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-full rounded-md border border-slate-300 dark:border-neutral-700 bg-card py-2 pl-7 pr-3 text-sm text-slate-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-400"
         />
       </div>
     </div>
@@ -254,12 +254,12 @@ function PdfImport({ onImport }: PdfImportProps) {
   }
 
   return (
-    <div className="mb-5 rounded-lg border border-dashed border-brand-300 bg-brand-50/40 p-4">
+    <div className="mb-5 rounded-lg border border-dashed border-brand-300 dark:border-brand-700 bg-brand-50/40 dark:bg-brand-900/30 p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs text-slate-600">
+        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
           <Upload className="h-4 w-4 text-brand-400" />
           <span className="font-medium">Import from PDF</span>
-          <span className="text-slate-400">— QuickBooks P&L report</span>
+          <span className="text-slate-400 dark:text-neutral-500">— QuickBooks P&L report</span>
         </div>
         <button
           type="button"
@@ -283,13 +283,13 @@ function PdfImport({ onImport }: PdfImportProps) {
       </div>
 
       {state === "done" && (
-        <div className="mt-2 flex items-start gap-1.5 text-[11px] text-emerald-700">
+        <div className="mt-2 flex items-start gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>PDF parsed — form pre-filled. Review and save.</span>
         </div>
       )}
       {state === "error" && (
-        <div className="mt-2 flex items-start gap-1.5 text-[11px] text-red-600">
+        <div className="mt-2 flex items-start gap-1.5 text-[11px] text-red-600 dark:text-red-400">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{errorMsg}</span>
         </div>
@@ -297,7 +297,7 @@ function PdfImport({ onImport }: PdfImportProps) {
       {warnings.length > 0 && (
         <ul className="mt-2 space-y-0.5">
           {warnings.map((w, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-[11px] text-amber-700">
+            <li key={i} className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
               <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
               {w}
             </li>
@@ -350,8 +350,8 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
   const ebitda = computeEbitda(d);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-4 text-sm font-semibold text-slate-700">
+    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">
         {initial ? "Edit Period" : "Add Period"}
       </h2>
 
@@ -361,16 +361,16 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
       {/* Month + type row */}
       <div className="mb-5 flex flex-wrap gap-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Period (Month)</label>
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-neutral-400">Period (Month)</label>
           <input
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-400"
+            className="rounded-md border border-slate-300 dark:border-neutral-700 bg-card px-3 py-2 text-sm text-slate-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Record Type</label>
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-neutral-400">Record Type</label>
           <div className="flex gap-2 flex-wrap">
             {(["actual", "budget", "ytd_actual"] as RecordType[]).map((rt) => (
               <button
@@ -380,7 +380,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
                 className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   recordType === rt
                     ? "bg-brand-500 text-white"
-                    : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+                    : "border border-slate-300 dark:border-neutral-700 text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                 }`}
               >
                 {rt === "ytd_actual" ? "YTD Actual" : rt.charAt(0).toUpperCase() + rt.slice(1)}
@@ -388,7 +388,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
             ))}
           </div>
           {recordType === "ytd_actual" && (
-            <p className="mt-1.5 text-[11px] text-amber-600">
+            <p className="mt-1.5 text-[11px] text-amber-600 dark:text-amber-400">
               YTD Actual — enter the cumulative year-to-date column from your QBO report. The period month should be the last month included (e.g., March for Jan–Mar YTD). These figures will be used directly in the YTD tab instead of summing monthly actuals.
             </p>
           )}
@@ -396,7 +396,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
       </div>
 
       {/* Income Statement */}
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Income Statement</p>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-neutral-500">Income Statement</p>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <CentsInput label="Revenue" value={d.revenue} onChange={(v) => setField("revenue", v)} />
         <CentsInput label="COGS" value={d.cogs} onChange={(v) => setField("cogs", v)} />
@@ -406,7 +406,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
       <button
         type="button"
         onClick={() => setOpexOpen((o) => !o)}
-        className="mb-2 flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+        className="mb-2 flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
       >
         <span>Operating Expenses</span>
         {opexOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -428,7 +428,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
       <button
         type="button"
         onClick={() => setBelowOpen((o) => !o)}
-        className="mb-2 flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+        className="mb-2 flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
       >
         <span>Below-the-Line Adjustments</span>
         {belowOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -443,7 +443,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
       )}
 
       {/* Computed summary */}
-      <div className="mb-4 rounded-lg bg-slate-50 p-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-5">
+      <div className="mb-4 rounded-lg bg-slate-50 dark:bg-muted/40 p-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-5">
         {[
           { label: "Gross Profit", val: d.gross_profit },
           { label: "NOI", val: noi },
@@ -451,8 +451,8 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
           { label: "Net Income", val: d.net_income },
         ].map(({ label, val }) => (
           <div key={label}>
-            <span className="text-slate-500">{label}</span>
-            <p className={`font-bold ${val >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fmt(val)}</p>
+            <span className="text-muted-foreground">{label}</span>
+            <p className={`font-bold ${val >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>{fmt(val)}</p>
           </div>
         ))}
       </div>
@@ -461,7 +461,7 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
       <button
         type="button"
         onClick={() => setCfOpen((o) => !o)}
-        className="mb-2 flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+        className="mb-2 flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
       >
         <span>Cash Flow (Optional)</span>
         {cfOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -476,18 +476,18 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
 
       {/* Notes */}
       <div className="mb-5">
-        <label className="mb-1 block text-xs font-medium text-slate-600">Notes</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-neutral-400">Notes</label>
         <textarea
           value={d.notes}
           onChange={(e) => setField("notes", e.target.value)}
           rows={2}
-          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+          className="w-full rounded-md border border-slate-300 dark:border-neutral-700 bg-card px-3 py-2 text-sm text-slate-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
           placeholder="Any context for this period…"
         />
       </div>
 
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-md px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">
+        <button type="button" onClick={onCancel} className="rounded-md px-4 py-2 text-sm text-slate-600 dark:text-neutral-400 hover:bg-muted">
           Cancel
         </button>
         <button
@@ -516,11 +516,11 @@ function MonthSelector({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <Calendar className="h-4 w-4 text-slate-400" />
+      <Calendar className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
       <select
         value={selected}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+        className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-slate-700 dark:text-neutral-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
       >
         {[...records].reverse().map((r) => (
           <option key={r.id} value={r.periodMonth}>
@@ -553,7 +553,7 @@ function OverviewTab({
 
   if (!actuals.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400">
+      <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400 dark:text-neutral-500">
         <DollarSign className="mb-3 h-10 w-10 opacity-30" />
         <p className="text-sm font-medium">No financial data yet</p>
         <p className="mt-1 text-xs">Import a PDF or add your first period via Data Entry</p>
@@ -595,9 +595,9 @@ function OverviewTab({
             { label: "NOI Margin", val: noiMarginPct },
             { label: "Net Margin", val: netMarginPct },
           ].map(({ label, val }) => (
-            <div key={label} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+            <div key={label} className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-slate-600 dark:text-neutral-400">
               {label}:{" "}
-              <span className={val >= 0 ? "font-bold text-emerald-600" : "font-bold text-red-500"}>
+              <span className={val >= 0 ? "font-bold text-emerald-600 dark:text-emerald-400" : "font-bold text-red-500 dark:text-red-400"}>
                 {val.toFixed(1)}%
               </span>
             </div>
@@ -613,7 +613,7 @@ function OverviewTab({
           prevMonth={prevRecord?.data.revenue}
           budget={budgetRecord?.data.revenue}
           icon={<DollarSign className="h-5 w-5 text-brand-400" />}
-          accent="text-brand-500"
+          accent="text-brand-500 dark:text-brand-400"
           positive
         />
         <KpiCard
@@ -622,8 +622,8 @@ function OverviewTab({
           value={d.gross_profit}
           prevMonth={prevRecord?.data.gross_profit}
           budget={budgetRecord?.data.gross_profit}
-          icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
-          accent="text-emerald-600"
+          icon={<TrendingUp className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />}
+          accent="text-emerald-600 dark:text-emerald-400"
         />
         <KpiCard
           label="Net Op. Income"
@@ -631,8 +631,8 @@ function OverviewTab({
           value={noi}
           prevMonth={prevRecord ? computeNOI(prevRecord.data) : undefined}
           budget={budgetRecord ? computeNOI(budgetRecord.data) : undefined}
-          icon={<TrendingUp className="h-5 w-5 text-blue-500" />}
-          accent="text-blue-600"
+          icon={<TrendingUp className="h-5 w-5 text-blue-500 dark:text-blue-400" />}
+          accent="text-blue-600 dark:text-blue-400"
         />
         <KpiCard
           label="Adj. EBITDA"
@@ -640,8 +640,8 @@ function OverviewTab({
           value={ebitda}
           prevMonth={prevRecord ? computeEbitda(prevRecord.data) : undefined}
           budget={budgetRecord ? computeEbitda(budgetRecord.data) : undefined}
-          icon={<TrendingUp className="h-5 w-5 text-violet-500" />}
-          accent="text-violet-600"
+          icon={<TrendingUp className="h-5 w-5 text-violet-500 dark:text-violet-400" />}
+          accent="text-violet-600 dark:text-violet-400"
         />
         <KpiCard
           label="Net Income"
@@ -649,14 +649,14 @@ function OverviewTab({
           value={d.net_income}
           prevMonth={prevRecord?.data.net_income}
           budget={budgetRecord?.data.net_income}
-          icon={<DollarSign className="h-5 w-5 text-slate-500" />}
-          accent="text-emerald-600"
+          icon={<DollarSign className="h-5 w-5 text-muted-foreground" />}
+          accent="text-emerald-600 dark:text-emerald-400"
         />
       </div>
 
       {/* Monthly Performance chart */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-700">Monthly Performance — All Periods</h3>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Monthly Performance — All Periods</h3>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -673,8 +673,8 @@ function OverviewTab({
       </div>
 
       {/* Margin trend */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-700">Margin Trends</h3>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Margin Trends</h3>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={marginData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -697,7 +697,7 @@ function OverviewTab({
 
 function PlTab({ records }: { records: FinancialPeriodRecord[] }) {
   if (!records.length) {
-    return <div className="py-24 text-center text-sm text-slate-400">No data yet</div>;
+    return <div className="py-24 text-center text-sm text-slate-400 dark:text-neutral-500">No data yet</div>;
   }
 
   const cols = records.slice(-12);
@@ -751,21 +751,21 @@ function PlTab({ records }: { records: FinancialPeriodRecord[] }) {
   };
 
   const fgClass = (fg?: string, v?: number) => {
-    if (!fg) return v !== undefined && v >= 0 ? "text-slate-800" : "text-red-500";
-    if (fg === "emerald") return v !== undefined && v >= 0 ? "text-emerald-700" : "text-red-500";
-    if (fg === "blue") return v !== undefined && v >= 0 ? "text-blue-700" : "text-red-500";
-    if (fg === "violet") return v !== undefined && v >= 0 ? "text-violet-700" : "text-red-500";
-    return "text-slate-800";
+    if (!fg) return v !== undefined && v >= 0 ? "text-slate-800 dark:text-neutral-100" : "text-red-500 dark:text-red-400";
+    if (fg === "emerald") return v !== undefined && v >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-500 dark:text-red-400";
+    if (fg === "blue") return v !== undefined && v >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-500 dark:text-red-400";
+    if (fg === "violet") return v !== undefined && v >= 0 ? "text-violet-700 dark:text-violet-400" : "text-red-500 dark:text-red-400";
+    return "text-slate-800 dark:text-neutral-100";
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+    <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
       <table className="min-w-full text-xs">
         <thead>
-          <tr className="border-b border-slate-100 bg-slate-50">
-            <th className="px-4 py-3 text-left font-semibold text-slate-600 min-w-[200px]">Category</th>
+          <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
+            <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-neutral-400 min-w-[200px]">Category</th>
             {cols.map((r) => (
-              <th key={r.id} className="px-4 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">
+              <th key={r.id} className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400 whitespace-nowrap">
                 {monthLabel(r.periodMonth)}
               </th>
             ))}
@@ -773,8 +773,8 @@ function PlTab({ records }: { records: FinancialPeriodRecord[] }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.key} className={`border-b border-slate-50 last:border-0 ${row.bold ? "bg-slate-50/70" : "hover:bg-slate-50/50"}`}>
-              <td className={`px-4 py-2.5 text-slate-700 ${row.bold ? "font-semibold" : ""} ${row.indent ? "pl-8 text-slate-500" : ""}`}>
+            <tr key={row.key} className={`border-b border-slate-50 dark:border-neutral-800 last:border-0 ${row.bold ? "bg-slate-50/70 dark:bg-muted/40" : "hover:bg-slate-50/50 dark:hover:bg-muted/40"}`}>
+              <td className={`px-4 py-2.5 text-slate-700 dark:text-neutral-300 ${row.bold ? "font-semibold" : ""} ${row.indent ? "pl-8 text-muted-foreground" : ""}`}>
                 {row.label}
               </td>
               {cols.map((r) => {
@@ -782,7 +782,7 @@ function PlTab({ records }: { records: FinancialPeriodRecord[] }) {
                 return (
                   <td
                     key={r.id}
-                    className={`px-4 py-2.5 text-right tabular-nums ${row.bold ? `font-semibold ${fgClass(row.fg, v)}` : "text-slate-600"}`}
+                    className={`px-4 py-2.5 text-right tabular-nums ${row.bold ? `font-semibold ${fgClass(row.fg, v)}` : "text-slate-600 dark:text-neutral-400"}`}
                   >
                     {fmt(v)}
                   </td>
@@ -847,28 +847,28 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
   }));
 
   if (!actuals.length) {
-    return <div className="py-24 text-center text-sm text-slate-400">No data yet</div>;
+    return <div className="py-24 text-center text-sm text-slate-400 dark:text-neutral-500">No data yet</div>;
   }
 
   return (
     <div className="space-y-6">
       {/* Year selector + margin pills */}
       <div className="flex flex-wrap items-center gap-3">
-        <Calendar className="h-4 w-4 text-slate-400" />
+        <Calendar className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
         <select
           value={year}
           onChange={(e) => setYear(parseInt(e.target.value, 10))}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-slate-700 dark:text-neutral-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
         >
           {years.map((y) => <option key={y} value={y}>{y} YTD</option>)}
         </select>
-        <span className="text-xs text-slate-400">{ytdRecords.length} month{ytdRecords.length !== 1 ? "s" : ""} on record</span>
+        <span className="text-xs text-slate-400 dark:text-neutral-500">{ytdRecords.length} month{ytdRecords.length !== 1 ? "s" : ""} on record</span>
         {usingQboYtd ? (
-          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+          <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
             ✓ QBO YTD column · {monthLabelLong(ytdActualRecord!.periodMonth)}
           </span>
         ) : (
-          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+          <span className="rounded-full bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
             ⚠ Summing monthly actuals — enter a YTD Actual record for exact QBO figures
           </span>
         )}
@@ -878,9 +878,9 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
             { label: "NOI Margin", val: ytdNoiMarginPct },
             { label: "Net Margin", val: ytdNetMarginPct },
           ].map(({ label, val }) => (
-            <div key={label} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+            <div key={label} className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-slate-600 dark:text-neutral-400">
               {label}:{" "}
-              <span className={val >= 0 ? "font-bold text-emerald-600" : "font-bold text-red-500"}>
+              <span className={val >= 0 ? "font-bold text-emerald-600 dark:text-emerald-400" : "font-bold text-red-500 dark:text-red-400"}>
                 {val.toFixed(1)}%
               </span>
             </div>
@@ -903,15 +903,15 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
             sublabel={sub}
             value={val}
             budget={hasBudget ? bud : undefined}
-            icon={<DollarSign className="h-5 w-5 text-slate-400" />}
-            accent="text-brand-600"
+            icon={<DollarSign className="h-5 w-5 text-slate-400 dark:text-neutral-500" />}
+            accent="text-brand-600 dark:text-brand-400"
           />
         ))}
       </div>
 
       {/* Monthly progression */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-700">{year} Monthly Progression</h3>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">{year} Monthly Progression</h3>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={monthlyChart} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -937,8 +937,8 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
           return { month: monthLabel(r.periodMonth), "Cumulative Revenue": cumRevenue, "Cumulative Net Income": cumNI };
         });
         return (
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-sm font-semibold text-slate-700">Cumulative YTD</h3>
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Cumulative YTD</h3>
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={cumData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -955,15 +955,15 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
       })()}
 
       {/* YTD summary table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-4 py-3 text-left font-semibold text-slate-600">Metric</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-600">YTD Actual</th>
-              {hasBudget && <th className="px-4 py-3 text-right font-semibold text-slate-600">YTD Budget</th>}
-              {hasBudget && <th className="px-4 py-3 text-right font-semibold text-slate-600">Variance $</th>}
-              {hasBudget && <th className="px-4 py-3 text-right font-semibold text-slate-600">Variance %</th>}
+            <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
+              <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-neutral-400">Metric</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">YTD Actual</th>
+              {hasBudget && <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">YTD Budget</th>}
+              {hasBudget && <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Variance $</th>}
+              {hasBudget && <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Variance %</th>}
             </tr>
           </thead>
           <tbody>
@@ -977,17 +977,17 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
               const var$ = a - b;
               const varPct = b !== 0 ? (var$ / Math.abs(b)) * 100 : 0;
               return (
-                <tr key={label} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                  <td className="px-4 py-2.5 font-medium text-slate-700">{label}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-800 font-semibold">{fmt(a)}</td>
-                  {hasBudget && <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{fmt(b)}</td>}
+                <tr key={label} className="border-b border-slate-50 dark:border-neutral-800 last:border-0 hover:bg-slate-50/50 dark:hover:bg-muted/40">
+                  <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-neutral-300">{label}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-800 dark:text-neutral-100 font-semibold">{fmt(a)}</td>
+                  {hasBudget && <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{fmt(b)}</td>}
                   {hasBudget && (
-                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${var$ >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${var$ >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                       {var$ >= 0 ? "+" : ""}{fmt(var$)}
                     </td>
                   )}
                   {hasBudget && (
-                    <td className={`px-4 py-2.5 text-right tabular-nums ${varPct >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    <td className={`px-4 py-2.5 text-right tabular-nums ${varPct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                       {fmtPct(varPct)}
                     </td>
                   )}
@@ -1004,7 +1004,7 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
 // ── Cash Flow Tab ─────────────────────────────────────────────────────────────
 
 function CashFlowTab({ records }: { records: FinancialPeriodRecord[] }) {
-  if (!records.length) return <div className="py-24 text-center text-sm text-slate-400">No data yet</div>;
+  if (!records.length) return <div className="py-24 text-center text-sm text-slate-400 dark:text-neutral-500">No data yet</div>;
 
   const chartData = records.map((r) => ({
     month: monthLabel(r.periodMonth),
@@ -1020,7 +1020,7 @@ function CashFlowTab({ records }: { records: FinancialPeriodRecord[] }) {
 
   if (allZero) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400">
+      <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400 dark:text-neutral-500">
         <DollarSign className="mb-3 h-10 w-10 opacity-30" />
         <p className="text-sm font-medium">No cash flow data entered yet</p>
         <p className="mt-1 text-xs">Add operating, investing, and financing figures in the Data Entry tab</p>
@@ -1030,8 +1030,8 @@ function CashFlowTab({ records }: { records: FinancialPeriodRecord[] }) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-700">Cash Flow by Activity</h3>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Cash Flow by Activity</h3>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1047,8 +1047,8 @@ function CashFlowTab({ records }: { records: FinancialPeriodRecord[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-700">Net Cash Change</h3>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Net Cash Change</h3>
         <ResponsiveContainer width="100%" height={180}>
           <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1061,25 +1061,25 @@ function CashFlowTab({ records }: { records: FinancialPeriodRecord[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-4 py-3 text-left font-semibold text-slate-600">Period</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-600">Operating</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-600">Investing</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-600">Financing</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-600">Net Change</th>
+            <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
+              <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-neutral-400">Period</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Operating</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Investing</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Financing</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Net Change</th>
             </tr>
           </thead>
           <tbody>
             {records.map((r) => {
               const net = r.data.cash_operating + r.data.cash_investing + r.data.cash_financing;
               return (
-                <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                  <td className="px-4 py-2.5 font-medium text-slate-700">{monthLabel(r.periodMonth)}</td>
+                <tr key={r.id} className="border-b border-slate-50 dark:border-neutral-800 last:border-0 hover:bg-slate-50/50 dark:hover:bg-muted/40">
+                  <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-neutral-300">{monthLabel(r.periodMonth)}</td>
                   {[r.data.cash_operating, r.data.cash_investing, r.data.cash_financing, net].map((v, i) => (
-                    <td key={i} className={`px-4 py-2.5 text-right tabular-nums ${i === 3 ? "font-semibold " : ""}${v >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    <td key={i} className={`px-4 py-2.5 text-right tabular-nums ${i === 3 ? "font-semibold " : ""}${v >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                       {fmt(v)}
                     </td>
                   ))}
@@ -1101,7 +1101,7 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
 
   if (!budgets.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400">
+      <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400 dark:text-neutral-500">
         <DollarSign className="mb-3 h-10 w-10 opacity-30" />
         <p className="text-sm font-medium">No budget data yet</p>
         <p className="mt-1 text-xs">Add budget entries via the Data Entry tab — select &ldquo;Budget&rdquo; as the record type</p>
@@ -1157,7 +1157,7 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
             type="button"
             onClick={() => setSelectedMetric(m.key)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              selectedMetric === m.key ? "bg-brand-500 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-50"
+              selectedMetric === m.key ? "bg-brand-500 text-white" : "border border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
             }`}
           >
             {m.label}
@@ -1166,8 +1166,8 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
       </div>
 
       {/* Actual vs Budget chart */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-700">Actual vs Budget — {metric.label}</h3>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Actual vs Budget — {metric.label}</h3>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1182,8 +1182,8 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
       </div>
 
       {/* Variance waterfall */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-700">Variance — {metric.label}</h3>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Variance — {metric.label}</h3>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart
             data={chartData.map((d) => ({ ...d, Variance: d.Actual - d.Budget }))}
@@ -1204,24 +1204,24 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
       </div>
 
       {/* Detail table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-4 py-3 text-left font-semibold text-slate-600">Period</th>
+            <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
+              <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-neutral-400">Period</th>
               {metrics.map((m) => (
-                <th key={m.key} colSpan={3} className="px-4 py-3 text-center font-semibold text-slate-600 border-l border-slate-100">
+                <th key={m.key} colSpan={3} className="px-4 py-3 text-center font-semibold text-slate-600 dark:text-neutral-400 border-l border-slate-100 dark:border-neutral-800">
                   {m.label}
                 </th>
               ))}
             </tr>
-            <tr className="border-b border-slate-100 bg-slate-50/50">
-              <th className="px-4 py-2 text-left text-slate-500" />
+            <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-muted/40">
+              <th className="px-4 py-2 text-left text-muted-foreground" />
               {metrics.map((m) => (
                 <Fragment key={m.key}>
-                  <th className="px-3 py-2 text-right text-slate-500 border-l border-slate-100">Actual</th>
-                  <th className="px-3 py-2 text-right text-slate-500">Budget</th>
-                  <th className="px-3 py-2 text-right text-slate-500">Var %</th>
+                  <th className="px-3 py-2 text-right text-muted-foreground border-l border-slate-100 dark:border-neutral-800">Actual</th>
+                  <th className="px-3 py-2 text-right text-muted-foreground">Budget</th>
+                  <th className="px-3 py-2 text-right text-muted-foreground">Var %</th>
                 </Fragment>
               ))}
             </tr>
@@ -1231,21 +1231,21 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
               const a = actuals.find((r) => r.periodMonth === m);
               const b = budgets.find((r) => r.periodMonth === m);
               return (
-                <tr key={m} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                  <td className="px-4 py-2.5 font-medium text-slate-700 whitespace-nowrap">{monthLabel(m)}</td>
+                <tr key={m} className="border-b border-slate-50 dark:border-neutral-800 last:border-0 hover:bg-slate-50/50 dark:hover:bg-muted/40">
+                  <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-neutral-300 whitespace-nowrap">{monthLabel(m)}</td>
                   {metrics.map((met) => {
                     const av = getVal(a, met.key);
                     const bv = getVal(b, met.key);
                     const vp = bv !== 0 ? ((av - bv) / Math.abs(bv)) * 100 : 0;
                     return (
                       <Fragment key={met.key}>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 font-medium border-l border-slate-50">
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-neutral-300 font-medium border-l border-slate-50 dark:border-neutral-800">
                           {a ? fmt(av) : "—"}
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-400">
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-400 dark:text-neutral-500">
                           {b ? fmt(bv) : "—"}
                         </td>
-                        <td className={`px-3 py-2.5 text-right tabular-nums text-xs ${a && b ? (vp >= 0 ? "text-emerald-600" : "text-red-500") : "text-slate-300"}`}>
+                        <td className={`px-3 py-2.5 text-right tabular-nums text-xs ${a && b ? (vp >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400") : "text-slate-300 dark:text-neutral-500"}`}>
                           {a && b ? fmtPct(vp) : "—"}
                         </td>
                       </Fragment>
@@ -1294,7 +1294,7 @@ function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRe
         <button
           type="button"
           onClick={() => { setAddingType("budget"); setAdding(true); }}
-          className="flex items-center gap-2 rounded-md border border-brand-400 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50"
+          className="flex items-center gap-2 rounded-md border border-brand-400 px-4 py-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
         >
           <PlusCircle className="h-4 w-4" />
           Add Budget
@@ -1302,7 +1302,7 @@ function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRe
         <button
           type="button"
           onClick={() => { setAddingType("ytd_actual"); setAdding(true); }}
-          className="flex items-center gap-2 rounded-md border border-amber-400 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50"
+          className="flex items-center gap-2 rounded-md border border-amber-400 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
         >
           <PlusCircle className="h-4 w-4" />
           Add YTD Actual
@@ -1318,7 +1318,7 @@ function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRe
       </div>
 
       {all.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 py-16 text-center text-slate-400">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 dark:border-neutral-700 py-16 text-center text-slate-400 dark:text-neutral-500">
           <DollarSign className="mb-3 h-8 w-8 opacity-30" />
           <p className="text-sm font-medium">No periods yet</p>
           <p className="mt-1 text-xs">Click &ldquo;Add Actuals&rdquo; to import from PDF or enter manually</p>
@@ -1326,51 +1326,51 @@ function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRe
       )}
 
       {all.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
           <table className="min-w-full text-xs">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">Period</th>
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">Type</th>
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">Revenue</th>
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">Gross Profit</th>
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">NOI</th>
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">Adj. EBITDA</th>
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">Net Income</th>
+              <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
+                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-neutral-400">Period</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-neutral-400">Type</th>
+                <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Revenue</th>
+                <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Gross Profit</th>
+                <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">NOI</th>
+                <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Adj. EBITDA</th>
+                <th className="px-4 py-3 text-right font-semibold text-slate-600 dark:text-neutral-400">Net Income</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {all.map((r) => (
-                <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                  <td className="px-4 py-2.5 font-medium text-slate-700">{monthLabel(r.periodMonth)}</td>
+                <tr key={r.id} className="border-b border-slate-50 dark:border-neutral-800 last:border-0 hover:bg-slate-50/50 dark:hover:bg-muted/40">
+                  <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-neutral-300">{monthLabel(r.periodMonth)}</td>
                   <td className="px-4 py-2.5">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       r.recordType === "actual"
-                        ? "bg-emerald-50 text-emerald-700"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                         : r.recordType === "ytd_actual"
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-blue-50 text-blue-700"
+                          ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                          : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400"
                     }`}>
                       {r.recordType === "ytd_actual" ? "YTD Actual" : r.recordType}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{fmt(r.data.revenue)}</td>
-                  <td className={`px-4 py-2.5 text-right tabular-nums ${r.data.gross_profit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">{fmt(r.data.revenue)}</td>
+                  <td className={`px-4 py-2.5 text-right tabular-nums ${r.data.gross_profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                     {fmt(r.data.gross_profit)}
                   </td>
-                  <td className={`px-4 py-2.5 text-right tabular-nums ${computeNOI(r.data) >= 0 ? "text-blue-600" : "text-red-500"}`}>
+                  <td className={`px-4 py-2.5 text-right tabular-nums ${computeNOI(r.data) >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-500 dark:text-red-400"}`}>
                     {fmt(computeNOI(r.data))}
                   </td>
-                  <td className={`px-4 py-2.5 text-right tabular-nums ${computeEbitda(r.data) >= 0 ? "text-violet-600" : "text-red-500"}`}>
+                  <td className={`px-4 py-2.5 text-right tabular-nums ${computeEbitda(r.data) >= 0 ? "text-violet-600 dark:text-violet-400" : "text-red-500 dark:text-red-400"}`}>
                     {fmt(computeEbitda(r.data))}
                   </td>
-                  <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${r.data.net_income >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                  <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${r.data.net_income >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                     {fmt(r.data.net_income)}
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-2">
-                      <button type="button" onClick={() => setEditing(r)} className="text-slate-400 hover:text-brand-500">
+                      <button type="button" onClick={() => setEditing(r)} className="text-slate-400 dark:text-neutral-500 hover:text-brand-500 dark:hover:text-brand-400">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
@@ -1380,7 +1380,7 @@ function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRe
                             deletePeriod.mutate(r.id);
                           }
                         }}
-                        className="text-slate-400 hover:text-red-500"
+                        className="text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -1410,10 +1410,10 @@ export function FinancialDashboard() {
 
   if (currentUser.role !== "admin") {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
-        <DollarSign className="h-10 w-10 text-slate-300" />
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+        <DollarSign className="h-10 w-10 text-slate-300 dark:text-neutral-500" />
         <p className="text-sm font-medium">Access restricted</p>
-        <p className="text-xs text-slate-400">The Financial dashboard is only available to administrators.</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">The Financial dashboard is only available to administrators.</p>
       </div>
     );
   }
@@ -1440,14 +1440,14 @@ export function FinancialDashboard() {
       />
 
       {/* Tab bar */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1 w-fit flex-wrap">
+      <div className="flex gap-1 rounded-xl bg-muted p-1 w-fit flex-wrap">
         {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
             className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
-              tab === t.key ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              tab === t.key ? "bg-card text-slate-800 dark:text-neutral-100 shadow-sm" : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
             }`}
           >
             {t.label}
@@ -1456,7 +1456,7 @@ export function FinancialDashboard() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-24 text-slate-400 text-sm">Loading…</div>
+        <div className="flex items-center justify-center py-24 text-slate-400 dark:text-neutral-500 text-sm">Loading…</div>
       ) : (
         <>
           {tab === "overview" && <OverviewTab actuals={actuals} budgets={budgets} />}

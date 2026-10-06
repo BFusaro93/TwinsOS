@@ -59,8 +59,8 @@ interface VendorDetailSheetProps {
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-3 gap-2 py-2">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="col-span-2 text-sm text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="col-span-2 text-sm text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -68,19 +68,19 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 const W9_STATUS_CONFIG: Record<W9Status, { label: string; classes: string }> = {
   not_requested: {
     label: "Not Requested",
-    classes: "border-slate-200 bg-slate-100 text-slate-500",
+    classes: "border-border bg-muted text-muted-foreground",
   },
   requested: {
     label: "Requested",
-    classes: "border-yellow-200 bg-yellow-50 text-yellow-700",
+    classes: "border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400",
   },
   received: {
     label: "Received",
-    classes: "border-green-200 bg-green-100 text-green-700",
+    classes: "border-green-200 dark:border-green-800 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
   },
   expired: {
     label: "Expired",
-    classes: "border-red-200 bg-red-100 text-red-700",
+    classes: "border-red-200 dark:border-red-800 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
   },
 };
 
@@ -111,7 +111,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
         <DetailRow
           label="Email"
           value={
-            <a href={`mailto:${vendor.email}`} className="text-brand-600 hover:underline">
+            <a href={`mailto:${vendor.email}`} className="text-brand-600 dark:text-brand-400 hover:underline">
               {vendor.email}
             </a>
           }
@@ -126,7 +126,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
                 href={vendor.website}
                 target="_blank"
                 rel="noreferrer"
-                className="text-brand-600 hover:underline"
+                className="text-brand-600 dark:text-brand-400 hover:underline"
               >
                 {vendor.website}
               </a>
@@ -139,10 +139,10 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
         <Separator className="my-4" />
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Notes</p>
             <span
               className={cn(
-                "flex items-center gap-1 text-xs font-medium text-green-600 transition-opacity duration-300",
+                "flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 transition-opacity duration-300",
                 notesSaved ? "opacity-100" : "opacity-0"
               )}
             >
@@ -156,7 +156,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
             readOnly={!canWriteEquipt}
             placeholder={canWriteEquipt ? "Add notes about this vendor…" : "No notes"}
             rows={4}
-            className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="w-full resize-none rounded-md border border-border bg-card px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
         </div>
       </PermissionGate>
@@ -164,7 +164,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
       {/* W9 */}
       <Separator className="my-4" />
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           W9 Status
         </p>
         <div className="flex items-start justify-between">
@@ -184,7 +184,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
               <DetailRow
                 label="Expires"
                 value={
-                  <span className={effectiveW9Status === "expired" ? "text-red-600" : undefined}>
+                  <span className={effectiveW9Status === "expired" ? "text-red-600 dark:text-red-400" : undefined}>
                     {formatDate(vendor.w9ExpirationDate)}
                   </span>
                 }
@@ -197,7 +197,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
       {/* Files */}
       <Separator className="my-4" />
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Files
         </p>
         <AttachmentsSection recordType="vendor" recordId={vendor.id} />
@@ -300,7 +300,7 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
   if (isLoading) {
     return (
       <div className="flex h-48 items-center justify-center p-6">
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
       </div>
     );
   }
@@ -311,9 +311,9 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
         {/* Parts */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Parts
-              <span className="ml-1.5 font-normal normal-case text-slate-300">({linkedParts.length})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({linkedParts.length})</span>
             </p>
             {canWriteEquipt && (
               <Button
@@ -330,18 +330,18 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
 
           {linkedParts.length === 0 ? (
             <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
-              <p className="text-sm text-slate-400">No parts linked to this vendor.</p>
+              <p className="text-sm text-slate-400 dark:text-neutral-500">No parts linked to this vendor.</p>
             </div>
           ) : (
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Name</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Part #</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Category</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">On Hand</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
+                  <tr className="bg-slate-50 dark:bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Name</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Part #</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Category</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">On Hand</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Unit Cost</th>
                     <th className="w-8 px-2 py-2" />
                   </tr>
                 </thead>
@@ -349,32 +349,32 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
                   {linkedParts.map((part) => {
                     const isPrimary = part.vendorId === vendor.id;
                     return (
-                      <tr key={part.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <tr key={part.id} className="border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                         <td className="px-3 py-2">
                           <button
                             onClick={() => { setSelectedPart(part); setPartSheetOpen(true); }}
-                            className="flex items-center gap-1.5 text-left font-medium text-brand-600 hover:underline"
+                            className="flex items-center gap-1.5 text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                           >
                             {part.name}
                             {!isPrimary && (
-                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-400">
+                              <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-slate-400 dark:text-neutral-500">
                                 Alt
                               </span>
                             )}
                           </button>
                         </td>
-                        <td className="px-3 py-2 font-mono text-xs text-slate-500">{part.partNumber}</td>
-                        <td className="px-3 py-2 capitalize text-slate-500">
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{part.partNumber}</td>
+                        <td className="px-3 py-2 capitalize text-muted-foreground">
                           {part.category.replace(/_/g, " ")}
                         </td>
-                        <td className="px-3 py-2 text-right text-slate-700">{part.quantityOnHand}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        <td className="px-3 py-2 text-right text-slate-700 dark:text-neutral-300">{part.quantityOnHand}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                           {formatCurrency(part.unitCost)}
                         </td>
                         <td className="px-2 py-2">
                           {canWriteEquipt && (
                             <button
-                              className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                              className="rounded p-1 text-slate-300 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                               title="Unlink part from vendor"
                               onClick={() => handleUnlinkPart(part)}
                             >
@@ -394,43 +394,43 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
         {/* Products */}
         {products.length > 0 && (
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Products
-              <span className="ml-1.5 font-normal normal-case text-slate-300">({products.length})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({products.length})</span>
             </p>
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Name</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Part #</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Category</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
+                  <tr className="bg-slate-50 dark:bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Name</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Part #</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Category</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Unit Cost</th>
                   </tr>
                 </thead>
                 <tbody>
                   {products.map((prod) => {
                     const isAlt = prod.vendorId !== vendor.id;
                     return (
-                      <tr key={prod.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <tr key={prod.id} className="border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                         <td className="px-3 py-2">
                           <button
                             onClick={() => { setSelectedProduct(prod); setProductSheetOpen(true); }}
-                            className="flex items-center gap-1.5 text-left font-medium text-brand-600 hover:underline"
+                            className="flex items-center gap-1.5 text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                           >
                             {prod.name}
                             {isAlt && (
-                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-400">
+                              <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-slate-400 dark:text-neutral-500">
                                 Alt
                               </span>
                             )}
                           </button>
                         </td>
-                        <td className="px-3 py-2 font-mono text-xs text-slate-500">{prod.partNumber}</td>
-                        <td className="px-3 py-2 capitalize text-slate-500">
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{prod.partNumber}</td>
+                        <td className="px-3 py-2 capitalize text-muted-foreground">
                           {prod.category.replace(/_/g, " ")}
                         </td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                           {formatCurrency(prod.unitCost)}
                         </td>
                       </tr>
@@ -453,7 +453,7 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
             <Input
               placeholder="Search by name or part #…"
               value={linkSearch}
@@ -464,7 +464,7 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
           </div>
           <div className="max-h-72 overflow-y-auto">
             {filteredAvailable.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">
+              <p className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                 {linkSearch ? "No parts match your search." : "All parts are already linked to this vendor."}
               </p>
             ) : (
@@ -472,21 +472,21 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
                 {filteredAvailable.map((part) => (
                   <li key={part.id}>
                     <button
-                      className="flex w-full items-start gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50"
+                      className="flex w-full items-start gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
                       onClick={() => handleLinkPart(part)}
                     >
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-800">{part.name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{part.name}</p>
+                        <p className="text-xs text-muted-foreground">
                           {part.partNumber} &middot; {part.category.replace(/_/g, " ")}
                           {part.vendorName && (
-                            <span className="ml-1 text-slate-400">
+                            <span className="ml-1 text-slate-400 dark:text-neutral-500">
                               · Primary: {part.vendorName}
                             </span>
                           )}
                         </p>
                       </div>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">
                         {part.isInventory ? `${part.quantityOnHand} on hand` : "Not tracked"}
                       </span>
                     </button>
@@ -541,7 +541,7 @@ function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
   if (isLoading) {
     return (
       <div className="flex h-48 items-center justify-center p-6">
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
       </div>
     );
   }
@@ -549,7 +549,7 @@ function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
   if (vendorPOs.length === 0 && cmmsCharges.length === 0) {
     return (
       <div className="flex h-48 items-center justify-center p-6">
-        <p className="text-sm text-slate-400">No purchase orders or work order charges found for this vendor.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">No purchase orders or work order charges found for this vendor.</p>
       </div>
     );
   }
@@ -559,53 +559,53 @@ function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
       <div className="p-6">
         {/* Summary */}
         <div className="mb-6 grid grid-cols-3 gap-3">
-          <div className="rounded-md border bg-slate-50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total Orders</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{vendorPOs.length}</p>
+          <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">Total Orders</p>
+            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-neutral-100">{vendorPOs.length}</p>
           </div>
-          <div className="rounded-md border bg-slate-50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">WO Charges</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{cmmsCharges.length}</p>
+          <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">WO Charges</p>
+            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-neutral-100">{cmmsCharges.length}</p>
           </div>
-          <div className="rounded-md border bg-slate-50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total Spend</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{formatCurrency(totalSpend)}</p>
+          <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">Total Spend</p>
+            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-neutral-100">{formatCurrency(totalSpend)}</p>
           </div>
         </div>
 
         {/* PO list */}
         {vendorPOs.length > 0 && (
           <div className="mb-6">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Purchase Orders
-              <span className="ml-1.5 font-normal normal-case text-slate-300">({formatCurrency(poSpend)})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({formatCurrency(poSpend)})</span>
             </p>
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Total</th>
+                  <tr className="bg-slate-50 dark:bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">PO #</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {vendorPOs.map((po) => (
-                    <tr key={po.id} className="border-t border-slate-100 hover:bg-slate-50">
+                    <tr key={po.id} className="border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
                       <td className="px-3 py-2">
                         <button
                           onClick={() => setSelectedPO(po)}
-                          className="font-mono text-xs font-medium text-brand-600 hover:underline"
+                          className="font-mono text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
                         >
                           {po.poNumber}
                         </button>
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{formatDate(po.poDate ?? po.createdAt)}</td>
                       <td className="px-3 py-2">
                         <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
                       </td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                      <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {formatCurrency(po.grandTotal)}
                       </td>
                     </tr>
@@ -620,29 +620,29 @@ function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
             bypasses the PO flow entirely. */}
         {cmmsCharges.length > 0 && (
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Work Order Charges (CMMS)
-              <span className="ml-1.5 font-normal normal-case text-slate-300">({formatCurrency(cmmsSpend)})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({formatCurrency(cmmsSpend)})</span>
             </p>
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Work Order</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Description</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Cost</th>
+                  <tr className="bg-slate-50 dark:bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Work Order</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Description</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Cost</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cmmsCharges.map((charge) => (
-                    <tr key={charge.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono text-xs font-medium text-slate-700">
+                    <tr key={charge.id} className="border-t border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
+                      <td className="px-3 py-2 font-mono text-xs font-medium text-slate-700 dark:text-neutral-300">
                         {woNumberById.get(charge.workOrderId) ?? charge.workOrderId}
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{charge.description || "—"}</td>
-                      <td className="px-3 py-2 text-slate-500">{formatDate(charge.createdAt)}</td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                      <td className="px-3 py-2 text-muted-foreground">{charge.description || "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{formatDate(charge.createdAt)}</td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {formatCurrency(charge.cost)}
                       </td>
                     </tr>
@@ -716,8 +716,8 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
                 variant="outline"
                 className={
                   vendor.isActive
-                    ? "border-green-200 bg-green-100 text-green-700"
-                    : "border-slate-200 bg-slate-100 text-slate-500"
+                    ? "border-green-200 dark:border-green-800 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400"
+                    : "border-border bg-muted text-muted-foreground"
                 }
               >
                 {vendor.isActive ? "Active" : "Inactive"}
@@ -729,7 +729,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                  className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
                   onClick={() => setDeleteConfirmOpen(true)}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -746,7 +746,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
                 <TabsTrigger
                   key={t.value}
                   value={t.value}
-                  className="h-10 rounded-none border-b-2 border-transparent px-4 pb-0 pt-0 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                  className="h-10 rounded-none border-b-2 border-transparent px-4 pb-0 pt-0 text-sm font-medium text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
                 >
                   {t.label}
                 </TabsTrigger>

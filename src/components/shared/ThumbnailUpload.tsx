@@ -105,7 +105,7 @@ export function ThumbnailUpload({ imageUrl, alt, size = "md", onUpload }: Thumbn
 
       {/* Thumbnail */}
       <div
-        className={`group relative shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 ${sizeClass} ${displayUrl ? "cursor-zoom-in" : onUpload ? "cursor-pointer" : ""}`}
+        className={`group relative shrink-0 overflow-hidden rounded-lg border border-border bg-slate-50 dark:bg-muted/40 ${sizeClass} ${displayUrl ? "cursor-zoom-in" : onUpload ? "cursor-pointer" : ""}`}
         title={displayUrl ? "Click to view full image" : onUpload ? "Click to upload photo" : undefined}
         onClick={handleThumbnailClick}
       >
@@ -117,7 +117,7 @@ export function ThumbnailUpload({ imageUrl, alt, size = "md", onUpload }: Thumbn
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <Camera className="h-6 w-6 text-slate-300" />
+            <Camera className="h-6 w-6 text-slate-300 dark:text-neutral-500" />
           </div>
         )}
 

@@ -26,10 +26,10 @@ function pct(v: number | null): string {
 }
 
 function pctClass(v: number | null): string {
-  if (v === null) return "text-slate-900";
-  if (v >= 95) return "text-green-700";
-  if (v >= 80) return "text-amber-600";
-  return "text-red-600";
+  if (v === null) return "text-slate-900 dark:text-neutral-100";
+  if (v >= 95) return "text-green-700 dark:text-green-400";
+  if (v >= 80) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
 }
 
 function barColor(v: number): string {
@@ -103,7 +103,7 @@ export function PMComplianceReport() {
 
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-muted-foreground">
         PMs completed ÷ PMs that came due, scored against each schedule&apos;s calendar. Meter-triggered PMs are due 7 days after the meter trips.
         Skipped, overdue and never-generated PMs count as missed; PMs not yet due aren&apos;t counted.
       </p>
@@ -118,7 +118,7 @@ export function PMComplianceReport() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[1, 2, 3, 4].map((i) => <ReportSkeletonCard key={i} />)}
         </div>
-        <div className="h-64 animate-pulse rounded-lg border bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-lg border bg-muted" />
       </div>
     );
   }
@@ -127,7 +127,7 @@ export function PMComplianceReport() {
     return (
       <div className="flex flex-col gap-6">
         {header}
-        <p className="rounded-lg border border-dashed py-10 text-center text-sm text-slate-400">PM compliance couldn&apos;t be loaded.</p>
+        <p className="rounded-lg border border-dashed py-10 text-center text-sm text-slate-400 dark:text-neutral-500">PM compliance couldn&apos;t be loaded.</p>
       </div>
     );
   }
@@ -156,15 +156,15 @@ export function PMComplianceReport() {
         <ReportStatCard
           label="Missed"
           value={overall.due - overall.done}
-          valueClassName={overall.due - overall.done > 0 ? "text-red-600" : "text-slate-900"}
+          valueClassName={overall.due - overall.done > 0 ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-neutral-100"}
           sub={`${overall.notGenerated} not generated · ${overall.skipped} skipped · ${overall.overdue} overdue`}
         />
         <ReportStatCard label="Open, Not Yet Due" value={pending} sub="Not counted yet" />
       </div>
 
       {byMonth.length > 1 && (
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Compliance by Month</p>
+        <div className="rounded-lg border bg-card p-6 shadow-sm">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Compliance by Month</p>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={byMonth} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -182,10 +182,10 @@ export function PMComplianceReport() {
         </div>
       )}
 
-      <div className="rounded-lg border bg-white shadow-sm">
-        <p className="border-b px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">By PM Schedule &amp; Meter Rule</p>
+      <div className="rounded-lg border bg-card shadow-sm">
+        <p className="border-b px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">By PM Schedule &amp; Meter Rule</p>
         {bySchedule.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-400">No scheduled PMs came due in this window.</p>
+          <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-neutral-500">No scheduled PMs came due in this window.</p>
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -210,9 +210,9 @@ export function PMComplianceReport() {
       </div>
 
       {missed.length > 0 && (
-        <div className="rounded-lg border bg-white shadow-sm">
-          <p className="border-b px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Missed PMs <span className="ml-1 font-normal normal-case text-slate-300">({missed.length})</span>
+        <div className="rounded-lg border bg-card shadow-sm">
+          <p className="border-b px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+            Missed PMs <span className="ml-1 font-normal normal-case text-slate-300 dark:text-neutral-500">({missed.length})</span>
           </p>
           <div className="overflow-x-auto">
             <Table>
@@ -232,12 +232,12 @@ export function PMComplianceReport() {
                     className={r.workOrderId ? "cursor-pointer" : undefined}
                     onClick={r.workOrderId ? () => openWorkOrder(r.workOrderId as string) : undefined}
                   >
-                    <TableCell className="font-mono text-xs">{r.workOrderNumber ?? <span className="font-sans text-slate-400">None</span>}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.workOrderNumber ?? <span className="font-sans text-slate-400 dark:text-neutral-500">None</span>}</TableCell>
                     <TableCell>{r.programName ?? "—"}</TableCell>
                     <TableCell>{r.assetName ?? "—"}</TableCell>
                     <TableCell className="whitespace-nowrap">{formatDate(r.dueOn)}</TableCell>
                     <TableCell>
-                      <span className={r.outcome === "skipped" ? "text-slate-500" : "text-red-600"}>
+                      <span className={r.outcome === "skipped" ? "text-muted-foreground" : "text-red-600 dark:text-red-400"}>
                         {r.outcome === "overdue" ? "Overdue" : r.outcome === "skipped" ? "Skipped" : "Not generated"}
                       </span>
                     </TableCell>
@@ -255,15 +255,15 @@ export function PMComplianceReport() {
 function ScheduleRow({ title, source, s }: { title: string; source: PMOutcomeRow["source"]; s: PMComplianceSummary }) {
   return (
     <TableRow>
-      <TableCell className="font-medium text-slate-900">
+      <TableCell className="font-medium text-slate-900 dark:text-neutral-100">
         {title}
-        {source === "meter" && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">Meter</span>}
+        {source === "meter" && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Meter</span>}
       </TableCell>
       <TableCell className="text-right tabular-nums">{s.due}</TableCell>
       <TableCell className="text-right tabular-nums">{s.done}</TableCell>
       <TableCell className="text-right tabular-nums">{s.due - s.done}</TableCell>
       <TableCell className={`text-right font-medium tabular-nums ${pctClass(s.compliancePct)}`}>{pct(s.compliancePct)}</TableCell>
-      <TableCell className="text-right tabular-nums text-slate-600">{pct(s.onTimePct)}</TableCell>
+      <TableCell className="text-right tabular-nums text-slate-600 dark:text-neutral-400">{pct(s.onTimePct)}</TableCell>
     </TableRow>
   );
 }

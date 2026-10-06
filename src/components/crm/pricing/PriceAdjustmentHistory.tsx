@@ -61,7 +61,7 @@ export function PriceAdjustmentHistory() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border bg-white p-6 text-sm text-slate-400 shadow-sm">
+      <div className="flex items-center gap-2 rounded-lg border bg-card p-6 text-sm text-slate-400 dark:text-neutral-500 shadow-sm">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading run history…
       </div>
     );
@@ -69,17 +69,17 @@ export function PriceAdjustmentHistory() {
 
   if (runs.length === 0) {
     return (
-      <div className="rounded-lg border bg-white p-6 text-center text-sm text-slate-400 shadow-sm">
+      <div className="rounded-lg border bg-card p-6 text-center text-sm text-slate-400 dark:text-neutral-500 shadow-sm">
         No price adjustments have been run yet.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <th className="px-4 py-3 text-left">Run</th>
             <th className="px-4 py-3 text-left">Change</th>
             <th className="px-4 py-3 text-left">Applied to</th>
@@ -92,29 +92,29 @@ export function PriceAdjustmentHistory() {
         </thead>
         <tbody>
           {runs.map((r) => (
-            <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50">
+            <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
               <td className="px-4 py-3">
-                <p className="font-medium text-slate-800">{r.name}</p>
-                {r.notes && <p className="text-xs text-slate-400">{r.notes}</p>}
+                <p className="font-medium text-slate-800 dark:text-neutral-100">{r.name}</p>
+                {r.notes && <p className="text-xs text-slate-400 dark:text-neutral-500">{r.notes}</p>}
               </td>
-              <td className="px-4 py-3 tabular-nums text-slate-600">
+              <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-neutral-400">
                 {describe(r.method, r.amount)}
-                <span className="ml-1.5 text-xs text-slate-400">
+                <span className="ml-1.5 text-xs text-slate-400 dark:text-neutral-500">
                   {ROUNDING_LABELS[r.rounding]}
                 </span>
               </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
+              <td className="px-4 py-3 text-xs text-muted-foreground">
                 {r.targets.map((t) => TARGET_LABELS[t]).join(", ")}
               </td>
               <td className="px-4 py-3 text-right tabular-nums">{r.lineCount}</td>
               <td
                 className={`px-4 py-3 text-right tabular-nums ${
-                  r.deltaCents > 0 ? "text-emerald-600" : r.deltaCents < 0 ? "text-red-600" : ""
+                  r.deltaCents > 0 ? "text-emerald-600 dark:text-emerald-400" : r.deltaCents < 0 ? "text-red-600 dark:text-red-400" : ""
                 }`}
               >
                 {signedCurrency(r.deltaCents)}
               </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
+              <td className="px-4 py-3 text-xs text-muted-foreground">
                 {new Date(r.appliedAt).toLocaleString("en-US", {
                   timeZone: orgTimeZone,
                   dateStyle: "medium",
@@ -134,10 +134,10 @@ export function PriceAdjustmentHistory() {
                   <button
                     onClick={() => handleRevert(r.id, r.name, r.lineCount)}
                     disabled={revert.isPending}
-                    className="rounded p-1 hover:bg-slate-100 disabled:opacity-40"
+                    className="rounded p-1 hover:bg-muted disabled:opacity-40"
                     title="Undo this run"
                   >
-                    <Undo2 className="h-4 w-4 text-slate-400" />
+                    <Undo2 className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
                   </button>
                 )}
               </td>

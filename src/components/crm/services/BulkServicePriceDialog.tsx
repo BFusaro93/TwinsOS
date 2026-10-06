@@ -280,8 +280,8 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
         </DialogHeader>
 
         {/* Quick adjust */}
-        <div className="rounded-md border bg-slate-50 p-3">
-          <p className="mb-2 text-xs font-semibold text-slate-500">
+        <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">
             Quick Adjust (applies to all rows matching the search below)
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -329,18 +329,18 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
               </Button>
             )}
           </div>
-          <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+          <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
             <Checkbox
               checked={includeMatrix}
               onCheckedChange={(c) => setIncludeMatrix(c === true)}
             />
             Also adjust rate-matrix tiers
-            <span className="text-slate-400">
+            <span className="text-slate-400 dark:text-neutral-500">
               ({matrixRows.length} tier{matrixRows.length !== 1 ? "s" : ""} across these services)
             </span>
           </label>
           {method === "percent" && (
-            <p className="mt-2 text-[11px] text-slate-400">
+            <p className="mt-2 text-[11px] text-slate-400 dark:text-neutral-500">
               A percentage leaves $0.00 rows at $0.00 — use a flat adjustment to price
               something that has no rate yet.
             </p>
@@ -359,8 +359,8 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
         {/* Table */}
         <div className="max-h-[45vh] overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50">
-              <tr className="border-b text-left text-xs text-slate-500">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+              <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Service</th>
                 <th className="px-3 py-2 font-medium">Unit</th>
                 <th className="w-60 px-3 py-2 font-medium">Default Rate ($)</th>
@@ -376,21 +376,21 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
 
                 return (
                   <Fragment key={r.id}>
-                    <tr className="border-b last:border-0 hover:bg-slate-50">
+                    <tr className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
                       <td className="px-3 py-2">
-                        <span className="font-medium text-slate-900">{r.name}</span>
-                        {r.code && <span className="ml-1.5 text-xs text-slate-400">{r.code}</span>}
+                        <span className="font-medium text-slate-900 dark:text-neutral-100">{r.name}</span>
+                        {r.code && <span className="ml-1.5 text-xs text-slate-400 dark:text-neutral-500">{r.code}</span>}
                         {r.matrixRowCount > 0 && (
-                          <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] text-brand-600">
+                          <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] text-brand-600 dark:text-brand-400">
                             <Layers className="h-3 w-3" />
                             matrix-priced
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{r.unit}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.unit}</td>
                       <td className="px-3 py-2">
                         {r.rate == null ? (
-                          <span className="text-xs text-slate-400">no catalog rate</span>
+                          <span className="text-xs text-slate-400 dark:text-neutral-500">no catalog rate</span>
                         ) : (
                           <div className="flex items-center gap-2.5">
                             <Input
@@ -405,10 +405,10 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                                   )
                                 )
                               }
-                              className={`h-7 w-28 text-xs ${rateChanged ? "border-brand-400 bg-brand-50" : ""}`}
+                              className={`h-7 w-28 text-xs ${rateChanged ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : ""}`}
                             />
                             {rateChanged && r.origRate != null && (
-                              <span className="whitespace-nowrap text-[10px] text-slate-400">
+                              <span className="whitespace-nowrap text-[10px] text-slate-400 dark:text-neutral-500">
                                 was {formatCurrency(r.origRate)}
                               </span>
                             )}
@@ -423,9 +423,9 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                         const mCents = parseDollarsToCents(m.rate);
                         const mChanged = mCents !== m.origRate;
                         return (
-                          <tr key={m.id} className="border-b bg-slate-50/40 last:border-0">
-                            <td className="px-3 py-1.5 pl-8 text-xs text-slate-500">
-                              <span className="text-slate-300">↳</span> tier {m.label}
+                          <tr key={m.id} className="border-b bg-slate-50/40 dark:bg-muted/40 last:border-0">
+                            <td className="px-3 py-1.5 pl-8 text-xs text-muted-foreground">
+                              <span className="text-slate-300 dark:text-neutral-500">↳</span> tier {m.label}
                             </td>
                             <td className="px-3 py-1.5" />
                             <td className="px-3 py-1.5">
@@ -442,10 +442,10 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                                       )
                                     )
                                   }
-                                  className={`h-7 w-28 text-xs ${mChanged ? "border-brand-400 bg-brand-50" : ""}`}
+                                  className={`h-7 w-28 text-xs ${mChanged ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : ""}`}
                                 />
                                 {mChanged && (
-                                  <span className="whitespace-nowrap text-[10px] text-slate-400">
+                                  <span className="whitespace-nowrap text-[10px] text-slate-400 dark:text-neutral-500">
                                     was {formatCurrency(m.origRate)}
                                   </span>
                                 )}
@@ -456,9 +456,9 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                       })}
 
                     {includeMatrix && r.tailRate != null && (
-                      <tr key={`${r.id}-tail`} className="border-b bg-slate-50/40 last:border-0">
-                        <td className="px-3 py-1.5 pl-8 text-xs text-slate-500">
-                          <span className="text-slate-300">↳</span> overflow rate
+                      <tr key={`${r.id}-tail`} className="border-b bg-slate-50/40 dark:bg-muted/40 last:border-0">
+                        <td className="px-3 py-1.5 pl-8 text-xs text-muted-foreground">
+                          <span className="text-slate-300 dark:text-neutral-500">↳</span> overflow rate
                         </td>
                         <td className="px-3 py-1.5" />
                         <td className="px-3 py-1.5">
@@ -475,10 +475,10 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
                                   )
                                 )
                               }
-                              className={`h-7 w-28 text-xs ${tailChanged ? "border-brand-400 bg-brand-50" : ""}`}
+                              className={`h-7 w-28 text-xs ${tailChanged ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : ""}`}
                             />
                             {tailChanged && r.origTailRate != null && (
-                              <span className="whitespace-nowrap text-[10px] text-slate-400">
+                              <span className="whitespace-nowrap text-[10px] text-slate-400 dark:text-neutral-500">
                                 was {formatCurrency(r.origTailRate)}
                               </span>
                             )}
@@ -491,7 +491,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-3 py-8 text-center text-sm text-slate-400">
+                  <td colSpan={3} className="px-3 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                     {matrixLoading ? "Loading…" : "No services match your search."}
                   </td>
                 </tr>
@@ -502,7 +502,7 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
 
         <DialogFooter className="items-center">
           {dirtyCount > 0 && (
-            <p className="mr-auto text-xs text-slate-500">
+            <p className="mr-auto text-xs text-muted-foreground">
               {dirtyServices.length} service{dirtyServices.length !== 1 ? "s" : ""}
               {dirtyMatrix.length > 0 && `, ${dirtyMatrix.length} tier${dirtyMatrix.length !== 1 ? "s" : ""}`}
               {" "}modified

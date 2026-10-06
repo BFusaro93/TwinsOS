@@ -40,7 +40,7 @@ export function CampaignAudiencePicker({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -49,7 +49,7 @@ export function CampaignAudiencePicker({
           />
         </div>
         <ClientFilterPopover fields={fields} rows={filterRows} onRowsChange={setFilterRows} />
-        <label className="flex shrink-0 items-center gap-1.5 text-xs text-slate-600">
+        <label className="flex shrink-0 items-center gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
           <Checkbox
             checked={hideDoNotMarket}
             onCheckedChange={(v) => setHideDoNotMarket(v === true)}
@@ -60,7 +60,7 @@ export function CampaignAudiencePicker({
 
       <div className="max-h-52 overflow-y-auto rounded border">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             <tr>
               <th className="w-8 px-2 py-1.5"></th>
               <th className="px-2 py-1.5 text-left">Client</th>
@@ -70,24 +70,24 @@ export function CampaignAudiencePicker({
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={4} className="px-2 py-3 text-center text-slate-400 italic">Loading…</td></tr>
+              <tr><td colSpan={4} className="px-2 py-3 text-center text-slate-400 dark:text-neutral-500 italic">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={4} className="px-2 py-3 text-center text-slate-400 italic">No clients match</td></tr>
+              <tr><td colSpan={4} className="px-2 py-3 text-center text-slate-400 dark:text-neutral-500 italic">No clients match</td></tr>
             ) : (
               filtered.map((c) => (
                 <tr
                   key={c.id}
-                  className="cursor-pointer border-t hover:bg-slate-50"
+                  className="cursor-pointer border-t hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => toggle(c.id)}
                 >
                   <td className="px-2 py-1.5">
                     <Checkbox checked={selectedSet.has(c.id)} onCheckedChange={() => toggle(c.id)} />
                   </td>
-                  <td className="px-2 py-1.5 font-medium text-slate-700">{c.displayName}</td>
-                  <td className="px-2 py-1.5 text-slate-500">{c.primaryEmail ?? "—"}</td>
+                  <td className="px-2 py-1.5 font-medium text-slate-700 dark:text-neutral-300">{c.displayName}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground">{c.primaryEmail ?? "—"}</td>
                   <td className="px-2 py-1.5">
                     {c.doNotMarket && (
-                      <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
+                      <span className="rounded bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
                         Do Not Market
                       </span>
                     )}
@@ -99,7 +99,7 @@ export function CampaignAudiencePicker({
         </table>
       </div>
 
-      <p className={cn("text-[11px]", selectedIds.length === 0 ? "text-amber-600" : "text-slate-400")}>
+      <p className={cn("text-[11px]", selectedIds.length === 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-neutral-500")}>
         {selectedIds.length} client{selectedIds.length !== 1 ? "s" : ""} selected
       </p>
     </div>

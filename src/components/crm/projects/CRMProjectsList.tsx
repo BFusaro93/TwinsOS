@@ -50,12 +50,12 @@ const STATUS_OPTIONS: ProjectStatus[] = [
 ];
 
 const STATUS_COLOR: Record<ProjectStatus, string> = {
-  sold:        "bg-blue-100 text-blue-700 border-blue-200",
-  scheduled:   "bg-yellow-100 text-yellow-700 border-yellow-200",
-  in_progress: "bg-brand-100 text-brand-700 border-brand-200",
-  complete:    "bg-green-100 text-green-700 border-green-200",
-  on_hold:     "bg-orange-100 text-orange-700 border-orange-200",
-  canceled:    "bg-red-100 text-red-600 border-red-200",
+  sold:        "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  scheduled:   "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
+  in_progress: "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 border-brand-200 dark:border-brand-800",
+  complete:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800",
+  on_hold:     "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+  canceled:    "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",
 };
 
 function statusLabel(s: ProjectStatus) {
@@ -69,10 +69,10 @@ function ProgressBar({ pct }: { pct: number }) {
   const color = clamped >= 100 ? "bg-green-500" : clamped >= 50 ? "bg-brand-500" : "bg-yellow-400";
   return (
     <div className="flex items-center gap-2">
-      <div className="h-2 w-20 rounded-full bg-slate-100 overflow-hidden">
+      <div className="h-2 w-20 rounded-full bg-muted overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${clamped}%` }} />
       </div>
-      <span className="text-xs font-medium text-slate-600">{clamped.toFixed(0)}%</span>
+      <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">{clamped.toFixed(0)}%</span>
     </div>
   );
 }
@@ -85,8 +85,8 @@ function MilestoneTab({ project }: { project: Project }) {
 
   if (!project.clientId) {
     return (
-      <div className="rounded-lg border bg-slate-50 p-4 text-sm text-slate-500">
-        <p className="mb-1 font-medium text-slate-700">Milestones</p>
+      <div className="rounded-lg border bg-slate-50 dark:bg-muted/40 p-4 text-sm text-muted-foreground">
+        <p className="mb-1 font-medium text-slate-700 dark:text-neutral-300">Milestones</p>
         <p>
           Link <span className="font-medium">{project.name}</span> to a client before setting up a
           billing schedule — a milestone invoice needs someone to bill.
@@ -98,8 +98,8 @@ function MilestoneTab({ project }: { project: Project }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-slate-700">Billing Schedule</h3>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-neutral-300">Billing Schedule</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Percentages are of the revised contract ({formatCurrency(project.contractPrice)}). Invoicing a
           milestone creates a draft invoice on this project — and marks it invoiced on the estimate it
           came from, since they are the same schedule. An approved change order adjusts the milestones
@@ -206,8 +206,8 @@ function BillingTab({ project }: { project: Project }) {
             onClick={() => setFilter(f)}
             className={`rounded border px-3 py-1 text-xs font-medium transition-colors ${
               filter === f
-                ? "border-brand-500 bg-brand-50 text-brand-700"
-                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
             }`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -216,7 +216,7 @@ function BillingTab({ project }: { project: Project }) {
       </div>
 
       {!project.clientId && (
-        <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+        <p className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
           This project isn&apos;t linked to a client, so it can&apos;t be billed. Edit the project to link one.
         </p>
       )}
@@ -225,7 +225,7 @@ function BillingTab({ project }: { project: Project }) {
       <div className="overflow-auto rounded border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500">
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-left text-xs font-semibold text-muted-foreground">
               <th className="px-3 py-2">Date</th>
               <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Reference #</th>
@@ -237,7 +237,7 @@ function BillingTab({ project }: { project: Project }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-xs text-slate-400">
+                <td colSpan={6} className="py-8 text-center text-xs text-slate-400 dark:text-neutral-500">
                   No {filter === "all" ? "billing activity" : `${filter}s`} yet
                 </td>
               </tr>
@@ -245,23 +245,23 @@ function BillingTab({ project }: { project: Project }) {
               filtered.map((r) => (
                 <tr
                   key={`${r.kind}-${r.id}`}
-                  className={`border-b last:border-0 hover:bg-slate-50 ${r.kind === "invoice" ? "cursor-pointer" : ""}`}
+                  className={`border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 ${r.kind === "invoice" ? "cursor-pointer" : ""}`}
                   onClick={r.kind === "invoice" ? () => router.push(`/crm/accounting/invoices/${r.id}`) : undefined}
                 >
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-slate-600 dark:text-neutral-400">
                     {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
                     })}
                   </td>
-                  <td className="px-3 py-2 font-medium text-slate-700">{r.type}</td>
-                  <td className="px-3 py-2 text-brand-600">{r.ref}</td>
-                  <td className="px-3 py-2 text-slate-500 text-xs">{r.memo}</td>
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-300">{r.type}</td>
+                  <td className="px-3 py-2 text-brand-600 dark:text-brand-400">{r.ref}</td>
+                  <td className="px-3 py-2 text-muted-foreground text-xs">{r.memo}</td>
                   <td className={`px-3 py-2 text-xs font-medium ${
-                    r.status === "overdue" || r.status.includes("Past Due") ? "text-red-600" : "text-slate-600"
+                    r.status === "overdue" || r.status.includes("Past Due") ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-neutral-400"
                   }`}>
                     {r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : ""}
                   </td>
-                  <td className="px-3 py-2 text-right font-medium text-slate-800">
+                  <td className="px-3 py-2 text-right font-medium text-slate-800 dark:text-neutral-100">
                     {formatCurrency(r.totalCents)}
                   </td>
                 </tr>
@@ -323,8 +323,8 @@ function AnalysisTab({ project }: { project: Project }) {
     <div className="space-y-6">
       {/* Project Overview */}
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">Project Overview</h3>
-        <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-slate-100">
+        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-neutral-300">Project Overview</h3>
+        <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-muted">
           {[
             { label: "Original Contract", value: formatCurrency(project.originalContractPrice) },
             { label: "Amount Due", value: formatCurrency(amountDue), red: amountDue > 0 },
@@ -334,9 +334,9 @@ function AnalysisTab({ project }: { project: Project }) {
             { label: "Remaining to Bill", value: formatCurrency(remainingToBill), red: remainingToBill < 0 },
             { label: "Total Cost", value: formatCurrency(project.totalCost) },
           ].map((row) => (
-            <div key={row.label} className="flex items-center justify-between bg-white px-4 py-2.5 text-sm">
-              <span className="text-slate-500">{row.label}</span>
-              <span className={`font-medium ${row.red ? "text-red-600" : "text-slate-800"}`}>
+            <div key={row.label} className="flex items-center justify-between bg-card px-4 py-2.5 text-sm">
+              <span className="text-muted-foreground">{row.label}</span>
+              <span className={`font-medium ${row.red ? "text-red-600 dark:text-red-400" : "text-slate-800 dark:text-neutral-100"}`}>
                 {row.value}
               </span>
             </div>
@@ -346,17 +346,17 @@ function AnalysisTab({ project }: { project: Project }) {
 
       {/* Man Hours */}
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">Job / Activity Overview</h3>
-        <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-slate-100">
+        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-neutral-300">Job / Activity Overview</h3>
+        <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-muted">
           {[
             { label: "Budgeted Man Hours", value: project.budgetHours != null ? `${project.budgetHours} Hrs` : "—" },
             { label: "Actual Man Hours", value: project.laborHours != null ? `${project.laborHours} Hrs` : "—" },
             { label: "Budgeted Labor Cost", value: budgetedLaborCostCents != null ? formatCurrency(budgetedLaborCostCents) : "—" },
             { label: "Actual Labor Cost", value: "—" },
           ].map((row) => (
-            <div key={row.label} className="flex items-center justify-between bg-white px-4 py-2.5 text-sm">
-              <span className="text-slate-500">{row.label}</span>
-              <span className="font-medium text-slate-800">{row.value}</span>
+            <div key={row.label} className="flex items-center justify-between bg-card px-4 py-2.5 text-sm">
+              <span className="text-muted-foreground">{row.label}</span>
+              <span className="font-medium text-slate-800 dark:text-neutral-100">{row.value}</span>
             </div>
           ))}
         </div>
@@ -384,7 +384,7 @@ function NotesTab({ project }: { project: Project }) {
   return (
     <div className="space-y-3">
       <textarea
-        className="w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+        className="w-full rounded-lg border bg-card px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
         rows={8}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
@@ -427,24 +427,24 @@ function ProjectDetailDialog({
         <div className="flex items-start justify-between border-b px-6 py-4">
           <div>
             <div className="flex items-center gap-3">
-              <DialogTitle className="text-lg font-bold text-slate-900">
+              <DialogTitle className="text-lg font-bold text-slate-900 dark:text-neutral-100">
                 {project.name}
               </DialogTitle>
-              <span className="text-slate-400">—</span>
+              <span className="text-slate-400 dark:text-neutral-500">—</span>
               <button
-                className="text-sm font-medium text-brand-600 hover:underline"
+                className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline"
                 onClick={() => setEditMode(true)}
               >
                 Edit
               </button>
             </div>
             {clientLabel && (
-              <p className="mt-0.5 text-sm text-slate-500">for {clientLabel}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">for {clientLabel}</p>
             )}
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-500 font-medium">Progress:</span>
+              <span className="text-muted-foreground font-medium">Progress:</span>
               <span className={`rounded px-3 py-1 text-sm font-bold text-white ${
                 project.progressPct >= 100 ? "bg-green-500" : "bg-brand-500"
               }`}>
@@ -484,7 +484,7 @@ function ProjectDetailDialog({
               label: "Audit Trail",
               content: (
                 <div className="p-6">
-                  <div className="rounded-lg border bg-slate-50 p-6 text-center text-sm text-slate-400">
+                  <div className="rounded-lg border bg-slate-50 dark:bg-muted/40 p-6 text-center text-sm text-slate-400 dark:text-neutral-500">
                     Audit trail coming soon
                   </div>
                 </div>
@@ -712,7 +712,7 @@ function NewProjectDialog({
                 className={endBeforeStart ? "border-red-400 focus-visible:ring-red-400" : undefined}
               />
               {endBeforeStart && (
-                <p className="text-xs text-red-600">End date must be on or after the start date.</p>
+                <p className="text-xs text-red-600 dark:text-red-400">End date must be on or after the start date.</p>
               )}
             </div>
           </div>
@@ -725,7 +725,7 @@ function NewProjectDialog({
               placeholder="0.00"
             />
             {isEditing && project && project.contractPrice !== project.originalContractPrice && (
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-muted-foreground">
                 Revised contract is {formatCurrency(project.contractPrice)} after approved change
                 orders. Record added scope as a change order rather than editing this — it keeps the
                 original, the approval and the billing schedule in step.
@@ -763,10 +763,10 @@ export function CRMProjectsList() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-4">
+      <div className="flex items-center justify-between border-b bg-card px-6 py-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Projects</h1>
-          <p className="text-sm text-slate-500">Manage all client projects, milestones, and billing</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Projects</h1>
+          <p className="text-sm text-muted-foreground">Manage all client projects, milestones, and billing</p>
         </div>
         {canModify && (
           <Button size="sm" onClick={() => setNewOpen(true)}>
@@ -776,7 +776,7 @@ export function CRMProjectsList() {
       </div>
 
       {/* Search */}
-      <div className="border-b bg-white px-6 py-3">
+      <div className="border-b bg-card px-6 py-3">
         <SearchInput
           value={search}
           onChange={setSearch}
@@ -787,10 +787,10 @@ export function CRMProjectsList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 border-b bg-slate-50">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 border-b bg-slate-50 dark:bg-muted/40">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="px-4 py-3 min-w-[200px]">Project</th>
               <th className="px-4 py-3">Client</th>
               <th className="px-4 py-3">Status</th>
@@ -814,7 +814,7 @@ export function CRMProjectsList() {
                 <td colSpan={7} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <BarChart3 className="h-8 w-8 text-slate-200" />
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-slate-400 dark:text-neutral-500">
                       {search ? "No projects match your search" : "No projects yet — create your first"}
                     </p>
                   </div>
@@ -824,11 +824,11 @@ export function CRMProjectsList() {
               filtered.map((p) => (
                 <tr
                   key={p.id}
-                  className={cn("border-b hover:bg-slate-50", canModify && "cursor-pointer")}
+                  className={cn("border-b hover:bg-slate-50 dark:hover:bg-muted/40", canModify && "cursor-pointer")}
                   onClick={canModify ? () => setSelectedProject(p) : undefined}
                 >
-                  <td className="px-4 py-3 font-medium text-brand-600">{p.name}</td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3 font-medium text-brand-600 dark:text-brand-400">{p.name}</td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
                     {p.clientName ?? p.customerName ?? "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -839,10 +839,10 @@ export function CRMProjectsList() {
                   <td className="px-4 py-3">
                     <ProgressBar pct={p.progressPct} />
                   </td>
-                  <td className="px-4 py-3 text-right font-medium text-slate-800">
+                  <td className="px-4 py-3 text-right font-medium text-slate-800 dark:text-neutral-100">
                     {formatCurrency(p.contractPrice)}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {p.startDate ? new Date(p.startDate + "T12:00:00").toLocaleDateString("en-US", {
                       month: "short", day: "numeric", year: "numeric",
                     }) : "—"}
@@ -850,7 +850,7 @@ export function CRMProjectsList() {
                   <td className="px-4 py-3">
                     {canModify && (
                       <button
-                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+                        className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-brand-600 dark:hover:text-brand-400"
                         onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
                         title="Open project"
                       >

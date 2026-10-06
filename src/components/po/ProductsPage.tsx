@@ -205,10 +205,10 @@ export function ProductsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <TableHead className="w-12" />
               <TableHead>Name</TableHead>
               {col("partNumber") && <TableHead>Part #</TableHead>}
@@ -235,7 +235,7 @@ export function ProductsPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No products found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No products found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -244,7 +244,7 @@ export function ProductsPage() {
               filtered.map((product) => (
                 <TableRow
                   key={product.id}
-                  className="cursor-pointer hover:bg-slate-50"
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => handleRowClick(product)}
                 >
                   <TableCell className="w-12 py-2 pl-4 pr-0">
@@ -255,14 +255,14 @@ export function ProductsPage() {
                         className="h-9 w-9 rounded-md object-cover"
                       />
                     ) : (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100">
-                        <BookOpen className="h-4 w-4 text-slate-400" />
+                      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted">
+                        <BookOpen className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
                       </div>
                     )}
                   </TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>
                   {col("partNumber") && (
-                    <TableCell className="font-mono text-xs text-slate-500">
+                    <TableCell className="font-mono text-xs text-muted-foreground">
                       {product.partNumber}
                     </TableCell>
                   )}
@@ -275,7 +275,7 @@ export function ProductsPage() {
                     </TableCell>
                   )}
                   {col("vendor") && (
-                    <TableCell className="text-slate-600">{product.vendorName}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-neutral-400">{product.vendorName}</TableCell>
                   )}
                   {col("unitCost") && (
                     <TableCell className="text-right">{formatCurrency(product.unitCost)}</TableCell>
@@ -288,8 +288,8 @@ export function ProductsPage() {
                       <span
                         className={
                           product.isInventory
-                            ? "text-xs font-medium text-green-700"
-                            : "text-xs text-slate-400"
+                            ? "text-xs font-medium text-green-700 dark:text-green-400"
+                            : "text-xs text-slate-400 dark:text-neutral-500"
                         }
                       >
                         {product.isInventory ? "Yes" : "No"}

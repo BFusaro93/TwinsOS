@@ -30,15 +30,15 @@ const DamageCasesChart = dynamic(
 );
 
 const STATUS_COLORS: Record<string, string> = {
-  open: "bg-yellow-100 text-yellow-800",
-  in_progress: "bg-blue-100 text-blue-800",
-  resolved: "bg-green-100 text-green-800",
-  closed: "bg-slate-100 text-slate-600",
+  open: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300",
+  in_progress: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300",
+  resolved: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300",
+  closed: "bg-muted text-slate-600 dark:text-neutral-400",
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  damage: "bg-red-100 text-red-800",
-  warranty: "bg-purple-100 text-purple-800",
+  damage: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300",
+  warranty: "bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300",
 };
 
 export function DamageCasesPage() {
@@ -84,7 +84,7 @@ export function DamageCasesPage() {
             className="max-w-sm"
           />
 
-          <div className="rounded-lg border bg-white overflow-hidden">
+          <div className="rounded-lg border bg-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -116,7 +116,7 @@ export function DamageCasesPage() {
                   filtered.map((c) => (
                     <TableRow
                       key={c.id}
-                      className="cursor-pointer hover:bg-slate-50"
+                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                       onClick={() => setSelectedId(c.id)}
                     >
                       <TableCell className="font-mono text-xs text-muted-foreground">{c.caseNumber}</TableCell>

@@ -143,7 +143,7 @@ export function AutomationBuilder({ automationId }: Props) {
           <Skeleton className="h-8 w-8 rounded" />
           <Skeleton className="h-5 w-48" />
         </div>
-        <div className="flex flex-1 items-center justify-center text-slate-400 text-sm">
+        <div className="flex flex-1 items-center justify-center text-slate-400 dark:text-neutral-500 text-sm">
           Loading…
         </div>
       </div>
@@ -152,7 +152,7 @@ export function AutomationBuilder({ automationId }: Props) {
 
   if (!automation) {
     return (
-      <div className="flex h-full items-center justify-center text-slate-400 text-sm">
+      <div className="flex h-full items-center justify-center text-slate-400 dark:text-neutral-500 text-sm">
         Automation not found.
       </div>
     );
@@ -161,7 +161,7 @@ export function AutomationBuilder({ automationId }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Top bar */}
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b bg-white px-4">
+      <div className="flex h-12 shrink-0 items-center gap-3 border-b bg-card px-4">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -181,12 +181,12 @@ export function AutomationBuilder({ automationId }: Props) {
         ) : canModify ? (
           <button
             onClick={startEditName}
-            className="text-sm font-semibold text-slate-800 hover:text-brand-600 transition-colors"
+            className="text-sm font-semibold text-slate-800 dark:text-neutral-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
           >
             {automation.name}
           </button>
         ) : (
-          <span className="text-sm font-semibold text-slate-800">{automation.name}</span>
+          <span className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{automation.name}</span>
         )}
 
         <div className="ml-auto flex items-center gap-3">
@@ -210,7 +210,7 @@ export function AutomationBuilder({ automationId }: Props) {
       </div>
 
       <Tabs defaultValue="builder" className="flex flex-1 flex-col overflow-hidden">
-        <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-4 py-0 h-10 gap-0">
+        <TabsList className="shrink-0 border-b bg-card rounded-none justify-start px-4 py-0 h-10 gap-0">
           {[
             { value: "builder", label: "Builder" },
             { value: "audit", label: "Audit Trail" },
@@ -232,8 +232,8 @@ export function AutomationBuilder({ automationId }: Props) {
         >
           <div className="flex flex-1 overflow-hidden">
             {/* Event palette sidebar */}
-            <div className="flex w-48 shrink-0 flex-col border-r bg-slate-50 p-3">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+            <div className="flex w-48 shrink-0 flex-col border-r bg-slate-50 dark:bg-muted/40 p-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
                 Events
               </p>
               {canModify && EVENT_PALETTE.filter(({ type }) => type !== "tags" || canAddTags).map(({ type, label, icon: Icon }) => (
@@ -241,7 +241,7 @@ export function AutomationBuilder({ automationId }: Props) {
                   key={type}
                   onClick={() => handleAddEvent(type)}
                   disabled={!focusedSequenceId || createEvent.isPending}
-                  className="flex cursor-grab items-center gap-2 rounded p-2 text-sm text-slate-700 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex cursor-grab items-center gap-2 rounded p-2 text-sm text-slate-700 dark:text-neutral-300 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
                   title={focusedSequenceId ? `Add ${label}` : "Select a sequence first"}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -249,12 +249,12 @@ export function AutomationBuilder({ automationId }: Props) {
                 </button>
               ))}
               {canModify && !focusedSequenceId && (
-                <p className="mt-3 text-[10px] text-slate-400 leading-tight">
+                <p className="mt-3 text-[10px] text-slate-400 dark:text-neutral-500 leading-tight">
                   Click a sequence to select it, then add events.
                 </p>
               )}
               {!canModify && (
-                <p className="mt-3 text-[10px] text-slate-400 leading-tight">
+                <p className="mt-3 text-[10px] text-slate-400 dark:text-neutral-500 leading-tight">
                   You don&apos;t have permission to modify automations.
                 </p>
               )}
@@ -278,7 +278,7 @@ export function AutomationBuilder({ automationId }: Props) {
                 <button
                   onClick={handleAddSequence}
                   disabled={createSequence.isPending}
-                  className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-8 text-sm text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 dark:border-neutral-700 p-8 text-sm text-slate-400 dark:text-neutral-500 transition-colors hover:border-brand-400 hover:text-brand-500 dark:hover:text-brand-400 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Plus className="h-5 w-5" />
                   Add Sequence

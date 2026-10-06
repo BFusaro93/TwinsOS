@@ -55,13 +55,13 @@ function NumberField({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-slate-600">{label}</label>
+      <label className="text-sm font-medium text-slate-600 dark:text-neutral-400">{label}</label>
       <div
-        className={`flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm ${
+        className={`flex items-stretch overflow-hidden rounded-lg border border-slate-300 dark:border-neutral-700 bg-card shadow-sm ${
           disabled ? "opacity-50" : ""
         }`}
       >
-        {prefix && <span className="flex items-center pl-3 text-sm text-slate-400">{prefix}</span>}
+        {prefix && <span className="flex items-center pl-3 text-sm text-slate-400 dark:text-neutral-500">{prefix}</span>}
         <input
           type="number"
           min="0"
@@ -70,10 +70,10 @@ function NumberField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
+          className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 dark:text-neutral-300 placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:outline-none disabled:cursor-not-allowed"
           aria-label={label}
         />
-        {suffix && <span className="flex items-center pr-3 text-sm text-slate-400 whitespace-nowrap">{suffix}</span>}
+        {suffix && <span className="flex items-center pr-3 text-sm text-slate-400 dark:text-neutral-500 whitespace-nowrap">{suffix}</span>}
       </div>
     </div>
   );
@@ -92,14 +92,14 @@ function TextField({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-slate-600">{label}</label>
-      <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
+      <label className="text-sm font-medium text-slate-600 dark:text-neutral-400">{label}</label>
+      <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 dark:border-neutral-700 bg-card shadow-sm">
         <input
           type="text"
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+          className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 dark:text-neutral-300 placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:outline-none"
           aria-label={label}
         />
       </div>
@@ -119,13 +119,13 @@ function SectionCard({
   headerExtra?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border bg-white p-5 space-y-4">
+    <div className="rounded-xl border bg-card p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">{title}</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-neutral-300">{title}</h3>
           {headerExtra}
         </div>
-        <span className="text-sm font-semibold text-brand-600">{formatCurrency(subtotal)}</span>
+        <span className="text-sm font-semibold text-brand-600 dark:text-brand-400">{formatCurrency(subtotal)}</span>
       </div>
       {children}
     </div>
@@ -398,8 +398,8 @@ export function SnowPricingCalculatorPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* Inputs */}
         <div className="space-y-4">
-          <div className="rounded-xl border bg-white p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">Property</h3>
+          <div className="rounded-xl border bg-card p-5 space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-neutral-300">Property</h3>
             <div className="grid grid-cols-2 gap-3">
               <TextField label="Property Name" value={propertyName} onChange={setPropertyName} placeholder="e.g. Maple Ridge Office Park" />
               <TextField label="Address" value={propertyAddress} onChange={setPropertyAddress} placeholder="123 Main St, Anytown, MN" />
@@ -432,7 +432,7 @@ export function SnowPricingCalculatorPage() {
             <div className="space-y-3">
               {machines.map((m) => (
                 <div key={m.key} className="grid grid-cols-[1fr_100px_70px_70px_90px] items-end gap-2">
-                  <span className="pb-2.5 text-sm text-slate-600">{m.label}</span>
+                  <span className="pb-2.5 text-sm text-slate-600 dark:text-neutral-400">{m.label}</span>
                   <NumberField
                     label="Rate"
                     value={m.monthlyRate}
@@ -445,7 +445,7 @@ export function SnowPricingCalculatorPage() {
                     onChange={(v) => updateMachine(m.key, { months: v })}
                   />
                   <NumberField label="Qty" value={m.qty} onChange={(v) => updateMachine(m.key, { qty: v })} />
-                  <span className="pb-2.5 text-right text-sm font-medium text-slate-600">
+                  <span className="pb-2.5 text-right text-sm font-medium text-slate-600 dark:text-neutral-400">
                     {formatCurrency(num(m.monthlyRate) * num(m.months) * num(m.qty))}
                   </span>
                 </div>
@@ -504,24 +504,24 @@ export function SnowPricingCalculatorPage() {
             )}
           </SectionCard>
 
-          <div className="rounded-xl border bg-white p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">Per-Storm Pricing</h3>
+          <div className="rounded-xl border bg-card p-5 space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-neutral-300">Per-Storm Pricing</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-slate-600">1-3 inches (base)</label>
+                  <label className="text-sm font-medium text-slate-600 dark:text-neutral-400">1-3 inches (base)</label>
                   {baseRateManual && (
                     <button
                       type="button"
                       onClick={() => setBaseRateManual(false)}
-                      className="text-xs font-medium text-brand-600 hover:underline"
+                      className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
                     >
                       Reset to 3× per inch
                     </button>
                   )}
                 </div>
-                <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
-                  <span className="flex items-center pl-3 text-sm text-slate-400">$</span>
+                <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 dark:border-neutral-700 bg-card shadow-sm">
+                  <span className="flex items-center pl-3 text-sm text-slate-400 dark:text-neutral-500">$</span>
                   <input
                     type="number"
                     min="0"
@@ -532,7 +532,7 @@ export function SnowPricingCalculatorPage() {
                       setBaseRateManual(true);
                       setBaseRate1to3(e.target.value);
                     }}
-                    className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+                    className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 dark:text-neutral-300 placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:outline-none"
                     aria-label="1-3 inches base rate"
                   />
                 </div>
@@ -581,8 +581,8 @@ export function SnowPricingCalculatorPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border bg-white p-5">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700">Per-Storm Pricing</h3>
+          <div className="rounded-xl border bg-card p-5">
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-neutral-300">Per-Storm Pricing</h3>
             <div className="space-y-2">
               {[
                 ["1-3 inches", rate1to3],
@@ -591,15 +591,15 @@ export function SnowPricingCalculatorPage() {
                 ["9-12 inches", rate9to12],
                 ["12+ inches", rate12plus],
               ].map(([label, value]) => (
-                <div key={label as string} className="flex items-center justify-between border-b border-slate-100 py-1.5 last:border-0">
-                  <span className="text-sm text-slate-600">{label}</span>
-                  <span className="text-sm font-semibold text-slate-800">{formatCurrency(value as number)}</span>
+                <div key={label as string} className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 py-1.5 last:border-0">
+                  <span className="text-sm text-slate-600 dark:text-neutral-400">{label}</span>
+                  <span className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{formatCurrency(value as number)}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-xl border bg-white p-5 space-y-1.5">
+          <div className="rounded-xl border bg-card p-5 space-y-1.5">
             <h3 className="text-sm font-semibold">Formula Reference</h3>
             <p className="text-xs text-muted-foreground">Salt: (sq ft ÷ 43,560) × lbs/acre ÷ 2,160 lbs/yard × $/yard × applications</p>
             <p className="text-xs text-muted-foreground">Ice Melt: bags × $/bag × applications</p>

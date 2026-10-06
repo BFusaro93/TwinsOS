@@ -110,12 +110,12 @@ import { useConfirm } from "@/components/shared/useConfirm";
 const BILLABLE_JOB_PRODUCT_STATUSES: string[] = ["pending", "used"];
 
 const STATUS_COLOR: Record<string, string> = {
-  scheduled:   "bg-blue-100 text-blue-700",
-  in_progress: "bg-yellow-100 text-yellow-700",
-  completed:   "bg-green-100 text-green-700",
-  cancelled:   "bg-red-100 text-red-600",
-  skipped:     "bg-slate-100 text-slate-500",
-  hold:        "bg-orange-100 text-orange-700",
+  scheduled:   "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  in_progress: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  completed:   "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  skipped:     "bg-muted text-muted-foreground",
+  hold:        "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -151,12 +151,12 @@ function todayLocalDateString(): string {
 }
 
 const VISIT_STATUS_COLOR: Record<string, string> = {
-  scheduled:   "bg-blue-50 text-blue-700",
-  dispatched:  "bg-purple-50 text-purple-700",
-  in_progress: "bg-yellow-50 text-yellow-700",
-  completed:   "bg-green-50 text-green-700",
-  cancelled:   "bg-red-50 text-red-600",
-  skipped:     "bg-slate-50 text-slate-500",
+  scheduled:   "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
+  dispatched:  "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400",
+  in_progress: "bg-yellow-50 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400",
+  completed:   "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400",
+  cancelled:   "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400",
+  skipped:     "bg-slate-50 dark:bg-muted/40 text-muted-foreground",
 };
 
 export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "attachments" | "audit";
@@ -630,7 +630,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
   if (!job) {
     return (
-      <div className="p-6 text-sm text-slate-500">
+      <div className="p-6 text-sm text-muted-foreground">
         {jobError ? `Error loading job: ${(jobError as Error).message}` : "Job not found."}
       </div>
     );
@@ -697,25 +697,25 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     <div className="flex h-full flex-col overflow-hidden">
 
       {/* ── top bar ── */}
-      <div className="flex items-center justify-between gap-4 border-b bg-white px-6 py-3 shadow-sm">
+      <div className="flex items-center justify-between gap-4 border-b bg-card px-6 py-3 shadow-sm">
         <div className="flex flex-1 items-center gap-3 min-w-0">
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 text-xs text-slate-500"
+            className="h-8 shrink-0 text-xs text-muted-foreground"
             onClick={() => onClose ? onClose() : router.push("/crm/scheduling")}
           >
             <ArrowLeft className="mr-1 h-3.5 w-3.5" />
             Back
           </Button>
           <div className="min-w-0">
-            <h1 className="flex items-center gap-1.5 text-base font-semibold text-slate-900 truncate">
+            <h1 className="flex items-center gap-1.5 text-base font-semibold text-slate-900 dark:text-neutral-100 truncate">
               {((edits.is_high_priority as boolean | undefined) ?? job.isHighPriority) && (
-                <span title="High priority"><Flame className="h-4 w-4 shrink-0 text-red-500" /></span>
+                <span title="High priority"><Flame className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400" /></span>
               )}
               {job.clientName ?? "Job"}
             </h1>
-            <p className="text-xs text-slate-400 flex items-center gap-2">
+            <p className="text-xs text-slate-400 dark:text-neutral-500 flex items-center gap-2">
               {job.scheduledDate
                 ? new Date(job.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
                     weekday: "long", month: "long", day: "numeric", year: "numeric",
@@ -725,7 +725,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 : job.schedule ?? job.recurrenceRule ?? "Not scheduled"
               }
               {job.recurrenceRule && (
-                <span className="flex items-center gap-1 text-brand-600 font-medium">
+                <span className="flex items-center gap-1 text-brand-600 dark:text-brand-400 font-medium">
                   <Repeat className="h-3 w-3" />
                   {job.recurrenceRule}
                 </span>
@@ -733,13 +733,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             </p>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 pl-4">
-            <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[effectiveStatus] ?? "bg-slate-100 text-slate-500")}>
+            <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[effectiveStatus] ?? "bg-muted text-muted-foreground")}>
               {STATUS_LABEL[effectiveStatus] ?? effectiveStatus}
             </Badge>
             {isOverdue && (
-              <Badge variant="outline" className="text-[10px] border-transparent bg-red-100 text-red-700">Overdue</Badge>
+              <Badge variant="outline" className="text-[10px] border-transparent bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400">Overdue</Badge>
             )}
-            <span className="text-sm font-normal text-slate-400 whitespace-nowrap">
+            <span className="text-sm font-normal text-slate-400 dark:text-neutral-500 whitespace-nowrap">
               {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
               {waitingListScheduled && " · Scheduled"}
             </span>
@@ -750,7 +750,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           {effectiveStatus !== "completed" && job.jobType !== "recurring" && job.jobType !== "package" && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => handleStatus("completed")}>
-              <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500" />
+              <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500 dark:text-green-400" />
               Complete
             </Button>
           )}
@@ -767,7 +767,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             <Button variant="outline" size="sm" className="h-8 text-xs"
               disabled={invoicing}
               onClick={handleInvoice}>
-              <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500" />
+              <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
               {invoicing
                 ? "Creating…"
                 : existingInvoice
@@ -775,7 +775,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   : "Invoice"}
             </Button>
           )}
-          <div className="ml-1 h-5 w-px bg-slate-200" />
+          <div className="ml-1 h-5 w-px bg-slate-200 dark:bg-neutral-700" />
           {editing ? (
             <>
               <Button size="sm" className="h-8 text-xs"
@@ -817,7 +817,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   disabled={!jobClient?.primaryEmail}
                   onSelect={() => setSendEmailOpen(true)}
                 >
-                  <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  <Mail className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   {jobClient?.primaryEmail ? "Send Email" : "Send Email (no address)"}
                 </DropdownMenuItem>
               )}
@@ -826,22 +826,22 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   disabled={!jobClient?.primaryPhone}
                   onSelect={() => setSendSmsOpen(true)}
                 >
-                  <MessageSquare className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  <MessageSquare className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   {jobClient?.primaryPhone ? "Send Text" : "Send Text (no number)"}
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onSelect={() => setTab("audit")}>
-                <History className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                <History className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                 View Audit Trail
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => goTo(`/crm/clients/${job.clientId}`)}>
-                <User className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                <User className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                 View Client
               </DropdownMenuItem>
               {job.estimateId && (
                 <DropdownMenuItem onSelect={() => goTo(`/crm/estimates/${job.estimateId}`)}>
-                  <FileText className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  <FileText className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   View Estimate
                 </DropdownMenuItem>
               )}
@@ -851,7 +851,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       </div>
 
       {/* ── tabs ── */}
-      <div className="flex gap-0 border-b bg-white px-6">
+      <div className="flex gap-0 border-b bg-card px-6">
         {(["overview", "services", "visits", "notes", "invoice", "costing", "attachments", "audit"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -859,8 +859,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             className={cn(
               "px-4 py-2 text-sm capitalize transition-colors border-b-2",
               tab === t
-                ? "border-brand-500 text-brand-600 font-medium"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-brand-500 text-brand-600 dark:text-brand-400 font-medium"
+                : "border-transparent text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
             )}
           >
             {t === "visits" ? `Visits (${visits.length})`
@@ -883,35 +883,35 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           {tab === "overview" && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Client card */}
-              <div className="rounded-lg border bg-white p-4 shadow-sm">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Client</p>
-                <p className="font-semibold text-slate-800">{job.clientName ?? "—"}</p>
+              <div className="rounded-lg border bg-card p-4 shadow-sm">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-2">Client</p>
+                <p className="font-semibold text-slate-800 dark:text-neutral-100">{job.clientName ?? "—"}</p>
                 {job.serviceAddress && (
-                  <p className="text-xs text-slate-500 mt-1 flex items-start gap-1">
+                  <p className="text-xs text-muted-foreground mt-1 flex items-start gap-1">
                     <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
                     {job.serviceAddress}{job.serviceCity ? `, ${job.serviceCity}` : ""}{job.serviceState ? `, ${job.serviceState}` : ""} {job.serviceZip ?? ""}
                   </p>
                 )}
                 {job.clientPhone && (
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <Phone className="h-3 w-3" />{job.clientPhone}
                   </p>
                 )}
               </div>
 
               {/* Job settings */}
-              <div className={cn("rounded-lg border bg-white p-4 shadow-sm flex flex-col gap-3", editing && "ring-2 ring-brand-400")}>
+              <div className={cn("rounded-lg border bg-card p-4 shadow-sm flex flex-col gap-3", editing && "ring-2 ring-brand-400")}>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Job Settings</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Job Settings</p>
                   {editing
-                    ? <span className="text-[10px] text-brand-600 font-medium">Editing — save when done</span>
-                    : <button onClick={() => { const match = schedules.find((s) => s.name === job.recurrenceRule || s.name === job.schedule); setSelectedSchedId(match?.id ?? "__none__"); setEditing(true); }} className="text-[10px] text-slate-400 hover:text-brand-600 flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" />Edit</button>
+                    ? <span className="text-[10px] text-brand-600 dark:text-brand-400 font-medium">Editing — save when done</span>
+                    : <button onClick={() => { const match = schedules.find((s) => s.name === job.recurrenceRule || s.name === job.schedule); setSelectedSchedId(match?.id ?? "__none__"); setEditing(true); }} className="text-[10px] text-slate-400 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" />Edit</button>
                   }
                 </div>
                 {editing ? (
                   <>
                     <div className="flex flex-col gap-1">
-                      <Label className="text-xs text-slate-500">Scheduled Date</Label>
+                      <Label className="text-xs text-muted-foreground">Scheduled Date</Label>
                       <Input
                         type="date"
                         defaultValue={job.scheduledDate ?? ""}
@@ -920,16 +920,16 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label className="text-xs text-slate-500">Budgeted Hours</Label>
-                      <p className="text-sm text-slate-500 py-1.5">
+                      <Label className="text-xs text-muted-foreground">Budgeted Hours</Label>
+                      <p className="text-sm text-muted-foreground py-1.5">
                         {job.budgetedHours != null ? `${formatHours(job.budgetedHours)}h` : "—"}
-                        <span className="text-[10px] text-slate-400 ml-1.5">
+                        <span className="text-[10px] text-slate-400 dark:text-neutral-500 ml-1.5">
                           (sum of service hours — edit per-service on the Services tab)
                         </span>
                       </p>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label className="text-xs text-slate-500">Crew</Label>
+                      <Label className="text-xs text-muted-foreground">Crew</Label>
                       <Select
                         defaultValue={job.crewId ?? "unassigned"}
                         onValueChange={(v) => patch("crew_id", v === "unassigned" ? null : v)}
@@ -946,7 +946,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       </Select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label className="text-xs text-slate-500">Status</Label>
+                      <Label className="text-xs text-muted-foreground">Status</Label>
                       <Select
                         defaultValue={job.status}
                         onValueChange={(v) => patch("status", v)}
@@ -964,7 +964,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     {job.jobType === "waiting_list" && (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-slate-500">Available From</Label>
+                          <Label className="text-xs text-muted-foreground">Available From</Label>
                           <Input
                             type="date"
                             defaultValue={job.waitingListStart ?? ""}
@@ -973,7 +973,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-slate-500">Available Until</Label>
+                          <Label className="text-xs text-muted-foreground">Available Until</Label>
                           <Input
                             type="date"
                             defaultValue={job.waitingListEnd ?? ""}
@@ -985,7 +985,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     )}
                     {job.jobType === "recurring" && (
                       <div className="flex flex-col gap-1">
-                        <Label className="text-xs text-slate-500">Recurring Schedule</Label>
+                        <Label className="text-xs text-muted-foreground">Recurring Schedule</Label>
                         <Select
                           value={selectedSchedId}
                           onValueChange={(v) => {
@@ -1022,11 +1022,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           </SelectContent>
                         </Select>
                         {creatingSchedule && (
-                          <div className="mt-1 rounded-md border bg-slate-50 p-3 flex flex-col gap-2">
-                            <p className="text-[11px] font-semibold text-slate-600">New Schedule</p>
+                          <div className="mt-1 rounded-md border bg-slate-50 dark:bg-muted/40 p-3 flex flex-col gap-2">
+                            <p className="text-[11px] font-semibold text-slate-600 dark:text-neutral-400">New Schedule</p>
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div className="flex flex-col gap-1">
-                                <Label className="text-[10px] text-slate-500">Frequency</Label>
+                                <Label className="text-[10px] text-muted-foreground">Frequency</Label>
                                 <Select value={newSchedFreq} onValueChange={(v) => setNewSchedFreq(v as "weekly" | "bi_weekly")}>
                                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -1036,7 +1036,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 </Select>
                               </div>
                               <div className="flex flex-col gap-1">
-                                <Label className="text-[10px] text-slate-500">Day</Label>
+                                <Label className="text-[10px] text-muted-foreground">Day</Label>
                                 <Select value={newSchedDay} onValueChange={setNewSchedDay}>
                                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -1048,7 +1048,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               </div>
                               {newSchedFreq === "bi_weekly" && (
                                 <div className="col-span-2 flex flex-col gap-1">
-                                  <Label className="text-[10px] text-slate-500">Week Pattern</Label>
+                                  <Label className="text-[10px] text-muted-foreground">Week Pattern</Label>
                                   <Select value={newSchedPattern} onValueChange={(v) => setNewSchedPattern(v as "even" | "odd")}>
                                     <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                                     <SelectContent>
@@ -1089,7 +1089,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       <>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <div className="flex flex-col gap-1">
-                            <Label className="text-xs text-slate-500"># Inch Trigger</Label>
+                            <Label className="text-xs text-muted-foreground"># Inch Trigger</Label>
                             <Input
                               type="number" min="0" step="0.5"
                               defaultValue={job.inchTrigger ?? ""}
@@ -1099,7 +1099,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             />
                           </div>
                           <div className="flex flex-col gap-1">
-                            <Label className="text-xs text-slate-500">Invoice Type</Label>
+                            <Label className="text-xs text-muted-foreground">Invoice Type</Label>
                             <Select
                               defaultValue={job.invoiceType ?? ""}
                               onValueChange={(v) => patch("invoice_type", v)}
@@ -1118,7 +1118,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         {(((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_event_per_inch" ||
                           ((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_push_per_inch") && (
                           <div className="flex flex-col gap-1">
-                            <Label className="text-xs text-slate-500">Rate Per Inch ($)</Label>
+                            <Label className="text-xs text-muted-foreground">Rate Per Inch ($)</Label>
                             <Input
                               type="number" min="0" step="0.01"
                               defaultValue={job.ratePerInchCents != null ? job.ratePerInchCents / 100 : ""}
@@ -1135,7 +1135,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           <SnowMonthlyBillingLink jobId={job.id} clientId={job.clientId} contractId={job.contractId} />
                         )}
                         <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-slate-500">Asset Type</Label>
+                          <Label className="text-xs text-muted-foreground">Asset Type</Label>
                           <Input
                             defaultValue={job.assetType ?? ""}
                             onChange={(e) => patch("asset_type", e.target.value || null)}
@@ -1144,7 +1144,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-slate-500">Days Authorized</Label>
+                          <Label className="text-xs text-muted-foreground">Days Authorized</Label>
                           <div className="flex gap-1 flex-wrap">
                             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => {
                               const current = (edits.schedule_days as string[] | undefined) ?? job.scheduleDays;
@@ -1156,7 +1156,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                   onClick={() => patch("schedule_days", active ? current.filter((x) => x !== d) : [...current, d])}
                                   className={cn(
                                     "rounded border px-2 py-0.5 text-xs transition-colors",
-                                    active ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 bg-white text-slate-600"
+                                    active ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-card text-slate-600 dark:text-neutral-400"
                                   )}
                                 >
                                   {d}
@@ -1169,18 +1169,18 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     )}
                     {/* Call Ahead toggle */}
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs text-slate-500">Call Ahead Required</Label>
+                      <Label className="text-xs text-muted-foreground">Call Ahead Required</Label>
                       <button
                         type="button"
                         onClick={() => patch("call_ahead", !(edits.call_ahead ?? job.callAhead))}
                         className={cn(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
-                          (edits.call_ahead ?? job.callAhead) ? "bg-brand-500" : "bg-slate-200"
+                          (edits.call_ahead ?? job.callAhead) ? "bg-brand-500" : "bg-slate-200 dark:bg-neutral-700"
                         )}
                       >
                         <span
                           className={cn(
-                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform",
+                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow ring-0 transition-transform",
                             (edits.call_ahead ?? job.callAhead) ? "translate-x-4" : "translate-x-0"
                           )}
                         />
@@ -1190,8 +1190,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         the route-order `priority` field; shows a Flame icon
                         on this job's visits on the dispatch board. */}
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs text-slate-500 flex items-center gap-1">
-                        <Flame className="h-3 w-3 text-red-500" />
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Flame className="h-3 w-3 text-red-500 dark:text-red-400" />
                         High Priority
                       </Label>
                       <button
@@ -1199,12 +1199,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         onClick={() => patch("is_high_priority", !(edits.is_high_priority ?? job.isHighPriority))}
                         className={cn(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
-                          (edits.is_high_priority ?? job.isHighPriority) ? "bg-red-500" : "bg-slate-200"
+                          (edits.is_high_priority ?? job.isHighPriority) ? "bg-red-500" : "bg-slate-200 dark:bg-neutral-700"
                         )}
                       >
                         <span
                           className={cn(
-                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform",
+                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow ring-0 transition-transform",
                             (edits.is_high_priority ?? job.isHighPriority) ? "translate-x-4" : "translate-x-0"
                           )}
                         />
@@ -1214,25 +1214,25 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 ) : (
                   <dl className="flex flex-col gap-2 text-sm">
                     <div className="flex justify-between">
-                      <dt className="text-xs text-slate-500">Date</dt>
-                      <dd className="text-xs font-medium text-slate-800">
+                      <dt className="text-xs text-muted-foreground">Date</dt>
+                      <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
                         {job.scheduledDate
                           ? new Date(job.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                           : "—"}
                       </dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-xs text-slate-500">Crew</dt>
-                      <dd className="text-xs font-medium text-slate-800" title={crewSummaryTitle}>{crewSummary}</dd>
+                      <dt className="text-xs text-muted-foreground">Crew</dt>
+                      <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100" title={crewSummaryTitle}>{crewSummary}</dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-xs text-slate-500">Status</dt>
-                      <dd><Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[job.status] ?? "bg-slate-100 text-slate-500")}>{STATUS_LABEL[job.status] ?? job.status}</Badge></dd>
+                      <dt className="text-xs text-muted-foreground">Status</dt>
+                      <dd><Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[job.status] ?? "bg-muted text-muted-foreground")}>{STATUS_LABEL[job.status] ?? job.status}</Badge></dd>
                     </div>
                     {job.jobType === "waiting_list" && (
                       <div className="flex justify-between">
-                        <dt className="text-xs text-slate-500">Available Window</dt>
-                        <dd className="text-xs font-medium text-slate-800">
+                        <dt className="text-xs text-muted-foreground">Available Window</dt>
+                        <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
                           {job.waitingListStart || job.waitingListEnd ? (
                             <>
                               {job.waitingListStart
@@ -1244,58 +1244,58 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 : "Any"}
                             </>
                           ) : (
-                            <span className="text-slate-400 italic">No window set</span>
+                            <span className="text-slate-400 dark:text-neutral-500 italic">No window set</span>
                           )}
                         </dd>
                       </div>
                     )}
                     {job.jobType === "recurring" && (
                       <div className="flex justify-between">
-                        <dt className="text-xs text-slate-500">Schedule</dt>
-                        <dd className="text-xs font-medium text-slate-800 flex items-center gap-1">
-                          <Repeat className="h-3 w-3 text-brand-500" />
-                          {job.recurrenceRule ?? job.schedule ?? <span className="text-slate-400 italic">Not set</span>}
+                        <dt className="text-xs text-muted-foreground">Schedule</dt>
+                        <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100 flex items-center gap-1">
+                          <Repeat className="h-3 w-3 text-brand-500 dark:text-brand-400" />
+                          {job.recurrenceRule ?? job.schedule ?? <span className="text-slate-400 dark:text-neutral-500 italic">Not set</span>}
                         </dd>
                       </div>
                     )}
                     {job.jobType === "snow" && (
                       <>
                         <div className="flex justify-between">
-                          <dt className="text-xs text-slate-500">Invoice Type</dt>
-                          <dd className="text-xs font-medium text-slate-800">
+                          <dt className="text-xs text-muted-foreground">Invoice Type</dt>
+                          <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
                             {job.invoiceType
                               ? { per_event: "Per Event", per_event_per_inch: "Per Event, Per Inch", per_push_per_inch: "Per Push", hourly: "Hourly", monthly_flat_rate: "Monthly Flat Rate" }[job.invoiceType] ?? job.invoiceType
-                              : <span className="text-slate-400 italic">Not set</span>}
+                              : <span className="text-slate-400 dark:text-neutral-500 italic">Not set</span>}
                           </dd>
                         </div>
                         <div className="flex justify-between">
-                          <dt className="text-xs text-slate-500"># Inch Trigger</dt>
-                          <dd className="text-xs font-medium text-slate-800">{job.inchTrigger != null ? `${job.inchTrigger}"` : "—"}</dd>
+                          <dt className="text-xs text-muted-foreground"># Inch Trigger</dt>
+                          <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">{job.inchTrigger != null ? `${job.inchTrigger}"` : "—"}</dd>
                         </div>
                         {(job.invoiceType === "per_event_per_inch" || job.invoiceType === "per_push_per_inch") && (
                           <div className="flex justify-between">
-                            <dt className="text-xs text-slate-500">Rate Per Inch</dt>
-                            <dd className="text-xs font-medium text-slate-800">{job.ratePerInchCents != null ? formatCurrency(job.ratePerInchCents) : "—"}</dd>
+                            <dt className="text-xs text-muted-foreground">Rate Per Inch</dt>
+                            <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">{job.ratePerInchCents != null ? formatCurrency(job.ratePerInchCents) : "—"}</dd>
                           </div>
                         )}
                         {job.assetType && (
                           <div className="flex justify-between">
-                            <dt className="text-xs text-slate-500">Asset Type</dt>
-                            <dd className="text-xs font-medium text-slate-800">{job.assetType}</dd>
+                            <dt className="text-xs text-muted-foreground">Asset Type</dt>
+                            <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">{job.assetType}</dd>
                           </div>
                         )}
                         <div className="flex justify-between">
-                          <dt className="text-xs text-slate-500">Days Authorized</dt>
-                          <dd className="text-xs font-medium text-slate-800">
-                            {job.scheduleDays.length > 0 ? job.scheduleDays.join(", ") : <span className="text-slate-400 italic">Any day</span>}
+                          <dt className="text-xs text-muted-foreground">Days Authorized</dt>
+                          <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
+                            {job.scheduleDays.length > 0 ? job.scheduleDays.join(", ") : <span className="text-slate-400 dark:text-neutral-500 italic">Any day</span>}
                           </dd>
                         </div>
                       </>
                     )}
                     {job.callAhead && (
                       <div className="flex justify-between">
-                        <dt className="text-xs text-slate-500">Call Ahead</dt>
-                        <dd className="text-xs font-medium text-amber-600 flex items-center gap-1">
+                        <dt className="text-xs text-muted-foreground">Call Ahead</dt>
+                        <dd className="text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
                           <Phone className="h-3 w-3" />
                           Required
                         </dd>
@@ -1303,8 +1303,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     )}
                     {job.isHighPriority && (
                       <div className="flex justify-between">
-                        <dt className="text-xs text-slate-500">Priority</dt>
-                        <dd className="text-xs font-medium text-red-600 flex items-center gap-1">
+                        <dt className="text-xs text-muted-foreground">Priority</dt>
+                        <dd className="text-xs font-medium text-red-600 dark:text-red-400 flex items-center gap-1">
                           <Flame className="h-3 w-3" />
                           High
                         </dd>
@@ -1312,8 +1312,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     )}
                     {job.notesToCrew && (
                       <div className="flex flex-col gap-0.5">
-                        <dt className="text-xs text-slate-500">Notes to Crew / Job Notes</dt>
-                        <dd className="text-xs text-slate-700">{job.notesToCrew}</dd>
+                        <dt className="text-xs text-muted-foreground">Notes to Crew / Job Notes</dt>
+                        <dd className="text-xs text-slate-700 dark:text-neutral-300">{job.notesToCrew}</dd>
                       </div>
                     )}
                   </dl>
@@ -1322,61 +1322,61 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
               {/* Notes to Crew — always visible when set */}
               {(job.notesToCrew || editing) && (
-                <div className="rounded-lg border bg-blue-50 border-blue-200 p-4 shadow-sm col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Notes to Crew / Job Notes</p>
+                <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 p-4 shadow-sm col-span-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-1">Notes to Crew / Job Notes</p>
                   {editing ? (
                     <Textarea
                       rows={2}
                       defaultValue={job.notesToCrew ?? ""}
                       onChange={(e) => patch("notes_to_crew", e.target.value)}
-                      className="text-sm resize-none bg-white"
+                      className="text-sm resize-none bg-card"
                       placeholder="Instructions, gate codes, special conditions…"
                     />
                   ) : (
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{job.notesToCrew}</p>
+                    <p className="text-sm text-slate-700 dark:text-neutral-300 whitespace-pre-wrap">{job.notesToCrew}</p>
                   )}
                 </div>
               )}
 
               {/* Internal Notes — same field as "Internal Notes" in the Notes tab */}
               {(job.notes || editing) && (
-                <div className="rounded-lg border bg-amber-50 border-amber-200 p-4 shadow-sm col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1">Internal Note <span className="font-normal normal-case text-amber-600">(also in Notes tab)</span></p>
+                <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 p-4 shadow-sm col-span-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">Internal Note <span className="font-normal normal-case text-amber-600 dark:text-amber-400">(also in Notes tab)</span></p>
                   {editing ? (
                     <Textarea
                       rows={3}
                       defaultValue={job.notes ?? ""}
                       onChange={(e) => patch("notes", e.target.value)}
-                      className="text-sm resize-none bg-white"
+                      className="text-sm resize-none bg-card"
                       placeholder="Internal notes visible only to office staff…"
                     />
                   ) : (
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{job.notes}</p>
+                    <p className="text-sm text-slate-700 dark:text-neutral-300 whitespace-pre-wrap">{job.notes}</p>
                   )}
                 </div>
               )}
 
               {/* Revenue summary */}
-              <div className="rounded-lg border bg-white p-4 shadow-sm col-span-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Revenue</p>
+              <div className="rounded-lg border bg-card p-4 shadow-sm col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-2">Revenue</p>
                 <div className="flex flex-wrap items-center gap-4 sm:gap-8 text-sm">
                   <div>
-                    <p className="text-xs text-slate-400">Job Value</p>
-                    <p className="text-xl font-bold text-slate-800">{formatCurrency(jobValueCents)}</p>
+                    <p className="text-xs text-slate-400 dark:text-neutral-500">Job Value</p>
+                    <p className="text-xl font-bold text-slate-800 dark:text-neutral-100">{formatCurrency(jobValueCents)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Budgeted Hrs</p>
-                    <p className="text-xl font-bold text-slate-800">{formatHours(job.budgetedHours)}</p>
+                    <p className="text-xs text-slate-400 dark:text-neutral-500">Budgeted Hrs</p>
+                    <p className="text-xl font-bold text-slate-800 dark:text-neutral-100">{formatHours(job.budgetedHours)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Actual Hrs</p>
-                    <p className="text-xl font-bold text-slate-800">
+                    <p className="text-xs text-slate-400 dark:text-neutral-500">Actual Hrs</p>
+                    <p className="text-xl font-bold text-slate-800 dark:text-neutral-100">
                       {formatHours(visits.filter((v) => v.actualHours).reduce((s, v) => s + (v.actualHours ?? 0), 0))}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Visits Completed</p>
-                    <p className="text-xl font-bold text-slate-800">
+                    <p className="text-xs text-slate-400 dark:text-neutral-500">Visits Completed</p>
+                    <p className="text-xl font-bold text-slate-800 dark:text-neutral-100">
                       {visits.filter((v) => v.status === "completed").length} / {visits.length}
                     </p>
                   </div>
@@ -1387,10 +1387,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
           {tab === "services" && (
             <div className="flex flex-col gap-3">
-              <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+              <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Service</th>
                       <th className="px-4 py-3 text-right">Budgeted Hrs</th>
                       <th className="px-4 py-3 text-right">QTY</th>
@@ -1402,14 +1402,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <tbody>
                     {services.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm">
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500 text-sm">
                           No services on this job.
                         </td>
                       </tr>
                     )}
                     {services.map((s) => (
                       <tr key={s.id} className="group border-b last:border-0">
-                        <td className="px-4 py-3 font-medium text-slate-800">{s.serviceName}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">{s.serviceName}</td>
                         {editingSvcId === s.id ? (
                           <>
                             <td className="px-2 py-2 text-right">
@@ -1440,15 +1440,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 className="h-7 w-24 text-right text-sm ml-auto"
                               />
                             </td>
-                            <td className="px-2 py-2 text-right tabular-nums text-slate-500">
+                            <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
                               {svcRate ? formatCurrency(Math.round(parseFloat(svcRate) * 100) * (parseFloat(svcQty) || 1)) : "—"}
                             </td>
                             <td className="px-2 py-2">
                               <div className="flex justify-end gap-1">
-                                <button onClick={() => void saveEditSvc()} className="rounded p-1 hover:bg-green-50 text-green-600">
+                                <button onClick={() => void saveEditSvc()} className="rounded p-1 hover:bg-green-50 dark:hover:bg-green-950/40 text-green-600 dark:text-green-400">
                                   <Check className="h-3.5 w-3.5" />
                                 </button>
-                                <button onClick={() => setEditingSvcId(null)} className="rounded p-1 hover:bg-slate-100 text-slate-400">
+                                <button onClick={() => setEditingSvcId(null)} className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500">
                                   <X className="h-3.5 w-3.5" />
                                 </button>
                               </div>
@@ -1456,7 +1456,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           </>
                         ) : (
                           <>
-                            <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${formatHours(s.budgetedHours)}h` : "—"}</td>
+                            <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{s.budgetedHours ? `${formatHours(s.budgetedHours)}h` : "—"}</td>
                             <td className="px-4 py-3 text-right tabular-nums">{s.qty ?? 1}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {s.rateCents != null ? formatCurrency(s.rateCents) : "—"}
@@ -1469,13 +1469,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
                                   <button
                                     onClick={() => startEditSvc(s)}
-                                    className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                                    className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </button>
                                   <button
                                     onClick={() => void handleDeleteSvc(s.id)}
-                                    className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                    className="rounded p-1 hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
@@ -1488,7 +1488,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     ))}
                     {/* Add-service inline row */}
                     {addingSvc && (
-                      <tr className="border-t bg-slate-50">
+                      <tr className="border-t bg-slate-50 dark:bg-muted/40">
                         <td className="px-2 py-2">
                           <div className="flex flex-col gap-1">
                             <Select value={newSvcId} onValueChange={(v) => {
@@ -1538,17 +1538,17 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             placeholder="0.00"
                             className="h-7 w-24 text-right text-xs ml-auto" />
                         </td>
-                        <td className="px-2 py-2 text-right tabular-nums text-xs text-slate-500">
+                        <td className="px-2 py-2 text-right tabular-nums text-xs text-muted-foreground">
                           {newSvcRate && newSvcQty
                             ? formatCurrency(Math.round(parseFloat(newSvcRate) * 100) * (parseFloat(newSvcQty) || 1))
                             : "—"}
                         </td>
                         <td className="px-2 py-2">
                           <div className="flex justify-end gap-1">
-                            <button onClick={() => void handleAddSvc()} className="rounded p-1 hover:bg-green-50 text-green-600">
+                            <button onClick={() => void handleAddSvc()} className="rounded p-1 hover:bg-green-50 dark:hover:bg-green-950/40 text-green-600 dark:text-green-400">
                               <Check className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => setAddingSvc(false)} className="rounded p-1 hover:bg-slate-100 text-slate-400">
+                            <button onClick={() => setAddingSvc(false)} className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500">
                               <X className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -1558,9 +1558,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   </tbody>
                   {services.length > 0 && (
                     <tfoot>
-                      <tr className="border-t bg-slate-50">
-                        <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold text-slate-500">Total</td>
-                        <td className="px-4 py-2 text-right font-bold text-slate-800">
+                      <tr className="border-t bg-slate-50 dark:bg-muted/40">
+                        <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold text-muted-foreground">Total</td>
+                        <td className="px-4 py-2 text-right font-bold text-slate-800 dark:text-neutral-100">
                           {formatCurrency(services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0))}
                         </td>
                         <td />
@@ -1586,7 +1586,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           {tab === "visits" && (
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium text-slate-700">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
+                <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
                 <div className="flex items-center gap-2">
                   {/* Manual generate button for recurring/package jobs */}
                   {(job.jobType === "recurring" || job.jobType === "package") && job.status !== "hold" && (
@@ -1623,13 +1623,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           toast.success(`Removed ${removed} ${entry.name} visits`);
                         }}
                       >
-                        <SelectTrigger className="h-8 text-xs w-auto gap-1 border-red-200 text-red-600 hover:bg-red-50">
+                        <SelectTrigger className="h-8 text-xs w-auto gap-1 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
                           <Trash2 className="h-3.5 w-3.5" />
                           <SelectValue placeholder="Remove day…" />
                         </SelectTrigger>
                         <SelectContent>
                           {days.map(({ day, name, count }) => (
-                            <SelectItem key={day} value={String(day)} className="text-red-600 text-xs">
+                            <SelectItem key={day} value={String(day)} className="text-red-600 dark:text-red-400 text-xs">
                               Remove all {name} visits ({count})
                             </SelectItem>
                           ))}
@@ -1648,8 +1648,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               </div>
 
               {addingBulkNote && (
-                <div className="rounded-lg border bg-amber-50 border-amber-200 p-4 flex flex-col gap-2">
-                  <p className="text-xs font-semibold text-amber-800">Add note to all {visits.filter(v => v.status === "scheduled").length} scheduled visits</p>
+                <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 p-4 flex flex-col gap-2">
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Add note to all {visits.filter(v => v.status === "scheduled").length} scheduled visits</p>
                   <Textarea
                     rows={2}
                     value={bulkNote}
@@ -1676,10 +1676,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               )}
 
               {addingVisit && (
-                <div className="rounded-lg border bg-blue-50 border-blue-200 p-4 flex items-end gap-3">
+                <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 p-4 flex items-end gap-3">
                   {job.jobType === "package" && (
                     <div className="flex flex-col gap-1">
-                      <Label className="text-xs text-slate-600">Service</Label>
+                      <Label className="text-xs text-slate-600 dark:text-neutral-400">Service</Label>
                       <Select
                         value={newVisitServiceId || "__none__"}
                         onValueChange={(v) => {
@@ -1702,7 +1702,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     </div>
                   )}
                   <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-slate-600">Date</Label>
+                    <Label className="text-xs text-slate-600 dark:text-neutral-400">Date</Label>
                     <Input
                       type="date"
                       value={newVisitDate}
@@ -1711,7 +1711,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-slate-600">Crew</Label>
+                    <Label className="text-xs text-slate-600 dark:text-neutral-400">Crew</Label>
                     <Select value={newVisitCrew} onValueChange={setNewVisitCrew}>
                       <SelectTrigger className="text-sm w-44">
                         <SelectValue placeholder="Unassigned" />
@@ -1731,10 +1731,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 </div>
               )}
 
-              <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
+              <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
-                    <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Date</th>
                       <th className="px-4 py-3 text-left">Service</th>
                       <th className="px-4 py-3 text-left">Crew</th>
@@ -1748,7 +1748,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <tbody>
                     {visits.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-sm">
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500 text-sm">
                           No visits yet. Schedule one above.
                         </td>
                       </tr>
@@ -1832,9 +1832,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           )}
 
           {tab === "notes" && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm flex flex-col gap-3">
+            <div className="rounded-lg border bg-card p-4 shadow-sm flex flex-col gap-3">
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-medium text-slate-600">Notes to Crew / Job Notes</Label>
+                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Notes to Crew / Job Notes</Label>
                 <Textarea
                   rows={4}
                   defaultValue={job.notesToCrew ?? ""}
@@ -1844,7 +1844,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-medium text-slate-600">Internal Notes</Label>
+                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Internal Notes</Label>
                 <Textarea
                   rows={4}
                   defaultValue={job.notes ?? ""}
@@ -1870,10 +1870,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               .filter(Boolean)
               .join(", ");
             return (
-            <div className="rounded-lg border bg-white p-4 shadow-sm flex flex-col gap-3">
+            <div className="rounded-lg border bg-card p-4 shadow-sm flex flex-col gap-3">
               <div>
-                <Label className="text-xs font-medium text-slate-600 mb-1 block">Invoice Description</Label>
-                <p className="text-xs text-slate-500 mb-2">
+                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1 block">Invoice Description</Label>
+                <p className="text-xs text-muted-foreground mb-2">
                   {defaultPreview
                     ? `Overrides the description shown on this job's invoices. Leave blank to use each service's default invoice description: "${defaultPreview}".`
                     : "This master description appears on all invoices generated for this job. Leave blank to use the default service name(s)."}
@@ -1900,13 +1900,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           )}
 
           {tab === "attachments" && (
-            <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
               <AttachmentsSection recordType="job" recordId={job.id} />
             </div>
           )}
 
           {tab === "audit" && (
-            <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
               <AuditTrailTab
                 groups={[
                   { recordType: "job", recordIds: [job.id] },
@@ -1925,8 +1925,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
              instead of clipping its rightmost action buttons. */}
         {!(onClose && tab === "visits") && (
           <div className="w-full xl:w-64 xl:shrink-0 flex flex-col gap-3">
-            <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
-              <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
+            <div className="rounded-lg border bg-card p-4 shadow-sm text-xs flex flex-col gap-2">
+              <p className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wide">Job Info</p>
               <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
               <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={crewSummary} title={crewSummaryTitle} />
               <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${formatHours(job.budgetedHours)}h` : "—"} />
@@ -1936,11 +1936,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 <button
                   type="button"
                   onClick={() => setProjectSheetOpen(true)}
-                  className="flex items-center gap-2 text-left text-slate-600 hover:text-brand-600"
+                  className="flex items-center gap-2 text-left text-slate-600 dark:text-neutral-400 hover:text-brand-600 dark:hover:text-brand-400"
                   title="Open linked Project — request materials or view cost tracking"
                 >
-                  <span className="text-slate-400"><FolderKanban className="h-3.5 w-3.5" /></span>
-                  <span className="text-slate-400 w-16 shrink-0">Project</span>
+                  <span className="text-slate-400 dark:text-neutral-500"><FolderKanban className="h-3.5 w-3.5" /></span>
+                  <span className="text-slate-400 dark:text-neutral-500 w-16 shrink-0">Project</span>
                   <span className="font-medium truncate underline decoration-dotted">
                     {linkedProject?.name ?? "View project"}
                   </span>
@@ -2073,7 +2073,7 @@ function VisitRow({
 
   return (
     <>
-      <tr className="group border-b last:border-0 hover:bg-slate-50">
+      <tr className="group border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
         {/* DATE is always the SCHEDULED date. It used to switch to completed_at
             once a visit was completed, which meant one header carried two
             different meanings and the job page disagreed with the dispatch
@@ -2082,7 +2082,7 @@ function VisitRow({
             the board. When it was actually serviced is shown next to the
             status instead, where it reads as a qualifier rather than a
             reschedule. */}
-        <td className="px-4 py-3 text-slate-700">
+        <td className="px-4 py-3 text-slate-700 dark:text-neutral-300">
           {serviceWindow
             ? serviceWindow
             : visit.scheduledDate
@@ -2091,8 +2091,8 @@ function VisitRow({
                 })
               : "—"}
         </td>
-        <td className="px-4 py-3 text-slate-600">{visitServiceName}</td>
-        <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
+        <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{visitServiceName}</td>
+        <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{visit.crewName ?? <span className="italic text-slate-400 dark:text-neutral-500">Unassigned</span>}</td>
         <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${formatHours(visitBudgetedHours)}h` : "—"}</td>
         <td className="px-4 py-3 text-right tabular-nums">{formatHours(computeActualHours(visit))}</td>
         <td className="px-4 py-3 text-center">
@@ -2100,7 +2100,7 @@ function VisitRow({
             variant="outline"
             className={cn(
               "gap-1 text-[10px] border-transparent",
-              VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500"
+              VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 dark:bg-muted/40 text-muted-foreground"
             )}
           >
             <VisitStatusIcon status={visit.status} className="h-3 w-3" />
@@ -2110,7 +2110,7 @@ function VisitRow({
               timezone — rendering it in the viewer's would show a different
               service date to someone looking from another timezone. */}
           {visit.status === "completed" && visit.completedAt && (
-            <p className="mt-0.5 text-[10px] text-slate-400">
+            <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500">
               {formatOrgDate(visit.completedAt)}
             </p>
           )}
@@ -2118,22 +2118,22 @@ function VisitRow({
         <td className="px-4 py-3 text-xs max-w-xs">
           <div className="flex flex-col gap-0.5">
             {jobNotesToCrew && (
-              <div className="truncate max-w-[200px] text-amber-700" title={jobNotesToCrew}>
+              <div className="truncate max-w-[200px] text-amber-700 dark:text-amber-400" title={jobNotesToCrew}>
                 <span className="font-semibold">Job note:</span> {jobNotesToCrew}
               </div>
             )}
             {/* generate-visits copies the job note onto each visit — don't show it twice */}
             {visit.notesToCrew && visit.notesToCrew !== jobNotesToCrew ? (
-              <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="text-slate-600 hover:text-brand-600 text-left truncate max-w-[200px] block">
+              <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="text-slate-600 dark:text-neutral-400 hover:text-brand-600 dark:hover:text-brand-400 text-left truncate max-w-[200px] block">
                 {visit.notesToCrew}
               </button>
             ) : (
-              <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500 italic">
+              <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-brand-500 dark:hover:text-brand-400 italic">
                 + crew note
               </button>
             )}
             {visit.jobComments.length > 0 && (
-              <div className="flex items-start gap-1 text-blue-500" title={visit.jobComments.map((c) => `${c.authorName}: ${c.text}`).join("\n")}>
+              <div className="flex items-start gap-1 text-blue-500 dark:text-blue-400" title={visit.jobComments.map((c) => `${c.authorName}: ${c.text}`).join("\n")}>
                 <MessageSquareText className="h-3 w-3 mt-0.5 shrink-0" />
                 <span className="truncate max-w-[190px]">
                   {visit.jobComments[visit.jobComments.length - 1].text}
@@ -2141,11 +2141,11 @@ function VisitRow({
               </div>
             )}
             {visit.invoiceDescription ? (
-              <button onClick={() => { setEditingInvoiceDesc(true); setEditingNote(false); }} className="text-indigo-600 hover:text-indigo-700 text-left truncate max-w-[200px] block text-[11px]">
+              <button onClick={() => { setEditingInvoiceDesc(true); setEditingNote(false); }} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-400 text-left truncate max-w-[200px] block text-[11px]">
                 📄 {visit.invoiceDescription}
               </button>
             ) : (
-              <button onClick={() => { setEditingInvoiceDesc(true); setEditingNote(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-500 italic text-[11px]">
+              <button onClick={() => { setEditingInvoiceDesc(true); setEditingNote(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-indigo-500 dark:hover:text-indigo-400 italic text-[11px]">
                 + invoice desc
               </button>
             )}
@@ -2157,7 +2157,7 @@ function VisitRow({
               <button
                 onClick={() => { setDispatching(true); setSkipping(false); setEditingNote(false); }}
                 title={isFreshDispatch ? "Dispatch to a date/crew" : "Change date/crew"}
-                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-50 text-slate-300 hover:text-orange-500"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-50 dark:hover:bg-orange-950/40 text-slate-300 dark:text-neutral-500 hover:text-orange-500 dark:hover:text-orange-400"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>
@@ -2167,8 +2167,8 @@ function VisitRow({
                 onClick={() => setShowChemicals((v) => !v)}
                 title="Chemical applications"
                 className={cn(
-                  "rounded p-1 hover:bg-teal-50 hover:text-teal-600 transition-opacity",
-                  showChemicals ? "text-teal-600" : "text-slate-300 opacity-0 group-hover:opacity-100"
+                  "rounded p-1 hover:bg-teal-50 dark:hover:bg-teal-950/40 hover:text-teal-600 dark:hover:text-teal-400 transition-opacity",
+                  showChemicals ? "text-teal-600 dark:text-teal-400" : "text-slate-300 dark:text-neutral-500 opacity-0 group-hover:opacity-100"
                 )}
               >
                 <FlaskConical className="h-3.5 w-3.5" />
@@ -2178,7 +2178,7 @@ function VisitRow({
               <button
                 onClick={() => { setSkipping(true); setEditingNote(false); }}
                 title="Skip visit"
-                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-amber-50 text-slate-300 hover:text-amber-500"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-300 dark:text-neutral-500 hover:text-amber-500 dark:hover:text-amber-400"
               >
                 <SkipForward className="h-3.5 w-3.5" />
               </button>
@@ -2186,7 +2186,7 @@ function VisitRow({
             <button
               onClick={onDelete}
               title="Delete visit"
-              className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 text-slate-300 hover:text-red-500"
+              className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -2194,22 +2194,22 @@ function VisitRow({
         </td>
       </tr>
       {showChemicals && (
-        <tr className="border-b bg-teal-50/40">
+        <tr className="border-b bg-teal-50/40 dark:bg-teal-950/40">
           <td colSpan={7} className="px-4 py-3">
             <ChemicalApplicationPanel jobId={jobId} visitId={visit.id} propertyId={propertyId} />
           </td>
         </tr>
       )}
       {skipping && (
-        <tr className="border-b bg-amber-50">
+        <tr className="border-b bg-amber-50 dark:bg-amber-950/40">
           <td colSpan={7} className="px-4 py-2">
-            <p className="text-xs font-medium text-amber-700 mb-1.5">Skip reason (optional)</p>
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1.5">Skip reason (optional)</p>
             <div className="flex items-end gap-2">
               <Textarea
                 rows={2}
                 value={skipReason}
                 onChange={(e) => setSkipReason(e.target.value)}
-                className="text-sm resize-none flex-1 bg-white"
+                className="text-sm resize-none flex-1 bg-card"
                 placeholder="Weather, client request, crew availability…"
                 autoFocus
               />
@@ -2226,23 +2226,23 @@ function VisitRow({
         </tr>
       )}
       {dispatching && (
-        <tr className="border-b bg-orange-50">
+        <tr className="border-b bg-orange-50 dark:bg-orange-950/40">
           <td colSpan={7} className="px-4 py-2">
-            <p className="text-xs font-medium text-orange-700 mb-1.5">{isFreshDispatch ? "Dispatch this visit" : "Change date / crew"}</p>
+            <p className="text-xs font-medium text-orange-700 dark:text-orange-400 mb-1.5">{isFreshDispatch ? "Dispatch this visit" : "Change date / crew"}</p>
             <div className="flex items-end gap-2">
               <div className="flex flex-col gap-1">
-                <Label className="text-xs text-slate-600">Date</Label>
+                <Label className="text-xs text-slate-600 dark:text-neutral-400">Date</Label>
                 <Input
                   type="date"
                   value={dispatchDate}
                   onChange={(e) => setDispatchDate(e.target.value)}
-                  className="h-8 text-sm w-40 bg-white"
+                  className="h-8 text-sm w-40 bg-card"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <Label className="text-xs text-slate-600">Crew</Label>
+                <Label className="text-xs text-slate-600 dark:text-neutral-400">Crew</Label>
                 <Select value={dispatchCrew || "__unassigned__"} onValueChange={(v) => setDispatchCrew(v === "__unassigned__" ? "" : v)}>
-                  <SelectTrigger className="h-8 text-sm w-44 bg-white">
+                  <SelectTrigger className="h-8 text-sm w-44 bg-card">
                     <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2273,9 +2273,9 @@ function VisitRow({
         </tr>
       )}
       {editingNote && (
-        <tr className="border-b bg-slate-50">
+        <tr className="border-b bg-slate-50 dark:bg-muted/40">
           <td colSpan={7} className="px-4 py-2">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Note to Crew</p>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Note to Crew</p>
             <div className="flex items-end gap-2">
               <Textarea
                 rows={2}
@@ -2297,14 +2297,14 @@ function VisitRow({
         </tr>
       )}
       {editingInvoiceDesc && (
-        <tr className="border-b bg-indigo-50">
+        <tr className="border-b bg-indigo-50 dark:bg-indigo-950/40">
           <td colSpan={7} className="px-4 py-2">
-            <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wide mb-1">Invoice Description</p>
+            <p className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-400 uppercase tracking-wide mb-1">Invoice Description</p>
             <div className="flex items-end gap-2">
               <Input
                 value={invoiceDescVal}
                 onChange={(e) => setInvoiceDescVal(e.target.value)}
-                className="text-sm flex-1 bg-white"
+                className="text-sm flex-1 bg-card"
                 placeholder="e.g. Mow, edge & blow — front & back"
                 autoFocus
               />
@@ -2325,9 +2325,9 @@ function VisitRow({
 
 function InfoRow({ icon, label, value, title }: { icon: React.ReactNode; label: string; value: string; title?: string }) {
   return (
-    <div className="flex items-center gap-2 text-slate-600">
-      <span className="text-slate-400">{icon}</span>
-      <span className="text-slate-400 w-16">{label}</span>
+    <div className="flex items-center gap-2 text-slate-600 dark:text-neutral-400">
+      <span className="text-slate-400 dark:text-neutral-500">{icon}</span>
+      <span className="text-slate-400 dark:text-neutral-500 w-16">{label}</span>
       <span className="font-medium truncate" title={title}>{value}</span>
     </div>
   );

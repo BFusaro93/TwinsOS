@@ -28,12 +28,12 @@ const STAGE_DOT: Record<EstimateStage, string> = {
 };
 
 const STAGE_HEADER: Record<EstimateStage, string> = {
-  draft:    "border-slate-200  bg-slate-50",
-  quote:    "border-blue-200   bg-blue-50",
-  sent:     "border-yellow-200 bg-yellow-50",
-  accepted: "border-green-200  bg-green-50",
-  lost:     "border-red-200    bg-red-50",
-  invoiced: "border-teal-200   bg-teal-50",
+  draft:    "border-border  bg-slate-50 dark:bg-muted/40",
+  quote:    "border-blue-200 dark:border-blue-800   bg-blue-50 dark:bg-blue-950/40",
+  sent:     "border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/40",
+  accepted: "border-green-200 dark:border-green-800  bg-green-50 dark:bg-green-950/40",
+  lost:     "border-red-200 dark:border-red-800    bg-red-50 dark:bg-red-950/40",
+  invoiced: "border-teal-200 dark:border-teal-800   bg-teal-50 dark:bg-teal-950/40",
 };
 
 // Stages that collapse by default since they accumulate over time
@@ -78,13 +78,13 @@ function EstimateCard({ estimate, onClick }: EstimateCardProps) {
           : undefined
       }
       className={cn(
-        "w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
+        "w-full rounded-md border border-border bg-card px-3 py-2.5 text-left shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
         isDragging && "opacity-50 shadow-lg"
       )}
     >
       {/* top row: estimate number + probability */}
       <div className="mb-1 flex items-center justify-between gap-1">
-        <span className="font-mono text-[10px] text-slate-400">
+        <span className="font-mono text-[10px] text-slate-400 dark:text-neutral-500">
           {padEstimateNumber(estimate.estimateNumber)}
         </span>
         {probPct > 0 && (
@@ -94,17 +94,17 @@ function EstimateCard({ estimate, onClick }: EstimateCardProps) {
         )}
       </div>
       {/* client name */}
-      <p className="mb-0.5 text-sm font-semibold leading-tight text-slate-900 line-clamp-1">
+      <p className="mb-0.5 text-sm font-semibold leading-tight text-slate-900 dark:text-neutral-100 line-clamp-1">
         {estimate.clientName ?? "—"}
       </p>
       {/* description */}
       {estimate.description && (
-        <p className="mb-1.5 truncate text-xs text-slate-500">
+        <p className="mb-1.5 truncate text-xs text-muted-foreground">
           {estimate.description}
         </p>
       )}
       {/* total */}
-      <p className="text-sm font-bold text-brand-600">
+      <p className="text-sm font-bold text-brand-600 dark:text-brand-400">
         {estimate.totalCents > 0 ? formatCurrency(estimate.totalCents) : "—"}
       </p>
     </button>
@@ -137,7 +137,7 @@ function PipelineColumn({
       ref={setNodeRef}
       className={cn(
         "flex w-[260px] shrink-0 flex-col gap-2 rounded-md",
-        isOver && "bg-brand-50 ring-2 ring-brand-300"
+        isOver && "bg-brand-50 dark:bg-brand-900/30 ring-2 ring-brand-300 dark:ring-brand-700"
       )}
     >
       {/* column header */}
@@ -149,17 +149,17 @@ function PipelineColumn({
       >
         <div className="flex items-center gap-2">
           <span className={cn("h-2 w-2 rounded-full shrink-0", STAGE_DOT[stageKey])} />
-          <span className="flex-1 text-xs font-semibold text-slate-700 leading-tight">
+          <span className="flex-1 text-xs font-semibold text-slate-700 dark:text-neutral-300 leading-tight">
             {stageName}
           </span>
-          <span className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">
+          <span className="rounded-full bg-card/70 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-neutral-400 ring-1 ring-border">
             {estimates.length}
           </span>
           {collapsible && (
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
-              className="ml-0.5 text-slate-400 hover:text-slate-600"
+              className="ml-0.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               aria-label={expanded ? "Collapse column" : "Expand column"}
             >
               {expanded ? (
@@ -171,7 +171,7 @@ function PipelineColumn({
           )}
         </div>
         {weighted > 0 && (
-          <p className="mt-1 text-[10px] text-slate-500">
+          <p className="mt-1 text-[10px] text-muted-foreground">
             {formatCurrency(weighted)} weighted
           </p>
         )}
@@ -182,14 +182,14 @@ function PipelineColumn({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="rounded-md border border-dashed border-slate-200 py-2 text-center text-xs text-slate-400 hover:border-slate-300 hover:text-slate-500"
+          className="rounded-md border border-dashed border-border py-2 text-center text-xs text-slate-400 dark:text-neutral-500 hover:border-slate-300 dark:hover:border-neutral-700 hover:text-muted-foreground"
         >
           Show {estimates.length} estimate{estimates.length !== 1 ? "s" : ""}
         </button>
       ) : (
         <div className="flex flex-col gap-2">
           {estimates.length === 0 ? (
-            <div className="rounded-md border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
+            <div className="rounded-md border border-dashed border-border py-6 text-center text-xs text-slate-400 dark:text-neutral-500">
               No estimates
             </div>
           ) : (

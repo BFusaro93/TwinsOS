@@ -40,8 +40,8 @@ export function SmsOnboardingGuide() {
         description="How to fill out the business info and consent wording so carriers approve your A2P 10DLC registration on the first pass."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -139,10 +139,10 @@ export function SmsOnboardingGuide() {
           </thead>
           <tbody>
             {REJECTION_REASONS.map(([what, flagged, fix]) => (
-              <tr key={what} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a]">{what}</td>
-                <td className="px-3 py-2 align-top text-[#4a4a46]">{flagged}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{fix}</td>
+              <tr key={what} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">{what}</td>
+                <td className="px-3 py-2 align-top text-[#4a4a46] dark:text-neutral-300">{flagged}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{fix}</td>
               </tr>
             ))}
           </tbody>
@@ -156,18 +156,18 @@ export function SmsOnboardingGuide() {
 
       <Section id="sample-wording" title="Sample wording that gets approved">
         <p>These are the shapes of wording that passed review — adapt the specifics to your own business, but keep this same structure:</p>
-        <div className="rounded-md border border-[#e6e6e0] bg-[#faf9f6] p-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6b6b66]">Checkbox label</p>
-          <p className="font-mono text-xs leading-relaxed text-[#0a0a0a]">
+        <div className="rounded-md border border-[#e6e6e0] dark:border-border bg-[#faf9f6] dark:bg-card p-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6b6b66] dark:text-neutral-400">Checkbox label</p>
+          <p className="font-mono text-xs leading-relaxed text-[#0a0a0a] dark:text-neutral-100">
             &quot;I agree to receive text messages from [Your Business] about my service appointments and
             account, including appointment reminders, crew arrival notices, and job status updates.
             Message frequency varies. Message and data rates may apply. Reply STOP to opt out at any
             time, HELP for help.&quot;
           </p>
         </div>
-        <div className="rounded-md border border-[#e6e6e0] bg-[#faf9f6] p-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6b6b66]">Verbal opt-in script</p>
-          <p className="font-mono text-xs leading-relaxed text-[#0a0a0a]">
+        <div className="rounded-md border border-[#e6e6e0] dark:border-border bg-[#faf9f6] dark:bg-card p-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#6b6b66] dark:text-neutral-400">Verbal opt-in script</p>
+          <p className="font-mono text-xs leading-relaxed text-[#0a0a0a] dark:text-neutral-100">
             &quot;Hi, this is [staff name] with [Your Business]. Would you like to receive text message
             updates about your appointments and account? If you agree, we&apos;ll send you texts such as
             appointment reminders, crew arrival notices, and account updates. Message frequency varies.

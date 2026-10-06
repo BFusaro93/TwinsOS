@@ -86,15 +86,15 @@ export function VendorsPage() {
       />
 
       {/* Stats */}
-      <div className="flex gap-6 text-sm text-slate-500">
+      <div className="flex gap-6 text-sm text-muted-foreground">
         <span>
-          <span className="font-semibold text-slate-900">
+          <span className="font-semibold text-slate-900 dark:text-neutral-100">
             {(vendors ?? []).filter((v) => v.isActive).length}
           </span>{" "}
           active
         </span>
         <span>
-          <span className="font-semibold text-slate-900">
+          <span className="font-semibold text-slate-900 dark:text-neutral-100">
             {(vendors ?? []).filter((v) => !v.isActive).length}
           </span>{" "}
           inactive
@@ -110,10 +110,10 @@ export function VendorsPage() {
         searchPlaceholder="Search vendors..."
       />
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <TableHead className="w-12" />
               <TableHead>Vendor</TableHead>
               <TableHead>Contact</TableHead>
@@ -138,8 +138,8 @@ export function VendorsPage() {
               <TableRow>
                 <TableCell colSpan={6} className="py-12 text-center">
                   <div className="flex flex-col items-center gap-2">
-                    <Building2 className="h-8 w-8 text-slate-300" />
-                    <p className="text-sm text-slate-500">No vendors found</p>
+                    <Building2 className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+                    <p className="text-sm text-muted-foreground">No vendors found</p>
                   </div>
                 </TableCell>
               </TableRow>
@@ -149,7 +149,7 @@ export function VendorsPage() {
               filtered.map((vendor) => (
                 <TableRow
                   key={vendor.id}
-                  className="cursor-pointer hover:bg-slate-50"
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => handleRowClick(vendor)}
                 >
                   <TableCell>
@@ -160,16 +160,16 @@ export function VendorsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">{vendor.name}</TableCell>
-                  <TableCell className="text-slate-600">{vendor.contactName}</TableCell>
-                  <TableCell className="text-slate-600">{vendor.email}</TableCell>
-                  <TableCell className="text-slate-600">{vendor.phone}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vendor.contactName}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vendor.email}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vendor.phone}</TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"
                       className={
                         vendor.isActive
-                          ? "border-green-200 bg-green-100 text-green-700"
-                          : "border-slate-200 bg-slate-100 text-slate-500"
+                          ? "border-green-200 dark:border-green-800 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400"
+                          : "border-border bg-muted text-muted-foreground"
                       }
                     >
                       {vendor.isActive ? "Active" : "Inactive"}

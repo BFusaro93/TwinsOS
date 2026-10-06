@@ -48,12 +48,12 @@ export function ConsentForm({
       <div className="max-h-64 space-y-3 overflow-y-auto rounded border p-3">
         {resources.map((resource) => (
           <div key={resource.key}>
-            <p className="text-sm font-medium text-slate-800">{resource.label}</p>
+            <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{resource.label}</p>
             <div className="mt-1 flex flex-wrap gap-3">
               {resource.tiers.map((tier) => {
                 const scope = scopeString(resource.key, tier);
                 return (
-                  <label key={scope} className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <label key={scope} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
                     <Checkbox checked={selected.has(scope)} onCheckedChange={() => toggle(scope)} />
                     {tierLabel(tier)}
                     <input type="checkbox" name="scopes" value={scope} checked={selected.has(scope)} readOnly hidden />
@@ -73,7 +73,7 @@ export function ConsentForm({
           Approve
         </Button>
       </div>
-      {selected.size === 0 && <p className="mt-2 text-right text-xs text-slate-400">Select at least one to approve.</p>}
+      {selected.size === 0 && <p className="mt-2 text-right text-xs text-slate-400 dark:text-neutral-500">Select at least one to approve.</p>}
     </form>
   );
 }

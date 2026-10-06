@@ -16,6 +16,17 @@
  *   3. Leave it alone — solid fills (bg-green-600), `text-white`, overlays —
  *      which read fine on dark.
  *
+ * A file containing the comment `dark-mode-codemod: skip` is left alone
+ * (use it for surfaces that are dark in both themes).
+ *
+ * A string containing the no-op class `dm-fixed-dark` gets no text/border
+ * dark: pairs (for text on a surface that is dark in both themes).
+ *
+ * With `--hex`, low-saturation arbitrary hex colors (`text-[#0a0a0a]`,
+ * `border-[#e6e6e0]`) are mapped by lightness too. Use it only on surfaces
+ * that are light in light mode (the docs); elsewhere hex text often sits on a
+ * fixed dark bar.
+ *
  * Idempotent: a class that already has a dark counterpart is skipped, so it
  * is safe to re-run. Anything the codemod can't decide (gradients, svg
  * fill/stroke, hex literals, inline style colors) is listed for manual review.
@@ -30,6 +41,7 @@ const ts = require("typescript");
 const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run");
 const VERBOSE = args.includes("--verbose");
+const HEX = args.includes("--hex");
 const targets = args.filter((a) => !a.startsWith("--"));
 if (targets.length === 0) {
   console.error("usage: dark-mode-codemod.mjs [--dry-run] [--verbose] <file|dir>...");
@@ -76,7 +88,7 @@ function darkUtil(kind, side, color, shade) {
       if (n === 700) return "text-neutral-300";
       if (n === 600 || n === 500) return "text-neutral-400";
       if (n === 400) return "text-neutral-500";
-      if (n === 300) return "text-neutral-600";
+      if (n === 300) return "text-neutral-500";
       return null;
     }
     if (isBorderish) {
@@ -116,12 +128,46 @@ function darkUtil(kind, side, color, shade) {
 function isFixedDarkBg(tok) {
   const [prefix, util] = splitVariants(tok);
   if (prefix) return false;
-  if (/^bg-(?:black|(?:slate|gray|zinc|neutral|stone)-(?:700|800|900|950))(?:\/\d+)?$/.test(util)) return !/\/\d/.test(util);
+  if (/^bg-(?:black|(?:slate|gray|zinc|neutral|stone)-(?:500|600|700|800|900|950))(?:\/\d+)?$/.test(util)) return !/\/\d/.test(util);
+  if (/^bg-white\/(?:5|10|15|20|25|30)$/.test(util)) return true;
   const hex = /^bg-\[#([0-9a-fA-F]{6})\]$/.exec(util);
   if (!hex) return false;
   const n = parseInt(hex[1], 16);
   const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
   return lum < 0.4;
+}
+
+const HEX_RE = /^(bg|text|border|divide|ring)-\[(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})\](?:\/(\d{1,3}))?$/;
+function hexDark(kind, hex) {
+  let h = hex.slice(1);
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const hx = (v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0");
+  if (Math.max(r, g, b) - Math.min(r, g, b) > 28) {
+    // Chromatic: keep the hue. Lighten dark text; darken light fills/borders.
+    const mix = (t, k) => "#" + [r, g, b].map((c) => hx(c + (t - c) * k)).join("");
+    if (kind === "text" && y < 0.45) return `text-[${mix(255, 0.62)}]`;
+    if (kind === "bg" && y > 0.75) return `bg-[${mix(0, 0.82)}]`;
+    if ((kind === "border" || kind === "divide" || kind === "ring") && y > 0.7) return `${kind}-[${mix(0, 0.68)}]`;
+    return null;
+  }
+  if (kind === "bg") {
+    if (y >= 0.96) return "bg-card";
+    if (y >= 0.88) return "bg-muted/50";
+    if (y >= 0.75) return "bg-muted";
+    return null;
+  }
+  if (kind === "text") {
+    if (y <= 0.18) return "text-neutral-100";
+    if (y <= 0.4) return "text-neutral-300";
+    if (y <= 0.62) return "text-neutral-400";
+    if (y <= 0.8) return "text-neutral-500";
+    return null;
+  }
+  if (y >= 0.75) return `${kind}-border`;
+  if (y >= 0.45) return `${kind}-neutral-700`;
+  return null;
 }
 
 const stats = { files: 0, filesChanged: 0, swapped: 0, paired: 0, manual: [] };
@@ -153,7 +199,11 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
 
   // A surface that is dark in BOTH themes (bg-[#4a4a4a], bg-slate-800, bg-black…)
   // carries light text on purpose; flipping that text would make it vanish.
-  const fixedDark = tokens.some((t) => isFixedDarkBg(t[0]));
+  // `text-slate-300 hover:text-white` is the filter-pill idiom on the fixed
+  // dark-gray list toolbars: light text that brightens on hover.
+  // Escape hatch that survives re-runs: add the no-op class `dm-fixed-dark`
+  // to a string whose text sits on a surface that is dark in both themes.
+  const fixedDark = tokens.some((t) => t[0] === "dm-fixed-dark") || tokens.some((t) => isFixedDarkBg(t[0])) || tokens.some((t) => t[0] === "hover:text-white");
   const pageShell = tokens.some((t) => /^(?:min-)?h-(?:dvh|screen)$/.test(t[0]));
 
   let out = "";
@@ -175,6 +225,16 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
       out += tok;
       return;
     }
+    if (HEX) {
+      const hm = HEX_RE.exec(util);
+      if (hm && !fixedDark) {
+        const key = kindKey(prefix, util);
+        if (hasDark.has(key)) { out += tok; return; }
+        const d = hexDark(hm[1], hm[2]);
+        if (d) { stats.paired++; out += `${tok} dark:${prefix}${d}`; } else out += tok;
+        return;
+      }
+    }
     if (util.includes("[") && !/\/\[/.test(util)) { out += tok; return; }
     const cm = COLOR_RE.exec(util);
     if (!cm) { out += tok; return; }
@@ -190,6 +250,9 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
     let replacement = tok;
     let dark = null;
 
+    // bg-white/5..30 is a highlight laid over a dark surface (sidebar rows,
+    // toolbar buttons) — it must stay white, not become the dark card color.
+    if (baseUtil === "bg-white" && alpha && Number(alpha) <= 30) { out += tok; return; }
     if (swapTarget && !sideName) {
       replacement = `${prefix}${swapTarget}${alpha ? "/" + alpha : ""}`;
       stats.swapped++;
@@ -220,6 +283,9 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
 
 function transformFile(file) {
   const src = fs.readFileSync(file, "utf8");
+  // Opt-out for components that are a fixed dark surface in BOTH themes
+  // (photo lightbox, annotation editor): put this comment anywhere in the file.
+  if (src.includes("dark-mode-codemod: skip")) { stats.files++; return; }
   const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, kind);
   const lineOf = (offsetInSrc) => sf.getLineAndCharacterOfPosition(offsetInSrc).line + 1;
