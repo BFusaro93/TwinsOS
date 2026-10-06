@@ -74,7 +74,7 @@ function computeInstallmentSummary(
   const numInstallments = est.num_installments ?? 1;
   if (numInstallments <= 1) return { count: 1, amountCents: totalCents };
   const balanceCents = Math.max(0, totalCents - (est.deposit_required_cents ?? 0));
-  return { count: numInstallments, amountCents: Math.round(balanceCents / numInstallments) };
+  return { count: numInstallments, amountCents: Math.floor(balanceCents / numInstallments) };
 }
 
 export async function POST(
@@ -267,10 +267,16 @@ export async function POST(
   // created_at is a timestamptz and the Node runtime is UTC on Vercel, so
   // without an explicit zone an estimate created in the evening is quoted with
   // tomorrow's date.
-  const quoteDate = new Date(est.created_at).toLocaleDateString("en-US", {
-    month: "long", day: "numeric", year: "numeric",
-    timeZone: await getOrgTimeZone(supabase, est.org_id as string),
-  });
+  // estimate_date is the user-editable date shown on the estimate itself, so
+  // [estimatedate] must match it; fall back to created_at for legacy rows.
+  const quoteDate = est.estimate_date
+    ? new Date(`${est.estimate_date as string}T12:00:00`).toLocaleDateString("en-US", {
+        month: "long", day: "numeric", year: "numeric",
+      })
+    : new Date(est.created_at).toLocaleDateString("en-US", {
+        month: "long", day: "numeric", year: "numeric",
+        timeZone: await getOrgTimeZone(supabase, est.org_id as string),
+      });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineItems = ((est.estimate_line_items ?? []) as any[])
@@ -548,6 +554,8 @@ export async function POST(
     await (supabase as any).from("estimates").update({
       stage: "sent",
       updated_at: sentIso,
+      // A (re)send restarts the expiry-reminder cycle.
+      expiry_notified_at: null,
       ...(est.sent_at ? {} : { sent_at: sentIso }),
     }).eq("id", estimateId).in("stage", ["draft", "quote", "sent"]);
   }

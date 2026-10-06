@@ -71,6 +71,16 @@ export async function POST(
   const { supabase, user } = await getContext();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Handing out the link is sending it — same server-side estimate_send gate
+  // as send-email (admins always pass inside has_settings_permission).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "estimate_send",
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const raw = await req.json().catch(() => ({}));
   const parsed = PostSchema.safeParse(raw ?? {});
   if (!parsed.success) {

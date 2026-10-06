@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/estimates", error);
@@ -53,6 +54,9 @@ export async function POST(request: Request) {
   const parsed = createEstimateSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
   const body = parsed.data;
+  if (body.estimateDate && body.validUntilDate && body.validUntilDate < body.estimateDate) {
+    return jsonError("validUntilDate can't be before estimateDate", 400);
+  }
 
   // deleted_at IS NULL on every FK check: an estimate pointing at a
   // soft-deleted client, service or rep is a dangling reference.
@@ -152,9 +156,9 @@ export async function POST(request: Request) {
 
   if (lineItemError) {
     // Line item failed after the header was committed — delete the
-    // just-created draft estimate (hard delete: it's a fresh row with no
-    // dependents yet) so it doesn't leak an orphaned empty draft.
-    await db.from("estimates").delete().eq("id", estimate.id);
+    // just-created draft estimate (soft delete — the project never hard
+    // deletes) so it doesn't leak an orphaned empty draft.
+    await db.from("estimates").update({ deleted_at: new Date().toISOString() }).eq("id", estimate.id);
     return jsonServerError("POST /api/v1/estimates (line item insert)", lineItemError);
   }
 

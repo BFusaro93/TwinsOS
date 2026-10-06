@@ -13,7 +13,7 @@ export async function GET() {
   // another timezone must see the same schedule the crew works to.
   const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
 
-  const [invoicesRes, visitsRes, estimatesRes] = await Promise.all([
+  const [invoicesRes, upcomingRes, recentRes, estimatesRes] = await Promise.all([
     supabase
       .from("crm_invoices")
       .select("id, invoice_number, total_cents, balance_cents, due_date, status, created_at")
@@ -24,14 +24,29 @@ export async function GET() {
       .order("due_date", { ascending: true })
       .limit(10),
 
+    // Two separate queries: one mixed list ordered newest-first with a limit
+    // would fill with far-future/cancelled rows and starve "upcoming" (or
+    // "recent") of the rows it actually needs.
     supabase
       .from("crm_job_visits")
       .select(`id, scheduled_date, status, completed_at, crm_jobs!inner(id, title, job_type, client_id)`)
       .eq("crm_jobs.client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
+      .gte("scheduled_date", today)
+      .not("status", "in", "(completed,cancelled)")
+      .order("scheduled_date", { ascending: true })
+      .limit(5),
+
+    supabase
+      .from("crm_job_visits")
+      .select(`id, scheduled_date, status, completed_at, crm_jobs!inner(id, title, job_type, client_id)`)
+      .eq("crm_jobs.client_id", ctx.clientId)
+      .eq("org_id", ctx.orgId)
+      .is("deleted_at", null)
+      .eq("status", "completed")
       .order("scheduled_date", { ascending: false })
-      .limit(20),
+      .limit(5),
 
     // Portal customers have no RLS read path to estimates (it would expose
     // internal cost/margin columns) — service client, scoped to this client.
@@ -47,15 +62,8 @@ export async function GET() {
       .limit(5) as Promise<{ data: unknown[] | null }>,
   ]);
 
-  const visits = visitsRes.data ?? [];
-  const upcoming = visits
-    .filter((v) => v.scheduled_date >= today && v.status !== "completed" && v.status !== "cancelled")
-    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
-    .slice(0, 5);
-  const recent = visits
-    .filter((v) => v.status === "completed")
-    .sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date))
-    .slice(0, 5);
+  const upcoming = upcomingRes.data ?? [];
+  const recent = recentRes.data ?? [];
 
   return NextResponse.json({
     invoices: invoicesRes.data ?? [],

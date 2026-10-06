@@ -63,6 +63,38 @@ export async function POST(req: Request) {
     if (!sessionOwnsInviteEmail) return signInRequired();
   }
 
+  // The invited client may have been deleted since the invite was sent —
+  // don't mint portal access to a record that no longer exists.
+  const { data: inviteClient } = await adminClient
+    .from("clients")
+    .select("id")
+    .eq("id", invite.client_id)
+    .eq("org_id", invite.org_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!inviteClient) {
+    return NextResponse.json({ error: "This invite is no longer valid" }, { status: 410 });
+  }
+
+  // An existing active portal link for this login in this org points at one
+  // client; the upsert below would silently re-point it to the invite's
+  // client, handing the person a different customer's data. Reject instead.
+  if (existingUserId) {
+    const { data: existingLink } = await adminClient
+      .from("client_portal_users")
+      .select("client_id")
+      .eq("user_id", existingUserId)
+      .eq("org_id", invite.org_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (existingLink && existingLink.client_id !== invite.client_id) {
+      return NextResponse.json(
+        { error: "This login is already linked to a different client account in this portal. Contact the company to resolve it." },
+        { status: 409 }
+      );
+    }
+  }
+
   // Claim the invite atomically — two concurrent submits of the same token
   // can't both get past this, whatever the earlier accepted_at read said.
   const { data: claimed, error: claimErr } = await adminClient

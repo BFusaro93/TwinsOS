@@ -31,7 +31,7 @@ import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule, resolveLineDiscountCents } from "@/lib/estimate-calc";
+import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule, resolveLineDiscountCents, tierBasis } from "@/lib/estimate-calc";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
@@ -954,8 +954,23 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 // the tax the client was quoted.
                 const isTaxable = taxRateBps > 0;
 
-                const invoiceLines = (estimate.lineItems ?? [])
-                  .filter((li) => !li.deletedAt && li.status !== "lost")
+                // Bill exactly what the estimate's totals count: non-lost,
+                // non-section lines of the chosen (or basis) tier. On a
+                // Good/Better/Best estimate, invoicing every open tier billed
+                // all the mutually exclusive options at once.
+                const liveLines = (estimate.lineItems ?? []).filter(
+                  (li) => !li.deletedAt && li.status !== "lost" && li.rowType !== "section"
+                );
+                const basis = tierBasis(
+                  !!estimate.tiersEnabled,
+                  liveLines.map((li) => ({
+                    tier: li.tier ?? null,
+                    status: li.status,
+                    netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)),
+                  }))
+                );
+                const invoiceLines = liveLines
+                  .filter((li) => !basis || !li.tier || li.tier === basis)
                   .map((li) => ({
                     name: li.serviceName ?? li.serviceId ?? "Service",
                     description: li.invoiceDesc ?? "",
@@ -1003,11 +1018,17 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   taxCents,
                   totalCents,
                 });
-                await updateStage({ id: estimate.id, stage: "invoiced" });
+                try {
+                  await updateStage({ id: estimate.id, stage: "invoiced" });
+                } catch {
+                  // The invoice exists; a failed stage move must not read as a
+                  // failed invoice (a retry would be blocked as a duplicate).
+                  toast.warning("Invoice created, but the estimate stage could not be updated");
+                }
                 toast.success("Invoice created");
                 router.push(`/crm/accounting/invoices/${invoice.id}`);
-              } catch {
-                toast.error("Failed to create invoice");
+              } catch (err) {
+                toast.error(err instanceof Error && err.message ? err.message : "Failed to create invoice");
               }
             }}
           >
