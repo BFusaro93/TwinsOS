@@ -47,7 +47,7 @@ import { useMeters } from "@/lib/hooks/use-meters";
 import { useCMMSStore } from "@/stores";
 import { useRouter } from "next/navigation";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
-import { cn, formatDate, matchesFilter } from "@/lib/utils";
+import { cn, codesMatch, formatDate, matchesFilter } from "@/lib/utils";
 import type { Vehicle } from "@/types";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
@@ -182,9 +182,9 @@ export function VehicleListPage() {
     // Search vehicles first
     const vehicleMatch = all.find(
       (v) =>
-        v.barcode?.toLowerCase() === q ||
-        v.assetTag.toLowerCase() === q ||
-        (v.licensePlate ?? "").toLowerCase() === q
+        codesMatch(q, v.barcode) ||
+        codesMatch(q, v.assetTag) ||
+        codesMatch(q, v.licensePlate)
     );
     if (vehicleMatch) {
       setSelectedVehicleId(vehicleMatch.id);
@@ -194,8 +194,8 @@ export function VehicleListPage() {
     // Fall back to assets — navigate there and pre-select
     const assetMatch = (assets ?? []).find(
       (a) =>
-        a.barcode?.toLowerCase() === q ||
-        a.assetTag.toLowerCase() === q
+        codesMatch(q, a.barcode) ||
+        codesMatch(q, a.assetTag)
     );
     if (assetMatch) {
       setSelectedAssetId(assetMatch.id);
