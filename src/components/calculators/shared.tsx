@@ -78,7 +78,7 @@ export function DimensionInput({
 export function ResultCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between rounded-xl bg-white/10 px-5 py-4 backdrop-blur-sm">
-      <span className="text-xs font-bold uppercase tracking-widest text-slate-300 dark:text-neutral-500">{label}</span>
+      <span className="text-xs font-bold uppercase tracking-widest text-slate-300 dm-fixed-dark">{label}</span>
       <span className="text-3xl font-light text-white tabular-nums">{value}</span>
     </div>
   );

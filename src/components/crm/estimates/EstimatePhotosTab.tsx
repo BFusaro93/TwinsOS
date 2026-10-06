@@ -116,7 +116,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                 <input
                   defaultValue={photo.caption ?? ""}
                   placeholder="Add caption…"
-                  className="min-w-0 flex-1 bg-transparent text-xs text-slate-600 dark:text-neutral-400 placeholder:text-slate-300 dark:placeholder:text-neutral-600 focus:outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-xs text-slate-600 dark:text-neutral-400 placeholder:text-slate-300 dark:placeholder:text-neutral-500 focus:outline-none"
                   onBlur={(e) => {
                     const caption = e.target.value.trim();
                     if (caption !== (photo.caption ?? "")) {

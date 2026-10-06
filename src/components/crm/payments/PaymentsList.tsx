@@ -765,15 +765,15 @@ export function AddPaymentDialog({
           <div className="w-52 shrink-0 bg-[#5a5a5a] p-5 text-sm text-white rounded-tr-lg">
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-slate-300 dark:text-neutral-500">Amount Applied:</span>
+                <span className="text-slate-300 dm-fixed-dark">Amount Applied:</span>
                 <span className="font-medium">{formatCurrency(amountApplied)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-300 dark:text-neutral-500">Unused Amount:</span>
+                <span className="text-slate-300 dm-fixed-dark">Unused Amount:</span>
                 <span className="font-medium">{formatCurrency(unusedCents)}</span>
               </div>
               <div className="flex justify-between border-t border-slate-500 pt-2">
-                <span className="text-slate-300 dark:text-neutral-500">Account Balance:</span>
+                <span className="text-slate-300 dm-fixed-dark">Account Balance:</span>
                 <span className="font-semibold">{formatCurrency(accountBalanceCents)}</span>
               </div>
             </div>
@@ -785,7 +785,7 @@ export function AddPaymentDialog({
           <div className="border-t">
             <div className="mx-6 mt-4 mb-1 rounded bg-[#4a4a4a] px-3 py-1.5 text-sm font-semibold text-white flex items-center justify-between">
               <span>({allocationInvoices.length} of {allocationInvoices.length} in 1 page)</span>
-              <span className="text-xs text-slate-300 dark:text-neutral-500">Page Size: 30</span>
+              <span className="text-xs text-slate-300 dm-fixed-dark">Page Size: 30</span>
             </div>
 
             <div className="mx-6 mb-4 overflow-auto rounded border bg-card">

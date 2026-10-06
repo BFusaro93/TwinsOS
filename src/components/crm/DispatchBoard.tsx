@@ -4780,7 +4780,7 @@ export function DispatchBoard() {
                 {cnt > 0 && (
                   <span className={cn(
                     "ml-1 rounded-full px-1 text-[9px]",
-                    statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300 dark:text-neutral-500"
+                    statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300 dm-fixed-dark"
                   )}>
                     {cnt}
                   </span>

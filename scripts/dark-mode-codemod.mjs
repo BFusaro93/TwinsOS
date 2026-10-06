@@ -19,6 +19,9 @@
  * A file containing the comment `dark-mode-codemod: skip` is left alone
  * (use it for surfaces that are dark in both themes).
  *
+ * A string containing the no-op class `dm-fixed-dark` gets no text/border
+ * dark: pairs (for text on a surface that is dark in both themes).
+ *
  * Idempotent: a class that already has a dark counterpart is skipped, so it
  * is safe to re-run. Anything the codemod can't decide (gradients, svg
  * fill/stroke, hex literals, inline style colors) is listed for manual review.
@@ -119,7 +122,8 @@ function darkUtil(kind, side, color, shade) {
 function isFixedDarkBg(tok) {
   const [prefix, util] = splitVariants(tok);
   if (prefix) return false;
-  if (/^bg-(?:black|(?:slate|gray|zinc|neutral|stone)-(?:700|800|900|950))(?:\/\d+)?$/.test(util)) return !/\/\d/.test(util);
+  if (/^bg-(?:black|(?:slate|gray|zinc|neutral|stone)-(?:500|600|700|800|900|950))(?:\/\d+)?$/.test(util)) return !/\/\d/.test(util);
+  if (/^bg-white\/(?:5|10|15|20|25|30)$/.test(util)) return true;
   const hex = /^bg-\[#([0-9a-fA-F]{6})\]$/.exec(util);
   if (!hex) return false;
   const n = parseInt(hex[1], 16);
@@ -158,7 +162,9 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
   // carries light text on purpose; flipping that text would make it vanish.
   // `text-slate-300 hover:text-white` is the filter-pill idiom on the fixed
   // dark-gray list toolbars: light text that brightens on hover.
-  const fixedDark = tokens.some((t) => isFixedDarkBg(t[0])) || tokens.some((t) => t[0] === "hover:text-white");
+  // Escape hatch that survives re-runs: add the no-op class `dm-fixed-dark`
+  // to a string whose text sits on a surface that is dark in both themes.
+  const fixedDark = tokens.some((t) => t[0] === "dm-fixed-dark") || tokens.some((t) => isFixedDarkBg(t[0])) || tokens.some((t) => t[0] === "hover:text-white");
   const pageShell = tokens.some((t) => /^(?:min-)?h-(?:dvh|screen)$/.test(t[0]));
 
   let out = "";

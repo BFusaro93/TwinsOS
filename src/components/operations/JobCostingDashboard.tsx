@@ -360,7 +360,7 @@ function CalculatorTab({
             type="button"
             onClick={handleSaveRates}
             disabled={!hasRates}
-            className="mt-2 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 disabled:cursor-not-allowed disabled:text-slate-300 dark:disabled:text-neutral-600"
+            className="mt-2 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 disabled:cursor-not-allowed disabled:text-slate-300 dark:disabled:text-neutral-500"
           >
             {savedRates ? "✓ Saved as project rates" : alreadyUsing ? "Using these rates" : "Set as project rates"}
           </button>

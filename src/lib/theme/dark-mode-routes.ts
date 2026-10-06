@@ -5,25 +5,59 @@
  * as white cards on a dark page.
  *
  * To ship a module: run scripts/dark-mode-codemod.mjs over it, review the
- * pages in both themes, then add its prefix below.
+ * pages in both themes, then add its prefix below. A prefix also covers every
+ * sub-route (detail pages); use EXACT for a path whose children aren't ready.
  */
 export const DARK_MODE_ROUTE_PREFIXES: readonly string[] = [
   "/crm/crew",
-  "/crm/scheduling/dispatch",
-  "/crm/scheduling/jobs",
-  "/crm/accounting/invoices",
+  "/crm/scheduling",
+  "/crm/accounting",
   "/crm/estimates",
   "/crm/clients",
-  "/crm/accounting/purchase-orders",
+  "/crm/home",
+  "/crm/leads",
+  "/crm/calls",
+  "/crm/tickets",
+  "/crm/sales-meetings",
+  "/crm/vendors",
+  "/crm/team",
+  "/crm/communication",
+  "/crm/admin/reports/r",
+  "/crm/admin/roles",
+  "/crm/admin/support",
+  "/crm/reports",
   "/cmms/work-orders",
   "/po/orders",
   "/po/requisitions",
   "/po/receiving",
   "/vendors",
+  "/dashboards/equipt",
+  "/dashboards/landscapt-reports",
+  "/dashboards/myday",
+  "/dashboards/social-media",
+  "/dashboards/calculators",
+  "/dashboards/estimate-builder",
+  "/dashboards/job-costing",
+  "/dashboards/kpis",
+  "/tools",
+  "/photos/jobs",
+  "/photos/projects",
+  "/photos/field/damage-report",
+  "/photos/field/injury-report",
+  "/settings/landscapt",
+  "/settings/equipt",
+];
+
+/** Routes that are ready only at exactly this path (their sub-routes are not). */
+export const DARK_MODE_EXACT_ROUTES: readonly string[] = [
+  "/settings",
+  "/dashboards",
+  "/crm/admin/reports",
 ];
 
 export function isDarkModeReady(pathname: string | null): boolean {
   if (!pathname) return false;
+  if (DARK_MODE_EXACT_ROUTES.includes(pathname)) return true;
   return DARK_MODE_ROUTE_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );

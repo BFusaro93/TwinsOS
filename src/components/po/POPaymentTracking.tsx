@@ -120,7 +120,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
             setCheckNumber(e.target.value);
             saveCheckNumber(e.target.value);
           }}
-          className="w-36 rounded border border-border bg-card px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 placeholder:text-slate-300 dark:placeholder:text-neutral-600 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="w-36 rounded border border-border bg-card px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 placeholder:text-slate-300 dark:placeholder:text-neutral-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
       </div>
       <CheckRow

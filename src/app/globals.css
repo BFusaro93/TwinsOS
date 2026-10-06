@@ -86,6 +86,38 @@
   }
 }
 
+/* Recharts takes its neutral chrome (grid, axes, tooltip) as props/attributes,
+   which Tailwind's dark: can't reach. CSS beats SVG presentation attributes,
+   so theme it here, scoped to `.dark`. Series colors are left as authored.
+   Don't target .recharts-label — LabelList text sits on coloured bars. */
+.dark .recharts-cartesian-grid line,
+.dark .recharts-polar-grid-concentric-polygon,
+.dark .recharts-polar-grid-angle line {
+  stroke: #2e2e2e;
+}
+.dark .recharts-cartesian-axis-line,
+.dark .recharts-cartesian-axis-tick-line {
+  stroke: #404040;
+}
+.dark .recharts-cartesian-axis-tick-value,
+.dark .recharts-polar-angle-axis-tick-value {
+  fill: #a3a3a3;
+}
+.dark .recharts-legend-item-text {
+  color: #d4d4d4 !important;
+}
+.dark .recharts-default-tooltip {
+  background-color: #1b1b1b !important;
+  border-color: #333333 !important;
+}
+.dark .recharts-tooltip-label,
+.dark .recharts-tooltip-item {
+  color: #f5f5f5 !important;
+}
+.dark .recharts-tooltip-cursor {
+  fill: rgba(255, 255, 255, 0.06);
+}
+
 /* Docs guide printing (window.print() via the "Download PDF" button in
    DocsHero) — preserve brand colors/backgrounds, which browsers otherwise
    strip by default unless the viewer manually checks "Background graphics". */
