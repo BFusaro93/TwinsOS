@@ -19,13 +19,15 @@ interface MentionQuery {
   /** Index of the "@" that opened this query, within `value`. */
   start: number;
   text: string;
+  /** Where to anchor the suggestion list, relative to the textarea wrapper. */
+  anchor: { left: number; top: number; bottom: number; flip: boolean };
 }
 
 // Finds an in-progress "@query" immediately before the cursor, if any — the
 // "@" must not be glued to a preceding word character (so emails like
 // "a@b.com" don't trigger it), and the query itself can't contain
 // whitespace/newlines (an unfinished mention ends at the next space).
-function findActiveMentionQuery(text: string, cursor: number): MentionQuery | null {
+function findActiveMentionQuery(text: string, cursor: number): Omit<MentionQuery, "anchor"> | null {
   const upToCursor = text.slice(0, cursor);
   const at = upToCursor.lastIndexOf("@");
   if (at === -1) return null;
@@ -35,6 +37,49 @@ function findActiveMentionQuery(text: string, cursor: number): MentionQuery | nu
   if (charBefore && /\w/.test(charBefore)) return null;
   return { start: at, text: query };
 }
+
+const MIRROR_PROPS = [
+  "boxSizing", "width", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+  "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+  "fontFamily", "fontSize", "fontWeight", "fontStyle", "letterSpacing", "lineHeight",
+  "textTransform", "wordSpacing", "textIndent", "whiteSpace", "wordWrap", "overflowWrap", "tabSize",
+] as const;
+
+interface CaretPosition {
+  left: number;
+  /** Bottom edge of the caret's line, relative to the textarea's top. */
+  bottom: number;
+  /** Top edge of the caret's line, relative to the textarea's top. */
+  top: number;
+}
+
+// Measures where the character at `index` renders inside the textarea by
+// copying its text into an off-screen mirror element with identical styling.
+function getCaretPosition(el: HTMLTextAreaElement, index: number): CaretPosition {
+  const style = window.getComputedStyle(el);
+  const mirror = document.createElement("div");
+  for (const prop of MIRROR_PROPS) mirror.style[prop] = style[prop];
+  mirror.style.position = "absolute";
+  mirror.style.visibility = "hidden";
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.overflowWrap = "break-word";
+  mirror.textContent = el.value.slice(0, index);
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+  const pos = {
+    left: marker.offsetLeft - el.scrollLeft,
+    top: marker.offsetTop - el.scrollTop,
+    bottom: marker.offsetTop - el.scrollTop + lineHeight,
+  };
+  document.body.removeChild(mirror);
+  return pos;
+}
+
+const DROPDOWN_WIDTH = 256; // matches w-64
+const DROPDOWN_MAX_HEIGHT = 220;
 
 /** Textarea with @-mention autocomplete. The visible text always shows just
  *  "@Name" for a mention — the underlying value (passed to onChange) embeds
@@ -60,7 +105,25 @@ export function MentionTextarea({
     onChange(nextRaw);
     const cursor = e.target.selectionStart ?? nextDisplay.length;
     const active = findActiveMentionQuery(nextDisplay, cursor);
-    setQuery(active);
+    if (active) {
+      const el = e.target;
+      const caret = getCaretPosition(el, active.start);
+      const maxLeft = Math.max(0, el.clientWidth - DROPDOWN_WIDTH);
+      const rect = el.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - (rect.top + caret.bottom);
+      const spaceAbove = rect.top + caret.top;
+      setQuery({
+        ...active,
+        anchor: {
+          left: Math.min(Math.max(0, caret.left), maxLeft),
+          top: caret.top,
+          bottom: caret.bottom,
+          flip: spaceBelow < DROPDOWN_MAX_HEIGHT && spaceAbove > spaceBelow,
+        },
+      });
+    } else {
+      setQuery(null);
+    }
     setHighlighted(0);
   }
 
@@ -107,7 +170,13 @@ export function MentionTextarea({
       />
       {query && matches.length > 0 && (
         <div
-          className={`absolute bottom-full left-0 z-20 mb-1 w-64 overflow-hidden rounded-md border shadow-lg ${
+          style={{
+            left: query.anchor.left,
+            ...(query.anchor.flip
+              ? { bottom: `calc(100% - ${query.anchor.top}px + 4px)` }
+              : { top: query.anchor.bottom + 4 }),
+          }}
+          className={`absolute z-20 w-64 overflow-hidden rounded-md border shadow-lg ${
             dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-slate-200 bg-white"
           }`}
         >
