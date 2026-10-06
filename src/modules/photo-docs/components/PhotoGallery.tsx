@@ -388,7 +388,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
       {isLoading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-square rounded-lg bg-slate-800" />
+            <Skeleton key={i} className="aspect-square rounded-lg" />
           ))}
         </div>
       ) : photos.length === 0 ? (
