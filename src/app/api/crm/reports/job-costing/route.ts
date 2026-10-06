@@ -27,16 +27,18 @@ export interface JobCostingReportRow {
   menCount: number;
   budgetedHours: number;
   actualManHours: number;
-  /** actual − budgeted; positive means over budget. */
-  hoursVariance: number;
+  /** False when no hours were recorded for the visit — hours variance and rev/man-hr aren't computable. */
+  hasActuals: boolean;
+  /** actual − budgeted; positive means over budget. Null when !hasActuals. */
+  hoursVariance: number | null;
   /** revenue ÷ budgeted man-hours. */
   budgetedRateCents: number;
-  /** revenue ÷ actual man-hours. */
-  revPerManHrCents: number;
+  /** revenue ÷ actual man-hours. Null when !hasActuals. */
+  revPerManHrCents: number | null;
   /** Man-hour-weighted crm_services.target_rate_cents_per_hr; 0 if none. */
   targetRateCents: number;
-  /** revPerManHr − target. */
-  overUnderCents: number;
+  /** revPerManHr − target. Null when !hasActuals. */
+  overUnderCents: number | null;
   laborCostCents: number;
   /** Labor was estimated (man-hours × crew/org labor rate) — no crew clock-out. */
   laborEstimated: boolean;
@@ -57,7 +59,7 @@ const QuerySchema = z.object({
 });
 
 function toRow(visit: CostedVisit, services: Map<string, ServiceTarget>): JobCostingReportRow {
-  const revPerManHrCents = ratio(visit.revenueCents, visit.manHours);
+  const revPerManHrCents = visit.hasActuals ? ratio(visit.revenueCents, visit.manHours) : null;
   const targetRateCents = weightedTargetRate(visit.services, services);
   const grossProfitCents = visit.revenueCents - visit.laborCostCents - visit.materialsCostCents;
   return {
@@ -71,11 +73,13 @@ function toRow(visit: CostedVisit, services: Map<string, ServiceTarget>): JobCos
     menCount: visit.menCount,
     budgetedHours: visit.budgetedHours,
     actualManHours: visit.manHours,
-    hoursVariance: Math.round((visit.manHours - visit.budgetedHours) * 100) / 100,
+    hasActuals: visit.hasActuals,
+    hoursVariance: visit.hasActuals ? Math.round((visit.manHours - visit.budgetedHours) * 100) / 100 : null,
     budgetedRateCents: ratio(visit.revenueCents, visit.budgetedHours),
     revPerManHrCents,
     targetRateCents,
-    overUnderCents: targetRateCents > 0 && revPerManHrCents > 0 ? revPerManHrCents - targetRateCents : 0,
+    overUnderCents:
+      revPerManHrCents != null && targetRateCents > 0 && revPerManHrCents > 0 ? revPerManHrCents - targetRateCents : revPerManHrCents == null ? null : 0,
     laborCostCents: visit.laborCostCents,
     laborEstimated: visit.laborEstimated,
     laborSource: visit.laborSource,

@@ -244,7 +244,6 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
 
   const {
     estimatedLines,
-    actualHours,
     menCount,
     actualStaffHrs,
     actualLaborCostCents,
@@ -330,7 +329,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
                 Labor Hours
                 {menCount > 1 && (
                   <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
-                    ({actualHours.toFixed(1)} crew hrs × {menCount} men = {actualStaffHrs.toFixed(1)} staff hrs)
+                    ({actualStaffHrs.toFixed(1)} man-hrs, latest crew of {menCount})
                   </span>
                 )}
               </td>

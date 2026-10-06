@@ -4,7 +4,7 @@ import type { AnalysisConfig, AnalysisFilter, ReportResultRow } from "@/types/cr
 import type { KpiComputedActuals } from "@/types/crm-kpi-scorecard";
 import { runAnalysis } from "@/lib/reports/engine";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
-import { daysBetweenYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
+import { daysBetweenYmd, isoInZone, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 import { BILLABLE_CONTRACT_STATUSES, monthlyRecurringCents } from "@/lib/reports/contract-schedule";
 import { loadVisitCosting, weightedTargetRate, type CostedVisit } from "@/lib/visit-costing";
 import { logger } from "@/lib/logger";
@@ -262,7 +262,8 @@ async function computeJobsSold(supabase: Client, w: YearWindow): Promise<Values>
   const row = await total(
     supabase,
     "rpt_jobs",
-    dateFilters("date_sold", w),
+    // A cancelled job isn't a sale.
+    [{ column: "status", op: "neq", value: "cancelled" }, ...dateFilters("date_sold", w)],
     [
       { column: "total_cents", fn: "sum" },
       { column: "total_cents", fn: "count" },
@@ -413,6 +414,13 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
     return t >= jan1 && t <= end;
   };
   const before = (v: string | null, at: number) => !!v && new Date(v).getTime() < at;
+  // client_since is a DATE column: compare as YYYY-MM-DD strings against the
+  // org-calendar window. new Date("YYYY-MM-DD") is UTC midnight, which lands on
+  // the previous evening in the org zone and slips Jan 1 / Dec 31 across the
+  // year boundary.
+  const endYmd = isoInZone(w.periodEnd, w.timeZone);
+  const dateInYear = (v: string | null) => !!v && v >= w.from && v <= endYmd;
+  const dateBeforeYear = (v: string | null) => !!v && v < w.from;
 
   const createdInYear = rows.filter((r) => inYear(r.created_at));
   const converted = createdInYear.filter((r) => r.client_since && r.status !== "lead").length;
@@ -420,14 +428,14 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
     (r) => !!r.referred_by || !!r.referred_by_client_id || /referr/i.test(r.source ?? "")
   ).length;
 
-  const newClients = rows.filter((r) => r.status !== "lead" && inYear(r.client_since)).length;
+  const newClients = rows.filter((r) => r.status !== "lead" && dateInYear(r.client_since)).length;
   const cancellations = rows.filter(
     (r) => (r.status === "cancelled" || r.status === "lost") && inYear(r.closed_at)
   ).length;
 
   // Retention: clients on Jan 1 (client_since before Jan 1, not closed before
   // Jan 1) who were still not closed by period end.
-  const base = rows.filter((r) => before(r.client_since, jan1) && !before(r.closed_at, jan1));
+  const base = rows.filter((r) => dateBeforeYear(r.client_since) && !before(r.closed_at, jan1));
   const retained = base.filter((r) => !r.closed_at || new Date(r.closed_at).getTime() > end).length;
 
   // Maintenance retention: a "maintenance client" has a recurring or package
@@ -578,35 +586,27 @@ async function computeEmployees(supabase: Client, w: YearWindow): Promise<Values
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as EmployeeRow[];
 
-  const jan1 = w.jan1.getTime();
-  const end = w.periodEnd.getTime();
-  const ts = (v: string | null) => (v ? new Date(v).getTime() : null);
-  const inYear = (v: string | null) => {
-    const t = ts(v);
-    return t !== null && t >= jan1 && t <= end;
-  };
+  // date_hired / date_released / rehire_date are DATE columns: compare them as
+  // YYYY-MM-DD strings against the org-calendar window (see computeClients).
+  const endYmd = isoInZone(w.periodEnd, w.timeZone);
+  const inYear = (v: string | null) => !!v && v >= w.from && v <= endYmd;
 
   // Employed on Jan 1: hired before Jan 1 (or unknown hire date but active),
   // and not released before Jan 1.
   const employedJan1 = rows.filter((r) => {
-    const hired = ts(r.date_hired);
-    const released = ts(r.date_released);
-    const wasHired = hired !== null ? hired < jan1 : r.is_active;
-    const wasReleased = released !== null && released < jan1;
+    const wasHired = r.date_hired ? r.date_hired < w.from : r.is_active;
+    const wasReleased = !!r.date_released && r.date_released < w.from;
     return wasHired && !wasReleased;
   });
-  const retained = employedJan1.filter((r) => {
-    const released = ts(r.date_released);
-    return released === null || released > end;
-  }).length;
+  const retained = employedJan1.filter((r) => !r.date_released || r.date_released > endYmd).length;
 
   const newHires = rows.filter((r) => inYear(r.date_hired) || inYear(r.rehire_date)).length;
   const terminations = rows.filter((r) => inYear(r.date_released)).length;
 
   const active = rows.filter((r) => r.is_active && !r.date_released);
   const tenures = active
-    .map((r) => ts(r.date_hired))
-    .filter((t): t is number => t !== null)
+    .map((r) => (r.date_hired ? Date.parse(`${r.date_hired}T12:00:00Z`) : null))
+    .filter((t): t is number => t !== null && !Number.isNaN(t))
     .map((t) => (Date.now() - t) / (365.25 * 86_400_000));
   const avgTenure = tenures.length > 0 ? round(tenures.reduce((s, t) => s + t, 0) / tenures.length) : null;
 
@@ -711,7 +711,11 @@ async function computeInjuryCases(supabase: Client, timeZone: string): Promise<V
 export async function computeLandscaptKpiActuals(
   supabase: Client,
   year: number,
-  timeZone?: string
+  timeZone?: string,
+  /** Data areas the caller may see (route-enforced per-role gate). Omitted =
+   *  all areas. Areas left out are skipped, so their metrics come back absent
+   *  (rendered as no data) instead of leaking invoice/payroll figures. */
+  allowedAreas?: ReadonlySet<string>
 ): Promise<KpiComputedActuals> {
   // Callers needn't pass a zone: it resolves from the session's own org.
   const w = buildWindow(year, timeZone ?? (await getMyTimeZone(supabase)));
@@ -731,13 +735,14 @@ export async function computeLandscaptKpiActuals(
     ["injury_cases", () => computeInjuryCases(supabase, w.timeZone)],
   ];
 
-  const settled = await Promise.allSettled(areas.map(([, fn]) => fn()));
+  const runnable = allowedAreas ? areas.filter(([name]) => allowedAreas.has(name)) : areas;
+  const settled = await Promise.allSettled(runnable.map(([, fn]) => fn()));
   const values: Values = {};
   settled.forEach((res, i) => {
     if (res.status === "fulfilled") {
       Object.assign(values, res.value);
     } else {
-      log.error(`KPI area "${areas[i][0]}" failed`, { year, error: String(res.reason) });
+      log.error(`KPI area "${runnable[i][0]}" failed`, { year, error: String(res.reason) });
     }
   });
 

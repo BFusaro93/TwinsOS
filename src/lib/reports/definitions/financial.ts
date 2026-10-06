@@ -10,6 +10,7 @@ import {
   issuedInvoiceFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 
@@ -17,40 +18,43 @@ import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 // Financial section — pre-built reports.
 // ============================================================
 
-/** Sum job-material costs (by created_at) and field-labor costs (by completed_at) in a window. */
+/**
+ * Sum job-material costs (by created_at) and field-labor costs in a window.
+ * Labor reads rpt_job_visits (completed visits, by worked_date) — the same
+ * source and day basis as Job Costing / COGS — so the figures agree, rather
+ * than raw crm_job_visits.actual_labor_cost_cents, which is 0 for visits whose
+ * labor the view estimates from hours × rate.
+ */
 async function sumExpenses(
   supabase: SupabaseClient,
   from: string | null,
   to: string | null
 ): Promise<{ materialsCents: number; laborCents: number }> {
-  let matQuery = supabase
-    .from("crm_job_materials")
-    .select("total_cost_cents")
-    .is("deleted_at", null);
-  if (from) matQuery = matQuery.gte("created_at", from);
-  if (to) matQuery = matQuery.lte("created_at", `${to} 23:59:59.999`);
-  const { data: matData, error: matError } = await matQuery.limit(5000);
-  if (matError) throw new Error(matError.message);
-
-  let laborQuery = supabase
-    .from("crm_job_visits")
-    .select("actual_labor_cost_cents")
-    .is("deleted_at", null);
-  if (from) laborQuery = laborQuery.gte("completed_at", from);
-  if (to) laborQuery = laborQuery.lte("completed_at", `${to} 23:59:59.999`);
-  const { data: laborData, error: laborError } = await laborQuery.limit(5000);
-  if (laborError) throw new Error(laborError.message);
-
   type MatRow = { total_cost_cents: number | null };
+  const matData = await fetchAllRows<MatRow>(() => {
+    let q = supabase
+      .from("crm_job_materials")
+      .select("total_cost_cents")
+      .is("deleted_at", null);
+    if (from) q = q.gte("created_at", from);
+    if (to) q = q.lte("created_at", `${to} 23:59:59.999`);
+    return q.order("id");
+  });
+
   type LaborRow = { actual_labor_cost_cents: number | null };
-  const materialsCents = ((matData ?? []) as unknown as MatRow[]).reduce(
-    (sum, r) => sum + (r.total_cost_cents ?? 0),
-    0
-  );
-  const laborCents = ((laborData ?? []) as unknown as LaborRow[]).reduce(
-    (sum, r) => sum + (r.actual_labor_cost_cents ?? 0),
-    0
-  );
+  const laborData = await fetchAllRows<LaborRow>(() => {
+    let q = supabase
+      .from("rpt_job_visits")
+      .select("actual_labor_cost_cents")
+      .eq("status", "completed")
+      .not("completed_at", "is", null);
+    if (from) q = q.gte("worked_date", from);
+    if (to) q = q.lte("worked_date", to);
+    return q.order("id");
+  });
+
+  const materialsCents = matData.reduce((sum, r) => sum + (r.total_cost_cents ?? 0), 0);
+  const laborCents = laborData.reduce((sum, r) => sum + (r.actual_labor_cost_cents ?? 0), 0);
   return { materialsCents, laborCents };
 }
 
@@ -161,15 +165,16 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
 
       // Rule A (issued invoices only) and the soft-delete guard are applied on
       // the joined parent; `!inner` drops line items whose invoice fails them.
-      let lineQuery = supabase
-        .from("crm_invoice_line_items")
-        .select("name, description, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)")
-        .is("crm_invoices.deleted_at", null)
-        .in("crm_invoices.status", ISSUED_INVOICE_STATUSES);
-      if (from) lineQuery = lineQuery.gte("crm_invoices.invoice_date", from);
-      if (to) lineQuery = lineQuery.lte("crm_invoices.invoice_date", to);
-      const { data, error } = await lineQuery.limit(5000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() => {
+        let lineQuery = supabase
+          .from("crm_invoice_line_items")
+          .select("name, description, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)")
+          .is("crm_invoices.deleted_at", null)
+          .in("crm_invoices.status", ISSUED_INVOICE_STATUSES);
+        if (from) lineQuery = lineQuery.gte("crm_invoices.invoice_date", from);
+        if (to) lineQuery = lineQuery.lte("crm_invoices.invoice_date", to);
+        return lineQuery.order("id");
+      });
 
       type LineRow = {
         name: string | null;
@@ -215,16 +220,17 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
-      let payQuery = supabase
-        .from("crm_payments")
-        .select("amount_cents, unused_amount_cents, refunded_amount_cents, processing_fee_cents")
-        .is("deleted_at", null)
-        .eq("is_credit", false)
-        .neq("method", AR_WRITE_OFF_METHOD);
-      if (from) payQuery = payQuery.gte("payment_date", from);
-      if (to) payQuery = payQuery.lte("payment_date", to);
-      const { data, error } = await payQuery.limit(5000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() => {
+        let payQuery = supabase
+          .from("crm_payments")
+          .select("amount_cents, unused_amount_cents, refunded_amount_cents, processing_fee_cents")
+          .is("deleted_at", null)
+          .eq("is_credit", false)
+          .neq("method", AR_WRITE_OFF_METHOD);
+        if (from) payQuery = payQuery.gte("payment_date", from);
+        if (to) payQuery = payQuery.lte("payment_date", to);
+        return payQuery.order("id");
+      });
 
       type PayRow = {
         amount_cents: number | null;
@@ -274,15 +280,16 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_year", timeZone);
-      let query = supabase
-        .from("crm_invoices")
-        .select("id, invoice_date, subtotal_cents, discount_cents, tax_cents, total_cents")
-        .is("deleted_at", null)
-        .in("status", ISSUED_INVOICE_STATUSES);
-      if (from) query = query.gte("invoice_date", from);
-      if (to) query = query.lte("invoice_date", to);
-      const { data, error } = await query.limit(5000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("crm_invoices")
+          .select("id, invoice_date, subtotal_cents, discount_cents, tax_cents, total_cents")
+          .is("deleted_at", null)
+          .in("status", ISSUED_INVOICE_STATUSES);
+        if (from) query = query.gte("invoice_date", from);
+        if (to) query = query.lte("invoice_date", to);
+        return query.order("id");
+      });
 
       type Row = {
         id: string;
@@ -310,13 +317,15 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       const invoicesWithLines = new Set<string>();
       const ids = invoices.map((r) => r.id);
       for (let i = 0; i < ids.length; i += 200) {
-        const { data: lines, error: linesError } = await supabase
-          .from("crm_invoice_line_items")
-          .select("invoice_id, total_cents, discount_cents, is_taxable")
-          .in("invoice_id", ids.slice(i, i + 200))
-          .limit(5000);
-        if (linesError) throw new Error(linesError.message);
-        for (const li of (lines ?? []) as unknown as LineRow[]) {
+        const idChunk = ids.slice(i, i + 200);
+        const lines = await fetchAllRows<LineRow>(() =>
+          supabase
+            .from("crm_invoice_line_items")
+            .select("invoice_id, total_cents, discount_cents, is_taxable")
+            .in("invoice_id", idChunk)
+            .order("id")
+        );
+        for (const li of lines) {
           invoicesWithLines.add(li.invoice_id);
           if (!li.is_taxable) continue;
           const net = (li.total_cents ?? 0) - (li.discount_cents ?? 0);
@@ -387,35 +396,38 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
-      let invQuery = supabase
-        .from("crm_invoices")
-        .select("subtotal_cents, tax_cents, total_cents")
-        .in("status", ISSUED_INVOICE_STATUSES)
-        .is("deleted_at", null);
-      if (from) invQuery = invQuery.gte("invoice_date", from);
-      if (to) invQuery = invQuery.lte("invoice_date", to);
-      const { data: invData, error: invError } = await invQuery.limit(10000);
-      if (invError) throw new Error(invError.message);
+      const invData = await fetchAllRows<unknown>(() => {
+        let invQuery = supabase
+          .from("crm_invoices")
+          .select("subtotal_cents, tax_cents, total_cents")
+          .in("status", ISSUED_INVOICE_STATUSES)
+          .is("deleted_at", null);
+        if (from) invQuery = invQuery.gte("invoice_date", from);
+        if (to) invQuery = invQuery.lte("invoice_date", to);
+        return invQuery.order("id");
+      });
 
-      let payQuery = supabase
-        .from("crm_payments")
-        .select("amount_cents, refunded_amount_cents")
-        .eq("is_credit", false)
-        .neq("method", AR_WRITE_OFF_METHOD)
-        .is("deleted_at", null);
-      if (from) payQuery = payQuery.gte("payment_date", from);
-      if (to) payQuery = payQuery.lte("payment_date", to);
-      const { data: payData, error: payError } = await payQuery.limit(10000);
-      if (payError) throw new Error(payError.message);
+      const payData = await fetchAllRows<unknown>(() => {
+        let payQuery = supabase
+          .from("crm_payments")
+          .select("amount_cents, refunded_amount_cents")
+          .eq("is_credit", false)
+          .neq("method", AR_WRITE_OFF_METHOD)
+          .is("deleted_at", null);
+        if (from) payQuery = payQuery.gte("payment_date", from);
+        if (to) payQuery = payQuery.lte("payment_date", to);
+        return payQuery.order("id");
+      });
 
-      const { data: balData, error: balError } = await supabase
-        .from("crm_invoices")
-        .select("due_date, invoice_date, balance_cents")
-        .in("status", ISSUED_INVOICE_STATUSES)
-        .gt("balance_cents", 0)
-        .is("deleted_at", null)
-        .limit(10000);
-      if (balError) throw new Error(balError.message);
+      const balData = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("crm_invoices")
+          .select("due_date, invoice_date, balance_cents")
+          .in("status", ISSUED_INVOICE_STATUSES)
+          .gt("balance_cents", 0)
+          .is("deleted_at", null)
+          .order("id")
+      );
 
       type InvRow = { subtotal_cents: number | null; tax_cents: number | null; total_cents: number | null };
       const invoices = (invData ?? []) as unknown as InvRow[];

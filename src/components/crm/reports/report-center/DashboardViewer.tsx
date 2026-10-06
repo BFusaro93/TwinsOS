@@ -281,7 +281,9 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     downloadCSV(
       `${panel.title}.csv`,
       result.columns.map((c) => c.label),
-      exportRowsWithTotals(result, formatCellValue)
+      // Raw numbers / blanks (like the Excel export) — formatCellValue's
+      // "$1,234.00" and "—" strings open as text in a spreadsheet.
+      exportRowsWithTotals(result, exportCellValue)
     );
   };
 

@@ -6,6 +6,7 @@ import {
   buildResult,
   col,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 // ============================================================
 // Receivables section — pre-built reports.
@@ -29,14 +30,15 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
       "Buckets each client's open invoice balances by how many days past due they are.",
     filters: [],
     run: async ({ supabase, timeZone }) => {
-      const { data, error } = await supabase
-        .from("crm_invoices")
-        .select("due_date, invoice_date, balance_cents, clients:client_id(display_name)")
-        .gt("balance_cents", 0)
-        .is("deleted_at", null)
-        .in("status", ISSUED_INVOICE_STATUSES)
-        .limit(5000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("crm_invoices")
+          .select("due_date, invoice_date, balance_cents, clients:client_id(display_name)")
+          .gt("balance_cents", 0)
+          .is("deleted_at", null)
+          .in("status", ISSUED_INVOICE_STATUSES)
+          .order("id")
+      );
 
       type Row = {
         due_date: string | null;
@@ -119,14 +121,15 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
     ],
     run: async ({ supabase, params }) => {
       const minCents = Math.round(parseFloat(params.min_balance || "0") * 100);
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, display_name, balance_outstanding_cents")
-        .gt("balance_outstanding_cents", minCents)
-        .neq("status", "lead")
-        .is("deleted_at", null)
-        .limit(5000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("clients")
+          .select("id, display_name, balance_outstanding_cents")
+          .gt("balance_outstanding_cents", minCents)
+          .neq("status", "lead")
+          .is("deleted_at", null)
+          .order("id")
+      );
 
       type ClientRow = {
         id: string;
@@ -135,24 +138,26 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
       };
       const clients = (data ?? []) as unknown as ClientRow[];
 
-      const { data: invData, error: invError } = await supabase
-        .from("crm_invoices")
-        .select("client_id, invoice_date, total_cents")
-        .is("deleted_at", null)
-        .in("status", ISSUED_INVOICE_STATUSES)
-        .order("invoice_date", { ascending: false })
-        .limit(5000);
-      if (invError) throw new Error(invError.message);
+      const invData = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("crm_invoices")
+          .select("client_id, invoice_date, total_cents")
+          .is("deleted_at", null)
+          .in("status", ISSUED_INVOICE_STATUSES)
+          .order("invoice_date", { ascending: false })
+          .order("id")
+      );
 
-      const { data: payData, error: payError } = await supabase
-        .from("crm_payments")
-        .select("client_id, payment_date, amount_cents")
-        .is("deleted_at", null)
-        .eq("is_credit", false)
-        .neq("method", AR_WRITE_OFF_METHOD)
-        .order("payment_date", { ascending: false })
-        .limit(5000);
-      if (payError) throw new Error(payError.message);
+      const payData = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("crm_payments")
+          .select("client_id, payment_date, amount_cents")
+          .is("deleted_at", null)
+          .eq("is_credit", false)
+          .neq("method", AR_WRITE_OFF_METHOD)
+          .order("payment_date", { ascending: false })
+          .order("id")
+      );
 
       type InvoiceRow = {
         client_id: string | null;

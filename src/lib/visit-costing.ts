@@ -47,9 +47,9 @@ type UntypedClient = SupabaseClient;
 export type LaborCostSource = "actual" | "estimated" | "none";
 
 export interface VisitCostingWindow {
-  /** "YYYY-MM-DD" inclusive lower bound on completed_at, or null for open. */
+  /** "YYYY-MM-DD" inclusive lower bound on worked_date (org-timezone day), or null for open. */
   from: string | null;
-  /** "YYYY-MM-DD" inclusive upper bound on completed_at, or null for open. */
+  /** "YYYY-MM-DD" inclusive upper bound on worked_date (org-timezone day), or null for open. */
   to: string | null;
 }
 
@@ -75,6 +75,8 @@ export interface CostedVisit {
   budgetedHours: number;
   /** Actual MAN-hours for the visit. */
   manHours: number;
+  /** False when the visit has no recorded hours at all (man_hours is null) — 0 hours is not "worked 0". */
+  hasActuals: boolean;
   revenueCents: number;
   laborCostCents: number;
   /** True when laborCostCents was derived from hours × a labor rate, not clock-out. */
@@ -100,7 +102,6 @@ export interface VisitCostingData {
 
 const PAGE_SIZE = 1000;
 const CHUNK_SIZE = 100;
-const SENTINEL_TS = "23:59:59.999";
 
 // ── generic fetch helpers ─────────────────────────────────────────────────────
 
@@ -178,10 +179,12 @@ async function loadCompletedVisits(supabase: UntypedClient, window: VisitCosting
       )
       .eq("status", "completed")
       .not("completed_at", "is", null);
-    if (window.from) q = q.gte("completed_at", window.from);
-    // completed_at is timestamptz — a bare date casts to midnight, which
-    // would drop almost all of the `to` day.
-    if (window.to) q = q.lte("completed_at", `${window.to} ${SENTINEL_TS}`);
+    // Window on worked_date (the org-timezone calendar day of completion),
+    // not on the raw timestamptz: bare dates cast to UTC midnight, which
+    // shifts evening completions into the next UTC day and made this report
+    // disagree with the Report Center.
+    if (window.from) q = q.gte("worked_date", window.from);
+    if (window.to) q = q.lte("worked_date", window.to);
     return q.order("completed_at").order("id").range(from, to);
   });
 }
@@ -194,20 +197,21 @@ interface VisitLinkRow {
 
 /**
  * rpt_job_visits exposes neither job_id nor crew_id, so read them from the
- * base table for the same window and join client-side by visit id.
+ * base table for exactly the visits the view returned (by id, so both reads
+ * share one window definition) and join client-side by visit id.
  */
-async function loadVisitLinks(supabase: Client, window: VisitCostingWindow) {
-  return fetchAllPages<VisitLinkRow>((from, to) => {
-    let q = supabase
-      .from("crm_job_visits")
-      .select("id, job_id, crew_id")
-      .eq("status", "completed")
-      .not("completed_at", "is", null)
-      .is("deleted_at", null);
-    if (window.from) q = q.gte("completed_at", window.from);
-    if (window.to) q = q.lte("completed_at", `${window.to} ${SENTINEL_TS}`);
-    return q.order("id").range(from, to);
-  });
+async function loadVisitLinks(supabase: Client, visitIds: string[]) {
+  return fetchByIdChunks(visitIds, (idChunk) =>
+    fetchAllPages<VisitLinkRow>((from, to) =>
+      supabase
+        .from("crm_job_visits")
+        .select("id, job_id, crew_id")
+        .in("id", idChunk)
+        .is("deleted_at", null)
+        .order("id")
+        .range(from, to)
+    )
+  );
 }
 
 interface MaterialRow {
@@ -367,14 +371,14 @@ export async function loadVisitCosting(
   // Views with columns newer than the generated types — see UntypedClient.
   const views = supabase as unknown as UntypedClient;
 
-  const [visitRows, linkRows, services] = await Promise.all([
+  const [visitRows, services] = await Promise.all([
     loadCompletedVisits(views, window),
-    loadVisitLinks(supabase, window),
     loadServiceTargets(supabase),
   ]);
 
-  const links = new Map(linkRows.map((l) => [l.id, l]));
   const visitIds = visitRows.map((v) => v.id).filter((id): id is string => !!id);
+  const linkRows = await loadVisitLinks(supabase, visitIds);
+  const links = new Map(linkRows.map((l) => [l.id, l]));
   const jobIds = Array.from(new Set(linkRows.map((l) => l.job_id)));
 
   const [materialRows, serviceRows] = await Promise.all([
@@ -410,6 +414,7 @@ export async function loadVisitCosting(
       menCount: Math.max(1, Math.round(num(row.men_count) || 1)),
       budgetedHours: round2(num(row.budgeted_hours)),
       manHours: round2(manHours),
+      hasActuals: row.man_hours != null,
       revenueCents: Math.round(num(row.revenue_cents)),
       laborCostCents: labor.cents,
       laborEstimated: labor.source === "estimated",

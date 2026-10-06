@@ -152,8 +152,9 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: visitRow } = await (supabase as any)
         .from("crm_job_visits")
-        .select("men_count, rate_cents")
+        .select("men_count")
         .eq("job_id", jobId)
+        .is("deleted_at", null)
         .not("clocked_out_at", "is", null)
         .order("clocked_out_at", { ascending: false })
         .limit(1)
@@ -182,6 +183,37 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
           .eq("id", serviceId)
           .maybeSingle();
         targetRateCentsPerHr = svc?.target_rate_cents_per_hr ?? 0;
+      }
+
+      // Revenue per man-hour is sum(revenue) / sum(man-hours) over the job's
+      // completed, non-deleted visits — the same basis as rpt_job_visits and
+      // the Job Costing report — not one visit's rate over the job's lifetime
+      // hours (which mixed a single visit's revenue with every visit's hours).
+      let completedRevenueCents = 0;
+      let completedManHours = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: completedVisits } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("id")
+        .eq("job_id", jobId)
+        .eq("status", "completed")
+        .is("deleted_at", null);
+      const completedIds: string[] = (completedVisits ?? []).map((v: { id: string }) => v.id);
+      if (completedIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: visitCosts } = await (supabase as any)
+          .from("rpt_job_visits")
+          .select("revenue_cents, man_hours")
+          .in("id", completedIds);
+        for (const vc of (visitCosts ?? []) as { revenue_cents: number | null; man_hours: number | string | null }[]) {
+          const hrs = Number(vc.man_hours ?? 0);
+          // A visit with no recorded hours would add its revenue with 0 hours
+          // and inflate the rate — leave it out of both sums.
+          if (hrs > 0) {
+            completedManHours += hrs;
+            completedRevenueCents += vc.revenue_cents ?? 0;
+          }
+        }
       }
 
       // Fetch materials
@@ -269,9 +301,8 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
       const actualHours = Number(jobRow.actual_hours ?? 0);
       const menCount = Number(visitRow?.men_count ?? 1);
       const actualStaffHrs = actualHours;
-      const actualRevRateCents: number = visitRow?.rate_cents ?? 0;
-      const actualRevPerManHrCents = actualStaffHrs > 0
-        ? Math.round(actualRevRateCents / actualStaffHrs)
+      const actualRevPerManHrCents = completedManHours > 0
+        ? Math.round(completedRevenueCents / completedManHours)
         : 0;
       const targetOverUnderCents = actualRevPerManHrCents - targetRateCentsPerHr;
       const actualLaborCostCents: number = jobRow.actual_labor_cost_cents ?? 0;

@@ -205,6 +205,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
         .in("status", OUTSTANDING_VISIT_STATUSES)
         .is("deleted_at", null)
         .is("crm_jobs.deleted_at", null)
+        .order("id")
     );
     for (const v of visitsRaw) {
       const job = v.crm_jobs;
@@ -248,6 +249,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
         // as "already dispatched".
         .is("crm_job_visits.deleted_at", null)
         .limit(1, { referencedTable: "crm_job_visits" })
+        .order("id")
     );
     for (const job of waitingRaw) {
       if ((job.crm_job_visits ?? []).length > 0) continue;
@@ -332,6 +334,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       .eq("status", "pending")
       .is("deleted_at", null)
       .is("crm_jobs.deleted_at", null)
+      .order("id")
   );
 
   interface GeneralDemandEntry {
@@ -394,6 +397,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
             .select("product_item_id, quantity, requisitions!inner(status)")
             .in("product_item_id", chunk)
             .in("requisitions.status", [...ACTIVE_REQ_STATUSES])
+            .order("id")
         ))
       );
       poLines.push(
@@ -403,6 +407,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
             .select("id, product_item_id, quantity, purchase_orders!inner(status)")
             .in("product_item_id", chunk)
             .in("purchase_orders.status", [...ACTIVE_PO_STATUSES])
+            .order("id")
         ))
       );
     }
@@ -429,6 +434,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
           .from("goods_receipt_lines")
           .select("po_line_item_id, quantity_received")
           .in("po_line_item_id", chunk)
+          .order("id")
       );
       for (const gr of receiptLines) {
         if (!gr.po_line_item_id) continue;

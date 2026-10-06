@@ -8,6 +8,7 @@ import {
   eqFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import type { AnalysisFilter } from "@/types/crm-reports";
 
@@ -151,17 +152,16 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
     filters: [dateRangeFilterDef("Estimate Date", "this_year")],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_year", timeZone);
-      let query = supabase
-        .from("estimates")
-        .select("id, estimate_number, estimate_date, total_cents, clients:client_id(display_name)")
-        .in("stage", ["accepted", "invoiced"])
-        .is("deleted_at", null);
-      if (from) query = query.gte("estimate_date", from);
-      if (to) query = query.lte("estimate_date", to);
-      const { data, error } = await query
-        .order("estimate_date", { ascending: false })
-        .limit(5000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("estimates")
+          .select("id, estimate_number, estimate_date, total_cents, clients:client_id(display_name)")
+          .in("stage", ["accepted", "invoiced"])
+          .is("deleted_at", null);
+        if (from) query = query.gte("estimate_date", from);
+        if (to) query = query.lte("estimate_date", to);
+        return query.order("estimate_date", { ascending: false }).order("id");
+      });
 
       type EstimateRow = {
         id: string;
@@ -176,14 +176,22 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       const paidByEstimate = new Map<string, number>();
       const ids = estimates.map((e) => e.id);
       if (ids.length > 0) {
-        const { data: invData, error: invError } = await supabase
-          .from("crm_invoices")
-          .select("estimate_id, total_cents, amount_paid_cents, status")
-          .in("estimate_id", ids)
-          .is("deleted_at", null)
-          .in("status", ISSUED_INVOICE_STATUSES)
-          .limit(5000);
-        if (invError) throw new Error(invError.message);
+        // Chunked: the id list rides on the URL.
+        const invData: unknown[] = [];
+        for (let i = 0; i < ids.length; i += 200) {
+          const idChunk = ids.slice(i, i + 200);
+          invData.push(
+            ...(await fetchAllRows<unknown>(() =>
+              supabase
+                .from("crm_invoices")
+                .select("estimate_id, total_cents, amount_paid_cents, status")
+                .in("estimate_id", idChunk)
+                .is("deleted_at", null)
+                .in("status", ISSUED_INVOICE_STATUSES)
+                .order("id")
+            ))
+          );
+        }
 
         type InvoiceRow = {
           estimate_id: string | null;
@@ -246,15 +254,16 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
     ],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_month", timeZone);
-      let query = supabase
-        .from("estimates")
-        .select("stage, total_cents, sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
-        .neq("stage", "draft")
-        .is("deleted_at", null);
-      if (from) query = query.gte("estimate_date", from);
-      if (to) query = query.lte("estimate_date", to);
-      const { data, error } = await query.limit(10000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("estimates")
+          .select("stage, total_cents, sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
+          .neq("stage", "draft")
+          .is("deleted_at", null);
+        if (from) query = query.gte("estimate_date", from);
+        if (to) query = query.lte("estimate_date", to);
+        return query.order("id");
+      });
 
       type Row = {
         stage: string | null;
@@ -320,13 +329,14 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       const todayNy = todayInZone(timeZone);
       const startIso = shiftYmd(todayNy, -6);
 
-      const { data, error } = await supabase
-        .from("estimates")
-        .select("estimate_date")
-        .is("deleted_at", null)
-        .gte("estimate_date", startIso)
-        .limit(10000);
-      if (error) throw new Error(error.message);
+      const data = await fetchAllRows<unknown>(() =>
+        supabase
+          .from("estimates")
+          .select("estimate_date")
+          .is("deleted_at", null)
+          .gte("estimate_date", startIso)
+          .order("id")
+      );
 
       const counts = new Map<string, number>();
       for (const r of (data ?? []) as { estimate_date: string | null }[]) {
