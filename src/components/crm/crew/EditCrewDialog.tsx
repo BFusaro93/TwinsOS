@@ -93,17 +93,17 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
             return (
               <div
                 key={member.id}
-                className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-lg"
+                className="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-muted/40 rounded-lg"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-800 truncate">{member.name}</p>
+                    <p className="font-medium text-slate-800 dark:text-neutral-100 truncate">{member.name}</p>
                     <Badge variant="outline" className="text-xs capitalize shrink-0">
                       {member.role}
                     </Badge>
                   </div>
                   {time?.clockedInAt && (
-                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       In: {format(parseISO(time.clockedInAt), "h:mm a")}
                       {time.clockedOutAt && ` · Out: ${format(parseISO(time.clockedOutAt), "h:mm a")}`}
@@ -113,14 +113,14 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
 
                 <div className="shrink-0">
                   {!visitId ? (
-                    <span className="text-xs text-slate-400">No active job</span>
+                    <span className="text-xs text-slate-400 dark:text-neutral-500">No active job</span>
                   ) : isDone ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">Clocked Out</Badge>
+                    <Badge className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 text-xs">Clocked Out</Badge>
                   ) : isIn ? (
                     <Button
                       size="sm"
                       variant="outline"
-                      className="gap-1 border-red-200 text-red-600 hover:bg-red-50 text-xs h-8"
+                      className="gap-1 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs h-8"
                       onClick={() => handleClockOut(member.id)}
                       disabled={isLoading}
                     >
@@ -131,7 +131,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                     <Button
                       size="sm"
                       variant="outline"
-                      className="gap-1 border-green-200 text-green-700 hover:bg-green-50 text-xs h-8"
+                      className="gap-1 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40 text-xs h-8"
                       onClick={() => handleClockIn(member.id)}
                       disabled={isLoading}
                     >
@@ -146,7 +146,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
         </div>
 
         {!visitId && (
-          <p className="text-xs text-slate-400 text-center mt-2">
+          <p className="text-xs text-slate-400 dark:text-neutral-500 text-center mt-2">
             Open a job first to clock individual crew members in/out.
           </p>
         )}

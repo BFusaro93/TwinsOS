@@ -10,63 +10,63 @@ const ACTION_CONFIG: Record<
 > = {
   created: {
     label: "Created",
-    color: "bg-brand-100 text-brand-700",
+    color: "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400",
     Icon: Plus,
   },
   updated: {
     label: "Updated",
-    color: "bg-slate-100 text-slate-600",
+    color: "bg-muted text-slate-600 dark:text-neutral-400",
     Icon: RefreshCw,
   },
   status_changed: {
     label: "Status Changed",
-    color: "bg-blue-100 text-blue-700",
+    color: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
     Icon: RefreshCw,
   },
   qty_adjusted: {
     label: "Qty Adjusted",
-    color: "bg-amber-100 text-amber-700",
+    color: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",
     Icon: Package,
   },
   price_updated: {
     label: "Price Updated",
-    color: "bg-purple-100 text-purple-700",
+    color: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400",
     Icon: TrendingUp,
   },
   vendor_changed: {
     label: "Vendor Changed",
-    color: "bg-teal-100 text-teal-700",
+    color: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",
     Icon: Truck,
   },
   image_uploaded: {
     label: "Image Uploaded",
-    color: "bg-slate-100 text-slate-600",
+    color: "bg-muted text-slate-600 dark:text-neutral-400",
     Icon: RefreshCw,
   },
   archived: {
     label: "Archived",
-    color: "bg-slate-100 text-slate-600",
+    color: "bg-muted text-slate-600 dark:text-neutral-400",
     Icon: Archive,
   },
   unarchived: {
     label: "Unarchived",
-    color: "bg-slate-100 text-slate-600",
+    color: "bg-muted text-slate-600 dark:text-neutral-400",
     Icon: ArchiveRestore,
   },
   deleted: {
     label: "Deleted",
-    color: "bg-red-100 text-red-700",
+    color: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
     Icon: Trash2,
   },
 };
 
 /** Consistent user avatar — same palette as CommentsSection */
 const AVATAR_COLORS = [
-  "bg-violet-100 text-violet-700",
-  "bg-sky-100 text-sky-700",
-  "bg-emerald-100 text-emerald-700",
-  "bg-rose-100 text-rose-700",
-  "bg-amber-100 text-amber-700",
+  "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400",
+  "bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400",
+  "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400",
+  "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400",
+  "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",
 ];
 
 function avatarColor(name: string) {
@@ -104,10 +104,10 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
     <li className="flex gap-3">
       {/* Timeline dot */}
       <div className="flex flex-col items-center">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100">
-          <Icon className="h-3.5 w-3.5 text-slate-500" />
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
-        <div className="mt-1 w-px flex-1 bg-slate-100" />
+        <div className="mt-1 w-px flex-1 bg-muted" />
       </div>
 
       <div className="mb-4 flex-1 pt-0.5">
@@ -118,22 +118,22 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
           >
             {cfg.label}
           </span>
-          <span className="text-sm text-slate-700">{entry.description}</span>
+          <span className="text-sm text-slate-700 dark:text-neutral-300">{entry.description}</span>
         </div>
 
         {/* Value change diff */}
         {hasValueChange && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             {entry.oldValue && (
-              <span className="rounded bg-red-50 px-1.5 py-0.5 font-mono text-red-600 line-through">
+              <span className="rounded bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 font-mono text-red-600 dark:text-red-400 line-through">
                 {entry.oldValue}
               </span>
             )}
             {entry.oldValue && entry.newValue && (
-              <ArrowRight className="h-3 w-3 text-slate-400" />
+              <ArrowRight className="h-3 w-3 text-slate-400 dark:text-neutral-500" />
             )}
             {entry.newValue && (
-              <span className="rounded bg-green-50 px-1.5 py-0.5 font-mono text-green-700">
+              <span className="rounded bg-green-50 dark:bg-green-950/40 px-1.5 py-0.5 font-mono text-green-700 dark:text-green-400">
                 {entry.newValue}
               </span>
             )}
@@ -147,7 +147,7 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
           >
             {initials(entry.changedByName)}
           </div>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-muted-foreground">
             {entry.changedByName} &middot; {formatDateTime(entry.createdAt)}
           </span>
         </div>
@@ -184,7 +184,7 @@ export function AuditTrailTab({ recordType, recordId, groups }: AuditTrailTabPro
   if (!entries || entries.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center">
-        <p className="text-sm text-slate-400">No audit history found.</p>
+        <p className="text-sm text-slate-400 dark:text-neutral-500">No audit history found.</p>
       </div>
     );
   }

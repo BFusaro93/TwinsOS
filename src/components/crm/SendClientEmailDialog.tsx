@@ -84,7 +84,7 @@ export function SendClientEmailDialog({
         <div className="space-y-3 py-1">
           <div className="space-y-1.5">
             <Label>To</Label>
-            <Input value={clientEmail} disabled className="text-slate-500" />
+            <Input value={clientEmail} disabled className="text-muted-foreground" />
           </div>
           <div className="space-y-1.5">
             <Label>Replies go to</Label>
@@ -94,12 +94,12 @@ export function SendClientEmailDialog({
                 onClick={() => setReplyToMode("company")}
                 className={`flex-1 rounded-md border px-3 py-1.5 text-left text-xs ${
                   replyToMode === "company"
-                    ? "border-brand-500 bg-brand-50 text-slate-900"
-                    : "border-slate-200 text-slate-500 hover:border-slate-300"
+                    ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-slate-900 dark:text-neutral-100"
+                    : "border-border text-muted-foreground hover:border-slate-300 dark:hover:border-neutral-700"
                 }`}
               >
                 <span className="block font-medium">Company</span>
-                <span className="block truncate text-[11px] text-slate-400">
+                <span className="block truncate text-[11px] text-slate-400 dark:text-neutral-500">
                   {orgReplyTo ?? "Not set — replies go nowhere"}
                 </span>
               </button>
@@ -109,18 +109,18 @@ export function SendClientEmailDialog({
                 onClick={() => setReplyToMode("user")}
                 className={`flex-1 rounded-md border px-3 py-1.5 text-left text-xs disabled:opacity-50 ${
                   replyToMode === "user"
-                    ? "border-brand-500 bg-brand-50 text-slate-900"
-                    : "border-slate-200 text-slate-500 hover:border-slate-300"
+                    ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-slate-900 dark:text-neutral-100"
+                    : "border-border text-muted-foreground hover:border-slate-300 dark:hover:border-neutral-700"
                 }`}
               >
                 <span className="block font-medium">Me</span>
-                <span className="block truncate text-[11px] text-slate-400">
+                <span className="block truncate text-[11px] text-slate-400 dark:text-neutral-500">
                   {userReplyTo ?? "No address on your login"}
                 </span>
               </button>
             </div>
             {replyToMode === "company" && !orgReplyTo && (
-              <p className="text-[11px] text-amber-600">
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
                 No company reply-to address is set — a reply to this email won&rsquo;t reach
                 anyone. Set one in Settings → Organization.
               </p>
@@ -138,7 +138,7 @@ export function SendClientEmailDialog({
               placeholder="Write your message…"
               rows={7}
             />
-            <p className="text-[11px] text-slate-400">Merge tags: {MERGE_TAG_HINT}</p>
+            <p className="text-[11px] text-slate-400 dark:text-neutral-500">Merge tags: {MERGE_TAG_HINT}</p>
           </div>
         </div>
         <DialogFooter>

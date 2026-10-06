@@ -42,13 +42,13 @@ export const JOB_PRODUCT_STATUS_LABEL: Record<JobProductStatus, string> = {
 };
 
 export const JOB_PRODUCT_STATUS_COLOR: Record<JobProductStatus, string> = {
-  pending: "bg-slate-100 text-slate-600",
+  pending: "bg-muted text-slate-600 dark:text-neutral-400",
   // Amber, not blue: 'used' is an outstanding action for the office (it still
   // needs to reach an invoice), whereas used_no_invoice is a settled decision.
-  used: "bg-amber-100 text-amber-700",
-  invoiced: "bg-green-100 text-green-700",
-  used_no_invoice: "bg-blue-100 text-blue-700",
-  not_used: "bg-red-100 text-red-600",
+  used: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",
+  invoiced: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  used_no_invoice: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  not_used: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
 /**
@@ -174,14 +174,14 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-        <div className="bg-slate-50 border-b px-4 py-2 flex items-center justify-between">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Products</p>
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+        <div className="bg-slate-50 dark:bg-muted/40 border-b px-4 py-2 flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400 uppercase tracking-wide">Products</p>
         </div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
-            <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               <th className="px-4 py-3 text-left">Product</th>
               <th className="px-4 py-3 text-left">Service</th>
               <th className="px-4 py-3 text-right">QTY</th>
@@ -195,14 +195,14 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
           <tbody>
             {jobProducts.length === 0 && !addingProduct && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400 text-sm">
+                <td colSpan={8} className="px-4 py-6 text-center text-slate-400 dark:text-neutral-500 text-sm">
                   No products on this job yet.
                 </td>
               </tr>
             )}
             {jobProducts.map((p) => (
               <tr key={p.id} className="group border-b last:border-0">
-                <td className="px-4 py-3 font-medium text-slate-800">{p.productName}</td>
+                <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">{p.productName}</td>
                 {editingProductId === p.id ? (
                   <>
                     <td className="px-2 py-2">
@@ -231,7 +231,7 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                         placeholder="0.00"
                         className="h-7 w-24 text-right text-sm ml-auto" />
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums text-slate-500">
+                    <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
                       {parseNonNegative(editProductPrice) != null && parseNonNegative(editProductQty) != null
                         ? formatCurrency(Math.round(parseNonNegative(editProductPrice)! * 100) * parseNonNegative(editProductQty)!)
                         : "—"}
@@ -264,10 +264,10 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                           } catch (err) {
                             toast.error(err instanceof Error ? err.message : "Failed to update product");
                           }
-                        }} className="rounded p-1 hover:bg-green-50 text-green-600">
+                        }} className="rounded p-1 hover:bg-green-50 dark:hover:bg-green-950/40 text-green-600 dark:text-green-400">
                           <Check className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => setEditingProductId(null)} className="rounded p-1 hover:bg-slate-100 text-slate-400">
+                        <button onClick={() => setEditingProductId(null)} className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500">
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -275,14 +275,14 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                   </>
                 ) : (
                   <>
-                    <td className="px-4 py-3 text-slate-500">
-                      {p.jobServiceId ? (serviceNameById.get(p.jobServiceId) ?? "—") : <span className="text-amber-600">Unassigned</span>}
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {p.jobServiceId ? (serviceNameById.get(p.jobServiceId) ?? "—") : <span className="text-amber-600 dark:text-amber-400">Unassigned</span>}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{p.qty}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {p.invoiceQty != null && p.invoiceQty !== p.qty
-                        ? <span className="font-medium text-brand-600">{p.invoiceQty}</span>
-                        : <span className="text-slate-400">{p.qty}</span>}
+                        ? <span className="font-medium text-brand-600 dark:text-brand-400">{p.invoiceQty}</span>
+                        : <span className="text-slate-400 dark:text-neutral-500">{p.qty}</span>}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(p.unitPriceCents)}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold">{formatCurrency(p.unitPriceCents * (p.invoiceQty ?? p.qty))}</td>
@@ -313,7 +313,7 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                           setEditProductQty(String(p.qty));
                           setEditProductInvoiceQty(p.invoiceQty != null ? String(p.invoiceQty) : "");
                           setEditProductPrice(String(p.unitPriceCents / 100));
-                        }} className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700">
+                        }} className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button disabled={p.status !== "pending"} onClick={async () => {
@@ -321,7 +321,7 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                             await deleteJobProduct.mutateAsync({ id: p.id, jobId });
                             toast.success("Product removed");
                           } catch { toast.error("Failed to remove product"); }
-                        }} className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500">
+                        }} className="rounded p-1 hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -331,7 +331,7 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
               </tr>
             ))}
             {addingProduct && (
-              <tr className="border-t bg-slate-50">
+              <tr className="border-t bg-slate-50 dark:bg-muted/40">
                 <td className="px-2 py-2">
                   <Select value={newProductId} onValueChange={(v) => {
                     const prod = productCatalog.find((p) => p.id === v);
@@ -359,14 +359,14 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                     onChange={(e) => setNewProductQty(e.target.value)}
                     className="h-7 w-20 text-right text-xs ml-auto" />
                 </td>
-                <td className="px-2 py-2 text-right text-xs text-slate-400">same</td>
+                <td className="px-2 py-2 text-right text-xs text-slate-400 dark:text-neutral-500">same</td>
                 <td className="px-2 py-2 text-right">
                   <Input type="number" min="0" step="0.01" value={newProductPrice}
                     onChange={(e) => setNewProductPrice(e.target.value)}
                     placeholder="0.00"
                     className="h-7 w-24 text-right text-xs ml-auto" />
                 </td>
-                <td className="px-2 py-2 text-right tabular-nums text-xs text-slate-500">
+                <td className="px-2 py-2 text-right tabular-nums text-xs text-muted-foreground">
                   {parseNonNegative(newProductPrice) != null && parseNonNegative(newProductQty) != null
                     ? formatCurrency(Math.round(parseNonNegative(newProductPrice)! * 100) * parseNonNegative(newProductQty)!)
                     : "—"}
@@ -401,10 +401,10 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                         setNewProductId(""); setNewProductServiceId(""); setNewProductPrice(""); setNewProductQty("1");
                         toast.success("Product added");
                       } catch { toast.error("Failed to add product"); }
-                    }} className="rounded p-1 hover:bg-green-50 text-green-600">
+                    }} className="rounded p-1 hover:bg-green-50 dark:hover:bg-green-950/40 text-green-600 dark:text-green-400">
                       <Check className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => setAddingProduct(false)} className="rounded p-1 hover:bg-slate-100 text-slate-400">
+                    <button onClick={() => setAddingProduct(false)} className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -414,9 +414,9 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
           </tbody>
           {jobProducts.length > 0 && (
             <tfoot>
-              <tr className="border-t bg-slate-50">
-                <td colSpan={5} className="px-4 py-2 text-right text-xs font-semibold text-slate-500">Total</td>
-                <td className="px-4 py-2 text-right font-bold text-slate-800">
+              <tr className="border-t bg-slate-50 dark:bg-muted/40">
+                <td colSpan={5} className="px-4 py-2 text-right text-xs font-semibold text-muted-foreground">Total</td>
+                <td className="px-4 py-2 text-right font-bold text-slate-800 dark:text-neutral-100">
                   {formatCurrency(jobProducts.reduce((s, p) => s + p.unitPriceCents * (p.invoiceQty ?? p.qty), 0))}
                 </td>
                 <td />
@@ -444,7 +444,7 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
             <Plus className="mr-1 h-3 w-3" /> Add Product
           </Button>
           {services.length === 0 && (
-            <p className="mt-1 text-[11px] text-slate-400">Add a service to this job first — every product must belong to one.</p>
+            <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">Add a service to this job first — every product must belong to one.</p>
           )}
         </div>
       )}

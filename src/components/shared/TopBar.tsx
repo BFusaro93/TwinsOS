@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { GlobalSearchDialog } from "@/components/shared/GlobalSearchDialog";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
+import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { HelpMenu } from "@/components/shared/HelpMenu";
 import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
 import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
@@ -47,13 +48,13 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "bg-purple-100 text-purple-700 border-purple-200",
-  manager: "bg-blue-100 text-blue-700 border-blue-200",
-  technician: "bg-green-100 text-green-700 border-green-200",
-  purchaser: "bg-amber-100 text-amber-700 border-amber-200",
-  viewer: "bg-slate-100 text-slate-600 border-slate-200",
-  requestor: "bg-slate-100 text-slate-600 border-slate-200",
-  crew: "bg-orange-100 text-orange-700 border-orange-200",
+  admin: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+  manager: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  technician: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800",
+  purchaser: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+  viewer: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  requestor: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
+  crew: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
 };
 
 function initials(name: string) {
@@ -233,7 +234,7 @@ function QuickAddMenu() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+        <DropdownMenuLabel className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
           <Plus className="h-3 w-3" /> Quick Add
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -273,7 +274,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
     <>
     <EditProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     <ImpersonationBanner />
-    <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-4 border-b bg-white px-4 pt-[env(safe-area-inset-top)]">
+    <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-4 border-b bg-card px-4 pt-[env(safe-area-inset-top)]">
       <StandaloneBackButton />
       {sidebarToggle && (
         <>
@@ -283,7 +284,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
             variant="ghost"
             size="icon"
             onClick={() => setSidebarOpen(true)}
-            className="shrink-0 text-slate-500 lg:hidden"
+            className="shrink-0 text-muted-foreground lg:hidden"
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -292,7 +293,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
-            className="hidden shrink-0 text-slate-500 lg:inline-flex"
+            className="hidden shrink-0 text-muted-foreground lg:inline-flex"
           >
             <PanelLeftClose className="h-5 w-5" />
           </Button>
@@ -300,15 +301,15 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
       )}
 
       {/* Breadcrumbs */}
-      <nav className="hidden items-center gap-1 text-sm text-slate-500 sm:flex lowercase">
+      <nav className="hidden items-center gap-1 text-sm text-muted-foreground sm:flex lowercase">
         {breadcrumbs.map((crumb, i) => (
           <span key={i} className="flex items-center gap-1">
-            {i > 0 && <span className="text-slate-300">/</span>}
+            {i > 0 && <span className="text-slate-300 dark:text-neutral-600">/</span>}
             <span
               className={cn(
                 i === breadcrumbs.length - 1
-                  ? "font-medium text-slate-800"
-                  : "text-slate-500"
+                  ? "font-medium text-slate-800 dark:text-neutral-100"
+                  : "text-muted-foreground"
               )}
             >
               {crumb}
@@ -319,12 +320,12 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
 
       {/* Search */}
       <div className="relative ml-auto hidden max-w-xs flex-1 sm:block">
-        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
         <Input
           placeholder="Search… (⌘K)"
           readOnly
           onClick={() => setSearchOpen(true)}
-          className="h-8 cursor-pointer bg-slate-50 pl-8 text-sm"
+          className="h-8 cursor-pointer bg-slate-50 dark:bg-muted/40 pl-8 text-sm"
         />
       </div>
 
@@ -334,6 +335,8 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
       <QuickAddMenu />
 
       <HelpMenu />
+
+      <ThemeToggle />
 
       {/* Notifications — hidden for crew users (they only need photo access, not CMMS/PO alerts) */}
       {currentUser.role !== "crew" && <NotificationsBell />}
@@ -367,11 +370,11 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
           {currentUser.role === "admin" && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
-                <UserCog className="mr-2 h-4 w-4 text-slate-400" />
+                <UserCog className="mr-2 h-4 w-4 text-slate-400 dark:text-neutral-500" />
                 <span>Switch User</span>
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-56">
-                <DropdownMenuLabel className="text-xs font-normal text-slate-400">
+                <DropdownMenuLabel className="text-xs font-normal text-slate-400 dark:text-neutral-500">
                   Simulate a different role
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -386,7 +389,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
                     <DropdownMenuRadioItem key={u.id} value={u.id}>
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">{u.name}</span>
-                        <span className="text-xs text-slate-400 capitalize">{u.role}</span>
+                        <span className="text-xs text-slate-400 dark:text-neutral-500 capitalize">{u.role}</span>
                       </div>
                     </DropdownMenuRadioItem>
                   ))}
@@ -404,7 +407,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            className="text-red-600"
+            className="text-red-600 dark:text-red-400"
             onSelect={async () => {
               const supabase = createClient();
               await supabase.auth.signOut();

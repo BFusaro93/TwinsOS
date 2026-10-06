@@ -4,11 +4,10 @@
 
 @layer base {
   :root {
-    /* This app has no dark-mode toggle or theme provider — the .dark
-       tokens below are unused shadcn/ui scaffolding. Without this, a
-       browser in dark mode renders native form controls (unstyled
-       input backgrounds, checkboxes, date pickers, scrollbars) using
-       its own dark theme regardless of our light-only design. */
+    /* Light is the default and the only theme most routes honor — dark is
+       opted in per route (src/lib/theme/dark-mode-routes.ts). Pinning
+       color-scheme keeps native form controls (input backgrounds,
+       checkboxes, date pickers, scrollbars) light unless `.dark` is set. */
     color-scheme: light;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -43,25 +42,33 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    color-scheme: dark;
+    /* Pure neutral grays (hue 0, sat 0) — the stock shadcn dark palette is
+       slate-blue, which reads as a blue tint. */
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
+    /* Slightly lifted from --background so cards read as raised surfaces. */
+    --card: 0 0% 10.5%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 10.5%;
+    --popover-foreground: 0 0% 96%;
+    /* Muted gray rather than the stock near-white so the Save/primary buttons
+       don't out-shout the brand-green accents. Also drives checkbox borders,
+       switch tracks and progress bars, so it can't go much darker than this
+       without those disappearing against --card / --input. */
+    --primary: 0 0% 30%;
+    --primary-foreground: 0 0% 96%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 96%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --destructive-foreground: 0 0% 96%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 0 0% 80%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;

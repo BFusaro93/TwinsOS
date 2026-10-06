@@ -33,7 +33,7 @@ export function FilterOptionRow({
         }
       }}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100",
+        "flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted",
         className
       )}
     >

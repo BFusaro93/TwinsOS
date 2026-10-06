@@ -58,13 +58,13 @@ export function ColumnChooser({
           size="sm"
           className={cn(
             "gap-1.5",
-            hiddenCount > 0 && "border-brand-400 text-brand-700"
+            hiddenCount > 0 && "border-brand-400 text-brand-700 dark:text-brand-400"
           )}
         >
           <Columns3 className="h-3.5 w-3.5" />
           Columns
           {hiddenCount > 0 && (
-            <span className="ml-0.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-xs font-medium leading-none text-brand-700">
+            <span className="ml-0.5 rounded-full bg-brand-100 dark:bg-brand-900/40 px-1.5 py-0.5 text-xs font-medium leading-none text-brand-700 dark:text-brand-400">
               {hiddenCount} hidden
             </span>
           )}
@@ -92,7 +92,7 @@ export function ColumnChooser({
                   "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
                   isVisible
                     ? "border-brand-500 bg-brand-500"
-                    : "border-slate-300 bg-white"
+                    : "border-slate-300 dark:border-neutral-700 bg-card"
                 )}
               >
                 {isVisible && (
@@ -101,7 +101,7 @@ export function ColumnChooser({
               </div>
               <span>{col.label}</span>
               {col.locked && (
-                <span className="ml-auto text-xs text-slate-400">Always shown</span>
+                <span className="ml-auto text-xs text-slate-400 dark:text-neutral-500">Always shown</span>
               )}
             </DropdownMenuItem>
           );
@@ -115,7 +115,7 @@ export function ColumnChooser({
                 e.preventDefault();
                 onVisibleKeysChange(columns.map((c) => c.key));
               }}
-              className="cursor-pointer justify-center text-xs text-slate-500 hover:text-slate-700"
+              className="cursor-pointer justify-center text-xs text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
             >
               Show all columns
             </DropdownMenuItem>

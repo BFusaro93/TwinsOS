@@ -71,15 +71,15 @@ function PlannedMaterialRow({
 
   if (material.status !== "pending") {
     const resolved = material.status === "not_used"
-      ? { label: "Not used", className: "bg-amber-100 text-amber-700" }
+      ? { label: "Not used", className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" }
       : material.status === "used_no_invoice"
-        ? { label: `Used: ${material.qty} (not billed)`, className: "bg-slate-100 text-slate-600" }
-        : { label: `Used: ${material.qty}`, className: "bg-green-100 text-green-700" };
+        ? { label: `Used: ${material.qty} (not billed)`, className: "bg-muted text-slate-600 dark:text-neutral-400" }
+        : { label: `Used: ${material.qty}`, className: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400" };
     return (
       <div className="px-4 py-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm text-slate-700 truncate">{material.productName}</p>
-          <p className="text-xs text-slate-400 mt-0.5">Called for: {material.plannedQty}</p>
+          <p className="text-sm text-slate-700 dark:text-neutral-300 truncate">{material.productName}</p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Called for: {material.plannedQty}</p>
         </div>
         <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${resolved.className}`}>
           {resolved.label}
@@ -91,8 +91,8 @@ function PlannedMaterialRow({
   return (
     <div className="px-4 py-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-slate-700">{material.productName}</p>
-        <p className="text-xs text-slate-400">Called for: {material.plannedQty}</p>
+        <p className="text-sm text-slate-700 dark:text-neutral-300">{material.productName}</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">Called for: {material.plannedQty}</p>
       </div>
       <div className="flex items-center gap-2">
         <Input
@@ -114,14 +114,14 @@ function PlannedMaterialRow({
           Mark Used
         </Button>
         <button
-          className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 disabled:opacity-50"
           disabled={!isValid || isSaving}
           onClick={() => onMarkUsedNoInvoice(material, parsedQty)}
         >
           Used — don&apos;t bill
         </button>
         <button
-          className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 disabled:opacity-50"
           disabled={isSaving}
           onClick={() => onMarkNotUsed(material)}
         >
@@ -324,7 +324,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-dvh">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-neutral-500" />
       </div>
     );
   }
@@ -332,31 +332,31 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   if (!stop || !anchor) {
     return (
       <div className="flex flex-col items-center justify-center h-dvh gap-3">
-        <p className="text-slate-500">Job not found</p>
+        <p className="text-muted-foreground">Job not found</p>
         <Button variant="outline" onClick={() => router.push("/crm/crew")}>Back</Button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-dvh bg-slate-50">
+    <div className="flex flex-col min-h-dvh bg-slate-50 dark:bg-muted/40">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 pt-safe-top pb-3 sticky top-0 z-10">
+      <div className="bg-card border-b border-border px-4 pt-safe-top pb-3 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push("/crm/crew")} className="p-1 -ml-1 text-slate-500">
+          <button onClick={() => router.push("/crm/crew")} className="p-1 -ml-1 text-muted-foreground">
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-slate-900 truncate">{stop.clientName ?? "—"}</h1>
+            <h1 className="font-bold text-slate-900 dark:text-neutral-100 truncate">{stop.clientName ?? "—"}</h1>
             {stop.address && (
-              <button onClick={openMaps} className="text-sm text-blue-600 flex items-center gap-1 mt-0.5">
+              <button onClick={openMaps} className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
                 <MapPin className="h-3 w-3" />
                 <span className="truncate">{stop.address}</span>
               </button>
             )}
           </div>
           {stop.clientPhone && (
-            <a href={`tel:${stop.clientPhone}`} className="p-2 text-slate-500">
+            <a href={`tel:${stop.clientPhone}`} className="p-2 text-muted-foreground">
               <Phone className="h-5 w-5" />
             </a>
           )}
@@ -367,29 +367,29 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         {/* Clock status */}
         {isActive && stop.clockedInAt && (
           isPaused && stop.pausedAt ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-blue-800 flex items-center gap-1.5">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
                   <Coffee className="h-3.5 w-3.5" />
                   On Break
                 </p>
-                <p className="text-xs text-blue-600">
+                <p className="text-xs text-blue-600 dark:text-blue-400">
                   Since {format(parseISO(stop.pausedAt), "h:mm a")}
                 </p>
               </div>
-              <div className="text-blue-700 font-mono font-bold text-lg">
+              <div className="text-blue-700 dark:text-blue-400 font-mono font-bold text-lg">
                 <ElapsedTimer start={stop.pausedAt} />
               </div>
             </div>
           ) : (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-amber-800">Job Running</p>
-                <p className="text-xs text-amber-600">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Job Running</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
                   Started {format(parseISO(stop.clockedInAt), "h:mm a")}
                 </p>
               </div>
-              <div className="text-amber-700 font-mono font-bold text-lg">
+              <div className="text-amber-700 dark:text-amber-400 font-mono font-bold text-lg">
                 <ElapsedTimer start={stop.clockedInAt} />
               </div>
             </div>
@@ -397,15 +397,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         )}
 
         {/* Services checklist — one row per visit in this stop, each its own service */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100">
-            <h2 className="font-semibold text-slate-800">
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
+            <h2 className="font-semibold text-slate-800 dark:text-neutral-100">
               Services {stop.visits.length > 1 && `(${stop.visits.length})`}
             </h2>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-neutral-800">
             {stop.visits.length === 0 && (
-              <p className="px-4 py-3 text-sm text-slate-400">No services listed</p>
+              <p className="px-4 py-3 text-sm text-slate-400 dark:text-neutral-500">No services listed</p>
             )}
             {stop.visits.map(v => {
               const svc = visitServices(v)[0];
@@ -414,9 +414,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               return (
                 <div key={v.id} className="px-4 py-3 flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm text-slate-700 truncate">{svc?.serviceName ?? "Service"}</p>
+                    <p className="text-sm text-slate-700 dark:text-neutral-300 truncate">{svc?.serviceName ?? "Service"}</p>
                     {budgeted != null && (
-                      <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                      <p className="text-xs text-slate-400 dark:text-neutral-500 flex items-center gap-1 mt-0.5">
                         <Clock className="h-3 w-3" />
                         Budgeted: {budgeted}h
                       </p>
@@ -424,15 +424,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {!hidePricing && svc?.rateCents != null && (
-                      <p className="text-sm text-slate-400">{formatCurrency(svc.rateCents)}</p>
+                      <p className="text-sm text-slate-400 dark:text-neutral-500">{formatCurrency(svc.rateCents)}</p>
                     )}
                     {v.status === "skipped" ? (
-                      <span className="text-xs text-orange-600 font-medium">Skipped</span>
+                      <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">Skipped</span>
                     ) : v.status === "completed" ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <CheckCircle2 className="h-4 w-4 text-green-500 dark:text-green-400" />
                     ) : !rowTerminal ? (
                       <button
-                        className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                        className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 flex items-center gap-1"
                         onClick={() => setSkipTargetId(v.id)}
                       >
                         <SkipForward className="h-3 w-3" />
@@ -451,9 +451,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             ratio when the office has it configured. Only shown when this
             stop actually has chemicals logged. */}
         {usedChemicals.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
+              <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
                 <FlaskConical className="h-4 w-4" />
                 Chemical Mix
               </h2>
@@ -464,30 +464,30 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 const serviceName =
                   stop.visits.length > 1 && visit ? visitServices(visit)[0]?.serviceName : undefined;
                 return (
-                  <div key={a.id} className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2">
-                    {serviceName && <p className="text-xs font-medium text-emerald-700 mb-0.5">{serviceName}</p>}
-                    <p className="text-sm font-medium text-emerald-900">{a.productName ?? "Chemical"}</p>
+                  <div key={a.id} className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 px-3 py-2">
+                    {serviceName && <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-0.5">{serviceName}</p>}
+                    <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">{a.productName ?? "Chemical"}</p>
                     {a.solutionAmount != null ? (
-                      <p className="text-sm text-emerald-800 mt-0.5">
+                      <p className="text-sm text-emerald-800 dark:text-emerald-300 mt-0.5">
                         Use{" "}
                         <span className="font-semibold">
                           {a.solutionAmount} {a.solutionUnitName ?? ""}
                         </span>{" "}
                         of finished mix
                         {a.chemicalAmount != null && (
-                          <span className="text-emerald-600">
+                          <span className="text-emerald-600 dark:text-emerald-400">
                             {" "}
                             ({a.chemicalAmount} {a.unitName ?? ""} active)
                           </span>
                         )}
                       </p>
                     ) : a.chemicalAmount != null ? (
-                      <p className="text-sm text-emerald-800 mt-0.5">
+                      <p className="text-sm text-emerald-800 dark:text-emerald-300 mt-0.5">
                         {a.chemicalAmount} {a.unitName ?? ""}
                       </p>
                     ) : null}
                     {a.applicationRateLabel && (
-                      <p className="text-xs text-emerald-600 mt-0.5">{a.applicationRateLabel}</p>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">{a.applicationRateLabel}</p>
                     )}
                   </div>
                 );
@@ -498,14 +498,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
         {/* Notes acknowledgment gate */}
         {hasNotes && (
-          <div className={`rounded-xl border overflow-hidden ${acknowledged ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+          <div className={`rounded-xl border overflow-hidden ${acknowledged ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40" : "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40"}`}>
             <div className="px-4 py-3 flex items-start gap-3">
-              <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${acknowledged ? "text-green-600" : "text-amber-600"}`} />
+              <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${acknowledged ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} />
               <div className="flex-1">
-                <p className={`text-sm font-medium ${acknowledged ? "text-green-800" : "text-amber-800"}`}>
+                <p className={`text-sm font-medium ${acknowledged ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300"}`}>
                   Job Notes
                 </p>
-                <p className="text-sm mt-1 text-slate-700 whitespace-pre-wrap">
+                <p className="text-sm mt-1 text-slate-700 dark:text-neutral-300 whitespace-pre-wrap">
                   {stop.notesToCrew}
                 </p>
               </div>
@@ -515,7 +515,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <Button
                   size="sm"
                   variant="outline"
-                  className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-100"
+                  className="gap-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40"
                   onClick={handleAcknowledge}
                   disabled={acknowledge.isPending}
                 >
@@ -529,14 +529,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             )}
             {!acknowledged && anchor.acknowledgedNotesAt && (
               <div className="px-4 pb-3">
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
                   The office changed these notes after you read them — read them again.
                 </p>
               </div>
             )}
             {acknowledged && anchor.acknowledgedNotesAt && (
               <div className="px-4 pb-3">
-                <p className="text-xs text-green-600 flex items-center gap-1">
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                   <CheckSquare className="h-3 w-3" />
                   Acknowledged {format(parseISO(anchor.acknowledgedNotesAt), "h:mm a")}
                 </p>
@@ -571,7 +571,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 ) : (
                   <Button
                     variant="outline"
-                    className="w-full h-14 text-base font-bold gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    className="w-full h-14 text-base font-bold gap-2 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40"
                     onClick={handlePause}
                     disabled={stopPause.isPending}
                   >
@@ -592,12 +592,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         )}
 
         {isComplete && (
-          <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
-            <p className="font-medium text-green-800">
+          <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 text-center">
+            <p className="font-medium text-green-800 dark:text-green-300">
               {stop.derivedStatus === "skipped" ? "Job Skipped" : "Job Complete"}
             </p>
             {stop.clockedInAt && stop.clockedOutAt && (
-              <p className="text-xs text-green-600 mt-1">
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                 {format(parseISO(stop.clockedInAt), "h:mm a")} – {format(parseISO(stop.clockedOutAt), "h:mm a")}
               </p>
             )}
@@ -605,9 +605,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         )}
 
         {/* Photos */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800 flex items-center justify-between">
+            <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
               <ImageIcon className="h-4 w-4" />
               Photos {photos.length > 0 && `(${photos.length})`}
             </h2>
@@ -620,7 +620,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 onChange={handlePhotoCapture}
                 disabled={uploadPhoto.isPending}
               />
-              <span className="inline-flex items-center gap-1 text-sm text-blue-600 font-medium">
+              <span className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 font-medium">
                 {uploadPhoto.isPending
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <Camera className="h-4 w-4" />
@@ -630,11 +630,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             </label>
           </div>
           {photos.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-slate-400 text-center">No photos yet</p>
+            <p className="px-4 py-4 text-sm text-slate-400 dark:text-neutral-500 text-center">No photos yet</p>
           ) : (
             <div className="grid grid-cols-3 gap-1 p-2">
               {photos.map(photo => (
-                <div key={photo.id} className="aspect-square bg-slate-100 rounded-md overflow-hidden">
+                <div key={photo.id} className="aspect-square bg-muted rounded-md overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {photoUrls[photo.id] ? (
                     <img
@@ -644,7 +644,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     />
                   ) : (
                     <button
-                      className="w-full h-full flex items-center justify-center text-slate-400"
+                      className="w-full h-full flex items-center justify-center text-slate-400 dark:text-neutral-500"
                       onClick={() => loadSignedUrl(photo.storagePath, photo.id)}
                     >
                       <ImageIcon className="h-6 w-6" />
@@ -660,14 +660,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             distinct from an ad-hoc new request. Mirrors crew-app's
             PlannedMaterialsSection. */}
         {jobProducts.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
+              <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
                 <ClipboardList className="h-4 w-4" />
                 Materials called for
               </h2>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 dark:divide-neutral-800">
               {jobProducts.map((m) => (
                 <PlannedMaterialRow
                   key={m.id}
@@ -687,30 +687,30 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         {upsellServices.length > 0 && (
           <button
             onClick={() => setUpsellOpen(true)}
-            className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left active:bg-emerald-100"
+            className="w-full rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-left active:bg-emerald-100 dark:active:bg-emerald-900/40"
           >
-            <span className="flex items-center gap-2 font-semibold text-emerald-800">
+            <span className="flex items-center gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
               <Sparkles className="h-4 w-4" />
               Suggest work
             </span>
-            <span className="mt-0.5 block text-xs text-emerald-700">
+            <span className="mt-0.5 block text-xs text-emerald-700 dark:text-emerald-400">
               Spotted something this property needs? Send it to the office.
             </span>
           </button>
         )}
 
         {/* Notes / Comments */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100">
-            <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
+            <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
               Notes to Office
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">Visible on the dispatch board</p>
+            <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Visible on the dispatch board</p>
           </div>
           {anchor.jobComments && anchor.jobComments.length > 0 && (
-            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
-              <p className="text-sm text-slate-600 whitespace-pre-wrap">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
+              <p className="text-sm text-slate-600 dark:text-neutral-400 whitespace-pre-wrap">
                 {typeof anchor.jobComments === "string"
                   ? anchor.jobComments
                   : anchor.jobComments.map((c: { text?: string; content?: string }) => c.text ?? c.content ?? "").join("\n")}
@@ -745,7 +745,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div>
-              <p className="mb-1.5 text-sm font-medium text-slate-700">What does it need?</p>
+              <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">What does it need?</p>
               <div className="flex flex-col gap-1.5">
                 {upsellServices.map((svc) => {
                   const picked = upsellServiceId === svc.id;
@@ -755,15 +755,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                       onClick={() => setUpsellServiceId(svc.id)}
                       className={`rounded-lg border px-3 py-2.5 text-left ${
                         picked
-                          ? "border-emerald-500 bg-emerald-50"
-                          : "border-slate-200 active:bg-slate-50"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40"
+                          : "border-border active:bg-slate-50 dark:active:bg-muted/40"
                       }`}
                     >
-                      <span className={`block text-sm font-medium ${picked ? "text-emerald-800" : "text-slate-800"}`}>
+                      <span className={`block text-sm font-medium ${picked ? "text-emerald-800 dark:text-emerald-300" : "text-slate-800 dark:text-neutral-100"}`}>
                         {svc.name}
                       </span>
                       {svc.upsell_pitch && (
-                        <span className="mt-0.5 block text-xs text-slate-500">{svc.upsell_pitch}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">{svc.upsell_pitch}</span>
                       )}
                     </button>
                   );
@@ -772,7 +772,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             </div>
 
             <div>
-              <p className="mb-1.5 text-sm font-medium text-slate-700">
+              <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">
                 Anything the office should know?
               </p>
               <Textarea
@@ -784,7 +784,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             </div>
 
             <div>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 active:bg-slate-50">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2.5 active:bg-slate-50 dark:active:bg-muted/40">
                 <input
                   type="file"
                   accept="image/*"
@@ -792,12 +792,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   className="sr-only"
                   onChange={(e) => setUpsellPhoto(e.target.files?.[0] ?? null)}
                 />
-                <Camera className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-600">
+                <Camera className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
                   {upsellPhoto ? "Photo attached — tap to replace" : "Add a photo"}
                 </span>
               </label>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
                 A photo usually saves the office a trip out to quote it.
               </p>
             </div>
@@ -854,7 +854,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             <DialogTitle>Stop Job</DialogTitle>
           </DialogHeader>
           <div className="py-2 space-y-2">
-            <p className="text-sm text-slate-600">Add any completion notes before finishing.</p>
+            <p className="text-sm text-slate-600 dark:text-neutral-400">Add any completion notes before finishing.</p>
             <Textarea
               placeholder="Completion notes (optional)"
               value={clockOutNotes}

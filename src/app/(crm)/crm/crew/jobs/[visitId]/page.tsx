@@ -21,7 +21,7 @@ export default function LegacyCrewJobDetailRedirect({ params }: { params: Promis
 
   return (
     <div className="flex items-center justify-center h-dvh">
-      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-neutral-500" />
     </div>
   );
 }

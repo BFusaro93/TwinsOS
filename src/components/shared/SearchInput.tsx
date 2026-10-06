@@ -29,7 +29,7 @@ export function SearchInput({
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className={cn("relative", className)}>
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
       <Input
         ref={inputRef}
         value={value}
@@ -54,7 +54,7 @@ export function SearchInput({
           size="icon"
           aria-label="Clear search"
           title="Clear search"
-          className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
           // Keep the cursor in the box so the next search can be typed straight away.
           onClick={() => { onChange(""); inputRef.current?.focus(); }}
         >

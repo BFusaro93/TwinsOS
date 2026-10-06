@@ -292,7 +292,7 @@ function VisitOutcomeReasonDialog({
         </DialogHeader>
         <div className="space-y-3 py-1">
           <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Reason (optional)</label>
+            <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">Reason (optional)</label>
             <div className="flex flex-wrap gap-1.5">
               {OUTCOME_REASON_PRESETS.map((r) => (
                 <button
@@ -301,7 +301,7 @@ function VisitOutcomeReasonDialog({
                   onClick={() => setPreset(preset === r ? "" : r)}
                   className={cn(
                     "rounded-full border px-2.5 py-1 text-xs transition-colors",
-                    preset === r ? "border-brand-500 bg-brand-50 text-brand-700 font-medium" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                    preset === r ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : "border-border text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40",
                   )}
                 >
                   {r}
@@ -369,7 +369,7 @@ function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving
           title={isDriving ? "Crew is driving to this stop — click to change status" : `Status: ${visit.status.replace(/_/g, " ")} — click to change`}
           className={cn("flex items-center justify-center rounded transition-opacity", isPending && "opacity-50")}
         >
-          {isDriving ? <Car className="h-4 w-4 text-blue-500" /> : <VisitStatusIcon status={visit.status} />}
+          {isDriving ? <Car className="h-4 w-4 text-blue-500 dark:text-blue-400" /> : <VisitStatusIcon status={visit.status} />}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40" onClick={(e) => e.stopPropagation()}>
@@ -991,20 +991,20 @@ function JobDetailSheet({
         className="w-full sm:max-w-[800px] md:w-[800px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
-        <SheetHeader className="shrink-0 border-b bg-slate-50 px-5 py-4 pr-14">
+        <SheetHeader className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-4 pr-14">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <SheetTitle className="flex items-center gap-1.5 text-base font-bold text-slate-900 leading-tight truncate">
+              <SheetTitle className="flex items-center gap-1.5 text-base font-bold text-slate-900 dark:text-neutral-100 leading-tight truncate">
                 {(highPriorityOverride ?? job?.isHighPriority) && (
-                  <span title="High priority"><Flame className="h-4 w-4 shrink-0 text-red-500" /></span>
+                  <span title="High priority"><Flame className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400" /></span>
                 )}
                 {serviceName}
               </SheetTitle>
               {visit.clientName && (
-                <p className="text-sm text-slate-500 mt-0.5">{visit.clientName}</p>
+                <p className="text-sm text-muted-foreground mt-0.5">{visit.clientName}</p>
               )}
               {job?.serviceAddress && (
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1">
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-neutral-500 mt-1">
                   <MapPin className="h-3 w-3 shrink-0" />
                   {job.serviceAddress}{job.serviceCity ? `, ${job.serviceCity}` : ""}{job.serviceZip ? ` ${job.serviceZip}` : ""}
                 </div>
@@ -1029,7 +1029,7 @@ function JobDetailSheet({
                         disabled={!visitClient?.primaryEmail}
                         onSelect={() => setSendEmailOpen(true)}
                       >
-                        <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                        <Mail className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                         {visitClient?.primaryEmail ? "Send Email" : "Send Email (no address)"}
                       </DropdownMenuItem>
                     )}
@@ -1039,7 +1039,7 @@ function JobDetailSheet({
                         disabled={!visitClient?.primaryPhone}
                         onSelect={() => setSendSmsOpen(true)}
                       >
-                        <MessageSquareText className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                        <MessageSquareText className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                         {visitClient?.primaryPhone ? "Send Text" : "Send Text (no number)"}
                       </DropdownMenuItem>
                     )}
@@ -1085,7 +1085,7 @@ function JobDetailSheet({
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {/* Schedule Date */}
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
                     Schedule Date
                   </label>
                   <Input
@@ -1098,7 +1098,7 @@ function JobDetailSheet({
 
                 {/* Status */}
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
                     Status
                   </label>
                   <Select value={status} onValueChange={(v) => setStatus(v as VisitStatus)}>
@@ -1114,8 +1114,8 @@ function JobDetailSheet({
                     </SelectContent>
                   </Select>
                   {(status === "skipped" || status === "cancelled") && (
-                    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
-                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                    <div className="mt-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-2">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">
                         {status === "cancelled" ? "Cancel" : "Skip"} reason
                         {visit.skipReason && status === visit.status ? "" : " (optional)"}
                       </label>
@@ -1127,7 +1127,7 @@ function JobDetailSheet({
                             onClick={() => setSkipReason(r)}
                             className={cn(
                               "rounded-full border px-2 py-0.5 text-[10px] transition-colors",
-                              skipReason === r ? "border-amber-500 bg-white text-amber-800 font-medium" : "border-amber-200 bg-white/60 text-slate-600 hover:bg-white",
+                              skipReason === r ? "border-amber-500 bg-card text-amber-800 dark:text-amber-300 font-medium" : "border-amber-200 dark:border-amber-800 bg-card/60 text-slate-600 dark:text-neutral-400 hover:bg-card",
                             )}
                           >
                             {r}
@@ -1138,7 +1138,7 @@ function JobDetailSheet({
                         rows={2}
                         value={skipReason}
                         onChange={(e) => setSkipReason(e.target.value)}
-                        className="text-xs resize-none bg-white"
+                        className="text-xs resize-none bg-card"
                         placeholder="Weather, client request, crew availability…"
                       />
                     </div>
@@ -1147,7 +1147,7 @@ function JobDetailSheet({
 
                 {/* Assigned To */}
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
                     Assigned To
                   </label>
                   <Select
@@ -1168,7 +1168,7 @@ function JobDetailSheet({
 
                 {/* Sub Status */}
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
                     Sub Status
                   </label>
                   <Select
@@ -1191,7 +1191,7 @@ function JobDetailSheet({
                     flag. "Job default" clears the override so the visit goes
                     back to inheriting whatever the job is set to. */}
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
                     Priority
                   </label>
                   <Select
@@ -1213,7 +1213,7 @@ function JobDetailSheet({
 
                 {/* Job Start */}
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
                     Job Start
                   </label>
                   {startHasMultipleTimes ? (
@@ -1221,7 +1221,7 @@ function JobDetailSheet({
                       type="button"
                       onClick={() => onEditTimes(visit)}
                       title="Crew members have different clock-in times — open Edit Job Times"
-                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs italic text-amber-600 hover:bg-slate-50"
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs italic text-amber-600 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                     >
                       Multiple times
                     </button>
@@ -1252,14 +1252,14 @@ function JobDetailSheet({
                     <button
                       type="button"
                       onClick={() => setEditingAppointmentStart(true)}
-                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs hover:bg-slate-50"
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                     >
-                      {startTime ? formatTimeShort(startTime) : <span className="text-slate-400">Not set</span>}
+                      {startTime ? formatTimeShort(startTime) : <span className="text-slate-400 dark:text-neutral-500">Not set</span>}
                     </button>
                   )}
                   {startPunchDiffers && (
                     <p
-                      className="mt-0.5 text-[10px] text-amber-500"
+                      className="mt-0.5 text-[10px] text-amber-500 dark:text-amber-400"
                       title={`Crew punched in at ${formatTimeShort(startClockTime)} — different from what's shown above`}
                     >
                       ⏱ Punched in {formatTimeShort(startClockTime)}
@@ -1269,7 +1269,7 @@ function JobDetailSheet({
 
                 {/* Job End */}
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
                     Job End
                   </label>
                   {endHasMultipleTimes ? (
@@ -1277,7 +1277,7 @@ function JobDetailSheet({
                       type="button"
                       onClick={() => onEditTimes(visit)}
                       title="Crew members have different clock-out times — open Edit Job Times"
-                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs italic text-amber-600 hover:bg-slate-50"
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs italic text-amber-600 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                     >
                       Multiple times
                     </button>
@@ -1301,14 +1301,14 @@ function JobDetailSheet({
                       type="button"
                       ref={appointmentEndButtonRef}
                       onClick={() => setEditingAppointmentEnd(true)}
-                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs hover:bg-slate-50"
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                     >
-                      {endTime ? formatTimeShort(endTime) : <span className="text-slate-400">Not set</span>}
+                      {endTime ? formatTimeShort(endTime) : <span className="text-slate-400 dark:text-neutral-500">Not set</span>}
                     </button>
                   )}
                   {endPunchDiffers && (
                     <p
-                      className="mt-0.5 text-[10px] text-amber-500"
+                      className="mt-0.5 text-[10px] text-amber-500 dark:text-amber-400"
                       title={`Crew punched out at ${formatTimeShort(endClockTime)} — different from what's shown above`}
                     >
                       ⏱ Punched out {formatTimeShort(endClockTime)}
@@ -1329,7 +1329,7 @@ function JobDetailSheet({
 
             {/* Notes tabs */}
             <Tabs defaultValue="job-notes" className="flex flex-col flex-1">
-              <div className="border-b bg-white">
+              <div className="border-b bg-card">
                 <TabsList className="h-9 rounded-none bg-transparent justify-start px-4 gap-0">
                   {(["job-notes","job-comments","client-notes","invoice-desc","audit"] as const).map((v, i) => {
                     // Job Notes = instructions to the crew (notesToCrew). Job Comments =
@@ -1343,7 +1343,7 @@ function JobDetailSheet({
                       <TabsTrigger
                         key={v}
                         value={v}
-                        className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-xs font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-slate-900"
+                        className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-xs font-medium text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-slate-900 dark:data-[state=active]:text-neutral-100"
                       >
                         {labels[i]}{cnt > 0 ? ` (${cnt})` : ""}
                       </TabsTrigger>
@@ -1360,7 +1360,7 @@ function JobDetailSheet({
                   clog up the board, unlike short job comments. */}
               <TabsContent value="job-notes" className="m-0 p-4 space-y-3">
                 {job?.notesToCrew && (
-                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded px-2 py-1.5">
                     <span className="font-semibold">Job note:</span> {job.notesToCrew}
                   </p>
                 )}
@@ -1381,9 +1381,9 @@ function JobDetailSheet({
                 {visit.jobComments.length > 0 && (
                   <div className="space-y-2 mb-3">
                     {visit.jobComments.map((c) => (
-                      <div key={c.id} className="rounded bg-orange-50/70 border border-orange-100 px-3 py-2">
-                        <p className="text-[10px] font-semibold text-slate-500 mb-0.5">{c.authorName}</p>
-                        <p className="text-xs text-slate-700">{c.text}</p>
+                      <div key={c.id} className="rounded bg-orange-50/70 dark:bg-orange-950/40 border border-orange-100 dark:border-orange-900 px-3 py-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">{c.authorName}</p>
+                        <p className="text-xs text-slate-700 dark:text-neutral-300">{c.text}</p>
                       </div>
                     ))}
                   </div>
@@ -1413,18 +1413,18 @@ function JobDetailSheet({
                   placeholder="Notes visible to client on invoice/portal…"
                   className="h-32 resize-none text-xs"
                 />
-                <p className="text-[10px] text-slate-400">Saved when you click Save below.</p>
+                <p className="text-[10px] text-slate-400 dark:text-neutral-500">Saved when you click Save below.</p>
               </TabsContent>
 
               {/* Invoice Desc */}
               <TabsContent value="invoice-desc" className="m-0 p-4 space-y-3">
                 {!visit.invoiceDescription && job?.invoiceDescription && (
-                  <p className="text-[10px] text-slate-400 italic">
+                  <p className="text-[10px] text-slate-400 dark:text-neutral-500 italic">
                     Showing job-level description. Edit below to override for this visit only.
                   </p>
                 )}
                 {!invoiceDesc && serviceInvoiceDescPreview && (
-                  <p className="text-[10px] text-slate-400 italic">
+                  <p className="text-[10px] text-slate-400 dark:text-neutral-500 italic">
                     Blank — invoices will use each service&apos;s own description: &quot;{serviceInvoiceDescPreview}&quot;
                   </p>
                 )}
@@ -1434,7 +1434,7 @@ function JobDetailSheet({
                   placeholder={serviceInvoiceDescPreview || "Description that will appear on the invoice…"}
                   className="h-32 resize-none text-xs"
                 />
-                <p className="text-[10px] text-slate-400">Saved when you click Save below.</p>
+                <p className="text-[10px] text-slate-400 dark:text-neutral-500">Saved when you click Save below.</p>
               </TabsContent>
 
               {/* Audit — includes the parent job's own entries (schedule, crew,
@@ -1454,12 +1454,12 @@ function JobDetailSheet({
             {/* Services section */}
             {services.length > 0 && (
               <div className="border-t">
-                <div className="bg-slate-50 border-b px-4 py-2">
-                  <p className="text-xs font-semibold text-slate-600">Services ({services.length})</p>
+                <div className="bg-slate-50 dark:bg-muted/40 border-b px-4 py-2">
+                  <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Services ({services.length})</p>
                 </div>
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b bg-slate-50 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    <tr className="border-b bg-slate-50 dark:bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                       <th className="px-4 py-2">Service</th>
                       <th className="px-2 py-2 text-right">Qty</th>
                       <th className="px-2 py-2 text-right">Rate</th>
@@ -1469,12 +1469,12 @@ function JobDetailSheet({
                   <tbody>
                     {services.map((s) => (
                       <tr key={s.id} className="border-b">
-                        <td className="px-4 py-2 text-slate-700">{s.serviceName}</td>
-                        <td className="px-2 py-2 text-right text-slate-500">{s.qty}</td>
-                        <td className="px-2 py-2 text-right text-slate-500">
+                        <td className="px-4 py-2 text-slate-700 dark:text-neutral-300">{s.serviceName}</td>
+                        <td className="px-2 py-2 text-right text-muted-foreground">{s.qty}</td>
+                        <td className="px-2 py-2 text-right text-muted-foreground">
                           {s.rateCents != null ? formatCurrency(s.rateCents) : "—"}
                         </td>
-                        <td className="px-2 py-2 text-right font-medium text-slate-700">
+                        <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
                           {s.rateCents != null ? formatCurrency(s.rateCents * s.qty) : "—"}
                         </td>
                       </tr>
@@ -1492,19 +1492,19 @@ function JobDetailSheet({
           </div>
 
           {/* Right: costing panel */}
-          <div className="w-56 shrink-0 border-l bg-slate-50 flex flex-col max-md:w-full max-md:border-l-0 max-md:border-t">
+          <div className="w-56 shrink-0 border-l bg-slate-50 dark:bg-muted/40 flex flex-col max-md:w-full max-md:border-l-0 max-md:border-t">
             <div className="px-4 pt-4 pb-3 border-b">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-3">
                 Job Costing
               </p>
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-500">Billing Mode</span>
-                  <span className="text-[11px] font-medium text-slate-700">Flat Rate</span>
+                  <span className="text-[11px] text-muted-foreground">Billing Mode</span>
+                  <span className="text-[11px] font-medium text-slate-700 dark:text-neutral-300">Flat Rate</span>
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500">B. Hours</span>
+                  <span className="text-[11px] text-muted-foreground">B. Hours</span>
                   <Input
                     type="number" step="0.25" min={0} value={budgetedHoursInput}
                     onChange={(e) => setBudgetedHoursInput(e.target.value)}
@@ -1514,7 +1514,7 @@ function JobDetailSheet({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500">Hours</span>
+                  <span className="text-[11px] text-muted-foreground">Hours</span>
                   <Input
                     type="number" step="0.25" value={actualHours}
                     onChange={(e) => setActualHours(e.target.value)}
@@ -1524,7 +1524,7 @@ function JobDetailSheet({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500">Men (Total)</span>
+                  <span className="text-[11px] text-muted-foreground">Men (Total)</span>
                   <Input
                     type="number" min={0} value={menCount}
                     onChange={(e) => setMenCount(e.target.value)}
@@ -1533,7 +1533,7 @@ function JobDetailSheet({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500">Qty</span>
+                  <span className="text-[11px] text-muted-foreground">Qty</span>
                   <Input
                     type="number" step="0.1" value={qty}
                     onChange={(e) => setQty(e.target.value)}
@@ -1543,7 +1543,7 @@ function JobDetailSheet({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500">Rate</span>
+                  <span className="text-[11px] text-muted-foreground">Rate</span>
                   <Input
                     type="number" step="0.01" value={rateCents}
                     onChange={(e) => setRateCents(e.target.value)}
@@ -1553,8 +1553,8 @@ function JobDetailSheet({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500">Expenses</span>
-                  <span className="text-[11px] text-slate-400">0.00</span>
+                  <span className="text-[11px] text-muted-foreground">Expenses</span>
+                  <span className="text-[11px] text-slate-400 dark:text-neutral-500">0.00</span>
                 </div>
               </div>
             </div>
@@ -1570,15 +1570,15 @@ function JobDetailSheet({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between shrink-0 border-t bg-white px-5 py-3">
+        <div className="flex items-center justify-between shrink-0 border-t bg-card px-5 py-3">
           <Popover>
             <PopoverTrigger asChild>
-              <button type="button" className="text-[10px] text-brand-600 hover:underline">
+              <button type="button" className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
                 Show: Attachments
               </button>
             </PopoverTrigger>
             <PopoverContent side="top" align="start" className="w-80">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Attachments
               </p>
               <AttachmentsSection recordType="job" recordId={visit.jobId} />
@@ -1593,7 +1593,7 @@ function JobDetailSheet({
               {saving ? "Saving…" : "Save"}
             </Button>
             <button
-              className="text-xs text-slate-500 hover:text-slate-700"
+              className="text-xs text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
               onClick={() => onOpenChange(false)}
             >
               Cancel
@@ -1635,7 +1635,7 @@ import { SearchInput } from "@/components/shared/SearchInput";
 
 /** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
 function WriteInBlank({ className = "" }: { className?: string }) {
-  return <span className={cn("inline-block border-b border-slate-400", className)}>&nbsp;</span>;
+  return <span className={cn("inline-block border-b border-slate-400 dark:border-neutral-600", className)}>&nbsp;</span>;
 }
 
 function crewNotesFor(v: CRMJobVisit): string {
@@ -1689,16 +1689,16 @@ function PrintDialog({
     return (
       <table className="w-full text-xs border-collapse mt-2">
         <thead>
-          <tr className="bg-slate-100">
-            <th className="border border-slate-300 px-2 py-1 text-left">#</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Client</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Address</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Service</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Sched.</th>
-            <th className="border border-slate-300 px-2 py-1 text-center">B Hrs</th>
-            <th className="border border-slate-300 px-2 py-1 text-center w-16">Start</th>
-            <th className="border border-slate-300 px-2 py-1 text-center w-16">End</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Notes to Crew</th>
+          <tr className="bg-muted">
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">#</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Client</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Address</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Service</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Sched.</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-center">B Hrs</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-center w-16">Start</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-center w-16">End</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Notes to Crew</th>
           </tr>
         </thead>
         <tbody>
@@ -1707,16 +1707,16 @@ function PrintDialog({
             const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
             const addr = [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", ");
             return (
-              <tr key={v.id} className="border-b border-slate-200">
-                <td className="border border-slate-200 px-2 py-1 font-mono text-center">{i + 1}</td>
-                <td className="border border-slate-200 px-2 py-1 font-medium">{v.clientName ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1">{addr || "—"}</td>
-                <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
-                <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 text-center">{computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1"><WriteInBlank className="w-full" /></td>
-                <td className="border border-slate-200 px-2 py-1"><WriteInBlank className="w-full" /></td>
-                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{crewNotesFor(v)}</td>
+              <tr key={v.id} className="border-b border-border">
+                <td className="border border-border px-2 py-1 font-mono text-center">{i + 1}</td>
+                <td className="border border-border px-2 py-1 font-medium">{v.clientName ?? "—"}</td>
+                <td className="border border-border px-2 py-1">{addr || "—"}</td>
+                <td className="border border-border px-2 py-1">{svc || "—"}</td>
+                <td className="border border-border px-2 py-1">{v.startTime ?? "—"}</td>
+                <td className="border border-border px-2 py-1 text-center">{computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
+                <td className="border border-border px-2 py-1"><WriteInBlank className="w-full" /></td>
+                <td className="border border-border px-2 py-1"><WriteInBlank className="w-full" /></td>
+                <td className="border border-border px-2 py-1 italic text-slate-600 dark:text-neutral-400">{crewNotesFor(v)}</td>
               </tr>
             );
           })}
@@ -1741,12 +1741,12 @@ function PrintDialog({
           <tbody>
             {rows.map((m, i) => (
               <tr key={m?.id ?? i}>
-                <td className="py-1.5 pr-3 border-b border-slate-300">
+                <td className="py-1.5 pr-3 border-b border-slate-300 dark:border-neutral-700">
                   {m ? `${m.employeeName ?? "—"}${m.resourceCode ? ` (${m.resourceCode})` : ""}` : <>&nbsp;</>}
                 </td>
-                <td className="py-1.5 pr-3 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
-                <td className="py-1.5 pr-3 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
-                <td className="py-1.5 border-b border-slate-300"><WriteInBlank className="w-full" /></td>
+                <td className="py-1.5 pr-3 border-b border-slate-300 dark:border-neutral-700"><WriteInBlank className="w-full" /></td>
+                <td className="py-1.5 pr-3 border-b border-slate-300 dark:border-neutral-700"><WriteInBlank className="w-full" /></td>
+                <td className="py-1.5 border-b border-slate-300 dark:border-neutral-700"><WriteInBlank className="w-full" /></td>
               </tr>
             ))}
           </tbody>
@@ -1771,19 +1771,19 @@ function PrintDialog({
     const turfSqft = job?.propertyTurfSqft;
 
     return (
-      <div key={v.id} className="border-b border-slate-300 py-2.5 break-inside-avoid">
+      <div key={v.id} className="border-b border-slate-300 dark:border-neutral-700 py-2.5 break-inside-avoid">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <span className="mt-0.5 inline-block h-3.5 w-3.5 border border-slate-600 shrink-0" />
             <div>
               <p className="font-bold text-sm leading-snug">{title || "—"}</p>
-              <p className="text-xs text-slate-600">{svc || "—"}</p>
+              <p className="text-xs text-slate-600 dark:text-neutral-400">{svc || "—"}</p>
             </div>
           </div>
           <div className="text-right text-xs shrink-0 space-y-0.5">
-            <p><span className="text-slate-500">Status:</span> <span className="font-semibold">{VISIT_STATUS_LABELS[v.status] ?? v.status}</span></p>
-            <p className="text-slate-500">Map Code: {job?.mapCode ?? "—"}</p>
-            <p><span className="text-slate-500">Priority:</span> <span className="font-semibold">{v.effectiveHighPriority ? "High" : "Normal"}</span></p>
+            <p><span className="text-muted-foreground">Status:</span> <span className="font-semibold">{VISIT_STATUS_LABELS[v.status] ?? v.status}</span></p>
+            <p className="text-muted-foreground">Map Code: {job?.mapCode ?? "—"}</p>
+            <p><span className="text-muted-foreground">Priority:</span> <span className="font-semibold">{v.effectiveHighPriority ? "High" : "Normal"}</span></p>
           </div>
         </div>
         <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-xs">
@@ -1801,7 +1801,7 @@ function PrintDialog({
           <p className="mt-1 text-xs"><span className="font-semibold">Gate/Lock Code</span> {gateCode}</p>
         )}
         {notes && (
-          <p className="mt-1 text-xs text-slate-700"><span className="font-semibold">Notes to Crew</span> <span className="italic">{notes}</span></p>
+          <p className="mt-1 text-xs text-slate-700 dark:text-neutral-300"><span className="font-semibold">Notes to Crew</span> <span className="italic">{notes}</span></p>
         )}
       </div>
     );
@@ -1812,7 +1812,7 @@ function PrintDialog({
       <div style={pageBreak ? { pageBreakBefore: "always" } : undefined}>
         <div className="flex items-baseline justify-between border-b-2 border-slate-800 pb-1 mb-3">
           <h2 className="text-base font-bold">{label}</h2>
-          <span className="text-sm font-medium text-slate-600">{dateLabel}</span>
+          <span className="text-sm font-medium text-slate-600 dark:text-neutral-400">{dateLabel}</span>
         </div>
         {renderCrewRosterHeader(members, cv.length)}
         {cv.map((v, i) => renderJobCard(v, i))}
@@ -1831,14 +1831,14 @@ function PrintDialog({
             <button
               type="button"
               onClick={() => setFormat("detailed")}
-              className={cn("rounded px-2.5 py-1", format === "detailed" ? "bg-white text-slate-900" : "text-white/80 hover:text-white")}
+              className={cn("rounded px-2.5 py-1", format === "detailed" ? "bg-card text-slate-900 dark:text-neutral-100" : "text-white/80 hover:text-white")}
             >
               Detailed
             </button>
             <button
               type="button"
               onClick={() => setFormat("compact")}
-              className={cn("rounded px-2.5 py-1", format === "compact" ? "bg-white text-slate-900" : "text-white/80 hover:text-white")}
+              className={cn("rounded px-2.5 py-1", format === "compact" ? "bg-card text-slate-900 dark:text-neutral-100" : "text-white/80 hover:text-white")}
             >
               Compact
             </button>
@@ -1846,7 +1846,7 @@ function PrintDialog({
         </DialogHeader>
         <div className="flex-1 overflow-y-auto p-5 space-y-8">
           {byCrew.length === 0 && unassigned.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">No visits to print for this date.</p>
+            <p className="text-sm text-slate-400 dark:text-neutral-500 text-center py-8">No visits to print for this date.</p>
           )}
           {byCrew.map(({ crew, members, visits: cv }, idx) => (
             <div key={crew.id}>
@@ -1856,7 +1856,7 @@ function PrintDialog({
                 <>
                   <div className="border-b-2 border-slate-800 pb-1 mb-2 flex items-baseline justify-between">
                     <h2 className="text-sm font-bold">{crew.name}</h2>
-                    <span className="text-xs text-slate-500">{cv.length} stop{cv.length !== 1 ? "s" : ""} · {selectedDate}</span>
+                    <span className="text-xs text-muted-foreground">{cv.length} stop{cv.length !== 1 ? "s" : ""} · {selectedDate}</span>
                   </div>
                   {printRouteTable(cv)}
                 </>
@@ -1870,8 +1870,8 @@ function PrintDialog({
               ) : (
                 <>
                   <div className="border-b-2 border-amber-600 pb-1 mb-2 flex items-baseline justify-between">
-                    <h2 className="text-sm font-bold text-amber-700">Unassigned</h2>
-                    <span className="text-xs text-amber-600">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""} · {selectedDate}</span>
+                    <h2 className="text-sm font-bold text-amber-700 dark:text-amber-400">Unassigned</h2>
+                    <span className="text-xs text-amber-600 dark:text-amber-400">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""} · {selectedDate}</span>
                   </div>
                   {printRouteTable(unassigned)}
                 </>
@@ -1879,8 +1879,8 @@ function PrintDialog({
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between">
-          <p className="text-[11px] text-slate-400">Opens your browser&apos;s print dialog in a new window</p>
+        <div className="shrink-0 border-t bg-card px-5 py-3 flex items-center justify-between">
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">Opens your browser&apos;s print dialog in a new window</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
             <Button
@@ -2060,8 +2060,8 @@ function TeamAssignDialog({
         </DialogHeader>
 
         {held ? (
-          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 bg-brand-50 px-5 py-2">
-            <p className="text-xs text-brand-800">
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-5 py-2">
+            <p className="text-xs text-brand-800 dark:text-brand-300">
               Moving <span className="font-semibold">{held.label}</span> —{" "}
               {held.kind === "visit"
                 ? "tap a crew, or Unassigned, to place it."
@@ -2069,13 +2069,13 @@ function TeamAssignDialog({
             </p>
             <button
               onClick={() => setHeld(null)}
-              className="shrink-0 rounded border border-brand-300 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
+              className="shrink-0 rounded border border-brand-300 dark:border-brand-700 bg-card px-2 py-1 text-[11px] font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40"
             >
               Cancel
             </button>
           </div>
         ) : (
-          <p className="shrink-0 border-b bg-slate-50 px-5 py-1.5 text-[11px] text-slate-400">
+          <p className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">
             Drag a visit or crew member, or tap one to pick it up and tap where it should go.
           </p>
         )}
@@ -2084,19 +2084,19 @@ function TeamAssignDialog({
           {/* Unassigned pool — drop target to un-assign */}
           <div
             className={cn(
-              "w-52 shrink-0 border-r bg-green-50 p-4",
+              "w-52 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
               held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (dragVisitId) { void unassign(visits.find((v) => v.id === dragVisitId)); setDragVisitId(null); } }}
             onClick={() => void placeUnassigned()}
           >
-            <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">
+            <p className="text-[10px] font-semibold uppercase text-green-700 dark:text-green-400 tracking-wide mb-3">
               Unassigned ({unassigned.length})
             </p>
             <div className="space-y-1.5">
               {unassigned.length === 0 ? (
-                <p className="text-xs text-green-600 italic">
+                <p className="text-xs text-green-600 dark:text-green-400 italic">
                   {held?.kind === "visit" ? "Tap to unassign" : "All visits assigned"}
                 </p>
               ) : (
@@ -2117,18 +2117,18 @@ function TeamAssignDialog({
                         toggleHold({ kind: "visit", id: v.id, label: v.clientName ?? "Visit" });
                       }}
                       className={cn(
-                        "rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing",
-                        isHeld && "ring-2 ring-brand-500 border-brand-300"
+                        "rounded bg-card border border-green-200 dark:border-green-800 px-2 py-1.5 cursor-grab active:cursor-grabbing",
+                        isHeld && "ring-2 ring-brand-500 border-brand-300 dark:border-brand-700"
                       )}
                     >
-                      <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
-                      <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
+                      <p className="text-xs font-medium text-slate-700 dark:text-neutral-300 truncate">{v.clientName ?? "—"}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-neutral-500 truncate">{svcName}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {crews.map((c) => (
                           <button
                             key={c.id}
                             onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, c.id, v.jobId); }}
-                            className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5 transition-colors"
+                            className="text-[9px] bg-muted hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400 text-muted-foreground rounded px-1.5 py-0.5 transition-colors"
                           >
                             → {c.name}
                           </button>
@@ -2165,7 +2165,7 @@ function TeamAssignDialog({
                   }}
                   onClick={() => void placeOnCrew(crew.id)}
                 >
-                  <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-1">
+                  <p className="text-[10px] font-semibold uppercase text-slate-600 dark:text-neutral-400 tracking-wide truncate mb-1">
                     {crew.name} ({crewVisits.length})
                   </p>
                   {/* Member chips — amber means "on loan" from another crew for
@@ -2191,8 +2191,8 @@ function TeamAssignDialog({
                           className={cn(
                             "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none",
                             onLoan
-                              ? "bg-amber-100 border-amber-300 text-amber-700"
-                              : "bg-brand-100 border-brand-200 text-brand-700",
+                              ? "bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400"
+                              : "bg-brand-100 dark:bg-brand-900/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-400",
                             isHeld && "ring-2 ring-brand-500"
                           )}
                           title={onLoan
@@ -2205,7 +2205,7 @@ function TeamAssignDialog({
                               onClick={(e) => { e.stopPropagation(); setHeld(null); void moveMember(m.id, home); }}
                               // Negative margins absorb the padding, so the hit
                               // area is finger-sized without growing the chip.
-                              className="-my-1.5 -mr-1.5 rounded-full px-1.5 py-1.5 leading-none text-amber-500 hover:text-amber-800"
+                              className="-my-1.5 -mr-1.5 rounded-full px-1.5 py-1.5 leading-none text-amber-500 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
                               title="Send back to their usual crew"
                             >
                               ↩
@@ -2215,7 +2215,7 @@ function TeamAssignDialog({
                       );
                     })}
                     {members.length === 0 && (
-                      <p className="text-[10px] text-slate-300 italic">
+                      <p className="text-[10px] text-slate-300 dark:text-neutral-600 italic">
                         {held?.kind === "member" ? "Tap to place here" : "No members"}
                       </p>
                     )}
@@ -2239,16 +2239,16 @@ function TeamAssignDialog({
                           className={cn(
                             // pr-7 keeps the client name clear of the ✕, which
                             // sits in the corner permanently on touch screens.
-                            "rounded bg-slate-50 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
+                            "rounded bg-slate-50 dark:bg-muted/40 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
                             held?.kind === "visit" && held.id === v.id && "ring-2 ring-brand-500"
                           )}
                         >
-                          <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
-                          <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
+                          <p className="text-xs font-medium text-slate-700 dark:text-neutral-300 truncate">{v.clientName ?? "—"}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-neutral-500 truncate">{svcName}</p>
                           <VisitStatusIcon status={v.status} />
                           <button
                             onClick={(e) => { e.stopPropagation(); setHeld(null); void reassign(v.id, null, v.jobId); }}
-                            className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500"
+                            className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                             title="Unassign"
                           >
                             ✕
@@ -2261,15 +2261,15 @@ function TeamAssignDialog({
               ))}
               {byCrew.length === 0 && (
                 <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-slate-400">No crews configured</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No crews configured</p>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between shrink-0 border-t bg-white px-5 py-3">
-          <p className="text-xs text-slate-500">
+        <div className="flex items-center justify-between shrink-0 border-t bg-card px-5 py-3">
+          <p className="text-xs text-muted-foreground">
             {visits.filter((v) => effectiveCrewId(v)).length} of {visits.length} visits assigned
           </p>
           <div className="flex items-center gap-2">
@@ -2388,16 +2388,16 @@ function EditJobTimeRow({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 py-1.5">
-      <span className="w-28 shrink-0 truncate text-sm text-slate-700">{memberName}</span>
+      <span className="w-28 shrink-0 truncate text-sm text-slate-700 dark:text-neutral-300">{memberName}</span>
       <Input type="date" value={date} onChange={(e) => setDate(e.target.value)}
         onBlur={() => onSave(date, start, end)} className="h-8 w-36 shrink-0 text-xs" />
       <Input type="time" value={start} onChange={(e) => setStart(e.target.value)}
         onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
-      <span className="shrink-0 text-xs text-slate-400">to</span>
+      <span className="shrink-0 text-xs text-slate-400 dark:text-neutral-500">to</span>
       <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
         onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
-      {overnight && <span className="shrink-0 text-[10px] text-slate-500" title="Ends the next day">+1 day</span>}
-      <button onClick={onDelete} className="shrink-0 text-slate-300 hover:text-red-500" title="Remove">
+      {overnight && <span className="shrink-0 text-[10px] text-muted-foreground" title="Ends the next day">+1 day</span>}
+      <button onClick={onDelete} className="shrink-0 text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400" title="Remove">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -2589,12 +2589,12 @@ function EditJobTimesDialog({
             />
           ))}
           {memberTimes.length === 0 && (
-            <p className="py-2 text-xs text-slate-400 italic">No times recorded yet</p>
+            <p className="py-2 text-xs text-slate-400 dark:text-neutral-500 italic">No times recorded yet</p>
           )}
         </div>
 
         {!crewId ? (
-          <p className="border-t pt-3 text-xs text-slate-400 italic">Assign a crew to this visit first to add crew member times.</p>
+          <p className="border-t pt-3 text-xs text-slate-400 dark:text-neutral-500 italic">Assign a crew to this visit first to add crew member times.</p>
         ) : availableMembers.length > 0 || otherEmployees.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
             <Select value={newMemberId || "unassigned"} onValueChange={(v) => setNewMemberId(v === "unassigned" ? "" : v)}>
@@ -2623,7 +2623,7 @@ function EditJobTimesDialog({
             </Select>
             <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-8 w-36 shrink-0 text-xs" />
             <Input type="time" value={newStart} onChange={(e) => setNewStart(e.target.value)} className="h-8 w-32 shrink-0 text-xs" />
-            <span className="shrink-0 text-xs text-slate-400">to</span>
+            <span className="shrink-0 text-xs text-slate-400 dark:text-neutral-500">to</span>
             <Input type="time" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="h-8 w-32 shrink-0 text-xs" />
             <button
               onClick={addRow}
@@ -2635,7 +2635,7 @@ function EditJobTimesDialog({
             </button>
           </div>
         ) : (
-          <p className="border-t pt-3 text-xs text-slate-400 italic">This crew has no members yet — add them in Team settings.</p>
+          <p className="border-t pt-3 text-xs text-slate-400 dark:text-neutral-500 italic">This crew has no members yet — add them in Team settings.</p>
         )}
 
         <DialogFooter>
@@ -2908,8 +2908,8 @@ function VisitRow({
     : "—";
 
   const serviceColor = services.length > 0
-    ? "bg-green-100 text-green-700 border-green-200"
-    : "bg-slate-100 text-slate-500 border-slate-200";
+    ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
+    : "bg-muted text-muted-foreground border-border";
 
   // suppress unused warning — selectedDate is available for future use
   void selectedDate;
@@ -2926,8 +2926,8 @@ function VisitRow({
     <>
     <tr
       className={cn(
-        "group border-b border-slate-100 text-xs cursor-pointer transition-colors",
-        isDragOver ? "bg-brand-50 border-brand-300" : selected ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-slate-50"
+        "group border-b border-slate-100 dark:border-neutral-800 text-xs cursor-pointer transition-colors",
+        isDragOver ? "bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700" : selected ? "bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40" : "bg-card hover:bg-slate-50 dark:hover:bg-muted/40"
       )}
       onClick={() => onOpen(visit)}
       draggable={manualRouteMode}
@@ -2950,14 +2950,14 @@ function VisitRow({
           be mistaken by the browser for starting a drag on the row. */}
       <td className="w-10 px-1 py-2 text-center font-mono">
         <div className="flex items-center justify-center gap-0.5">
-          <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
+          <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 dark:text-neutral-600 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
           {onReorder && manualRouteMode ? (
             <input
               type="number"
               defaultValue={orderNum}
               key={orderNum}
               min={1}
-              className="w-7 text-center text-[10px] text-slate-600 bg-transparent border border-slate-200 rounded focus:outline-none focus:border-brand-400"
+              className="w-7 text-center text-[10px] text-slate-600 dark:text-neutral-400 bg-transparent border border-border rounded focus:outline-none focus:border-brand-400"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -2972,11 +2972,11 @@ function VisitRow({
               }}
             />
           ) : (
-            <span className="text-slate-400 text-[10px]">{orderNum}</span>
+            <span className="text-slate-400 dark:text-neutral-500 text-[10px]">{orderNum}</span>
           )}
         </div>
         {driveMinsToNext !== undefined && (
-          <div className="text-[9px] text-blue-500 font-normal leading-tight whitespace-nowrap">
+          <div className="text-[9px] text-blue-500 dark:text-blue-400 font-normal leading-tight whitespace-nowrap">
             ↓{driveMinsToNext}m
           </div>
         )}
@@ -2995,17 +2995,17 @@ function VisitRow({
       <td className="min-w-[200px] px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:min-w-[160px] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-1">
           {visit.effectiveHighPriority && (
-            <span title="High priority" className="shrink-0"><Flame className="h-3 w-3 text-red-500" /></span>
+            <span title="High priority" className="shrink-0"><Flame className="h-3 w-3 text-red-500 dark:text-red-400" /></span>
           )}
           <Link
             href={`/crm/clients/${visit.clientId}`}
-            className="block truncate max-w-[200px] max-lg:max-w-[150px] font-medium text-brand-600 hover:underline"
+            className="block truncate max-w-[200px] max-lg:max-w-[150px] font-medium text-brand-600 dark:text-brand-400 hover:underline"
           >
             {visit.clientName ?? "—"}
           </Link>
         </div>
         {job?.serviceAddress && (
-          <p className="truncate max-w-[200px] max-lg:max-w-[150px] text-[10px] text-slate-400">{job.serviceAddress}</p>
+          <p className="truncate max-w-[200px] max-lg:max-w-[150px] text-[10px] text-slate-400 dark:text-neutral-500">{job.serviceAddress}</p>
         )}
       </td>
 
@@ -3023,40 +3023,40 @@ function VisitRow({
 
       {/* Date */}
       {isVisible("date") && (
-        <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{formatDateShort(visit.scheduledDate)}</td>
+        <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{formatDateShort(visit.scheduledDate)}</td>
       )}
 
       {/* City */}
       {isVisible("city") && (
-        <td className="px-2 py-2 text-slate-500">{job?.serviceCity ?? "—"}</td>
+        <td className="px-2 py-2 text-muted-foreground">{job?.serviceCity ?? "—"}</td>
       )}
 
       {/* Zip */}
       {isVisible("zip") && (
-        <td className="px-2 py-2 text-slate-500">{job?.serviceZip ?? "—"}</td>
+        <td className="px-2 py-2 text-muted-foreground">{job?.serviceZip ?? "—"}</td>
       )}
 
       {/* Assigned */}
       {isVisible("assigned") && (
-        <td className="min-w-[90px] px-2 py-2 text-slate-600 font-medium">
-          {effectiveCrew ?? <span className="text-slate-300 italic">—</span>}
+        <td className="min-w-[90px] px-2 py-2 text-slate-600 dark:text-neutral-400 font-medium">
+          {effectiveCrew ?? <span className="text-slate-300 dark:text-neutral-600 italic">—</span>}
         </td>
       )}
 
       {/* Last Svc */}
       {isVisible("last_svc") && (
-        <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{lastSvc}</td>
+        <td className="px-2 py-2 text-slate-400 dark:text-neutral-500 whitespace-nowrap">{lastSvc}</td>
       )}
 
       {/* Start */}
       {isVisible("start") && (
-        <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+        <td className="px-1 py-1 text-slate-400 dark:text-neutral-500 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           {startHasMultipleTimes ? (
             <button
               type="button"
               onClick={() => onEditTimes(visit)}
               title="Crew members have different clock-in times — open Edit Job Times"
-              className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
+              className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 dark:text-amber-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
             >
               Multiple times
             </button>
@@ -3088,15 +3088,15 @@ function VisitRow({
                       if (document.activeElement === endButtonRef.current) setEditingEnd(true);
                     }, 0);
                   }}
-                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 dark:text-neutral-400 focus:outline-none"
                 />
               ) : (
                 <button
                   type="button"
                   onClick={() => setEditingStart(true)}
-                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 dark:text-neutral-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
                 >
-                  {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 italic">—</span>}
+                  {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 dark:text-neutral-600 italic">—</span>}
                 </button>
               )}
               {/* A real crew-app punch exists that Start doesn't reflect yet —
@@ -3104,7 +3104,7 @@ function VisitRow({
                   one case worth surfacing instead of just duplicating Start. */}
               {startPunchDiffers && (
                 <span
-                  className="text-[9px] leading-none text-amber-500"
+                  className="text-[9px] leading-none text-amber-500 dark:text-amber-400"
                   title={`Crew punched in at ${formatTimeShort(startClockTime)} — different from what's shown above`}
                 >
                   ⏱ {formatTimeShort(startClockTime)}
@@ -3117,7 +3117,7 @@ function VisitRow({
 
       {/* End */}
       {isVisible("end") && (
-        <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+        <td className="px-1 py-1 text-slate-400 dark:text-neutral-500 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-0.5">
               {endHasMultipleTimes ? (
@@ -3125,7 +3125,7 @@ function VisitRow({
                   type="button"
                   onClick={() => onEditTimes(visit)}
                   title="Crew members have different clock-out times — open Edit Job Times"
-                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 dark:text-amber-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
                 >
                   Multiple times
                 </button>
@@ -3142,16 +3142,16 @@ function VisitRow({
                     setEndTouched(false);
                     void saveVisitTime("end_time", endVal);
                   }}
-                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                  className="w-[74px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 dark:text-neutral-400 focus:outline-none"
                 />
               ) : (
                 <button
                   type="button"
                   ref={endButtonRef}
                   onClick={() => setEditingEnd(true)}
-                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                  className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 dark:text-neutral-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
                 >
-                  {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 italic">—</span>}
+                  {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 dark:text-neutral-600 italic">—</span>}
                 </button>
               )}
               {/* Only way to correct per-crew-member times, or to split a single
@@ -3162,7 +3162,7 @@ function VisitRow({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onEditTimes(visit); }}
                 title="Edit job times"
-                className="shrink-0 text-slate-300 hover:text-brand-600 transition-colors"
+                className="shrink-0 text-slate-300 dark:text-neutral-600 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
               >
                 <Clock className="h-3 w-3" />
               </button>
@@ -3170,7 +3170,7 @@ function VisitRow({
             {/* Same real-punch-vs-displayed-End divergence check as Start. */}
             {endPunchDiffers && (
               <span
-                className="text-[9px] leading-none text-amber-500"
+                className="text-[9px] leading-none text-amber-500 dark:text-amber-400"
                 title={`Crew punched out at ${formatTimeShort(endClockTime)} — different from what's shown above`}
               >
                 ⏱ {formatTimeShort(endClockTime)}
@@ -3182,7 +3182,7 @@ function VisitRow({
 
       {/* B Hrs */}
       {isVisible("b_hrs") && (
-        <td className="px-1 py-1 text-right text-slate-500" onClick={(e) => e.stopPropagation()}>
+        <td className="px-1 py-1 text-right text-muted-foreground" onClick={(e) => e.stopPropagation()}>
           <input
             type="number"
             min={0}
@@ -3190,7 +3190,7 @@ function VisitRow({
             value={bHrsVal}
             onChange={(e) => setBHrsVal(e.target.value)}
             onBlur={() => saveBudgetedHours(bHrsVal)}
-            className="w-14 rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
+            className="w-14 rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 dark:text-neutral-400 hover:border-border focus:border-brand-400 focus:outline-none"
           />
         </td>
       )}
@@ -3200,7 +3200,7 @@ function VisitRow({
           saveVisitTime) always equals whatever Start/End show — showing it
           twice was the confusing part, so it's gone from here entirely. */}
       {isVisible("actual") && (
-        <td className="px-2 py-2 text-right text-slate-500">
+        <td className="px-2 py-2 text-right text-muted-foreground">
           {actualHours != null ? actualHours.toFixed(2) : "—"}
         </td>
       )}
@@ -3210,46 +3210,46 @@ function VisitRow({
       {isVisible("variance") && (
         <td className="px-2 py-2 text-right tabular-nums">
           {actualHours != null && budgetedHours != null ? (
-            <span className={cn("font-medium", actualHours > budgetedHours ? "text-red-600" : actualHours < budgetedHours ? "text-green-600" : "text-slate-500")}>
+            <span className={cn("font-medium", actualHours > budgetedHours ? "text-red-600 dark:text-red-400" : actualHours < budgetedHours ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
               {actualHours > budgetedHours ? "+" : ""}{(actualHours - budgetedHours).toFixed(2)}
             </span>
           ) : (
-            <span className="text-slate-300">—</span>
+            <span className="text-slate-300 dark:text-neutral-600">—</span>
           )}
         </td>
       )}
 
       {/* Men */}
       {isVisible("men") && (
-        <td className="px-1 py-1 text-center text-slate-400" onClick={(e) => e.stopPropagation()}>
+        <td className="px-1 py-1 text-center text-slate-400 dark:text-neutral-500" onClick={(e) => e.stopPropagation()}>
           <input
             type="number"
             min={0}
             value={menVal}
             onChange={(e) => setMenVal(e.target.value)}
             onBlur={() => saveMenCount(menVal)}
-            className="w-10 rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
+            className="w-10 rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-xs text-slate-600 dark:text-neutral-400 hover:border-border focus:border-brand-400 focus:outline-none"
           />
         </td>
       )}
 
       {/* Qty */}
       {isVisible("qty") && (
-        <td className="px-2 py-2 text-right text-slate-400">
+        <td className="px-2 py-2 text-right text-slate-400 dark:text-neutral-500">
           {visit.qty != null ? visit.qty.toFixed(1) : "—"}
         </td>
       )}
 
       {/* Rate */}
       {isVisible("rate") && (
-        <td className="px-2 py-2 text-right text-slate-500">
+        <td className="px-2 py-2 text-right text-muted-foreground">
           {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
         </td>
       )}
 
       {/* Amt */}
       {isVisible("amt") && (
-        <td className="px-2 py-2 text-right font-medium text-slate-700">
+        <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
           {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
         </td>
       )}
@@ -3274,14 +3274,14 @@ function VisitRow({
                 <span title={crewNoteBanner} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
               )}
               {hasLinkedProduct && (
-                <span title="Service has a linked product" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
+                <span title="Service has a linked product" className="shrink-0"><Package className="h-3 w-3 text-purple-500 dark:text-purple-400" /></span>
               )}
               {visit.job?.callAhead && visit.clientPhone && (
                 <a
                   href={`tel:${visit.clientPhone}`}
                   onClick={(e) => e.stopPropagation()}
                   title={`Call ahead: ${visit.job.clientPhone}`}
-                  className="text-slate-300 hover:text-green-600 transition-colors shrink-0"
+                  className="text-slate-300 dark:text-neutral-600 hover:text-green-600 dark:hover:text-green-400 transition-colors shrink-0"
                 >
                   <Phone className="h-3 w-3" />
                 </a>
@@ -3301,13 +3301,13 @@ function VisitRow({
       {isVisible("priority") && (
         <td className="px-2 py-2 whitespace-nowrap">
           <div className="flex items-center gap-1">
-            {visit.effectiveHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500" /></span>}
-            <span className="text-[11px] capitalize text-slate-500">{job?.clientPriority ?? visit.clientPriority ?? "normal"}</span>
+            {visit.effectiveHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500 dark:text-red-400" /></span>}
+            <span className="text-[11px] capitalize text-muted-foreground">{job?.clientPriority ?? visit.clientPriority ?? "normal"}</span>
           </div>
         </td>
       )}
       {EXTRA_COL_DEFS.filter((d) => d.key !== "priority").map((d) => isVisible(d.key) && (
-        <td key={d.key} className="px-2 py-2 text-slate-500 max-w-[160px] truncate" title={extraColCellText(d.key, job)}>
+        <td key={d.key} className="px-2 py-2 text-muted-foreground max-w-[160px] truncate" title={extraColCellText(d.key, job)}>
           {extraColCellText(d.key, job)}
         </td>
       ))}
@@ -3317,7 +3317,7 @@ function VisitRow({
         const val = job?.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
         const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
         return (
-          <td key={key} className="px-2 py-2 text-slate-500 max-w-[160px] truncate" title={display}>
+          <td key={key} className="px-2 py-2 text-muted-foreground max-w-[160px] truncate" title={display}>
             {display}
           </td>
         );
@@ -3328,10 +3328,10 @@ function VisitRow({
         icon above with its tooltip is the only on-board indicator. Job
         Comments (short scheduling remarks) still get the full banner below. */}
     {visit.jobComments.map((c) => (
-      <tr key={c.id} className="border-b border-slate-100 bg-orange-50/70">
-        <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-600">
-          <span className="font-medium text-slate-500">{c.text}</span>
-          <span className="ml-2 text-slate-400">{relativeTime(c.createdAt)} by {c.authorName}</span>
+      <tr key={c.id} className="border-b border-slate-100 dark:border-neutral-800 bg-orange-50/70 dark:bg-orange-950/40">
+        <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-600 dark:text-neutral-400">
+          <span className="font-medium text-muted-foreground">{c.text}</span>
+          <span className="ml-2 text-slate-400 dark:text-neutral-500">{relativeTime(c.createdAt)} by {c.authorName}</span>
         </td>
       </tr>
     ))}
@@ -3415,12 +3415,12 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
   const labelSpan = 4 + preHrsKeys.filter((k) => isVisible(k)).length;
 
   return (
-    <tr className="bg-slate-100 text-[10px] font-semibold text-slate-700">
-      <td colSpan={labelSpan} className="px-2 py-1.5 text-right text-slate-500">Totals</td>
+    <tr className="bg-muted text-[10px] font-semibold text-slate-700 dark:text-neutral-300">
+      <td colSpan={labelSpan} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
       {isVisible("b_hrs")   && <td className="px-2 py-1.5 text-right">{totalBHrs > 0 ? totalBHrs.toFixed(2) : "—"}</td>}
       {isVisible("actual")  && <td className="px-2 py-1.5 text-right">{totalAct  > 0 ? totalAct.toFixed(2)  : "—"}</td>}
       {isVisible("variance") && (
-        <td className={cn("px-2 py-1.5 text-right", countedAct > 0 && variance > 0 ? "text-red-600" : countedAct > 0 && variance < 0 ? "text-green-600" : "")}>
+        <td className={cn("px-2 py-1.5 text-right", countedAct > 0 && variance > 0 ? "text-red-600 dark:text-red-400" : countedAct > 0 && variance < 0 ? "text-green-600 dark:text-green-400" : "")}>
           {countedAct > 0 ? `${variance > 0 ? "+" : ""}${variance.toFixed(2)}` : "—"}
         </td>
       )}
@@ -4334,7 +4334,7 @@ export function DispatchBoard() {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearPendingOrder(); }} />
 
-        <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500 ml-1">
+        <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground ml-1">
           <span className="font-medium">From</span>
           <Input
             type="date"
@@ -4351,7 +4351,7 @@ export function DispatchBoard() {
           />
           {endDate && (
             <button
-              className="text-slate-400 hover:text-slate-700"
+              className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
               onClick={() => { setEndDate(""); clearPendingOrder(); }}
               title="Clear end date"
             >
@@ -4369,7 +4369,7 @@ export function DispatchBoard() {
           </Button>
           <div className="flex items-center shrink-0">
             <Button size="sm" variant="outline"
-              className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
+              className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600 dark:text-brand-400")}
               onClick={handleOptimizeRoute}
               disabled={optimizing}
             >
@@ -4383,7 +4383,7 @@ export function DispatchBoard() {
               value={routeStrategy}
               onValueChange={(v) => { setRouteStrategy(v as "nearest_first" | "furthest_first"); clearOptimization(); }}
             >
-              <SelectTrigger className={cn("h-9 max-lg:h-11 w-[112px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}>
+              <SelectTrigger className={cn("h-9 max-lg:h-11 w-[112px] rounded-l-none text-xs", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600 dark:text-brand-400")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -4405,8 +4405,8 @@ export function DispatchBoard() {
       {/* Save/Clear Order — its own full-width row so it's never pushed off
           screen by the toolbar above. */}
       {(optimizedOrder || manualOrder) && (
-        <div className="flex items-center justify-between gap-3 border-y border-brand-200 bg-brand-50 px-4 py-2 shrink-0">
-          <p className="text-xs font-medium text-brand-700">
+        <div className="flex items-center justify-between gap-3 border-y border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-4 py-2 shrink-0">
+          <p className="text-xs font-medium text-brand-700 dark:text-brand-400">
             {manualOrder ? "Order changed — not yet saved." : "Route optimized — not yet saved."}
           </p>
           <div className="flex items-center gap-2">
@@ -4414,7 +4414,7 @@ export function DispatchBoard() {
               Save Order
             </Button>
             <Button size="sm" variant="outline"
-              className="h-7 gap-1.5 px-3 text-xs text-red-500 border-red-200"
+              className="h-7 gap-1.5 px-3 text-xs text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
               onClick={() => { clearOptimization(); setManualOrder(null); }}
             >
               <XIcon className="h-3.5 w-3.5" />
@@ -4426,8 +4426,8 @@ export function DispatchBoard() {
 
       {/* Select a Filter bar — ABOVE dark bar. Wraps on a narrow screen so the
           action buttons drop to their own line instead of running off it. */}
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-white px-4 py-2 shrink-0">
-        <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-card px-4 py-2 shrink-0">
+        <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex flex-wrap items-center gap-1">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
             const label = key === "client" ? "Client" : key === "service" ? "Service" : key === "date" ? "Date" : key === "city" ? "City" : key === "zip" ? "Zip" : "Crew";
@@ -4437,15 +4437,15 @@ export function DispatchBoard() {
                 onClick={() => { if (colFilterKey === key) { setColFilterKey(null); setColFilterValue(""); } else { setColFilterKey(key); setColFilterValue(""); } }}
                 className={cn(
                   "rounded px-2 py-0.5 max-lg:py-2 text-xs transition-colors whitespace-nowrap",
-                  colFilterKey === key ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
+                  colFilterKey === key ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
                 )}
               >
                 {label}
                 {key === "service" && serviceFilters.length > 0 && (
-                  <span className="ml-1 text-brand-500">· {serviceFilters.length}</span>
+                  <span className="ml-1 text-brand-500 dark:text-brand-400">· {serviceFilters.length}</span>
                 )}
                 {key !== "service" && colFilterKey === key && colFilterValue && (
-                  <span className="ml-1 text-brand-500">· {colFilterValue}</span>
+                  <span className="ml-1 text-brand-500 dark:text-brand-400">· {colFilterValue}</span>
                 )}
               </button>
             );
@@ -4457,9 +4457,9 @@ export function DispatchBoard() {
             <Popover defaultOpen onOpenChange={(o) => { if (!o) setColFilterKey(null); }}>
               <PopoverTrigger className="sr-only" />
               <PopoverContent className="w-56 p-1" align="start">
-                <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Services</p>
+                <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 dark:text-neutral-500 tracking-wide">Services</p>
                 {(allServices ?? []).length === 0 && (
-                  <p className="px-2 py-2 text-xs text-slate-400 italic">No services found</p>
+                  <p className="px-2 py-2 text-xs text-slate-400 dark:text-neutral-500 italic">No services found</p>
                 )}
                 {(allServices ?? []).map((svc) => (
                   <FilterOptionRow
@@ -4468,14 +4468,14 @@ export function DispatchBoard() {
                     onToggle={() => setServiceFilters((prev) =>
                       prev.includes(svc.name) ? prev.filter((x) => x !== svc.name) : [...prev, svc.name]
                     )}
-                    className={serviceFilters.includes(svc.name) ? "bg-brand-50 text-brand-700 font-medium" : undefined}
+                    className={serviceFilters.includes(svc.name) ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : undefined}
                   >
                     {svc.name}
                   </FilterOptionRow>
                 ))}
                 <div className="border-t mt-1 pt-1">
                   <button
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100"
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:bg-muted"
                     onClick={() => { setServiceFilters([]); setColFilterKey(null); }}
                   >
                     <XIcon className="h-3 w-3" /> Clear filter
@@ -4497,7 +4497,7 @@ export function DispatchBoard() {
                 onChange={(e) => setColFilterValue(e.target.value)}
                 className="ml-2 h-6 w-36 text-xs"
               />
-              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <XIcon className="h-3.5 w-3.5" />
               </button>
             </>
@@ -4529,7 +4529,7 @@ export function DispatchBoard() {
                   className="ml-2 h-6 w-44 text-xs"
                 />
               )}
-              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <XIcon className="h-3.5 w-3.5" />
               </button>
             </>
@@ -4540,7 +4540,7 @@ export function DispatchBoard() {
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
           <Button
             size="sm" variant="outline"
-            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", statsOpen && "border-brand-400 text-brand-700 bg-brand-50")}
+            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", statsOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
             onClick={() => setStatsOpen((o) => !o)}
             title="Show crew stats"
           >
@@ -4551,13 +4551,13 @@ export function DispatchBoard() {
             <PopoverTrigger asChild>
               <Button
                 size="sm" variant="outline"
-                className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", callAheadOpen && "border-brand-400 text-brand-700 bg-brand-50")}
+                className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", callAheadOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
                 title="Call ahead required"
               >
                 <PhoneCall className="h-3.5 w-3.5" />
                 Call Ahead
                 {callAheadVisits.length > 0 && (
-                  <span className="ml-0.5 rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">
+                  <span className="ml-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 px-1.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
                     {callAheadVisits.length}
                   </span>
                 )}
@@ -4565,19 +4565,19 @@ export function DispatchBoard() {
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align="end">
               <div className="border-b px-3 py-2">
-                <p className="text-xs font-semibold text-slate-700">Call Ahead Required</p>
-                <p className="text-[10px] text-slate-400">Jobs in the current view needing a call before arrival</p>
+                <p className="text-xs font-semibold text-slate-700 dark:text-neutral-300">Call Ahead Required</p>
+                <p className="text-[10px] text-slate-400 dark:text-neutral-500">Jobs in the current view needing a call before arrival</p>
               </div>
               <div className="max-h-80 overflow-y-auto">
                 {callAheadVisits.length === 0 ? (
-                  <p className="px-3 py-4 text-xs text-slate-400 italic text-center">No call-ahead jobs in view</p>
+                  <p className="px-3 py-4 text-xs text-slate-400 dark:text-neutral-500 italic text-center">No call-ahead jobs in view</p>
                 ) : (
                   callAheadVisits.map((v) => (
-                    <div key={v.id} className="flex items-start justify-between gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-slate-50">
+                    <div key={v.id} className="flex items-start justify-between gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-slate-50 dark:hover:bg-muted/40">
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-medium text-slate-800">{v.clientName ?? v.job?.clientName ?? "—"}</p>
-                        <p className="truncate text-[10px] text-slate-500">{v.job?.serviceAddress ?? ""}{v.job?.serviceCity ? `, ${v.job.serviceCity}` : ""}</p>
-                        <p className="text-[10px] text-slate-400">
+                        <p className="truncate text-xs font-medium text-slate-800 dark:text-neutral-100">{v.clientName ?? v.job?.clientName ?? "—"}</p>
+                        <p className="truncate text-[10px] text-muted-foreground">{v.job?.serviceAddress ?? ""}{v.job?.serviceCity ? `, ${v.job.serviceCity}` : ""}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-neutral-500">
                           {new Date(`${v.scheduledDate}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric" })}
                           {v.startTime ? ` · ${v.startTime}` : ""}
                           {v.crewName ? ` · ${v.crewName}` : ""}
@@ -4585,7 +4585,7 @@ export function DispatchBoard() {
                       </div>
                       <a
                         href={`tel:${v.clientPhone}`}
-                        className="shrink-0 flex items-center gap-1 rounded border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100"
+                        className="shrink-0 flex items-center gap-1 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 px-2 py-1 text-[10px] font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
                       >
                         <Phone className="h-3 w-3" />
                         {v.clientPhone}
@@ -4598,7 +4598,7 @@ export function DispatchBoard() {
           </Popover>
           <Button
             size="sm" variant="outline"
-            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 bg-brand-50")}
+            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
             onClick={() => setManualRouteMode((m) => !m)}
             title="Enable drag-and-drop and manual # editing to reorder stops"
           >
@@ -4652,7 +4652,7 @@ export function DispatchBoard() {
                 className={cn(
                   "px-2.5 py-1 max-lg:py-2.5 text-[10px] font-medium rounded transition-colors",
                   statusFilter === t.value
-                    ? "bg-white text-slate-800"
+                    ? "bg-card text-slate-800 dark:text-neutral-100"
                     : "text-slate-300 hover:text-white"
                 )}
               >
@@ -4660,7 +4660,7 @@ export function DispatchBoard() {
                 {cnt > 0 && (
                   <span className={cn(
                     "ml-1 rounded-full px-1 text-[9px]",
-                    statusFilter === t.value ? "bg-slate-200 text-slate-700" : "bg-slate-600 text-slate-300"
+                    statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300"
                   )}>
                     {cnt}
                   </span>
@@ -4711,7 +4711,7 @@ export function DispatchBoard() {
               All Tags
             </FilterOptionRow>
             {orgTags.length === 0 && (
-              <p className="px-2 py-1.5 text-[11px] text-slate-400">No client tags yet</p>
+              <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No client tags yet</p>
             )}
             {orgTags.map((tag) => (
               <FilterOptionRow
@@ -4742,7 +4742,7 @@ export function DispatchBoard() {
               All Priorities
             </FilterOptionRow>
             <div className="my-1 border-t" />
-            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Job</p>
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Job</p>
             {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
               <FilterOptionRow
                 key={o.value}
@@ -4751,12 +4751,12 @@ export function DispatchBoard() {
                   prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
                 )}
               >
-                {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500" />}
+                {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500 dark:text-red-400" />}
                 {o.label}
               </FilterOptionRow>
             ))}
             <div className="my-1 border-t" />
-            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Client</p>
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Client</p>
             {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
               <FilterOptionRow
                 key={o.value}
@@ -4797,7 +4797,7 @@ export function DispatchBoard() {
               {/* Change Status submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="text-xs">
-                  <ListChecks className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  <ListChecks className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   Change Status
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
@@ -4823,7 +4823,7 @@ export function DispatchBoard() {
               {/* Re-assign Crew submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="text-xs">
-                  <Users className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  <Users className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   Re-assign Crew
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
@@ -4889,7 +4889,7 @@ export function DispatchBoard() {
                   className="text-xs"
                   onSelect={() => setBulkEmailOpen(true)}
                 >
-                  <Mail className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  <Mail className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   Email Selected Clients
                 </DropdownMenuItem>
               )}
@@ -4912,7 +4912,7 @@ export function DispatchBoard() {
                     }
                   }}
                 >
-                  <Undo2 className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  <Undo2 className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   Return to Waiting List
                 </DropdownMenuItem>
               )}
@@ -4922,7 +4922,7 @@ export function DispatchBoard() {
                 className="text-xs"
                 onSelect={() => { setMoveDayDate(selectedDate); setMoveDayOpen(true); }}
               >
-                <Calendar className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                <Calendar className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                 Move to Day…
               </DropdownMenuItem>
 
@@ -4965,7 +4965,7 @@ export function DispatchBoard() {
                   );
                 }}
               >
-                <Route className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                <Route className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                 Move to Top of Crew&apos;s Route
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -4993,50 +4993,50 @@ export function DispatchBoard() {
 
       {/* Stats overlay panel */}
       {statsOpen && (
-        <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
+        <div className="bg-card border-b shadow-sm px-4 py-3 shrink-0">
           <div className="flex items-start gap-3 overflow-x-auto pb-1">
             {crewStatsList.map((s) => (
-              <div key={s.id} className="shrink-0 rounded border bg-slate-50 px-3 py-2 min-w-[130px]">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1 truncate">{s.name}</p>
-                <p className="text-xl font-bold text-slate-800 leading-none">{s.count}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">jobs</p>
+              <div key={s.id} className="shrink-0 rounded border bg-slate-50 dark:bg-muted/40 px-3 py-2 min-w-[130px]">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1 truncate">{s.name}</p>
+                <p className="text-xl font-bold text-slate-800 dark:text-neutral-100 leading-none">{s.count}</p>
+                <p className="text-[10px] text-slate-400 dark:text-neutral-500 mt-0.5">jobs</p>
                 <div className="mt-1.5 flex flex-col gap-0.5 text-[10px]">
-                  <span className="text-slate-600">{s.bHrs.toFixed(1)} B.Hrs</span>
-                  <span className="text-green-700 font-semibold">{formatCurrency(s.amt)}</span>
+                  <span className="text-slate-600 dark:text-neutral-400">{s.bHrs.toFixed(1)} B.Hrs</span>
+                  <span className="text-green-700 dark:text-green-400 font-semibold">{formatCurrency(s.amt)}</span>
                 </div>
               </div>
             ))}
             {unassignedStatCount > 0 && (
-              <div className="shrink-0 rounded border border-dashed border-amber-300 bg-amber-50 px-3 py-2 min-w-[130px]">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 mb-1">Unassigned</p>
-                <p className="text-xl font-bold text-slate-800 leading-none">{unassignedStatCount}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">jobs</p>
+              <div className="shrink-0 rounded border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 min-w-[130px]">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400 mb-1">Unassigned</p>
+                <p className="text-xl font-bold text-slate-800 dark:text-neutral-100 leading-none">{unassignedStatCount}</p>
+                <p className="text-[10px] text-slate-400 dark:text-neutral-500 mt-0.5">jobs</p>
                 <div className="mt-1.5 flex flex-col gap-0.5 text-[10px]">
-                  <span className="text-slate-600">{unassignedStatBHrs.toFixed(1)} B.Hrs</span>
-                  <span className="text-green-700 font-semibold">{formatCurrency(unassignedStatAmt)}</span>
+                  <span className="text-slate-600 dark:text-neutral-400">{unassignedStatBHrs.toFixed(1)} B.Hrs</span>
+                  <span className="text-green-700 dark:text-green-400 font-semibold">{formatCurrency(unassignedStatAmt)}</span>
                 </div>
               </div>
             )}
             {crewStatsList.length === 0 && unassignedStatCount === 0 && (
-              <p className="text-xs text-slate-400 italic py-1">No visits to summarize</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500 italic py-1">No visits to summarize</p>
             )}
           </div>
         </div>
       )}
 
       {/* Count bar */}
-      <div className="bg-slate-100 border-b px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
-        <span className="font-semibold text-slate-700">
+      <div className="bg-muted border-b px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
+        <span className="font-semibold text-slate-700 dark:text-neutral-300">
           {isLoading ? "Loading…" : `${filtered.length} Job${filtered.length !== 1 ? "s" : ""} Total`}
         </span>
         {!isLoading && dispatchedCount > 0 && (
-          <span className="text-orange-500">{dispatchedCount} dispatched</span>
+          <span className="text-orange-500 dark:text-orange-400">{dispatchedCount} dispatched</span>
         )}
         {!isLoading && completedCount > 0 && (
-          <span className="text-green-600">{completedCount} completed</span>
+          <span className="text-green-600 dark:text-green-400">{completedCount} completed</span>
         )}
         {optimizedOrder && totalDriveMins !== null && (
-          <span className="ml-auto flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-blue-700 font-medium">
+          <span className="ml-auto flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 text-blue-700 dark:text-blue-400 font-medium">
             <Route className="h-3 w-3" />
             Route optimized · {routedCrewCount} {routedCrewCount === 1 ? "crew" : "crews"} ·{" "}
             {routeStrategy === "furthest_first" ? "furthest first" : "nearest first"} ·{" "}
@@ -5052,10 +5052,10 @@ export function DispatchBoard() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto overscroll-x-contain bg-white max-lg:min-h-[60dvh]">
+      <div className="flex-1 overflow-auto overscroll-x-contain bg-card max-lg:min-h-[60dvh]">
         <table className="w-full min-w-[1200px] text-xs">
-          <thead className="sticky top-0 z-10 bg-slate-50">
-            <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted/40">
+            <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-8 px-2 py-2.5" onClick={toggleSelectAll}>
                 <Checkbox
                   checked={displayVisits.length > 0 && selectedIds.size === displayVisits.length}
@@ -5065,7 +5065,7 @@ export function DispatchBoard() {
               </th>
               <th className="w-10 px-1 py-2.5">#</th>
               <th className="w-8  px-2 py-2.5">St</th>
-              <th className="min-w-[200px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:min-w-[160px] max-lg:bg-slate-50 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
+              <th className="min-w-[200px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:min-w-[160px] max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
               {isVisible("service")  && <th className="px-2 py-2.5">Service</th>}
               {isVisible("date")     && <th className="px-2 py-2.5">Date</th>}
               {isVisible("city")     && <th className="px-2 py-2.5">City</th>}
@@ -5105,7 +5105,7 @@ export function DispatchBoard() {
               ))
             ) : displayVisits.length === 0 ? (
               <tr>
-                <td colSpan={20} className="py-20 text-center text-sm text-slate-400">
+                <td colSpan={20} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search || crewFilters.length > 0 || statusFilter !== "all"
                     ? "No visits match the current filters"
                     : "No visits scheduled for this date"}
@@ -5196,7 +5196,7 @@ export function DispatchBoard() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">New Date</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">New Date</label>
               <Input
                 type="date"
                 value={moveDayDate}
@@ -5284,11 +5284,11 @@ export function DispatchBoard() {
             <DialogTitle>Nearby Waiting List — {selectedDate}</DialogTitle>
           </DialogHeader>
           {nearbyLoading ? (
-            <p className="py-8 text-center text-sm text-slate-500">Checking proximity to today&rsquo;s route…</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">Checking proximity to today&rsquo;s route…</p>
           ) : nearbyError ? (
-            <p className="py-8 text-center text-sm text-red-600">{nearbyError}</p>
+            <p className="py-8 text-center text-sm text-red-600 dark:text-red-400">{nearbyError}</p>
           ) : !nearbyMatches || nearbyMatches.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-500">
+            <p className="py-8 text-center text-sm text-muted-foreground">
               No waiting-list jobs within 3 miles of today&rsquo;s scheduled visits.
             </p>
           ) : (
@@ -5296,11 +5296,11 @@ export function DispatchBoard() {
               {nearbyMatches.map((m) => (
                 <div key={m.jobId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-800">{m.clientName ?? "Unknown client"}</p>
-                    <p className="truncate text-xs text-slate-500">{m.address || "No address"}</p>
+                    <p className="truncate font-medium text-slate-800 dark:text-neutral-100">{m.clientName ?? "Unknown client"}</p>
+                    <p className="truncate text-xs text-muted-foreground">{m.address || "No address"}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs text-slate-400">{m.distanceMiles} mi</span>
+                    <span className="text-xs text-slate-400 dark:text-neutral-500">{m.distanceMiles} mi</span>
                     <Button
                       size="sm"
                       className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white"

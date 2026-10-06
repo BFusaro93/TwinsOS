@@ -44,14 +44,14 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
 
   if (!planLoading && !planAllowed) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-slate-900">Landscapt isn&apos;t on your plan</h1>
-          <p className="mt-2 text-sm text-slate-500">
+      <div className="flex h-dvh items-center justify-center bg-slate-50 dark:bg-background p-6">
+        <div className="max-w-md rounded-lg border bg-card p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Landscapt isn&apos;t on your plan</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Your current subscription doesn&apos;t include the Landscapt (CRM) module. Upgrade to Growth
             or Enterprise, or contact us, to turn it on.
           </p>
-          <Link href="/settings?tab=subscription" className="mt-4 inline-block text-sm font-medium text-brand-600 hover:text-brand-700">
+          <Link href="/settings?tab=subscription" className="mt-4 inline-block text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400">
             Go to Subscription settings &rarr;
           </Link>
         </div>
@@ -61,14 +61,14 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
 
   if (!isLoading && !allowed) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-slate-900">No Landscapt access yet</h1>
-          <p className="mt-2 text-sm text-slate-500">
+      <div className="flex h-dvh items-center justify-center bg-slate-50 dark:bg-background p-6">
+        <div className="max-w-md rounded-lg border bg-card p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">No Landscapt access yet</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Your login isn&apos;t linked to a Landscapt employee record, so you don&apos;t have access to
             this section. Ask an admin to add you under Team &rarr; Employees and assign a Landscapt role.
           </p>
-          <Link href="/equipt/home" className="mt-4 inline-block text-sm font-medium text-brand-600 hover:text-brand-700">
+          <Link href="/equipt/home" className="mt-4 inline-block text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400">
             Go to dashboard &rarr;
           </Link>
         </div>
@@ -77,7 +77,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50 print:h-auto print:overflow-visible">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background print:h-auto print:overflow-visible">
       <RealtimeSync />
       <SettingsLoader />
 

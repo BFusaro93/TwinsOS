@@ -89,10 +89,10 @@ export function SendClientSmsDialog({
         <div className="space-y-3 py-1">
           <div className="space-y-1.5">
             <Label>To</Label>
-            <Input value={clientPhone} disabled className="text-slate-500" />
+            <Input value={clientPhone} disabled className="text-muted-foreground" />
           </div>
           {!smsOptIn ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
               {clientName} has not opted in to text messages. Check
               &ldquo;Opted in to text messages&rdquo; on the client record — after they have
               confirmed consent — before texting them.
@@ -106,9 +106,9 @@ export function SendClientSmsDialog({
                 placeholder="Write your message…"
                 rows={5}
               />
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-neutral-500">
                 <span>Merge tags: {MERGE_TAG_HINT}</span>
-                <span className={length > MAX_SMS_LENGTH - 100 ? "text-amber-600" : undefined}>
+                <span className={length > MAX_SMS_LENGTH - 100 ? "text-amber-600 dark:text-amber-400" : undefined}>
                   {length}/{MAX_SMS_LENGTH} · {segments} segment{segments === 1 ? "" : "s"}
                 </span>
               </div>
