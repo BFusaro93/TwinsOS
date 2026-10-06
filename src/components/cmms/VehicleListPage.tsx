@@ -152,6 +152,8 @@ export function VehicleListPage() {
       (vehicle.equipmentNumber ?? "").toLowerCase().includes(q) ||
       (vehicle.licensePlate ?? "").toLowerCase().includes(q) ||
       (vehicle.vin ?? "").toLowerCase().includes(q) ||
+      (vehicle.serialNumber ?? "").toLowerCase().includes(q) ||
+      (vehicle.engineSerialNumber ?? "").toLowerCase().includes(q) ||
       (vehicle.assignedCrew ?? "").toLowerCase().includes(q) ||
       (vehicle.division ?? "").toLowerCase().includes(q);
     const matchStatus   = matchesFilter(vehicle.status, filterValues.status);
@@ -429,6 +431,31 @@ export function VehicleListPage() {
                     fuelType: v.fuelType ?? "",
                     status: v.status,
                     assignedCrew: v.assignedCrew ?? "",
+                    equipmentNumber: v.equipmentNumber ?? "",
+                    samsaraVehicleId: v.samsaraVehicleId ?? "",
+                    location: v.location ?? "",
+                    nextOilChangeDue: v.nextOilChangeDue ?? "",
+                    nextOilChangeMileage: v.nextOilChangeMileage ?? "",
+                    nextInspectionStickerDue: v.nextInspectionStickerDue ?? "",
+                    serialNumber: v.serialNumber ?? "",
+                    division: v.division ?? "",
+                    manufacturer: v.manufacturer ?? "",
+                    engineModel: v.engineModel ?? "",
+                    engineSerialNumber: v.engineSerialNumber ?? "",
+                    airFilterPartNumber: v.airFilterPartNumber ?? "",
+                    oilFilterPartNumber: v.oilFilterPartNumber ?? "",
+                    sparkPlugPartNumber: v.sparkPlugPartNumber ?? "",
+                    barcode: v.barcode ?? "",
+                    purchaseVendorName: v.purchaseVendorName ?? "",
+                    purchaseDate: v.purchaseDate ?? "",
+                    purchasePrice: v.purchasePrice != null ? (v.purchasePrice / 100).toFixed(2) : "",
+                    paymentMethod: v.paymentMethod ?? "",
+                    financeInstitution: v.financeInstitution ?? "",
+                    warrantyStartDate: v.warrantyStartDate ?? "",
+                    warrantyTermMonths: v.warrantyTermMonths ?? "",
+                    warrantyEndDate: v.warrantyEndDate ?? "",
+                    warrantyNotes: v.warrantyNotes ?? "",
+                    notes: v.notes ?? "",
                   })),
                   "vehicles-export.csv"
                 )
